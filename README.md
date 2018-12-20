@@ -18,7 +18,7 @@ Pretty Query Language
         add Country(name="United States")
         add Person(name="Orwell", country=england)
 
-        adults = Person [age >= 18]
-        adults_with_country = adults -> id, country.name
-        some_query = Person [age < 50, country.name = "United States"] -> id, name 
+        adults = Person(age >= 18)
+        adults_with_country = adults {id, country.name}
+        some_query = Person(age < 50, country.name = "United States") {id,name}
 ```

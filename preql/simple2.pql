@@ -1,0 +1,25 @@
+table Country:
+    name: Str
+    language: Str
+
+table Person:
+    name: Str
+    country: Country -> citizens
+    
+
+add Country("Israel", "he") as isr
+add Country("England", "en") as eng
+add Country("United States", "en") as us
+
+add Person("Erez Shinan", isr) as me
+add Person("Ephraim Kishon", isr)
+add Person("Eric Blaire", eng)
+add Person("H.G. Wells", eng)
+add Person("John Steinbeck", us)
+
+
+english_speakers = Person(country.language="en")
+speak_my_language = Person(country=me.country, id!=me.id)
+person_language = Person {name, country.language}
+population = Country(name, count(citizens))
+citizens = Country {name, citizens}     # array_agg
