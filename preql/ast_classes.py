@@ -83,6 +83,12 @@ class Value(Expr):
     type: Type
     value: object
 
+    @classmethod
+    def from_pyobj(cls, obj):
+        if isinstance(obj, str):
+            return cls(StrType, obj)
+        assert False
+
 @dataclass
 class Ref(Expr):
     "Any reference; Prior to type resolution"

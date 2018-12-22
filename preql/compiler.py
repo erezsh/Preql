@@ -71,6 +71,12 @@ class Compiler:
         #     assert False
         name ,= ref.name
 
+        try:
+            v = context['args'][name]
+            return self._sqlexpr(v)
+        except KeyError:
+            pass
+
         relation = context['relation']
         for c in relation.columns:
             if c.name == name:
@@ -106,6 +112,13 @@ class Compiler:
 
     # def _sqlexpr_Function(self, func: Function, context):
 
+    def _sqlexpr_FuncCall(self, funccall: FuncCall, context):
+        f = self.functions[funccall.name]
+        args = funccall.args
+        assert len(args) == len(f.params or []), (args, f.params)
+        args_d = dict(zip(f.params or [], args))
+        return self._sqlexpr(f.expr, {'args': args_d})
+
     def _add_table(self, table):
         self.tables[table.name] = table
         return self._sql(table)
@@ -135,10 +148,10 @@ class Compiler:
                 raise ValueError(c)
 
     def compile_func_call(self, fname, args):
-        f = self.functions[fname]
-        assert len(args) == len(f.params or []), (args, f.params)
-        args_d = dict(zip(f.params or [], args))
-        return self._sqlexpr(f.expr, {'args': args_d})
+        print ('!!', fname, args)
+        args = [Value.from_pyobj(a) for a in args]
+        funccall = FuncCall(fname, args)
+        return self._sqlexpr(funccall)
 
     def compile_query(self, query):
         return self._sql(query)

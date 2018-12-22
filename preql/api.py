@@ -45,5 +45,7 @@ def test():
     e = SqliteEngine()
     e._execute(a)
     print(e.english())
+    print(e.by_country('Israel'))
+    print(e.english2())
 
 test()
