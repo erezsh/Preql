@@ -74,6 +74,11 @@ class Expr(Ast):
     pass
 
 @dataclass
+class Arith(Expr):
+    op: str
+    elems: list
+
+@dataclass
 class Value(Expr):
     type: Type
     value: object
@@ -96,7 +101,8 @@ class Compare(Expr):
 
 @dataclass
 class Query(Expr):
-    relation: Ref  # ref (table / table.other_table / function / (expr) )
+    relation: Expr  # ref (table / table.other_table / function / (expr) )
+    as_: str
     selection: list
     groupby: list
     projection: list
@@ -111,7 +117,7 @@ class Query(Expr):
 class Function(Ast):
     name: str
     params: list
-    query: Query
+    expr: Expr
 
 @dataclass
 class FuncCall(Expr):

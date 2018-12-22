@@ -21,6 +21,7 @@ as_args = v_args(inline=False)
 @v_args(inline=True)
 class ToAST(Transformer):
     name = str
+    as_ = str
     stmts = as_args(list)
 
     # Table definition
@@ -28,10 +29,12 @@ class ToAST(Transformer):
         cols = [Column('id', Type.from_str('Int'), None, False, True)] + list(cols)
         return Table(name, cols)
 
+    typemod = as_args(list)
     def col_def(self, name, type_, backref):
+        type_, typemod = type_
         if backref:
             assert isinstance(type_, TableType) # TODO nice error
-        return Column(name, type_, backref, False, False)
+        return Column(name, type_, backref, typemod and '?' in typemod, False)
 
     # Add Row
     arguments = as_args(list)
@@ -44,6 +47,7 @@ class ToAST(Transformer):
     # Query
     query = Query
     selection = as_args(list)
+    func_args = as_args(list)
     projection = as_args(list)
     func_params = as_args(list)
     func_def = Function
@@ -55,8 +59,7 @@ class ToAST(Transformer):
 
     typename = str
     def type(self, typename, typemod):
-        assert typemod is None
-        return Type.from_str(typename)
+        return Type.from_str(typename), typemod
 
     ref = as_args(Ref)
 
@@ -64,6 +67,9 @@ class ToAST(Transformer):
     compare_op = str
     def compare(self, a, op, b):
         return Compare(str(op), [a, b])
+
+    def arith_expr(self, a, op, b):
+        return Arith(str(op), [a, b])
 
 def parse(s):
     t = parser.parse(s.rstrip() + '\n')
@@ -78,6 +84,8 @@ def parse_query(q):
 
 def test():
     a = open("preql/simple1.pql").read()
+    # a = open("preql/simple2.pql").read()
+    # a = open("preql/tree.pql").read()
     for s in parse(a):
         print(s)
 

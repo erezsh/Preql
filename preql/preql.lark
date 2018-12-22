@@ -1,0 +1,75 @@
+?start: _NL? _INDENT? stmts _DEDENT?
+
+stmts: stmt+
+?stmt: table_def | func_def | add_row
+
+add_row: "add" name "(" arguments ")" as_? _NL
+arguments: atom ("," atom)* ","?
+
+as_: "as" name
+// assigns: assign ("," assign)* ","?
+// assign: (name "=")? atom
+
+table_def: "table" name ":" _NL _INDENT table_def_stmt+ _DEDENT
+?table_def_stmt: col_def
+col_def: name ":" type ["->" name] _NL
+type: name typemod?
+typemod: PK | NULLABLE
+
+func_def: name func_params? "=" expr _NL
+func_params: "(" name ("," name)* ")"
+
+?query: atom as_? selection groupby? projection?
+      | atom as_? selection? groupby? projection
+      | atom as_ selection? groupby? projection?
+
+selection: "[" [compare ("," compare)*] "]"
+
+groupby: "groupby" _refs
+
+projection: "{" atom ("," atom)* "}"
+
+?compare: atom compare_op atom
+
+?expr: arith_expr
+
+!?arith_expr: expr "+" atom
+           | atom
+
+!compare_op: "<" | ">" | "=" | "!=" | "<>"
+?atom: value
+     | func_call
+     | ref            // or ref
+     | list
+     | query
+     | "(" expr ")"
+
+list: "[" atom ("," atom)* "]"
+
+func_call: name func_args
+func_args: "(" [expr ("," expr)*] ")"
+
+?value: NUMBER -> number
+      | STRING -> string
+
+_refs: ref ("," ref)*
+
+ref: name ("." name)*
+name: NAME
+
+PK: "pk"
+NULLABLE: "?"
+COMMENT: /#[^\n]*/
+// _NL: /\n+/
+_NL: ( /\r?\n[\t ]*/ | COMMENT )+
+
+
+%import common.CNAME -> NAME
+%import common.WS_INLINE
+%import common.NUMBER
+%import common.ESCAPED_STRING -> STRING
+%ignore WS_INLINE
+%ignore /\\[\t \f]*\r?\n/   // LINE_CONT
+%ignore COMMENT
+%declare _INDENT _DEDENT
+

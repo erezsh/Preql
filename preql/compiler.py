@@ -16,7 +16,13 @@ class Compiler:
 
     def _sql(self, ast_node):
         ast_type = type(ast_node)
+        assert not issubclass(ast_type, Expr)
         return getattr(self, '_sql_' + ast_type.__name__)(ast_node)
+
+    def _sqlexpr(self, ast_node, context=None):
+        ast_type = type(ast_node)
+        assert issubclass(ast_type, Expr)
+        return getattr(self, '_sqlexpr_' + ast_type.__name__)(ast_node, context)
 
     def _sql_Column(self, column: Column):
         sql_type = {
@@ -33,16 +39,18 @@ class Compiler:
             self._sql(r) for r in table.columns
             ), '\n);'])
 
-    def _sql_Value(self, v: Value):
+    def _sqlexpr_Value(self, v: Value, context):
         assert v.type is StrType, v
         return '"%s"' % v.value
 
     def _sql_AddRow(self, addrow: AddRow):
-        cols, values = zip(*addrow.assigns)
+        # cols, values = zip(*addrow.args)
+        cols = [c.name for c in self.tables[addrow.table.name].columns[1:]]
+        values = addrow.args
         q = ['INSERT INTO', addrow.table.name, 
              "(", ', '.join(cols), ")",
              "VALUES",
-             "(", ', '.join(self._sql(v) for v in values), ")",
+             "(", ', '.join(self._sqlexpr(v) for v in values), ")",
         ]
         insert = ' '.join(q) + ';'
 
@@ -58,12 +66,45 @@ class Compiler:
         else:
             yield insert
 
-    def _sql_Function(self, func: Function):
-        print('@@', func.query)
-        import pdb
-        pdb.set_trace()
-        return []
+    def _sqlexpr_Ref(self, ref: Ref, context):
+        # if ref.name in context['params']:
+        #     assert False
+        name ,= ref.name
 
+        relation = context['relation']
+        for c in relation.columns:
+            if c.name == name:
+                # return '%s.%s' % (relation.name)
+                return name
+
+        assert False, (ref, relation)
+
+    def _sqlexpr_Compare(self, compare: Compare, context):
+        elems = [self._sqlexpr(e, context) for e in compare.elems]
+        return compare.op.join(elems)
+
+    def _sqlexpr_Query(self, query: Query, context):
+        assert query.as_ is None, query
+        assert isinstance(query.relation, Ref), query
+        table_name ,= query.relation.name   # Cannot handle join yet
+        context = dict(context)
+        context['relation'] = self.tables[table_name]
+        sel_sql = ' AND '.join([
+            self._sqlexpr(x, context)
+            for x in query.selection
+        ])
+        assert query.groupby is None
+        proj_sql = ', '.join([
+            self._sqlexpr(x, context)
+            for x in query.projection
+        ])
+        return f'SELECT {proj_sql} FROM {table_name} WHERE {sel_sql}'
+
+        # selection: list
+        # groupby: list
+        # projection: list
+
+    # def _sqlexpr_Function(self, func: Function, context):
 
     def _add_table(self, table):
         self.tables[table.name] = table
@@ -93,9 +134,11 @@ class Compiler:
             else:
                 raise ValueError(c)
 
-    def compile_func_call(self, fname):
+    def compile_func_call(self, fname, args):
         f = self.functions[fname]
-        return self._sql(f), f.params
+        assert len(args) == len(f.params or []), (args, f.params)
+        args_d = dict(zip(f.params or [], args))
+        return self._sqlexpr(f.expr, {'args': args_d})
 
     def compile_query(self, query):
         return self._sql(query)
