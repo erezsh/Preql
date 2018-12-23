@@ -7,12 +7,12 @@ def find_exprs(expr):
         yield from find_exprs(e)
 
 
-class Compiler:
-    def __init__(self):
+class Interpreter:
+    def __init__(self, sqlengine):
+        self.sqlengine = sqlengine
         self.tables = {}
         self.functions = {}
-
-        self.added_variables = False
+        self.vars = {}
 
     def _sql(self, ast_node):
         ast_type = type(ast_node)
@@ -25,51 +25,42 @@ class Compiler:
         return getattr(self, '_sqlexpr_' + ast_type.__name__)(ast_node, context)
 
     def _sql_Column(self, column: Column):
-        sql_type = {
-            IntType: 'INTEGER',
-            StrType: 'VARCHAR(4000)',
-            # 'real': 'REAL',
-        }[column.type]
         mod = ' NOT NULL' if not column.is_nullable else ''
         mod += ' PRIMARY KEY' if column.is_pk else ''
-        return f'{column.name} {sql_type}{mod}'
+
+        if isinstance(column.type, TableType):
+            c = f'{column.name} INTEGER{mod}'
+            fk = f'FOREIGN KEY({column.name}) REFERENCES {column.type.name}(id)'
+            return c + ", " + fk
+        else:
+            sql_type = {
+                IntType: 'INTEGER',
+                StrType: 'VARCHAR(4000)',
+                # 'real': 'REAL',
+            }[column.type]
+            return f'{column.name} {sql_type}{mod}'
 
     def _sql_Table(self, table: Table):
-        yield ' '.join(['CREATE TABLE', table.name, '(\n ', ',\n  '.join(
+        return ' '.join(['CREATE TABLE', table.name, '(\n ', ',\n  '.join(
             self._sql(r) for r in table.columns
             ), '\n);'])
 
     def _sqlexpr_Value(self, v: Value, context):
+        if v.type is IntType:
+            return str(v.value)
         assert v.type is StrType, v
         return '"%s"' % v.value
 
-    def _sql_AddRow(self, addrow: AddRow):
-        # cols, values = zip(*addrow.args)
-        cols = [c.name for c in self.tables[addrow.table.name].columns[1:]]
-        values = addrow.args
-        q = ['INSERT INTO', addrow.table.name, 
-             "(", ', '.join(cols), ")",
-             "VALUES",
-             "(", ', '.join(self._sqlexpr(v) for v in values), ")",
-        ]
-        insert = ' '.join(q) + ';'
-
-        if addrow.as_:
-            set_var = AddRow('_variables', {
-                'name': Value('"%s"' % addrow.as_),
-                'rowid': Value('last_insert_rowid()'),
-            }.items(), None)
-            assert set_var.as_ is None
-            yield from self._require_variables()
-            yield insert
-            yield from self._sql(set_var)
-        else:
-            yield insert
 
     def _sqlexpr_Ref(self, ref: Ref, context):
         # if ref.name in context['params']:
         #     assert False
         name ,= ref.name
+
+        try:
+            return self._sqlexpr(self.vars[name], {})
+        except KeyError:
+            pass
 
         try:
             v = context['args'][name]
@@ -121,11 +112,27 @@ class Compiler:
 
     def _add_table(self, table):
         self.tables[table.name] = table
-        return self._sql(table)
+        r = self.sqlengine.query( self._sql(table) )
+        assert not r
 
-    def _add_row(self, table):
-        return self._sql(table)
+    def _sql_AddRow(self, addrow: AddRow):
+        cols = [c.name for c in self.tables[addrow.table.name].columns[1:]]
+        values = addrow.args
+        q = ['INSERT INTO', addrow.table.name, 
+             "(", ', '.join(cols), ")",
+             "VALUES",
+             "(", ', '.join(self._sqlexpr(v) for v in values), ")",
+        ]
+        insert = ' '.join(q) + ';'
+        return insert
 
+    def _add_row(self, addrow: AddRow):
+        insert = self._sql(addrow)
+        assert not self.sqlengine.query(insert)
+
+        if addrow.as_:
+            rowid ,= self.sqlengine.query('SELECT last_insert_rowid();')[0]
+            self.vars[addrow.as_] = Value(IntType, rowid)   # TODO Id type?
 
     def _def_function(self, func: Function):
         assert func.name not in self.functions
@@ -134,24 +141,17 @@ class Compiler:
 
 
 
-    def compile_ast(self, commands):
-        for c in commands:
-            if isinstance(c, Table):
-                yield from self._add_table(c)
-            # elif isinstance(c, Query):
-            #     yield from self._compile_query(c)
-            elif isinstance(c, Function):
-                yield from self._def_function(c)
-            elif isinstance(c, AddRow):
-                yield from self._add_row(c)
-            else:
-                raise ValueError(c)
-
-    def compile_func_call(self, fname, args):
-        print ('!!', fname, args)
-        args = [Value.from_pyobj(a) for a in args]
-        funccall = FuncCall(fname, args)
-        return self._sqlexpr(funccall)
+    def run_stmt(self, c):
+        if isinstance(c, Table):
+            self._add_table(c)
+        # elif isinstance(c, Query):
+        #     yield from self._compile_query(c)
+        elif isinstance(c, Function):
+            self._def_function(c)
+        elif isinstance(c, AddRow):
+            self._add_row(c)
+        else:
+            raise ValueError(c)
 
     def compile_query(self, query):
         return self._sql(query)
@@ -161,14 +161,18 @@ class Compiler:
     #     assert isinstance(ast, Query)
     #     sql ,= self._compile_query(ast)
     #     return sql
+    def call_func(self, fname, args):
+        args = [Value.from_pyobj(a) for a in args]
+        funccall = FuncCall(fname, args)
+        sql = self._sqlexpr(funccall)
+        return self.sqlengine.query(sql)
 
-    def compile_statements(self, s):
+    def execute(self, s):
         ast = parse(s)
-        return self.compile_ast(ast)
+        for stmt in ast:
+            self.run_stmt(stmt)
 
-def test():
-    a = open("preql/simple1.pql").read()
-    c = Compiler()
-    print('\n'.join(c.compile_statements(a)))
-
-test()
+    def query(self, q):
+        ast = parse(q)
+        sql = self.compile_query(ast)
+        return self.sqlengine.query(sql)
