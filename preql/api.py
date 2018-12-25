@@ -47,5 +47,6 @@ def test2():
     a = open("preql/simple2.pql").read()
     i = Interface()
     i(a)
+    print(i.english_speakers())
 
 test2()

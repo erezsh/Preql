@@ -83,8 +83,8 @@ def parse_query(q):
 
 
 def test():
-    a = open("preql/simple1.pql").read()
-    # a = open("preql/simple2.pql").read()
+    # a = open("preql/simple1.pql").read()
+    a = open("preql/simple2.pql").read()
     # a = open("preql/tree.pql").read()
     for s in parse(a):
         print(s)

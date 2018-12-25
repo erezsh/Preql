@@ -10,3 +10,4 @@
 
 - Support check, default, unique
 
+- Store schema in meta table

@@ -16,8 +16,11 @@ class Ast:
 BuiltinTypes = Enum('BuiltinTypes', 'Str Int Float')
 TypeEnum = Enum('Types', 'builtin table')
 
-class Type(Ast):
 
+class Expr(Ast):
+    pass
+
+class Type(Expr):
     @classmethod
     def from_str(cls, s):
         try:
@@ -52,26 +55,11 @@ class TableType(RelationType):
         return 'TableType(%r)' % self.name
 
 @dataclass
-class Table(Ast):
-    name: str
-    columns: list
+class Join(RelationType):
+    rel1: RelationType
+    rel2: RelationType
+    selection: list
 
-@dataclass
-class Column(Ast):
-    name: str
-    type: Type
-    backref: str
-    is_nullable: bool
-    is_pk: bool
-
-@dataclass
-class AddRow(Ast):
-    table: TableType
-    args: list
-    as_: str
-
-class Expr(Ast):
-    pass
 
 @dataclass
 class Arith(Expr):
@@ -96,6 +84,10 @@ class Ref(Expr):
 
     def __repr__(self):
         return "Ref(%s)" % '.'.join(self.name)
+
+@dataclass
+class Attr(Expr):
+    name: str
 
 @dataclass
 class Compare(Expr):
@@ -133,3 +125,41 @@ class FuncCall(Expr):
 
     def exprs(self):
         return self.args
+
+
+
+# Non-expr AST
+@dataclass
+class Relation(Ast):
+    def get_column(self, name):
+        for c in self.columns:
+            if c.name == name:
+                return c
+        
+        raise KeyError(name)
+
+
+@dataclass
+class Table(Relation):
+    name: str
+    columns: list
+
+@dataclass
+class Column(Ast):
+    name: str
+    type: Type
+    backref: str
+    is_nullable: bool
+    is_pk: bool
+
+@dataclass
+class AddRow(Ast):
+    table: TableType
+    args: list
+    as_: str
+
+
+## ??
+@dataclass
+class ColumnRef(Expr):
+    column: Column
