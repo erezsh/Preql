@@ -43,6 +43,11 @@ class BuiltinType(Type):
 
 StrType = BuiltinType('Str')
 IntType = BuiltinType('Int')
+BoolType = BuiltinType('Int')
+
+@dataclass
+class ArrayType(Type):
+    elem_type: Type
 
 class RelationType(Type):
     pass

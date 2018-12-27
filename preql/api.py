@@ -51,6 +51,7 @@ def test2():
     print(i.person_and_language())
     print(i.from_my_country())
     print(i.population_count())
-    # print(i.citizens_list())  # TODO requires maintaining return type
+    print(i.citizens_list())  # TODO requires maintaining return type
+
 
 test2()

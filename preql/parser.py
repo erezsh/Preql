@@ -89,4 +89,5 @@ def test():
     for s in parse(a):
         print(s)
 
-test()
+if __name__ == '__main__':
+    test()
