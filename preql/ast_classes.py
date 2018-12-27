@@ -55,6 +55,10 @@ class TableType(RelationType):
         return 'TableType(%r)' % self.name
 
 @dataclass
+class BackRefType(RelationType):
+    ref_to: RelationType
+
+@dataclass
 class Join(RelationType):
     rel1: RelationType
     rel2: RelationType
@@ -162,4 +166,11 @@ class AddRow(Ast):
 ## ??
 @dataclass
 class ColumnRef(Expr):
+    relation: Relation
     column: Column
+
+@dataclass
+class RowRef(Expr):
+    relation: TableType
+    row_id: int
+

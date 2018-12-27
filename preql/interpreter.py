@@ -16,6 +16,13 @@ class Interpreter:
         self.functions = {}
         self.vars = {}
 
+        self._rel_id = 0
+
+    def _new_rel_name(self):
+        n = 'r%d' % self._rel_id
+        self._rel_id += 1
+        return n
+
     def _sql(self, ast_node):
         ast_type = type(ast_node)
         assert not issubclass(ast_type, Expr)
@@ -68,11 +75,16 @@ class Interpreter:
     def _rel_attr(self, relation, name, requires):
         c = relation.get_column(name)
         if isinstance(c.type, TableType):
-            requires.append(c.type)
-        return ColumnRef(c)
+            requires.append((c.type, None))
+        elif isinstance(c.type, BackRefType):
+            requires.append((c.type.ref_to, relation.name))
+            # return 'array_agg(%s)' % c.type.ref_to.name
+            # return FuncCall('to_array', ['%s.id' % c.type.ref_to.name])
+            return ColumnRef(self.tables[c.type.ref_to.name], self.tables[c.type.ref_to.name].get_column('id'))
+        return ColumnRef(relation, c)
 
     def _sqlexpr_ColumnRef(self, colref: ColumnRef, context, requires):
-        return colref.column.name
+        return '%s.%s' % (colref.relation.name, colref.column.name)
 
     def _sqlexpr_TableType(self, tabletype: TableType, context, requires):
         return tabletype.name
@@ -80,12 +92,25 @@ class Interpreter:
     def _sqlexpr_Ref(self, ref: Ref, context, requires):
         x = self._bind_name(ref.name[0], context, requires)
         for name in ref.name[1:]:
-            assert isinstance(x, ColumnRef)
-            relation = self.tables[x.column.type.name]
-            c = relation.get_column(name)
-            if isinstance(c.type, TableType):
-                requires.append(c.type)
-            x = ColumnRef(c)
+            if isinstance(x, RowRef):
+                if name == 'id':
+                    x = Value(IntType, x.row_id) 
+                else:
+                    relation = self.tables[x.relation.name]
+                    c = relation.get_column(name)
+                    if isinstance(c.type, TableType):
+                        rowid ,= self.sqlengine.query(f'select id name from {relation.name} where id={x.row_id}')
+                        x = RowRef(c.type, rowid[0])
+                    else:
+                        assert False, c
+            else:
+                assert isinstance(x, ColumnRef), x
+                relation = self.tables[x.column.type.name]
+                # relation = self.tables[x.relation.name]
+                c = relation.get_column(name)
+                if isinstance(c.type, TableType):
+                    requires.append((c.type, None))
+                x = ColumnRef(relation, c)
         return self._sqlexpr(x, {}, requires)
 
 
@@ -93,16 +118,27 @@ class Interpreter:
         elems = [self._sqlexpr(e, context, requires) for e in compare.elems]
         return compare.op.join(elems)
 
+    def _find_join(self, rel1, rel2):
+        t1 = self.tables[rel1.name]
+        t2 = self.tables[rel2.name]
+        for c in t1.columns:
+            if isinstance(c.type, TableType) and c.type.name == rel2.name:
+                return c, rel1, rel2
+            elif isinstance(c.type, BackRefType) and c.type.ref_to.name == rel2.name:
+                return t2.get_column(c.backref), rel2, rel1
+
     def _sqlexpr_Join(self, join: Join, context, requires):
         r1_sql = self._sqlexpr(join.rel1, context, requires)
         r2_sql = self._sqlexpr(join.rel2, context, requires)
 
         # XXX temporary code, not generic enough!!
-        t1 = self.tables[join.rel1.name]
-        foreignkey ,= [c for c in t1.columns if c.type.name == join.rel2.name]
-        fkname = foreignkey.name
+        # foreignkey ,= [c for c in t1.columns if c.type.name == join.rel2.name]
+        # fkname = foreignkey.name
+        fk, f, t = self._find_join(join.rel1, join.rel2)
 
-        return f'{r1_sql} a JOIN {r2_sql} b ON a.{fkname} = b.id'
+        s = f'{r1_sql} JOIN {r2_sql} ON {f.name}.{fk.name} = {t.name}.id'
+        return s
+
 
     def _sqlexpr_Query(self, query: Query, context, parent_requires):
         assert query.as_ is None, query
@@ -111,10 +147,13 @@ class Interpreter:
         table_name ,= query.relation.name   # Cannot handle join yet
         context = dict(context)
         context['relation'] = self.tables[table_name]
-        sel_sql = ' AND '.join([
-            self._sqlexpr(x, context, requires)
-            for x in query.selection
-        ])
+        if query.selection:
+            sel_sql = ' WHERE ' + ' AND '.join([
+                self._sqlexpr(x, context, requires)
+                for x in query.selection
+            ])
+        else:
+            sel_sql = ''
         assert query.groupby is None
         if query.projection:
             proj_sql = ', '.join([
@@ -125,13 +164,20 @@ class Interpreter:
             proj_sql = '*'
 
         relation = TableType(table_name)
+        groupby = None
         if requires:
-            for r in requires:
+            for r, r_gb in requires:
                 relation = Join(relation, r, [])
+                if r_gb:
+                    assert groupby is None
+                    groupby = r_gb
 
         rel_sql = self._sqlexpr(relation, context, None)
 
-        return f'SELECT {proj_sql} FROM {rel_sql} WHERE {sel_sql}'
+        s = f'SELECT {proj_sql} FROM {rel_sql}{sel_sql}'
+        if groupby:
+            s += f' GROUP BY {groupby}.id'
+        return s
 
         # selection: list
         # groupby: list
@@ -140,6 +186,14 @@ class Interpreter:
     # def _sqlexpr_Function(self, func: Function, context):
 
     def _sqlexpr_FuncCall(self, funccall: FuncCall, context, requires):
+        # TODO: Requires understanding type of arguments
+        # if funccall.name == 'to_array':
+        #     assert False
+        #     return '%s(%s)' % ('group_concat', ', '.join(funccall.args))
+        if funccall.name == 'count':
+            args = [self._sqlexpr(a, context, requires) for a in funccall.args]
+            return 'count(%s)' % (', '.join(args))
+
         f = self.functions[funccall.name]
         args = funccall.args
         assert len(args) == len(f.params or []), (args, f.params)
@@ -148,11 +202,25 @@ class Interpreter:
 
     def _add_table(self, table):
         self.tables[table.name] = table
+
+        for c in table.columns:
+            if c.backref:
+                assert isinstance(c.type, TableType)
+                ref_to = self.tables[c.type.name]
+                ref_to.columns.append( 
+                    Column(c.backref, BackRefType(TableType(table.name)), c.name, False, False)
+                )
         r = self.sqlengine.query( self._sql(table) )
         assert not r
 
+    def _sqlexpr_RowRef(self, rowref: RowRef, context, requires):
+        return str(rowref.row_id)
+
     def _sql_AddRow(self, addrow: AddRow):
-        cols = [c.name for c in self.tables[addrow.table.name].columns[1:]]
+        cols = [c.name
+                for c in self.tables[addrow.table.name].columns[1:]
+                if not isinstance(c.type, BackRefType)]
+
         values = addrow.args
         q = ['INSERT INTO', addrow.table.name, 
              "(", ', '.join(cols), ")",
@@ -168,7 +236,7 @@ class Interpreter:
 
         if addrow.as_:
             rowid ,= self.sqlengine.query('SELECT last_insert_rowid();')[0]
-            self.vars[addrow.as_] = Value(IntType, rowid)   # TODO Id type?
+            self.vars[addrow.as_] = RowRef(addrow.table, rowid)
 
     def _def_function(self, func: Function):
         assert func.name not in self.functions
