@@ -12,8 +12,8 @@ class PythonIndenter(Indenter):
     DEDENT_type = '_DEDENT'
     tab_len = 8
 
-parser = Lark.open('preql/preql.lark', parser='lalr', postlex=PythonIndenter(), lexer='standard', maybe_placeholders=True)
-query_parser = Lark.open('preql/preql.lark', start='query', parser='lalr', postlex=PythonIndenter(), lexer='standard', maybe_placeholders=True)
+parser = Lark.open('preql.lark', rel_to=__file__, parser='lalr', postlex=PythonIndenter(), lexer='standard', maybe_placeholders=True)
+query_parser = Lark.open('preql.lark', rel_to=__file__, start='query', parser='lalr', postlex=PythonIndenter(), lexer='standard', maybe_placeholders=True)
 
 
 as_args = v_args(inline=False)
@@ -56,6 +56,13 @@ class ToAST(Transformer):
     # Atoms (Types and Values)
     def string(self, x):
         return Value(StrType, x[1:-1])
+
+    def null(self):
+        return Null
+
+    @as_args
+    def array(self, v):
+        return Value(ArrayType(AnyType), v)
 
     typename = str
     def type(self, typename, typemod):

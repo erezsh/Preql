@@ -1,11 +1,15 @@
 # WITH bfs(id) AS (VALUES(1) UNION ALL SELECT nodes.id FROM bfs JOIN nodes ON nodes.parent=bfs.id)
 # SELECT value FROM bfs JOIN nodes ON nodes.id = bfs.id;
 
+# WITH bfs(id) AS (VALUES(1) UNION ALL SELECT nodes.id FROM nodes JOIN bfs ON nodes.parent=bfs.id)
+# ...> SELECT value FROM bfs JOIN nodes ON nodes.id = bfs.id;
+
+
 table Tree:
-    value: str
+    value: Str
     parent: Tree? -> children
 
-add Tree("Animal") as animal
+add Tree("Animal", null) as animal
 add Tree("Mammal", animal) as mammal
 add Tree("Fish", animal) as fish
 add Tree("Dog", mammal) as dog
@@ -13,5 +17,6 @@ add Tree("Lion", mammal) as lion
 
 bfs(root) = [root] + recurse.children
 
-animals = bfs(animal)
+#animals = bfs(animal)
 
+up(o) = Tree[id=o] {parent}

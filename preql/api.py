@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from .interpreter import Interpreter
 
 class SqlEngine:
@@ -34,24 +36,42 @@ class Interface:
         sql = self._compiler.compile_query(pq)
         return self._query(sql, [])
 
+    def load(self, fn, rel_to=None):
+        """Load content filename as Preql code
+
+        If rel_to is provided, the function will find the filename in relation to it.
+        """
+        if rel_to:
+            fn = Path(rel_to).parent / fn
+        with open(fn, encoding='utf8') as f:
+            self(f.read())
+
 
 def test1():
-    a = open("preql/simple1.pql").read()
     i = Interface()
-    i(a)
+    i.load('simple1.pql', rel_to=__file__)
     print(i.english())
     print(i.by_country('Israel'))
     print(i.english2())
 
 def test2():
-    a = open("preql/simple2.pql").read()
     i = Interface()
-    i(a)
+    i.load('simple2.pql', rel_to=__file__)
     print(i.english_speakers())
     print(i.person_and_language())
     print(i.from_my_country())
     print(i.population_count())
-    print(i.citizens_list())  # TODO requires maintaining return type
+    print(i.citizens_list())
 
+def test3():
+    a = open("preql/tree.pql").read()
+    i = Interface()
+    i(a)
+    lion = i.lion()
+    print(lion)
+    print(i.up(lion['id']))
+
+    # i.up() - requires join aliases!
+    # i.animals() - Requires advanced type system
 
 test2()

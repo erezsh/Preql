@@ -3,11 +3,6 @@ from contextlib import suppress
 from .ast_classes import *
 from .parser import parse, parse_query
 
-def find_exprs(expr):
-    for e in expr.exprs:
-        yield e
-        yield from find_exprs(e)
-
 
 @dataclass
 class CompiledSQL:
@@ -50,6 +45,8 @@ class Interpreter:
             c = f'{column.name} INTEGER{mod}'
             fk = f'FOREIGN KEY({column.name}) REFERENCES {column.type.name}(id)'
             return c + ", " + fk
+        elif isinstance(column.type, BackRefType):
+            return None
         else:
             sql_type = {
                 IntType: 'INTEGER',
@@ -59,13 +56,20 @@ class Interpreter:
             return f'{column.name} {sql_type}{mod}'
 
     def _sql_Table(self, table: Table):
+        cols = [self._sql(r) for r in table.columns]
         return ' '.join(['CREATE TABLE', table.name, '(\n ', ',\n  '.join(
-            self._sql(r) for r in table.columns
+                c for c in cols if c is not None
             ), '\n);'])
 
     def _sqlexpr_Value(self, v: Value, context, requires):
-        if v.type is IntType:
+        if v is Null:
+            return CompiledSQL('NULL', [v.type])
+        elif v.type is IntType:
             return CompiledSQL(str(v.value), [v.type])
+        elif isinstance(v.type, ArrayType):
+            values = [self._sqlexpr(v, context, requires) for v in v.value]
+            sql = 'VALUES(%s)' % ', '.join(_v.sql for _v in values)
+            return CompiledSQL(sql, [v.type])
         assert v.type is StrType, v
         return CompiledSQL('"%s"' % v.value, [v.type])
 
@@ -87,8 +91,7 @@ class Interpreter:
             requires.append((c.type, None))
         elif isinstance(c.type, BackRefType):
             requires.append((c.type.ref_to, relation.name))
-            # return 'array_agg(%s)' % c.type.ref_to.name
-            return FuncCall('to_array', [c.name, '%s.id' % c.type.ref_to.name])
+            return FuncCall('to_array', [c.name, c.type.ref_to])
             # return ColumnRef(self.tables[c.type.ref_to.name], self.tables[c.type.ref_to.name].get_column('id'))
         return ColumnRef(relation, c)
 
@@ -123,6 +126,12 @@ class Interpreter:
                 x = ColumnRef(relation, c)
         return self._sqlexpr(x, {}, requires)
 
+    def _sqlexpr_Arith(self, arith: Arith, context, requires):
+        assert arith.op == '+'  # XXX temporary
+        elems = [self._sqlexpr(e, context, requires) for e in arith.elems]
+        # TODO verify types match
+        sql = ' UNION ALL '.join('(%s)'%e.sql for e in elems)
+        return CompiledSQL(sql, elems[0].types)
 
     def _sqlexpr_Compare(self, compare: Compare, context, requires):
         elems = [self._sqlexpr(e, context, requires) for e in compare.elems]
@@ -217,11 +226,10 @@ class Interpreter:
     def _sqlexpr_FuncCall(self, funccall: FuncCall, context, requires):
         # TODO: Requires understanding type of arguments
         if funccall.name == 'to_array':
-        #     assert False
-        #     return '%s(%s)' % ('group_concat', ', '.join(funccall.args))
             name, expr = funccall.args
-            # TODO always int???
-            return CompiledSQL(expr, [ArrayType(IntType)], [name])
+            assert isinstance(expr, TableType)  # XXX temporary
+            # TODO ArrayType(expr)
+            return CompiledSQL('%s.id' % expr.name, [ArrayType(IntType)], [name])
         if funccall.name == 'count':
             args = [self._sqlexpr(a, context, requires) for a in funccall.args]
             # TODO validate all args are column names
@@ -232,18 +240,23 @@ class Interpreter:
         args = funccall.args
         assert len(args) == len(f.params or []), (args, f.params)
         args_d = dict(zip(f.params or [], args))
-        return self._sqlexpr(f.expr, {'args': args_d}, requires)
+        assert funccall.name not in args_d
+        return self._sqlexpr(f.expr, {'args': args_d, 'func': f}, requires)
 
     def _add_table(self, table):
         self.tables[table.name] = table
 
+        backrefs = []
+
         for c in table.columns:
             if c.backref:
-                assert isinstance(c.type, TableType)
+                assert isinstance(c.type, TableType), c
                 ref_to = self.tables[c.type.name]
-                ref_to.columns.append( 
-                    Column(c.backref, BackRefType(TableType(table.name)), c.name, False, False)
-                )
+                backrefs.append((ref_to, Column(c.backref, BackRefType(TableType(table.name)), c.name, False, False)))
+
+        for ref_to, col in backrefs:
+            ref_to.columns.append(col)
+
         r = self.sqlengine.query( self._sql(table) )
         assert not r
 
@@ -301,10 +314,14 @@ class Interpreter:
     #     sql ,= self._compile_query(ast)
     #     return sql
     def call_func(self, fname, args):
+        if fname in self.vars:
+            assert not args
+            sql = self._sqlexpr(self.vars[fname], {}, None)
+            return self._make_struct(sql.sql, sql)
+
         args = [Value.from_pyobj(a) for a in args]
         funccall = FuncCall(fname, args)
         funccall_sql = self._sqlexpr(funccall, {}, None)
-        # return self.sqlengine.query(sql)
         return self._query_as_struct(funccall_sql)
 
     def _make_struct(self, row, compiled_sql):

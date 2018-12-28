@@ -40,17 +40,18 @@ projection: "{" atom ("," atom)* "}"
 ?atom: value
      | func_call
      | ref            // or ref
-     | list
+     | array
      | query
      | "(" expr ")"
 
-list: "[" atom ("," atom)* "]"
+array: "[" atom ("," atom)* "]"
 
 func_call: name func_args
 func_args: "(" [expr ("," expr)*] ")"
 
 ?value: NUMBER -> number
       | STRING -> string
+      | "null" -> null
 
 _refs: ref ("," ref)*
 

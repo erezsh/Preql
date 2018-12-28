@@ -44,6 +44,7 @@ class BuiltinType(Type):
 StrType = BuiltinType('Str')
 IntType = BuiltinType('Int')
 BoolType = BuiltinType('Int')
+NullType = BuiltinType('Null')
 
 @dataclass
 class ArrayType(Type):
@@ -179,3 +180,7 @@ class RowRef(Expr):
     relation: TableType
     row_id: int
 
+
+
+Null = Value(NullType, None)
+AnyType = Type()
