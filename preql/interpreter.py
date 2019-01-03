@@ -1,3 +1,4 @@
+from copy import deepcopy
 from contextlib import suppress
 
 from .ast_classes import *
@@ -30,12 +31,22 @@ class Interpreter:
         assert not issubclass(ast_type, Expr)
         return getattr(self, '_sql_' + ast_type.__name__)(ast_node)
 
-    def _sqlexpr(self, ast_node, context, requires):
+    def _sqlexpr(self, ast_node, context) -> CompiledSQL:
         ast_type = type(ast_node)
         assert issubclass(ast_type, Expr), (ast_node)
-        res = getattr(self, '_sqlexpr_' + ast_type.__name__)(ast_node, context, requires)
+        res = getattr(self, '_sqlexpr_' + ast_type.__name__)(ast_node, context)
         assert isinstance(res, CompiledSQL), ast_node
         return res
+
+
+    def _resolve_expr(self, ast_node, context):
+        ast_type = type(ast_node)
+        assert issubclass(ast_type, Expr), (ast_node)
+        resolve_f = getattr(self, '_resolve_' + ast_type.__name__)
+        if resolve_f is NotImplemented:
+            return []
+        return list(resolve_f(ast_node, context))
+
 
     def _sql_Column(self, column: Column):
         mod = ' NOT NULL' if not column.is_nullable else ''
@@ -61,49 +72,65 @@ class Interpreter:
                 c for c in cols if c is not None
             ), '\n);'])
 
-    def _sqlexpr_Value(self, v: Value, context, requires):
+    def _sqlexpr_Value(self, v: Value, context):
         if v is Null:
             return CompiledSQL('NULL', [v.type])
         elif v.type is IntType:
             return CompiledSQL(str(v.value), [v.type])
         elif isinstance(v.type, ArrayType):
-            values = [self._sqlexpr(v, context, requires) for v in v.value]
+            values = [self._sqlexpr(v, context) for v in v.value]
             sql = 'VALUES(%s)' % ', '.join(_v.sql for _v in values)
             return CompiledSQL(sql, [v.type])
         assert v.type is StrType, v
         return CompiledSQL('"%s"' % v.value, [v.type])
 
-
-    def _bind_name(self, name, context, requires):
-        # Function argument?
-        with suppress(KeyError):
-            return context['args'][name]
-
-        # Global variable?
-        with suppress(KeyError):
-            return self.vars[name]
-
-        return self._rel_attr(context['relation'], name, requires)
-
-    def _rel_attr(self, relation, name, requires):
-        c = relation.get_column(name)
-        if isinstance(c.type, TableType):
-            requires.append((c.type, None))
-        elif isinstance(c.type, BackRefType):
-            requires.append((c.type.ref_to, relation.name))
-            return FuncCall('to_array', [c.name, c.type.ref_to])
-            # return ColumnRef(self.tables[c.type.ref_to.name], self.tables[c.type.ref_to.name].get_column('id'))
-        return ColumnRef(relation, c)
-
-    def _sqlexpr_ColumnRef(self, colref: ColumnRef, context, requires):
+    def _sqlexpr_ColumnRef(self, colref: ColumnRef, context):
         sql = '%s.%s' % (colref.relation.name, colref.column.name)
         return CompiledSQL(sql, [colref.column.type], [colref.column.name])
 
-    def _sqlexpr_TableType(self, tabletype: TableType, context, requires):
+    def _sqlexpr_TableType(self, tabletype: TableType, context):
         return CompiledSQL(tabletype.name, [tabletype], [tabletype.name])
 
-    def _sqlexpr_Ref(self, ref: Ref, context, requires):
-        x = self._bind_name(ref.name[0], context, requires)
+    _resolve_Value = NotImplemented
+
+    _resolve_ColumnRef = NotImplemented
+    _resolve_TableType = NotImplemented
+    _resolve_RowRef = NotImplemented
+
+    def _resolve_exprs(self, exprs, context):
+        for e in exprs:
+            yield from self._resolve_expr(e, context)
+
+    def _resolve_elems(self, expr: Expr, context):
+        return self._resolve_exprs(expr.elems, context)
+    _resolve_Arith = _resolve_elems
+    _resolve_Compare = _resolve_elems
+
+    def _resolve_Ref(self, ref: Ref, context):
+        assert ref.resolved is None, ref
+        name = ref.name[0]
+        with suppress(KeyError):
+            ref.resolved = context['args'][name]
+            return
+
+        # Global variable?
+        with suppress(KeyError):
+            ref.resolved = self.vars[name]
+            return
+
+        relation = context['relation']
+        c = relation.get_column(name)
+        if isinstance(c.type, TableType):
+            # Foreign Key - join with the target table
+            yield c.type, None
+        elif isinstance(c.type, BackRefType):
+            # Many-to-one(?) - join with referencing table
+            yield c.type.ref_to, relation.name
+            ref.resolved = FuncCall('to_array', [c.name, c.type.ref_to])
+            return
+
+        # Updates x as necessary (emulates recursion)
+        x = ColumnRef(relation, c)
         for name in ref.name[1:]:
             if isinstance(x, RowRef):
                 if name == 'id':
@@ -122,19 +149,25 @@ class Interpreter:
                 # relation = self.tables[x.relation.name]
                 c = relation.get_column(name)
                 if isinstance(c.type, TableType):
-                    requires.append((c.type, None))
+                    yield c.type, None
                 x = ColumnRef(relation, c)
-        return self._sqlexpr(x, {}, requires)
+        
+        ref.resolved = x
 
-    def _sqlexpr_Arith(self, arith: Arith, context, requires):
+
+    def _sqlexpr_Ref(self, ref: Ref, context):
+        assert ref.resolved is not None, (ref, ref.resolved)
+        return self._sqlexpr(ref.resolved, {})
+
+    def _sqlexpr_Arith(self, arith: Arith, context):
         assert arith.op == '+'  # XXX temporary
-        elems = [self._sqlexpr(e, context, requires) for e in arith.elems]
+        elems = [self._sqlexpr(e, context) for e in arith.elems]
         # TODO verify types match
         sql = ' UNION ALL '.join('(%s)'%e.sql for e in elems)
         return CompiledSQL(sql, elems[0].types)
 
-    def _sqlexpr_Compare(self, compare: Compare, context, requires):
-        elems = [self._sqlexpr(e, context, requires) for e in compare.elems]
+    def _sqlexpr_Compare(self, compare: Compare, context):
+        elems = [self._sqlexpr(e, context) for e in compare.elems]
         # TODO verify types match, or convert if necessary
         sql = compare.op.join(e.sql for e in elems)
         return CompiledSQL(sql, [BoolType])
@@ -148,9 +181,12 @@ class Interpreter:
             elif isinstance(c.type, BackRefType) and c.type.ref_to.name == rel2.name:
                 return t2.get_column(c.backref), rel2, rel1
 
-    def _sqlexpr_Join(self, join: Join, context, requires):
-        r1 = self._sqlexpr(join.rel1, context, requires)
-        r2 = self._sqlexpr(join.rel2, context, requires)
+    def _resolve_Join(self, join: Join, context):
+        return self._resolve_expr(join.rel1, context) + self._resolve_expr(join.rel2, context)
+
+    def _sqlexpr_Join(self, join: Join, context):
+        r1 = self._sqlexpr(join.rel1, context)
+        r2 = self._sqlexpr(join.rel2, context)
         assert len(r1.types) == len(r2.types) == 1  # TODO validate relation type
 
         # XXX temporary code, not generic enough!!
@@ -161,24 +197,62 @@ class Interpreter:
         s = f'{r1.sql} JOIN {r2.sql} ON {f.name}.{fk.name} = {t.name}.id'
         return CompiledSQL(s, [RelationType])
 
+    def _resolve_relation(self, rel: Expr):
+        if isinstance(rel, Join):
+            self._resolve_relation(rel.rel1)
+            self._resolve_relation(rel.rel2)
+            return
 
-    def _sqlexpr_Query(self, query: Query, context, parent_requires):
-        assert query.as_ is None, query
-        assert isinstance(query.relation, Ref), query
-        requires = []
+        if isinstance(rel, TableType):
+            rel.resolved = rel
+            return
+
+        assert isinstance(rel, Ref), rel
+        assert not rel.resolved
+        name ,= rel.name
+        rel.resolved = TableType(name)
+
+    def _resolve_Query(self, query: Query, context):
         table_name ,= query.relation.name   # Cannot handle join yet
         context = dict(context)
         context['relation'] = self.tables[table_name]
+
+        requires = []
         if query.selection:
-            # Verify all types are BoolType
-            sel = [self._sqlexpr(x, context, requires) for x in query.selection]
+            requires += self._resolve_exprs(query.selection, context)
+        if query.projection:
+            requires += self._resolve_exprs(query.projection, context)
+
+        relation = TableType(table_name)
+        if requires:
+            for r, r_gb in requires:
+                query.relation = Join(relation, r, [])
+                if r_gb:
+                    assert query.groupby is None, query.groupby
+                    query.groupby = r_gb
+        
+        self._resolve_relation(query.relation)
+
+        return []
+
+    def _sqlexpr_Query(self, query: Query, context):
+        assert query.as_ is None, query
+        # assert isinstance(query.relation, Ref), query
+
+        # table_name ,= query.relation.name   # Cannot handle join yet
+        # context = dict(context)
+        # context['relation'] = self.tables[table_name]
+        table_name = query.relation.main_rel_name()
+
+        if query.selection:
+            # Verify allo types are BoolType
+            sel = [self._sqlexpr(x, context) for x in query.selection]
             assert all(s.types==[BoolType] for s in sel)
             sel_sql = ' WHERE ' + ' AND '.join(s.sql for s in sel)
         else:
             sel_sql = ''
-        assert query.groupby is None
         if query.projection:
-            proj = [self._sqlexpr(x, context, requires) for x in query.projection]
+            proj = [self._sqlexpr(x, context) for x in query.projection]
             proj_sql_list = []
             proj_types = []
             proj_names = []
@@ -200,21 +274,15 @@ class Interpreter:
             proj_types = [IntType]  # TODO id type
             proj_names = ['id']
 
-        relation = TableType(table_name)
-        groupby = None
-        if requires:
-            for r, r_gb in requires:
-                relation = Join(relation, r, [])
-                if r_gb:
-                    assert groupby is None
-                    groupby = r_gb
 
-        rel = self._sqlexpr(relation, context, None)
+        relation = query.relation
+
+        rel = self._sqlexpr(relation, context)
         assert len(rel.types) == 1  # TODO validate is a relation
 
         s = f'SELECT {proj_sql} FROM {rel.sql}{sel_sql}'
-        if groupby:
-            s += f' GROUP BY {groupby}.id'
+        if query.groupby:
+            s += f' GROUP BY {query.groupby}.id'
         return CompiledSQL(s, proj_types, proj_names)
 
         # selection: list
@@ -223,7 +291,21 @@ class Interpreter:
 
     # def _sqlexpr_Function(self, func: Function, context):
 
-    def _sqlexpr_FuncCall(self, funccall: FuncCall, context, requires):
+    def _resolve_FuncCall(self, funccall: FuncCall, context):
+        if funccall.name in ('to_array', 'count'):
+            yield from self._resolve_exprs(funccall.args, context)
+            return
+
+        f = deepcopy(self.functions[funccall.name])
+        funccall.resolved = f
+
+        args_d = dict(zip(f.params or [], funccall.args))
+        assert funccall.name not in args_d
+        context = {'args': args_d, 'func': f}
+        yield from self._resolve_expr(f.expr, context)
+        yield from self._resolve_exprs(funccall.args, context)
+
+    def _sqlexpr_FuncCall(self, funccall: FuncCall, context):
         # TODO: Requires understanding type of arguments
         if funccall.name == 'to_array':
             name, expr = funccall.args
@@ -231,17 +313,18 @@ class Interpreter:
             # TODO ArrayType(expr)
             return CompiledSQL('%s.id' % expr.name, [ArrayType(IntType)], [name])
         if funccall.name == 'count':
-            args = [self._sqlexpr(a, context, requires) for a in funccall.args]
+            args = [self._sqlexpr(a, context) for a in funccall.args]
             # TODO validate all args are column names
             # TODO auto name field_count
             return CompiledSQL('count(%s)' % (', '.join(a.sql for a in args)), [IntType], ['count'])
 
-        f = self.functions[funccall.name]
+        f = funccall.resolved #self.functions[funccall.name]
+        assert f
         args = funccall.args
         assert len(args) == len(f.params or []), (args, f.params)
         args_d = dict(zip(f.params or [], args))
         assert funccall.name not in args_d
-        return self._sqlexpr(f.expr, {'args': args_d, 'func': f}, requires)
+        return self._sqlexpr(f.expr, {'args': args_d, 'func': f})
 
     def _add_table(self, table):
         self.tables[table.name] = table
@@ -260,7 +343,7 @@ class Interpreter:
         r = self.sqlengine.query( self._sql(table) )
         assert not r
 
-    def _sqlexpr_RowRef(self, rowref: RowRef, context, requires):
+    def _sqlexpr_RowRef(self, rowref: RowRef, context):
         return CompiledSQL(str(rowref.row_id), [IntType], ['id'])   # TODO id type
 
     def _sql_AddRow(self, addrow: AddRow):
@@ -268,7 +351,9 @@ class Interpreter:
                 for c in self.tables[addrow.table.name].columns[1:]
                 if not isinstance(c.type, BackRefType)]
 
-        values = [self._sqlexpr(v, {}, None) for v in addrow.args]
+        requires = list(self._resolve_exprs(addrow.args, {}))
+        assert not requires, requires
+        values = [self._sqlexpr(v, {}) for v in addrow.args]
         # TODO verify types
         q = ['INSERT INTO', addrow.table.name, 
              "(", ', '.join(cols), ")",
@@ -316,12 +401,13 @@ class Interpreter:
     def call_func(self, fname, args):
         if fname in self.vars:
             assert not args
-            sql = self._sqlexpr(self.vars[fname], {}, None)
+            sql = self._sqlexpr(self.vars[fname], {})
             return self._make_struct(sql.sql, sql)
 
         args = [Value.from_pyobj(a) for a in args]
         funccall = FuncCall(fname, args)
-        funccall_sql = self._sqlexpr(funccall, {}, None)
+        self._resolve_expr(funccall, {})
+        funccall_sql = self._sqlexpr(funccall, {})
         return self._query_as_struct(funccall_sql)
 
     def _make_struct(self, row, compiled_sql):

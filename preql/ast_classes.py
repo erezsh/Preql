@@ -41,6 +41,9 @@ class BuiltinType(Type):
     def __repr__(self):
         return self.name
 
+    def __deepcopy__(self, memo):
+        return self
+
 StrType = BuiltinType('Str')
 IntType = BuiltinType('Int')
 BoolType = BuiltinType('Int')
@@ -60,6 +63,9 @@ class TableType(RelationType):
     def __repr__(self):
         return 'TableType(%r)' % self.name
 
+    def main_rel_name(self):
+        return self.name
+
 @dataclass
 class BackRefType(RelationType):
     ref_to: RelationType
@@ -69,6 +75,9 @@ class Join(RelationType):
     rel1: RelationType
     rel2: RelationType
     selection: list
+
+    def main_rel_name(self):
+        return self.rel1.main_rel_name()
 
 
 @dataclass
@@ -91,9 +100,17 @@ class Value(Expr):
 class Ref(Expr):
     "Any reference; Prior to type resolution"
     name: list
+    resolved: object = None
 
     def __repr__(self):
+        if self.resolved:
+            return "Ref(%s, resolved=%r)" % ('.'.join(self.name), self.resolved)
+
         return "Ref(%s)" % '.'.join(self.name)
+
+    def main_rel_name(self):
+        name ,= self.name
+        return name
 
 @dataclass
 class Attr(Expr):
@@ -132,6 +149,7 @@ class FuncCall(Expr):
     # TODO Are Query and FuncCall the same construct?
     name: str
     args: list
+    resolved: object = None
 
     def exprs(self):
         return self.args
