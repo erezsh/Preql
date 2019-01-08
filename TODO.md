@@ -4,6 +4,10 @@
 
 - Two-step: Bind + type inference -> generate sql
 
+- Explicit joins
+
+- Offset + limit
+
 # More stuff
 
 - Many-to-many

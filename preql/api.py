@@ -74,4 +74,7 @@ def test3():
     # i.up() - requires join aliases!
     # i.animals() - Requires advanced type system
 
+print('---------')
+test1()
+print('---------')
 test2()
