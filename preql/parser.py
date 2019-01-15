@@ -1,7 +1,6 @@
 from lark import Lark, Transformer, Discard, v_args
 from lark.indenter import Indenter
 
-from .utils import classify
 from .ast_classes import *
 
 class PythonIndenter(Indenter):
@@ -47,12 +46,29 @@ class ToAST(Transformer):
     # Query
     query = Query
     selection = as_args(list)
-    func_args = as_args(list)
+    # func_args = as_args(list)
     projection = as_args(list)
     func_params = as_args(list)
     func_def = Function
     func_call = FuncCall
 
+    func_arg = as_args(tuple)
+    # def func_arg(self, name, value):
+    #     return name, value
+
+    @as_args
+    def func_args(self, args):
+        pos_args = []
+        named_args = {}
+        for name, value in args:
+            if name:  # Named arg
+                assert name not in named_args
+                named_args[name] = value
+            else:
+                assert not named_args
+                pos_args.append(value)
+        return FuncArgs(pos_args, named_args)
+        
     # Atoms (Types and Values)
     def string(self, x):
         return Value(StrType, x[1:-1])

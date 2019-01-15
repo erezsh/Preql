@@ -81,31 +81,36 @@ class ExprCompiler:
     _resolve_Arith = _resolve_elems
     _resolve_Compare = _resolve_elems
 
-    def _resolve_Ref(self, ref: Ref):
-        assert ref.resolved is None, ref
-        name = ref.name[0]
-        with suppress(KeyError):
-            ref.resolved = self.context.get('args')[name]
-            return
-
-        # Global variable?
-        with suppress(KeyError):
-            ref.resolved = self.vars[name]
-            return
-
-        relation = self.context.get('relation')
+    def _resolve_Ref_relation(self, relation, name, requires):
         c = relation.get_column(name)
         if isinstance(c.type, TableType):
             # Foreign Key - join with the target table
-            yield c.type, None
+            requires.append( (c.type, None) )
         elif isinstance(c.type, BackRefType):
             # Many-to-one(?) - join with referencing table
-            yield c.type.ref_to, relation.name
-            ref.resolved = FuncCall('to_array', [c.name, c.type.ref_to])
-            return
+            requires.append(( c.type.ref_to, relation.name ))
+            return FuncCall('to_array', FuncArgs([c.name, c.type.ref_to], {}))
+
+        return ColumnRef(relation, c)
+
+    def _resolve_Ref_base(self, name, requires):
+        with suppress(KeyError):
+            return self.context.get('args')[name]
+
+        # Global variable?
+        with suppress(KeyError):
+            return self.vars[name]
+
+        relation = self.context.get('relation')
+        return self._resolve_Ref_relation(relation, name, requires)
+
+    def _resolve_Ref(self, ref: Ref):
+        assert ref.resolved is None, ref
+
+        requires = []
+        x = self._resolve_Ref_base(ref.name[0], requires)
 
         # Updates x as necessary (emulates recursion)
-        x = ColumnRef(relation, c)
         for name in ref.name[1:]:
             if isinstance(x, RowRef):
                 if name == 'id':
@@ -114,21 +119,25 @@ class ExprCompiler:
                     relation = self.tables[x.relation.name]
                     c = relation.get_column(name)
                     if isinstance(c.type, TableType):
-                        assert False
-                        rowid ,= self.sqlengine.query(f'select id name from {relation.name} where id={x.row_id}')
+                        # assert False, (x, c, ref)
+                        rowid ,= self.interp.sqlengine.query(f'select {c.name} from {relation.name} where id={x.row_id}')
                         x = RowRef(c.type, rowid[0])
                     else:
                         assert False, c
-            else:
-                assert isinstance(x, ColumnRef), x
+            elif isinstance(x, ColumnRef):
                 relation = self.tables[x.column.type.name]
                 # relation = self.tables[x.relation.name]
                 c = relation.get_column(name)
                 if isinstance(c.type, TableType):
                     yield c.type, None
                 x = ColumnRef(relation, c)
+            
+            else:
+                assert isinstance(x, TableType)
+                x = self._resolve_Ref_relation(self.tables[x.name], name, requires)
         
         ref.resolved = x
+        yield from requires
 
 
     def _sqlexpr_Ref(self, ref: Ref):
@@ -160,6 +169,12 @@ class ExprCompiler:
     def _resolve_Join(self, join: Join):
         return self._resolve_expr(join.rel1) + self._resolve_expr(join.rel2)
 
+    def _resolve_FreeJoin(self, join: FreeJoin):
+        print('###', freejoin)
+        assert False
+        import pdb
+        pdb.set_trace()
+
     def _sqlexpr_Join(self, join: Join):
         r1 = self._sqlexpr(join.rel1)
         r2 = self._sqlexpr(join.rel2)
@@ -172,6 +187,13 @@ class ExprCompiler:
 
         s = f'{r1.sql} JOIN {r2.sql} ON {f.name}.{fk.name} = {t.name}.id'
         return CompiledSQL(s, [RelationType])
+
+    def _sqlexpr_FreeJoin(self, join: FreeJoin):
+        r1 = self._sqlexpr(join.rel1)
+        r2 = self._sqlexpr(join.rel2)
+        import pdb
+        pdb.set_trace()
+        pass
 
     def _resolve_relation(self, rel: Expr):
         if isinstance(rel, Join):
@@ -190,8 +212,26 @@ class ExprCompiler:
         rel.resolved = TableType(name)
 
     def _resolve_Query(self, query: Query):
-        table_name ,= query.relation.name   # Cannot handle join yet
-        self.context.append( {'relation': self.tables[table_name]} )
+        if isinstance(query.relation, FuncCall):
+            fc = query.relation
+            assert fc.name == 'freejoin'
+            assert not fc.args.pos_args
+            relations = fc.args.named_args
+            assert len(relations) == 2  # TODO support joining several at a time
+            types = {}
+            for alias, ref in relations.items():
+                assert isinstance(ref, Ref)
+                name ,= ref.name
+                types[alias] = TableType(name)
+            relation = FreeJoin(*types.values(), None)
+            args = dict(self.context.get('args'))
+            args.update(types)
+            self.context.append( {'args': args} )
+        else:
+            table_name ,= query.relation.name   # Cannot handle join yet
+            relation = TableType(table_name)
+            self.context.append( {'relation': self.tables[table_name]} )
+
         try:
 
             requires = []
@@ -200,27 +240,21 @@ class ExprCompiler:
             if query.projection:
                 requires += self._resolve_exprs(query.projection)
 
-            relation = TableType(table_name)
             if requires:
                 for r, r_gb in requires:
-                    query.relation = Join(relation, r, [])
+                    relation = Join(relation, r, [])
                     if r_gb:
                         assert query.groupby is None, query.groupby
                         query.groupby = r_gb
             
-            self._resolve_relation(query.relation)
+            self._resolve_relation(relation)
+            query.relation = relation
         
         finally:
             self.context.pop()
         return []
 
     def _sqlexpr_Query(self, query: Query):
-        assert query.as_ is None, query
-        # assert isinstance(query.relation, Ref), query
-
-        # table_name ,= query.relation.name   # Cannot handle join yet
-        # context = dict(context)
-        # context['relation'] = self.tables[table_name]
         table_name = query.relation.main_rel_name()
 
         if query.selection:
@@ -249,14 +283,11 @@ class ExprCompiler:
             proj_sql = ', '.join(proj_sql_list)
         else:
             proj_sql = table_name + '.id'
-            # assert False, "Return struct"
             proj_types = [IntType]  # TODO id type
             proj_names = ['id']
 
 
-        relation = query.relation
-
-        rel = self._sqlexpr(relation)
+        rel = self._sqlexpr(query.relation)
         assert len(rel.types) == 1  # TODO validate is a relation
 
         s = f'SELECT {proj_sql} FROM {rel.sql}{sel_sql}'
@@ -264,38 +295,36 @@ class ExprCompiler:
             s += f' GROUP BY {query.groupby}.id'
         return CompiledSQL(s, proj_types, proj_names)
 
-        # selection: list
-        # groupby: list
-        # projection: list
-
-    # def _sqlexpr_Function(self, func: Function, context):
-
     def _resolve_FuncCall(self, funccall: FuncCall):
+        assert not funccall.args.named_args # TODO
+
         if funccall.name in ('to_array', 'count'):
-            yield from self._resolve_exprs(funccall.args)
+            yield from self._resolve_exprs(funccall.args.pos_args)
             return
 
         f = deepcopy(self.functions[funccall.name])
         funccall.resolved = f
 
-        args_d = dict(zip(f.params or [], funccall.args))
+        args_d = dict(zip(f.params or [], funccall.args.pos_args))
+
         assert funccall.name not in args_d
         self.context.append( {'args': args_d, 'func': f} )
         try:
             yield from self._resolve_expr(f.expr)
-            yield from self._resolve_exprs(funccall.args)
+            yield from self._resolve_exprs(funccall.args.pos_args)
         finally:
             self.context.pop()
 
     def _sqlexpr_FuncCall(self, funccall: FuncCall):
         # TODO: Requires understanding type of arguments
+        assert not funccall.args.named_args #TODO
         if funccall.name == 'to_array':
-            name, expr = funccall.args
+            name, expr = funccall.args.pos_args
             assert isinstance(expr, TableType)  # XXX temporary
             # TODO ArrayType(expr)
             return CompiledSQL('%s.id' % expr.name, [ArrayType(IntType)], [name])
         if funccall.name == 'count':
-            args = [self._sqlexpr(a) for a in funccall.args]
+            args = [self._sqlexpr(a) for a in funccall.args.pos_args]
             # TODO validate all args are column names
             # TODO auto name field_count
             return CompiledSQL('count(%s)' % (', '.join(a.sql for a in args)), [IntType], ['count'])
@@ -303,8 +332,8 @@ class ExprCompiler:
         f = funccall.resolved #self.functions[funccall.name]
         assert f
         args = funccall.args
-        assert len(args) == len(f.params or []), (args, f.params)
-        args_d = dict(zip(f.params or [], args))
+        assert len(args.pos_args) == len(f.params or []), (args, f.params)
+        args_d = dict(zip(f.params or [], args.pos_args))
         assert funccall.name not in args_d
         self.context.append({'args': args_d, 'func': f})
         try:
@@ -313,7 +342,9 @@ class ExprCompiler:
             self.context.pop()
 
     def compile(self, expr):
+        print('^^', expr)
         self._resolve_expr(expr)
+        print('##', expr)
         return self._sqlexpr(expr)
 
 
@@ -440,7 +471,7 @@ class Interpreter:
             return self._make_struct(sql.sql, sql)
 
         args = [Value.from_pyobj(a) for a in args]
-        funccall = FuncCall(fname, args)
+        funccall = FuncCall(fname, FuncArgs(args, {}))
         # self._resolve_expr(funccall, {})
         funccall_sql = self._sqlexpr(funccall, {})
         return self._query_as_struct(funccall_sql)

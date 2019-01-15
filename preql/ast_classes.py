@@ -68,7 +68,7 @@ class TableType(RelationType):
 
 @dataclass
 class BackRefType(RelationType):
-    ref_to: RelationType
+    ref_to: TableType
 
 @dataclass
 class Join(RelationType):
@@ -78,6 +78,10 @@ class Join(RelationType):
 
     def main_rel_name(self):
         return self.rel1.main_rel_name()
+
+@dataclass
+class FreeJoin(Join):
+    pass
 
 
 @dataclass
@@ -127,7 +131,6 @@ class Compare(Expr):
 @dataclass
 class Query(Expr):
     relation: Expr  # ref (table / table.other_table / function / (expr) )
-    as_: str
     selection: list
     groupby: list
     projection: list
@@ -145,10 +148,15 @@ class Function(Ast):
     expr: Expr
 
 @dataclass
+class FuncArgs(Ast):
+    pos_args: list
+    named_args: dict
+
+@dataclass
 class FuncCall(Expr):
     # TODO Are Query and FuncCall the same construct?
     name: str
-    args: list
+    args: FuncArgs
     resolved: object = None
 
     def exprs(self):

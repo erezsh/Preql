@@ -19,9 +19,9 @@ typemod: PK | NULLABLE
 func_def: name func_params? "=" expr _NL
 func_params: "(" name ("," name)* ")"
 
-?query: atom as_? selection groupby? projection?
-      | atom as_? selection? groupby? projection
-      | atom as_ selection? groupby? projection?
+?query: atom selection groupby? projection?
+      | atom selection? groupby projection?
+      | atom selection? groupby? projection
 
 selection: "[" [compare ("," compare)*] "]"
 
@@ -47,7 +47,8 @@ projection: "{" atom ("," atom)* "}"
 array: "[" atom ("," atom)* "]"
 
 func_call: name func_args
-func_args: "(" [expr ("," expr)*] ")"
+func_args: "(" [func_arg ("," func_arg)*] ")"
+func_arg: [name "="] expr
 
 ?value: NUMBER -> number
       | STRING -> string
