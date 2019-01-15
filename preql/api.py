@@ -62,7 +62,7 @@ def test2():
     print(i.from_my_country())
     print(i.population_count())
     print(i.citizens_list())
-    # print(i.explicit_join2())
+    print(i.explicit_join2())
 
 def test3():
     a = open("preql/tree.pql").read()

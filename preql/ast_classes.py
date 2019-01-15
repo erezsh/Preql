@@ -53,15 +53,20 @@ NullType = BuiltinType('Null')
 class ArrayType(Type):
     elem_type: Type
 
+@dataclass
 class RelationType(Type):
     pass
 
 @dataclass
 class TableType(RelationType):
     name: str
+    alias: str = None
 
     def __repr__(self):
-        return 'TableType(%r)' % self.name
+        if self.alias:
+            return 'TableType(%s=%r)' % (self.alias, self.name)
+        else:
+            return 'TableType(%r)' % self.name
 
     def main_rel_name(self):
         return self.name
@@ -200,6 +205,7 @@ class AddRow(Ast):
 class ColumnRef(Expr):
     relation: Relation
     column: Column
+    alias: str = None
 
 @dataclass
 class RowRef(Expr):

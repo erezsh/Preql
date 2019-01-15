@@ -60,11 +60,17 @@ class ExprCompiler:
         return CompiledSQL('"%s"' % v.value, [v.type])
 
     def _sqlexpr_ColumnRef(self, colref: ColumnRef):
-        sql = '%s.%s' % (colref.relation.name, colref.column.name)
-        return CompiledSQL(sql, [colref.column.type], [colref.column.name])
+        sql = '%s.%s' % (colref.alias or colref.relation.name, colref.column.name)
+        col_prefix = '%s.' % colref.alias if colref.alias else '' 
+        return CompiledSQL(sql, [colref.column.type], [col_prefix + colref.column.name])
 
     def _sqlexpr_TableType(self, tabletype: TableType):
-        return CompiledSQL(tabletype.name, [tabletype], [tabletype.name])
+        if tabletype.alias:
+            sql = '%s %s' % (tabletype.name, tabletype.alias)
+        else:
+            sql = tabletype.name
+
+        return CompiledSQL(sql, [tabletype], [tabletype.name])
 
     _resolve_Value = NotImplemented
 
@@ -81,7 +87,7 @@ class ExprCompiler:
     _resolve_Arith = _resolve_elems
     _resolve_Compare = _resolve_elems
 
-    def _resolve_Ref_relation(self, relation, name, requires):
+    def _resolve_Ref_relation(self, relation, alias, name, requires):
         c = relation.get_column(name)
         if isinstance(c.type, TableType):
             # Foreign Key - join with the target table
@@ -91,7 +97,7 @@ class ExprCompiler:
             requires.append(( c.type.ref_to, relation.name ))
             return FuncCall('to_array', FuncArgs([c.name, c.type.ref_to], {}))
 
-        return ColumnRef(relation, c)
+        return ColumnRef(relation, c, alias)
 
     def _resolve_Ref_base(self, name, requires):
         with suppress(KeyError):
@@ -102,7 +108,7 @@ class ExprCompiler:
             return self.vars[name]
 
         relation = self.context.get('relation')
-        return self._resolve_Ref_relation(relation, name, requires)
+        return self._resolve_Ref_relation(relation, None, name, requires)
 
     def _resolve_Ref(self, ref: Ref):
         assert ref.resolved is None, ref
@@ -134,7 +140,7 @@ class ExprCompiler:
             
             else:
                 assert isinstance(x, TableType)
-                x = self._resolve_Ref_relation(self.tables[x.name], name, requires)
+                x = self._resolve_Ref_relation(self.tables[x.name], x.alias, name, requires)
         
         ref.resolved = x
         yield from requires
@@ -170,10 +176,7 @@ class ExprCompiler:
         return self._resolve_expr(join.rel1) + self._resolve_expr(join.rel2)
 
     def _resolve_FreeJoin(self, join: FreeJoin):
-        print('###', freejoin)
-        assert False
-        import pdb
-        pdb.set_trace()
+        raise Exception()
 
     def _sqlexpr_Join(self, join: Join):
         r1 = self._sqlexpr(join.rel1)
@@ -191,9 +194,9 @@ class ExprCompiler:
     def _sqlexpr_FreeJoin(self, join: FreeJoin):
         r1 = self._sqlexpr(join.rel1)
         r2 = self._sqlexpr(join.rel2)
-        import pdb
-        pdb.set_trace()
-        pass
+
+        s = f'{r1.sql} JOIN {r2.sql}'
+        return CompiledSQL(s, [RelationType])
 
     def _resolve_relation(self, rel: Expr):
         if isinstance(rel, Join):
@@ -218,19 +221,20 @@ class ExprCompiler:
             assert not fc.args.pos_args
             relations = fc.args.named_args
             assert len(relations) == 2  # TODO support joining several at a time
-            types = {}
+            tables = {}
             for alias, ref in relations.items():
                 assert isinstance(ref, Ref)
                 name ,= ref.name
-                types[alias] = TableType(name)
-            relation = FreeJoin(*types.values(), None)
+                tables[alias] = TableType(name, alias=alias)
+            relation = FreeJoin(*tables.values(), None)
             args = dict(self.context.get('args'))
-            args.update(types)
+            args.update(tables)
             self.context.append( {'args': args} )
         else:
             table_name ,= query.relation.name   # Cannot handle join yet
             relation = TableType(table_name)
             self.context.append( {'relation': self.tables[table_name]} )
+            tables = {}
 
         try:
 
@@ -241,7 +245,10 @@ class ExprCompiler:
                 requires += self._resolve_exprs(query.projection)
 
             if requires:
+                joined_tables = [t.name for t in tables.values()]
                 for r, r_gb in requires:
+                    if r.name in joined_tables:
+                        continue
                     relation = Join(relation, r, [])
                     if r_gb:
                         assert query.groupby is None, query.groupby
@@ -264,6 +271,7 @@ class ExprCompiler:
             sel_sql = ' WHERE ' + ' AND '.join(s.sql for s in sel)
         else:
             sel_sql = ''
+
         if query.projection:
             proj = [self._sqlexpr(x) for x in query.projection]
             proj_sql_list = []
@@ -342,9 +350,7 @@ class ExprCompiler:
             self.context.pop()
 
     def compile(self, expr):
-        print('^^', expr)
         self._resolve_expr(expr)
-        print('##', expr)
         return self._sqlexpr(expr)
 
 
@@ -484,7 +490,7 @@ class Interpreter:
         for i, n in enumerate(names):
             if n is None:
                 names[i] = '_%d' % i
-        assert len(names) == len(set(names))
+        assert len(names) == len(set(names)), names
         values = []
         for t, v in zip(types, row):
             if isinstance(t, ArrayType):
