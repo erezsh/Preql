@@ -4,7 +4,7 @@ stmts: stmt+
 ?stmt: table_def | func_def | add_row
 
 add_row: "add" name "(" arguments ")" as_? _NL
-arguments: atom ("," atom)* ","?
+arguments: molecule ("," molecule)* ","?
 
 as_: "as" name
 // assigns: assign ("," assign)* ","?
@@ -12,51 +12,54 @@ as_: "as" name
 
 table_def: "table" name ":" _NL _INDENT table_def_stmt+ _DEDENT
 ?table_def_stmt: col_def
-col_def: name ":" type ["->" name] _NL
-type: name typemod?
+col_def: name ":" type typemod? ["->" name] _NL
+type: name
 typemod: PK | NULLABLE
 
 func_def: name func_params? "=" expr _NL
 func_params: "(" name ("," name)* ")"
 
-?query: atom selection groupby? projection?
-      | atom selection? groupby projection?
-      | atom selection? groupby? projection
+?query: molecule selection projection?
+      | molecule selection? projection
+
+?query2: molecule projection selection
 
 selection: "[" [compare ("," compare)*] "]"
 
-groupby: "groupby" _refs
+// groupby: "groupby" _refs
+// _refs: ref ("," ref)*
 
-projection: "{" atom ("," atom)* "}"
+projection: "{" func_arg ("," func_arg)* "}"
 
-?compare: atom compare_op atom
+?compare: molecule compare_op molecule
 
 ?expr: arith_expr
 
-!?arith_expr: expr "+" atom
-           | atom
+?arith_expr: expr ARITH_OP molecule
+           | molecule
+
+ARITH_OP: "+"
 
 !compare_op: "<" | ">" | "=" | "!=" | "<>"
-?atom: value
+?molecule: atom
      | func_call
-     | ref            // or ref
+     | identifier
      | array
-     | query
+     | query | query2
      | "(" expr ")"
 
-array: "[" atom ("," atom)* "]"
+array: "[" molecule ("," molecule)* "]"
 
 func_call: name func_args
 func_args: "(" [func_arg ("," func_arg)*] ")"
 func_arg: [name "="] expr
 
-?value: NUMBER -> number
+?atom: NUMBER -> number
       | STRING -> string
       | "null" -> null
 
-_refs: ref ("," ref)*
 
-ref: name ("." name)*
+identifier: name ("." name)*
 name: NAME
 
 PK: "pk"

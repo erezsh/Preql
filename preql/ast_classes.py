@@ -1,218 +1,238 @@
 from enum import Enum
 from dataclasses import dataclass as _dataclass
 
-# from validateit import typeforced
-# dataclass = lambda c: typeforced(_dataclass(c))
-
 dataclass = _dataclass
 
-class Ast:
+class Dataclass:
     def __post_init__(self):
+        if not hasattr(self, '__annotations__'):
+            return
         for name, type_ in self.__annotations__.items():
             value = getattr(self, name)
             assert value is None or isinstance(value, type_), (name, value, type_)
 
+class Ast(Dataclass):
+    pass
 
-BuiltinTypes = Enum('BuiltinTypes', 'Str Int Float')
-TypeEnum = Enum('Types', 'builtin table')
 
+
+@dataclass
+class Type(Dataclass):
+    pass
+
+class ValueType(Type):
+    pass
+
+class AnyType(ValueType):
+    pass
+
+class TabularType(ValueType):
+    pass
+
+@dataclass
+class RelationalType(Type):  # TablularType?
+    "Signifies a relationship between tables"
+
+    table_name: str
+    column_name: str = 'id'
+    # backref_name: str
+
+
+class AtomType(ValueType):
+    pass
+
+class BoolType(AtomType):
+    pass
+
+class IntegerType(AtomType):
+    pass
+
+@dataclass
+class IdType(AtomType): # IntegerType?
+    table: str
+
+class StringType(AtomType):
+    pass
+
+class NullType(AtomType):
+    pass
+
+@dataclass
+class ArrayType(ValueType):
+    elem_type: ValueType
+
+
+
+
+##################################################
+#                Expressions
+##################################################
 
 class Expr(Ast):
-    pass
-
-class Type(Expr):
-    @classmethod
-    def from_str(cls, s):
-        try:
-            return {
-                "Int": IntType,
-                "Str": StrType,
-            }[s]
-        except KeyError:
-            return TableType(s)
-
-    def __repr__(self):
-        return type(self).__name__
-
-@dataclass(frozen=True)
-class BuiltinType(Type):
-    name: str
-
-    def __repr__(self):
-        return self.name
-
-    def __deepcopy__(self, memo):
-        return self
-
-StrType = BuiltinType('Str')
-IntType = BuiltinType('Int')
-BoolType = BuiltinType('Int')
-NullType = BuiltinType('Null')
-
-@dataclass
-class ArrayType(Type):
-    elem_type: Type
-
-@dataclass
-class RelationType(Type):
-    pass
-
-@dataclass
-class TableType(RelationType):
-    name: str
-    alias: str = None
-
-    def __repr__(self):
-        if self.alias:
-            return 'TableType(%s=%r)' % (self.alias, self.name)
-        else:
-            return 'TableType(%r)' % self.name
-
-    def main_rel_name(self):
-        return self.name
-
-@dataclass
-class BackRefType(RelationType):
-    ref_to: TableType
-
-@dataclass
-class Join(RelationType):
-    rel1: RelationType
-    rel2: RelationType
-    selection: list
-
-    def main_rel_name(self):
-        return self.rel1.main_rel_name()
-
-@dataclass
-class FreeJoin(Join):
-    pass
-
+    type: Type = None
 
 @dataclass
 class Arith(Expr):
     op: str
-    elems: list
+    exprs: list
+
+@dataclass
+class Compare(Expr):
+    op: str
+    exprs: list
 
 @dataclass
 class Value(Expr):
-    type: Type
     value: object
+    type: ValueType
 
     @classmethod
     def from_pyobj(cls, obj):
+        if obj is None:
+            return cls(None, NullType())
         if isinstance(obj, str):
-            return cls(StrType, obj)
+            return cls(obj, StringType())
         assert False
 
 @dataclass
-class Ref(Expr):
+class Identifier(Expr):
     "Any reference; Prior to type resolution"
     name: list
     resolved: object = None
 
     def __repr__(self):
         if self.resolved:
-            return "Ref(%s, resolved=%r)" % ('.'.join(self.name), self.resolved)
+            return "Identifier(%s, resolved=%r)" % ('.'.join(self.name), self.resolved)
 
-        return "Ref(%s)" % '.'.join(self.name)
+        return "Identifier(%s)" % '.'.join(self.name)
 
-    def main_rel_name(self):
-        name ,= self.name
-        return name
 
-@dataclass
-class Attr(Expr):
-    name: str
+class TabularExpr(Expr):
+    type = TabularType
 
 @dataclass
-class Compare(Expr):
-    op: str
-    elems: list
+class Join(TabularExpr):
+    exprs: list
 
-    def exprs(self):
-        return self.elems
-
-@dataclass
-class Query(Expr):
-    relation: Expr  # ref (table / table.other_table / function / (expr) )
-    selection: list
-    groupby: list
-    projection: list
-
-    def relations(self):
-        return [self.relation]
-
-    def exprs(self):
-        return self.relations + self.selection + self.projection + self.groupby
+    __types__ = {
+        'exprs': [TabularType]
+    }
 
 @dataclass
-class Function(Ast):
-    name: str
-    params: list
-    expr: Expr
+class FreeJoin(Join):
+    pass
 
 @dataclass
-class FuncArgs(Ast):
+class AutoJoin(Join):
+    pass
+
+
+@dataclass
+class Projection(TabularExpr):
+    tab: Expr
+    exprs: list
+
+    __types__ = {
+        'tab': TabularType,
+    }
+
+@dataclass
+class Selection(TabularExpr):
+    tab: Expr
+    exprs: list
+
+    __types__ = {
+        'tab': TabularType,
+        'exprs': [BoolType]
+    }
+
+
+@dataclass
+class FuncArgs(Expr):
     pos_args: list
     named_args: dict
 
+    @property
+    def exprs(self):
+        return self.pos_args + self.named_args.values()
+
+
+
 @dataclass
 class FuncCall(Expr):
-    # TODO Are Query and FuncCall the same construct?
     name: str
     args: FuncArgs
     resolved: object = None
 
+    @property
     def exprs(self):
-        return self.args
+        return [self.args]
 
 
+##################################################
+#                 Declarations
+##################################################
 
-# Non-expr AST
-@dataclass
-class Relation(Ast):
-    def get_column(self, name):
-        for c in self.columns:
-            if c.name == name:
-                return c
-        
-        raise KeyError(name)
-
+class Declaration(Ast):
+    pass
 
 @dataclass
-class Table(Relation):
+class Function(Declaration):
+    name: str
+    params: list
+    expr: Expr
+
+    param_types: list = None
+    return_type: Type = None
+
+
+@dataclass
+class Table(Declaration):
     name: str
     columns: list
 
 @dataclass
-class Column(Ast):
+class Column(Declaration):
     name: str
     type: Type
-    backref: str
+    backref: str  # Handled in type?
     is_nullable: bool
     is_pk: bool
 
-@dataclass
-class AddRow(Ast):
-    table: TableType
-    args: list
-    as_: str
+    table: Table = None
 
 
-## ??
+### Declaration references, resolved by identifier
+
+class DeclRef(Expr):
+    "Objects that refer to declared objects"
+    pass
+
 @dataclass
 class ColumnRef(Expr):
-    relation: Relation
+    # tab: TabularExpr
     column: Column
-    alias: str = None
+
+    @property
+    def type(self):
+        return self.column.type
+
+# @dataclass    # Query?
+# class RowRef(Expr):
+#     tab: TabularExpr
+#     row_id: int
+
+#     type: TabularType
+
+##################################################
+#                 Statements
+##################################################
+
+class Stmt(Ast):
+    pass
 
 @dataclass
-class RowRef(Expr):
-    relation: TableType
-    row_id: int
-
-
-
-Null = Value(NullType, None)
-AnyType = Type()
+class AddRow(Stmt):
+    table: str
+    args: list
+    as_: str

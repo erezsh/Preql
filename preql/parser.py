@@ -25,26 +25,38 @@ class ToAST(Transformer):
 
     # Table definition
     def table_def(self, name, *cols):
-        cols = [Column('id', Type.from_str('Int'), None, False, True)] + list(cols)
-        return Table(name, cols)
+        cols = [Column('id', IdType(name), None, False, True)] + list(cols)
+        table = Table(name, cols)
+        for c in cols:
+            assert c.table is None
+            c.table = table
+        return table
 
     typemod = as_args(list)
-    def col_def(self, name, type_, backref):
-        type_, typemod = type_
+    def col_def(self, name, type_, typemod, backref):
         if backref:
-            assert isinstance(type_, TableType) # TODO nice error
+            assert isinstance(type_, RelationalType) # TODO nice error
         return Column(name, type_, backref, typemod and '?' in typemod, False)
 
     # Add Row
     arguments = as_args(list)
     def add_row(self, table, args, as_name):
-        return AddRow(TableType(table), args, as_name)
+        return AddRow(table, args, as_name)
 
     assign = as_args(tuple)
     assigns = as_args(list)
 
     # Query
-    query = Query
+    def query(self, tab, sel, proj):
+        if sel:
+            tab = Selection(tab, sel)
+        if proj:
+            tab = Projection(tab, proj)
+        return tab
+
+    def query2(self, tab, proj, sel):
+        return self.query(tab, sel, proj)
+
     selection = as_args(list)
     # func_args = as_args(list)
     projection = as_args(list)
@@ -71,20 +83,27 @@ class ToAST(Transformer):
         
     # Atoms (Types and Values)
     def string(self, x):
-        return Value(StrType, x[1:-1])
+        return Value.from_pyobj(x[1:-1])
 
     def null(self):
-        return Null
+        return Value.from_pyobj(None)
 
     @as_args
     def array(self, v):
-        return Value(ArrayType(AnyType), v)
+        return Value(v, ArrayType(AnyType()))
 
     typename = str
-    def type(self, typename, typemod):
-        return Type.from_str(typename), typemod
+    def type(self, typename):
+        # return Type.from_str(typename), typemod
+        try:
+            return {
+                "Int": IntegerType,
+                "Str": StringType,
+            }[typename]()
+        except KeyError:
+            return RelationalType(typename)
 
-    ref = as_args(Ref)
+    identifier = as_args(Identifier)
 
     # Operations
     compare_op = str
@@ -107,8 +126,8 @@ def parse_query(q):
 
 def test():
     # a = open("preql/simple1.pql").read()
-    a = open("preql/simple2.pql").read()
-    # a = open("preql/tree.pql").read()
+    # a = open("preql/simple2.pql").read()
+    a = open("preql/tree.pql").read()
     for s in parse(a):
         print(s)
 
