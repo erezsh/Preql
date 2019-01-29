@@ -29,7 +29,7 @@ selection: "[" [compare ("," compare)*] "]"
 // groupby: "groupby" _refs
 // _refs: ref ("," ref)*
 
-projection: "{" func_arg ("," func_arg)* "}"
+projection: "{" named_expr ("," named_expr)* "}"
 
 ?compare: molecule compare_op molecule
 
@@ -51,8 +51,8 @@ ARITH_OP: "+"
 array: "[" molecule ("," molecule)* "]"
 
 func_call: name func_args
-func_args: "(" [func_arg ("," func_arg)*] ")"
-func_arg: [name "="] expr
+func_args: "(" [named_expr ("," named_expr)*] ")"
+named_expr: [name "="] expr
 
 ?atom: NUMBER -> number
       | STRING -> string

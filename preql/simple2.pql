@@ -18,11 +18,11 @@ add Person("H.G. Wells", eng)
 add Person("John Steinbeck", us)
 
 
-english_speakers = Person[country.language="en"]
-person_and_language = Person {name, country.language}
-from_my_country = Person [country=me.country, id!=me.id]
-population_count = Country {name, count(citizens)}
-citizens_list = Country {name, citizens}     # array_agg
+# english_speakers = Person[country.language="en"]
+# person_and_language = Person {name, country.language}
+# from_my_country = Person [country=me.country, id!=me.id]
+# population_count = Country {name, count(citizens)}
+# citizens_list = Country {name, citizens}     # array_agg
 
 
 

@@ -57,12 +57,13 @@ def test1():
 def test2():
     i = Interface()
     i.load('simple2.pql', rel_to=__file__)
-    print(i.english_speakers())
-    print(i.person_and_language())
-    print(i.from_my_country())
-    print(i.population_count())
-    print(i.citizens_list())
-    print(i.explicit_join2())
+    # print(i.english_speakers())
+    # print(i.person_and_language())
+    # print(i.from_my_country())
+    # print(i.population_count())
+    # print(i.citizens_list())
+    # print(i.explicit_join2())
+    print(i.explicit_join())
 
 def test3():
     a = open("preql/tree.pql").read()
@@ -75,7 +76,7 @@ def test3():
     # i.up() - requires join aliases!
     # i.animals() - Requires advanced type system
 
-print('---------')
-test1()
-print('---------')
-test2()
+# print('---------')
+# # test1()
+# print('---------')
+# test2()

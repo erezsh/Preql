@@ -11,9 +11,12 @@ class PythonIndenter(Indenter):
     DEDENT_type = '_DEDENT'
     tab_len = 8
 
-parser = Lark.open('preql.lark', rel_to=__file__, parser='lalr', postlex=PythonIndenter(), lexer='standard', maybe_placeholders=True)
-query_parser = Lark.open('preql.lark', rel_to=__file__, start='query', parser='lalr', postlex=PythonIndenter(), lexer='standard', maybe_placeholders=True)
 
+def _parser(start):
+    return Lark.open('preql.lark', rel_to=__file__, start=start, parser='lalr', postlex=PythonIndenter(), lexer='standard', maybe_placeholders=True)
+
+parser = _parser('start')
+query_parser = _parser('query')
 
 as_args = v_args(inline=False)
 
@@ -25,8 +28,8 @@ class ToAST(Transformer):
 
     # Table definition
     def table_def(self, name, *cols):
-        cols = [Column('id', IdType(name), None, False, True)] + list(cols)
-        table = Table(name, cols)
+        cols = [Column('id', None, False, True, type=IdType(name))] + list(cols)
+        table = NamedTable(cols, name)
         for c in cols:
             assert c.table is None
             c.table = table
@@ -36,7 +39,7 @@ class ToAST(Transformer):
     def col_def(self, name, type_, typemod, backref):
         if backref:
             assert isinstance(type_, RelationalType) # TODO nice error
-        return Column(name, type_, backref, typemod and '?' in typemod, False)
+        return Column(name, backref, typemod and '?' in typemod, False, type=type_)
 
     # Add Row
     arguments = as_args(list)
@@ -64,7 +67,7 @@ class ToAST(Transformer):
     func_def = Function
     func_call = FuncCall
 
-    func_arg = as_args(tuple)
+    named_expr = NamedExpr #as_args(tuple)
     # def func_arg(self, name, value):
     #     return name, value
 
@@ -72,13 +75,13 @@ class ToAST(Transformer):
     def func_args(self, args):
         pos_args = []
         named_args = {}
-        for name, value in args:
-            if name:  # Named arg
-                assert name not in named_args
-                named_args[name] = value
+        for ne in args:
+            if ne.name:  # Named arg
+                assert ne.name not in named_args
+                named_args[ne.name] = ne.expr
             else:
                 assert not named_args
-                pos_args.append(value)
+                pos_args.append(ne.expr)
         return FuncArgs(pos_args, named_args)
         
     # Atoms (Types and Values)
@@ -108,10 +111,10 @@ class ToAST(Transformer):
     # Operations
     compare_op = str
     def compare(self, a, op, b):
-        return Compare(str(op), [a, b])
+        return Compare(op, [a, b])
 
     def arith_expr(self, a, op, b):
-        return Arith(str(op), [a, b])
+        return Arith(op, [a, b])
 
 def parse(s):
     t = parser.parse(s.rstrip() + '\n')

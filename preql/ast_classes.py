@@ -16,7 +16,7 @@ class Ast(Dataclass):
 
 
 
-@dataclass
+@dataclass(frozen=True)
 class Type(Dataclass):
     pass
 
@@ -36,6 +36,10 @@ class RelationalType(Type):  # TablularType?
     table_name: str
     column_name: str = 'id'
     # backref_name: str
+
+@dataclass
+class BackRefType(Type):
+    to_table: str
 
 
 class AtomType(ValueType):
@@ -60,7 +64,6 @@ class NullType(AtomType):
 @dataclass
 class ArrayType(ValueType):
     elem_type: ValueType
-
 
 
 
@@ -106,9 +109,26 @@ class Identifier(Expr):
 
         return "Identifier(%s)" % '.'.join(self.name)
 
+    @property
+    def type(self):
+        if self.resolved:
+            return self.resolved.type
 
 class TabularExpr(Expr):
     type = TabularType
+
+@dataclass
+class Table(TabularExpr):
+    columns: list
+
+    def __getitem__(self, name):
+        cols = [c for c in self.columns if c.name == name]
+        if not cols:
+            raise KeyError("No such column: %s" % name)
+        col ,= cols
+        return col
+
+
 
 @dataclass
 class Join(TabularExpr):
@@ -146,6 +166,10 @@ class Selection(TabularExpr):
         'exprs': [BoolType]
     }
 
+    @property
+    def type(self):
+        return self.tab.type
+
 
 @dataclass
 class FuncArgs(Expr):
@@ -156,6 +180,10 @@ class FuncArgs(Expr):
     def exprs(self):
         return self.pos_args + self.named_args.values()
 
+@dataclass
+class NamedExpr(Expr):
+    name: str   # nullable
+    expr: Expr
 
 
 @dataclass
@@ -173,7 +201,16 @@ class FuncCall(Expr):
 #                 Declarations
 ##################################################
 
-class Declaration(Ast):
+class Stmt(Ast):
+    pass
+
+@dataclass
+class AddRow(Stmt):
+    table: str
+    args: list
+    as_: str
+
+class Declaration(Stmt):
     pass
 
 @dataclass
@@ -187,35 +224,55 @@ class Function(Declaration):
 
 
 @dataclass
-class Table(Declaration):
+class NamedTable(Table, Declaration):
     name: str
-    columns: list
+
+    def __repr__(self):
+        return '<NamedTable:%s>' % self.name
 
 @dataclass
-class Column(Declaration):
+class Column(Expr, Declaration):
     name: str
-    type: Type
     backref: str  # Handled in type?
     is_nullable: bool
     is_pk: bool
 
+    type: Type
     table: Table = None
 
 
 ### Declaration references, resolved by identifier
 
-class DeclRef(Expr):
-    "Objects that refer to declared objects"
-    pass
+# class DeclRef(Expr):
+#     "Objects that refer to declared objects"
+#     pass
 
-@dataclass
-class ColumnRef(Expr):
-    # tab: TabularExpr
-    column: Column
+# @dataclass
+# class ColumnRef(Expr):
+#     # tab: TabularExpr
+#     column: Column
 
-    @property
-    def type(self):
-        return self.column.type
+#     @property
+#     def type(self):
+#         return self.column.type
+
+#     def __repr__(self):
+#         return 'ColumnRef:%s' % self.column.name
+
+
+# @dataclass
+# class TableRef(TabularExpr):
+#     table: Table
+
+#     type = TabularType
+
+#     def __repr__(self):
+#         return 'TableRef:%s' % self.table.name
+
+#     def __getitem__(self, name):
+#         col ,= [c for c in self.table if c.name == name]
+#         return col
+
 
 # @dataclass    # Query?
 # class RowRef(Expr):
@@ -227,12 +284,3 @@ class ColumnRef(Expr):
 ##################################################
 #                 Statements
 ##################################################
-
-class Stmt(Ast):
-    pass
-
-@dataclass
-class AddRow(Stmt):
-    table: str
-    args: list
-    as_: str
