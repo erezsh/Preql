@@ -3,6 +3,8 @@ from dataclasses import dataclass as _dataclass
 
 dataclass = _dataclass
 
+from lark import Tree
+
 class Dataclass:
     def __post_init__(self):
         if not hasattr(self, '__annotations__'):
@@ -12,6 +14,25 @@ class Dataclass:
             assert value is None or isinstance(value, type_), (name, value, type_)
 
 class Ast(Dataclass):
+    def _to_tree(self, expr):
+        if isinstance(expr, Ast):
+            return expr.to_tree()
+        return expr
+
+    def to_tree(self):
+        if getattr(self, 'resolved', False):
+            return self.resolved.to_tree()
+
+        children = []
+        for name, type_ in self.__annotations__.items():
+            value = getattr(self, name)
+            if isinstance(value, list):
+                t = Tree('.'+name, [self._to_tree(v) for v in value])
+            else:
+                t = Tree('.'+name, [self._to_tree(value)])
+
+            children.append(t)
+        return Tree(self.__class__.__name__, children)
     pass
 
 
@@ -97,8 +118,20 @@ class Value(Expr):
             return cls(obj, StringType())
         assert False
 
+class Resolvable:
+    @property
+    def type(self):
+        if self.resolved:
+            return self.resolved.type
+
+    @property
+    def resolved_table(self):
+        rt = self.resolved.resolved_table
+        assert rt, self.resolved
+        return rt
+
 @dataclass
-class Identifier(Expr):
+class Identifier(Expr, Resolvable):
     "Any reference; Prior to type resolution"
     name: list
     resolved: object = None
@@ -109,13 +142,10 @@ class Identifier(Expr):
 
         return "Identifier(%s)" % '.'.join(self.name)
 
-    @property
-    def type(self):
-        if self.resolved:
-            return self.resolved.type
 
 class TabularExpr(Expr):
-    type = TabularType
+    type = TabularType()
+    resolved_table = None
 
 @dataclass
 class Table(TabularExpr):
@@ -128,6 +158,9 @@ class Table(TabularExpr):
         col ,= cols
         return col
 
+    @property
+    def resolved_table(self):
+        return self
 
 
 @dataclass
@@ -137,6 +170,13 @@ class Join(TabularExpr):
     __types__ = {
         'exprs': [TabularType]
     }
+
+    def __getitem__(self, name):
+        exprs = [c for c in self.exprs if c.name == name]
+        if not exprs:
+            raise KeyError("No such alias: %s" % name)
+        expr ,= exprs
+        return expr
 
 @dataclass
 class FreeJoin(Join):
@@ -149,26 +189,31 @@ class AutoJoin(Join):
 
 @dataclass
 class Projection(TabularExpr):
-    tab: Expr
+    table: Expr
     exprs: list
 
     __types__ = {
-        'tab': TabularType,
+        'table': TabularType,
     }
 
 @dataclass
 class Selection(TabularExpr):
-    tab: Expr
+    table: Expr
     exprs: list
 
     __types__ = {
-        'tab': TabularType,
+        'table': TabularType,
         'exprs': [BoolType]
     }
 
     @property
     def type(self):
-        return self.tab.type
+        return self.table.type
+
+@dataclass
+class AliasedTable(TabularExpr):
+    table: Expr
+    name: str
 
 
 @dataclass
@@ -187,7 +232,7 @@ class NamedExpr(Expr):
 
 
 @dataclass
-class FuncCall(Expr):
+class FuncCall(Expr, Resolvable):
     name: str
     args: FuncArgs
     resolved: object = None
@@ -196,6 +241,11 @@ class FuncCall(Expr):
     def exprs(self):
         return [self.args]
 
+
+@dataclass
+class Count(Expr):
+    exprs: list
+    type: IntegerType
 
 ##################################################
 #                 Declarations
@@ -240,6 +290,8 @@ class Column(Expr, Declaration):
     type: Type
     table: Table = None
 
+    def to_tree(self):
+        return '-> %s.%s' % (self.table.name, self.name)
 
 ### Declaration references, resolved by identifier
 

@@ -60,8 +60,7 @@ class ResolveIdentifiers:
     Compare = _resolve_exprs
 
     def _resolve_expr_list(self, exprs):
-        for e in exprs:
-            self._resolve_expr(e)
+        return [self._resolve_expr(e) for e in exprs]
 
     def _resolve_expr(self, ast_node):
         ast_type = type(ast_node)
@@ -84,58 +83,114 @@ class ResolveIdentifiers:
         return self._resolve_expr(expr)
 
     def Projection(self, proj: Projection):
-        table = self._resolve_expr(proj.tab)
-        self.context.append({'table': table})
+        self._resolve_expr(proj.table)
+        proj.resolved_table = proj.table.resolved_table
+        assert proj.resolved_table, proj
+        self.context.append({'table': proj.resolved_table})
         self._resolve_exprs(proj)
         self.context.pop()
         # TODO return projected table
-        return table
 
     def Selection(self, sel: Selection):
-        table = self._resolve_expr(sel.tab)
-        self.context.append({'table': table})
+        self._resolve_expr(sel.table)
+        sel.resolved_table = sel.table.resolved_table
+        assert sel.resolved_table, sel
+        self.context.append({'table': sel.resolved_table})
         self._resolve_exprs(sel)
         self.context.pop()
-        return table
 
     def Identifier(self, ident: Identifier):
         assert not ident.resolved
 
         basename = ident.name[0]
-        assert not ident.name[1:]   # TODO
+        # assert not ident.name[1:]   # TODO
 
         args = self.context.get('args')
 
+        path = ident.name[1:]
         if basename in args:
-            ident.resolved = args[basename]
+            obj = args[basename]
         elif basename in self.state.vars:
             assert False
         elif basename in self.state.tables: 
-            ident.resolved = table = self.state.tables[basename]
+            obj = self.state.tables[basename]
         else:
             # Check if basename is a column in the current table
-            table = self.context.get('table')
+            obj = self.context.get('table')
+            path = ident.name
+            assert obj
 
-            col = table[basename]
-            if isinstance(col.type, RelationalType):
-                assert False
-
-            assert isinstance(col.type, AtomType), col
-
-            ident.resolved = col
         
+        for name in path:
+            assert isinstance(obj.type, TabularType)
+
+            obj = obj.resolved_table[name]
+
+            if isinstance(obj.type, RelationalType):
+                assert False
+            elif isinstance(obj.type, TabularType):
+                pass
+            else:
+                assert isinstance(obj.type, AtomType), obj
+                pass
+
+
+        # if len(ident.name)>1:
+        #     table = self.context.get('table')
+        #     print('@@', table)
+        #     print('@@', table[basename])
+        #     import pdb
+        #     pdb.set_trace()
+        
+        ident.resolved = obj
         return ident.resolved
 
     def NamedExpr(self, named_expr):
         self._resolve_expr(named_expr.expr)
+
+    def AutoJoin(self, join: AutoJoin):
+        self._resolve_expr_list(join.exprs)
+        join.resolved_table = join
+
+    def AliasedTable(self, aliased):
+        # TODO clunky code. Put into generic methods
+        self._resolve_expr(aliased.table)
+        resolved = aliased.table.resolved_table 
+        columns = [copy(c) for c in resolved.columns]
+        renamed_table = NamedTable(columns, aliased.name)
+        for c in columns:
+            c.table = renamed_table
+        aliased.resolved_table = renamed_table
         
     def FuncCall(self, call: FuncCall):
+        if call.name in ('join', 'freejoin'):
+            assert not call.args.pos_args
+
+            cls = {
+                'join': AutoJoin,
+                'freejoin': FreeJoin,
+            }[call.name]
+
+            args = []
+            for name, table in call.args.named_args.items():
+                new_table = AliasedTable(table, name)
+                args.append(new_table)
+
+            join = cls(args)
+            call.resolved = join
+            return self._resolve_expr(join)
+
         assert not call.args.named_args # TODO
 
         if call.name in ('to_array', 'count'):
-            assert False
-            self._resolve_exprs(call.args.pos_args)
+            args = call.args.pos_args
+            self._resolve_expr_list(args)
+            if call.name == 'count':
+                call.resolved = Count(args)
+            else:
+                assert False, call
             return
+
 
         f = self.state.functions[call.name]
         expr = deepcopy(f.expr)
@@ -239,7 +294,7 @@ class Interpreter:
             table = self.state.tables[addrow.table]
             idcol ,= [c for c in table.columns if c.name == 'id']
             compare = Compare('=', [idcol, Value(rowid, IntegerType())])
-            self.state.vars[addrow.as_] = Projection(TableRef(table), [compare] )
+            self.state.vars[addrow.as_] = Projection(table, [compare] )
 
     def _def_function(self, func: Function):
         assert func.name not in self.state.functions
@@ -288,7 +343,8 @@ def _test(fn):
         print('***', name, '***', f.params)
         print(f.expr)
         f = i.call_func(name, ["hello" for p in f.params or []])
-        print(f)
+        # print(f)
+        print(f.to_tree().pretty())
         # expr = deepcopy(f.expr)
         # (i.resolver.resolve(expr))
         # print(expr)
@@ -296,8 +352,8 @@ def _test(fn):
 
             
 def test():
-    _test("preql/simple1.pql")
-    # _test("preql/simple2.pql")
+    # _test("preql/simple1.pql")
+    _test("preql/simple2.pql")
 
 if __name__ == '__main__':
     test()

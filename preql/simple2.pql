@@ -25,14 +25,13 @@ add Person("John Steinbeck", us)
 # citizens_list = Country {name, citizens}     # array_agg
 
 
-
 explicit_join = (
     join(c = Country[language="en"], p = Person)
     { p.id, p.name, c.name }
 )
 
-explicit_join2 = (
-    freejoin(c = Country, p = Person)
-    [c.language="en", p.country = c.id]
-    { p.id, p.name, c.name }
-)
+# explicit_join2 = (
+#     freejoin(c = Country, p = Person)
+#     [c.language="en", p.country = c.id]
+#     { p.id, p.name, c.name }
+# )
