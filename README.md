@@ -6,19 +6,29 @@ Pretty Query Language
 ## Example
 
 ```ruby
+        # Table definitions
+        
         table Country:
-            name: str?
+            name: string
+            language: string
 
         table Person:
-            name: str
-            age: int?
-            country -> Country
+            name: string
+            age: integer?
+            country: Country -> citizens         # Define a foreign-key with backref
 
-        add Country(name="England") as england
-        add Country(name="United States")
-        add Person(name="Orwell", country=england)
+        # Inserts
+        
+        add Country("England", "en") as england
+        add Country("United States", "en") as us
+        add Country("France", "fr") as france
+        add Person("Geroge Orwell", country=england)
+        ...
+
+        # Query definitions
 
         adults = Person [age >= 18]
-        adults_with_country = adults -> id, country.name
-        some_query = Person [age < 50, country.name = "United States"] -> id, name 
+        adults_with_country = adults {name, country.name}
+        english_speakers = Person [country.language = "en"]
+        population_count = Country {name, count(citizens)}
 ```
