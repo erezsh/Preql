@@ -7,7 +7,6 @@ Pretty Query Language
 
 ```ruby
         # Table definitions
-        
         table Country:
             name: string
             language: string
@@ -18,15 +17,13 @@ Pretty Query Language
             country: Country -> citizens         # Define a foreign-key with backref
 
         # Inserts
-        
         add Country("England", "en") as england
         add Country("United States", "en") as us
         add Country("France", "fr") as france
-        add Person("Geroge Orwell", country=england)
+        add Person("George Orwell", country=england)
         ...
 
         # Query definitions
-
         adults = Person [age >= 18]
         adults_with_country = adults {name, country.name}
         english_speakers = Person [country.language = "en"]
