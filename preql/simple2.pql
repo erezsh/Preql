@@ -31,7 +31,7 @@ explicit_join = (
 )
 
 # explicit_join2 = (
-#     freejoin(c = Country, p = Person)
-#     [c.language="en", p.country = c.id]
-#     { p.id, p.name, c.name }
-# )
+#    freejoin(c = Country, p = Person)
+#    [c.language="en", p.country = c]
+#    { p.id, p.name, c.name }
+#)

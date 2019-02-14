@@ -42,6 +42,125 @@ class State:
 #         return self._resolve_tables(expr)
 
 
+class ExprCompiler:
+    def __init__(self, state):
+        self.state = state
+        # self.context = Context()
+
+    def compile(self, expr):
+        return self._sqlexpr(expr)
+
+    def _sqlexpr(self, ast_node) -> CompiledSQL:
+        ast_type = type(ast_node)
+        assert issubclass(ast_type, Expr), (ast_node)
+        res = getattr(self, ast_type.__name__)(ast_node)
+        assert isinstance(res, CompiledSQL), ast_node
+        return res
+
+
+    def _resolved(self, node):
+        assert node.resolved
+        return self._sqlexpr(node.resolved)
+
+    FuncCall = _resolved
+    Identifier = _resolved
+
+    def Projection(self, proj):
+        # TODO names
+        table_sql = self._sqlexpr(proj.table)
+        exprs_sql = [self._sqlexpr(e) for e in proj.exprs]
+        proj_sql = ', '.join(e.sql for e in exprs_sql)
+        assert all(len(e.types) == 1 for e in exprs_sql)
+        # assert all(len(e.names) == 1 for e in exprs_sql), exprs_sql
+        proj_types = [e.types[0] for e in exprs_sql]
+        # proj_names = [e.names[0] for e in exprs_sql]
+        sql = f'SELECT {proj_sql} FROM ({table_sql.sql})' 
+        return CompiledSQL(sql, proj_types, [])
+
+    def Selection(self, sel):
+        table_sql = self._sqlexpr(sel.table)
+        exprs_sql = [self._sqlexpr(e) for e in sel.exprs]
+        where_sql = ' AND '.join(e.sql for e in exprs_sql)
+        sql = f'SELECT * FROM ({table_sql.sql}) WHERE ({where_sql})' 
+        return CompiledSQL(sql, table_sql.types, table_sql.names)
+
+    def NamedTable(self, nt):
+        # XXX returns columns? Just IdType?
+        return CompiledSQL(nt.name, [nt], [nt.name])
+
+    def AliasedTable(self, at):
+        sql = self._sqlexpr(at.table)
+        return CompiledSQL(f'({sql.sql}) {at.name}', sql.types, sql.names)
+
+    def Compare(self, cmp):
+        exprs_sql = [self._sqlexpr(e) for e in cmp.exprs]
+        assert all(len(e.types) == 1 for e in exprs_sql)
+        types = [e.types[0] for e in exprs_sql]
+        assert all(t==types[0] for t in types[1:]), types
+
+        return CompiledSQL(cmp.op.join(e.sql for e in exprs_sql), [cmp.type])
+
+    def Column(self, col):
+        prefix = ''
+        if isinstance(col.table, AliasedTable):
+            prefix = col.table.name + '.'
+        return CompiledSQL(prefix + col.name, [col.type], [col.name])
+
+    def Value(self, v):
+        # if v is Null:
+        #     return CompiledSQL('NULL', [v.type])
+        # elif v.type is IntType:
+        #     return CompiledSQL(str(v.value), [v.type])
+        # elif isinstance(v.type, ArrayType):
+        #     values = [self._sqlexpr(v) for v in v.value]
+        #     sql = 'VALUES(%s)' % ', '.join(_v.sql for _v in values)
+        #     return CompiledSQL(sql, [v.type])
+        # assert v.type is StrType, v
+        if isinstance(v.type, StringType):
+            return CompiledSQL('"%s"' % v.value, [v.type])
+        assert False
+
+    def NamedExpr(self, ne):
+        expr_sql = self._sqlexpr(ne.expr)
+        print('@@', ne)
+        # TODO add name here
+        return CompiledSQL(expr_sql.sql, expr_sql.types, expr_sql.names)
+
+    def Count(self, cnt):
+        if cnt.exprs:
+            exprs_sql = [self._sqlexpr(e) for e in cnt.exprs]
+            count_sql = ', '.join(e.sql for e in exprs_sql)
+        else:
+            count_sql = '*'
+        return CompiledSQL(f'count({count_sql})', [cnt.type])
+
+    def _find_relation(self, tables):
+        resolved_tables = [t.resolved_table for t in tables]
+        assert all(isinstance(t, NamedTable) for t in resolved_tables)
+        table1, table2 = resolved_tables     # currently just 2 tables for now
+        table1_name = table1.id.type.table
+        table2_name = table2.id.type.table
+        relations = [(table1, c, table2) for c in table1.relations if c.type.table_name == table2_name]
+        relations += [(table2, c, table1) for c in table2.relations if c.type.table_name == table1_name]
+        if len(relations) > 1:
+            raise Exception("More than 1 relation between %s <-> %s" % (table1.name, table2.name))
+        rel ,= relations
+        return rel
+
+
+    def AutoJoin(self, autojoin):
+        src_table, rel, dst_table = self._find_relation(autojoin.exprs)
+        exprs_sql = [self._sqlexpr(e) for e in autojoin.exprs]
+        join_sql = ' JOIN '.join(e.sql for e in exprs_sql)
+
+        join_sql += ' ON ' + f'{src_table.name}.{rel.name} = {dst_table.name}.id'   # rel.type.column_name
+        return CompiledSQL(join_sql, sum([e.types for e in exprs_sql], []))
+
+    def FreeJoin(self, freejoin):
+        exprs_sql = [self._sqlexpr(e) for e in freejoin.exprs]
+        join_sql = ' JOIN '.join(e.sql for e in exprs_sql)
+        return CompiledSQL(join_sql, sum([e.types for e in exprs_sql], []))
+
 class ResolveIdentifiers:
 
     def __init__(self, state):
@@ -127,7 +246,8 @@ class ResolveIdentifiers:
             obj = obj.resolved_table[name]
 
             if isinstance(obj.type, RelationalType):
-                assert False
+                # assert False
+                pass
             elif isinstance(obj.type, TabularType):
                 pass
             else:
@@ -149,6 +269,11 @@ class ResolveIdentifiers:
         self._resolve_expr(named_expr.expr)
 
     def AutoJoin(self, join: AutoJoin):
+        # TODO: Add join condition
+        self._resolve_expr_list(join.exprs)
+        join.resolved_table = join
+
+    def FreeJoin(self, join: FreeJoin):
         self._resolve_expr_list(join.exprs)
         join.resolved_table = join
 
@@ -159,7 +284,7 @@ class ResolveIdentifiers:
         columns = [copy(c) for c in resolved.columns]
         renamed_table = NamedTable(columns, aliased.name)
         for c in columns:
-            c.table = renamed_table
+            c.table = aliased #renamed_table
         aliased.resolved_table = renamed_table
         
     def FuncCall(self, call: FuncCall):
@@ -311,13 +436,20 @@ class Interpreter:
             raise ValueError(c)
 
     def call_func(self, fname, args):
-
         args = [Value.from_pyobj(a) for a in args]
         funccall = FuncCall(fname, FuncArgs(args, {}))
-        # import pdb
-        # pdb.set_trace()
         self.resolver.resolve(funccall)
-        return funccall
+        # return funccall
+        funccall_sql = self._sqlexpr(funccall)
+        return funccall_sql
+        # return self._query_as_struct(funccall_sql)
+
+    def execute_code(self, code):
+        for s in parse(code):
+            self.run_stmt(s)
+
+    def _sqlexpr(self, expr):
+        return ExprCompiler(self).compile(expr)
 
 
 def _test(fn):
@@ -343,8 +475,8 @@ def _test(fn):
         print('***', name, '***', f.params)
         print(f.expr)
         f = i.call_func(name, ["hello" for p in f.params or []])
-        # print(f)
-        print(f.to_tree().pretty())
+        print(f.sql)
+        # print(f.to_tree().pretty())
         # expr = deepcopy(f.expr)
         # (i.resolver.resolve(expr))
         # print(expr)
@@ -354,6 +486,7 @@ def _test(fn):
 def test():
     # _test("preql/simple1.pql")
     _test("preql/simple2.pql")
+    # _test("preql/tree.pql")
 
 if __name__ == '__main__':
     test()

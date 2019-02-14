@@ -14,7 +14,7 @@ class SqliteEngine(SqlEngine):
         dargs = {}
         c = self._conn.cursor()
         for i, s in enumerate(sql.split('\n')):
-            print(' ...' if i else 'SQL>', s)
+            print('    ' if i else 'SQL>', s)
         c.execute(sql, dargs)
         return c.fetchall()
 
@@ -24,7 +24,7 @@ class Interface:
         self.interp = Interpreter(SqliteEngine())
 
     def __call__(self, q, *args, **kw):
-        return self.interp.execute(q, *args, **kw)
+        return self.interp.execute_code(q, *args, **kw)
 
     def __getattr__(self, fname):
         def delegate(*args, **kw):
@@ -77,6 +77,6 @@ def test3():
     # i.animals() - Requires advanced type system
 
 # print('---------')
-# # test1()
+test1()
 # print('---------')
 # test2()

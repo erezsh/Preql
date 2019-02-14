@@ -7,7 +7,6 @@ add Person("Eric Blaire", "England")
 add Person("H.G. Wells", "England")
 
 english = Person[country="England"] {id, name}
-by_country(c) = Person[country=c] {name}
-english2 = by_country("England")
-english3 = by_country("England") {id}
-demography = Person {country, count(id)}
+by_country(c) = Person[country=c]
+english2 = by_country("England") {name}
+# demography = Person {country, count(id)}

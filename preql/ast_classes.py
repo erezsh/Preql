@@ -105,6 +105,8 @@ class Compare(Expr):
     op: str
     exprs: list
 
+    type = BoolType()
+
 @dataclass
 class Value(Expr):
     value: object
@@ -157,6 +159,15 @@ class Table(TabularExpr):
             raise KeyError("No such column: %s" % name)
         col ,= cols
         return col
+
+    @property
+    def relations(self):
+        return [c for c in self.columns if isinstance(c.type, RelationalType)]
+
+    @property
+    def id(self):
+        x ,= [c for c in self.columns if isinstance(c.type, IdType)]
+        return x
 
     @property
     def resolved_table(self):
