@@ -51,11 +51,7 @@ class ToAST(Transformer):
 
     # Query
     def query(self, tab, sel, proj):
-        if sel:
-            tab = Selection(tab, sel)
-        if proj:
-            tab = Projection(tab, proj)
-        return tab
+        return Query(tab, sel or [], proj or [])
 
     def query2(self, tab, proj, sel):
         return self.query(tab, sel, proj)

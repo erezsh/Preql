@@ -199,27 +199,37 @@ class AutoJoin(Join):
 
 
 @dataclass
-class Projection(TabularExpr):
+class Query(TabularExpr):
     table: Expr
-    exprs: list
+    selection: list
+    projection: list
 
     __types__ = {
         'table': TabularType,
     }
 
-@dataclass
-class Selection(TabularExpr):
-    table: Expr
-    exprs: list
+# @dataclass
+# class Projection(TabularExpr):
+#     table: Expr
+#     exprs: list
 
-    __types__ = {
-        'table': TabularType,
-        'exprs': [BoolType]
-    }
+#     __types__ = {
+#         'table': TabularType,
+#     }
 
-    @property
-    def type(self):
-        return self.table.type
+# @dataclass
+# class Selection(TabularExpr):
+#     table: Expr
+#     exprs: list
+
+#     __types__ = {
+#         'table': TabularType,
+#         'exprs': [BoolType]
+#     }
+
+#     @property
+#     def type(self):
+#         return self.table.type
 
 @dataclass
 class AliasedTable(TabularExpr):

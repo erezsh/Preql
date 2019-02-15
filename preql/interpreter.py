@@ -65,24 +65,42 @@ class CompileSQL_Expr:
     FuncCall = _resolved
     Identifier = _resolved
 
-    def Projection(self, proj):
-        # TODO names
-        table_sql = self._sqlexpr(proj.table)
-        exprs_sql = [self._sqlexpr(e) for e in proj.exprs]
-        proj_sql = ', '.join(e.sql for e in exprs_sql)
-        assert all(len(e.types) == 1 for e in exprs_sql)
-        # assert all(len(e.names) == 1 for e in exprs_sql), exprs_sql
-        proj_types = [e.types[0] for e in exprs_sql]
-        # proj_names = [e.names[0] for e in exprs_sql]
+    def Query(self, query: Query):
+        table_sql = self._sqlexpr(query.table)
+
+        where_sql = None
+        if query.selection:
+            exprs_sql = [self._sqlexpr(e) for e in query.selection]
+            where_sql = ' AND '.join(e.sql for e in exprs_sql)
+
+        if query.projection:
+            exprs_sql = [self._sqlexpr(e) for e in query.projection]
+            proj_sql = ', '.join(e.sql for e in exprs_sql)
+
+            proj_types = [e.types[0] for e in exprs_sql]
+        else:
+            proj_sql = '*'
+            proj_types = table_sql.types
+
         sql = f'SELECT {proj_sql} FROM ({table_sql.sql})'
+        if where_sql:
+            sql += ' WHERE ' + where_sql
         return CompiledSQL(sql, proj_types, [])
 
-    def Selection(self, sel):
-        table_sql = self._sqlexpr(sel.table)
-        exprs_sql = [self._sqlexpr(e) for e in sel.exprs]
-        where_sql = ' AND '.join(e.sql for e in exprs_sql)
-        sql = f'SELECT * FROM ({table_sql.sql}) WHERE ({where_sql})'
-        return CompiledSQL(sql, table_sql.types, table_sql.names)
+    # def Projection(self, proj):
+    #     # TODO names
+    #     exprs_sql = [self._sqlexpr(e) for e in proj.exprs]
+    #     assert all(len(e.types) == 1 for e in exprs_sql)
+    #     # assert all(len(e.names) == 1 for e in exprs_sql), exprs_sql
+    #     # proj_names = [e.names[0] for e in exprs_sql]
+    #     sql = f'SELECT {proj_sql} FROM ({table_sql.sql})'
+    #     return CompiledSQL(sql, proj_types, [])
+
+    # def Selection(self, sel):
+    #     table_sql = self._sqlexpr(sel.table)
+    #     exprs_sql = [self._sqlexpr(e) for e in sel.exprs]
+    #     sql = f'SELECT * FROM ({table_sql.sql}) WHERE ({where_sql})'
+    #     return CompiledSQL(sql, table_sql.types, table_sql.names)
 
     def NamedTable(self, nt):
         # XXX returns columns? Just IdType?
@@ -206,22 +224,26 @@ class ResolveIdentifiers:
     def resolve(self, expr):
         return self._resolve_expr(expr)
 
-    def Projection(self, proj: Projection):
-        self._resolve_expr(proj.table)
-        proj.resolved_table = proj.table.resolved_table
-        assert proj.resolved_table, proj
-        self.context.append({'table': proj.resolved_table})
-        self._resolve_exprs(proj)
+    def Query(self, query: Query):
+        self._resolve_expr(query.table)
+        query.resolved_table = query.table.resolved_table
+        self.context.append({'table': query.resolved_table})
+        self._resolve_expr_list(query.selection)
+        self._resolve_expr_list(query.projection)
         self.context.pop()
-        # TODO return projected table
 
-    def Selection(self, sel: Selection):
-        self._resolve_expr(sel.table)
-        sel.resolved_table = sel.table.resolved_table
-        assert sel.resolved_table, sel
-        self.context.append({'table': sel.resolved_table})
-        self._resolve_exprs(sel)
-        self.context.pop()
+    # def Projection(self, proj: Projection):
+    #     assert proj.resolved_table, proj
+    #     self._resolve_exprs(proj)
+    #     self.context.pop()
+    #     # TODO return projected table
+
+    # def Selection(self, sel: Selection):
+    #     sel.resolved_table = sel.table.resolved_table
+    #     assert sel.resolved_table, sel
+    #     self.context.append({'table': sel.resolved_table})
+    #     self._resolve_exprs(sel)
+    #     self.context.pop()
 
     def Identifier(self, ident: Identifier):
         assert not ident.resolved
@@ -266,6 +288,8 @@ class ResolveIdentifiers:
         #     print('@@', table[basename])
         #     import pdb
         #     pdb.set_trace()
+        if isinstance(obj, AliasedTable):
+            obj = obj.resolved_table['id']     # XXX a bit of a hack to support freejoins
 
         ident.resolved = obj
         return ident.resolved
@@ -452,6 +476,7 @@ class Interpreter:
         funccall = FuncCall(fname, FuncArgs(args, {}))
         self.resolver.resolve(funccall)
         # return funccall
+        print('@@', funccall.to_tree().pretty())
         return self.sqlexpr.compile(funccall)
         # return self._query_as_struct(funccall_sql)
 

@@ -1,10 +1,5 @@
 # First things first
 
-- Named joins to support recursion and other stuff
-
-- Two-step: Bind + type inference -> generate sql
-
-- Explicit joins
 
 - Offset + limit
 
@@ -27,3 +22,11 @@
 - Support index, check, default, unique
 
 - Store schema in meta table
+
+- Lift query selections / projections when possible (for example through a join)
+
+
+# Done Already
+- Named joins to support recursion and other stuff
+- Two-step: Bind + type inference -> generate sql
+- Explicit joins
