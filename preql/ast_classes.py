@@ -304,6 +304,14 @@ class Column(Expr, Declaration):
     def to_tree(self):
         return '-> %s.%s' % (self.table.name, self.name)
 
+
+
+@dataclass
+class RowRef(Expr):
+    table: Expr
+    row_id: int
+
+
 ### Declaration references, resolved by identifier
 
 # class DeclRef(Expr):

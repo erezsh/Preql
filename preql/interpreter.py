@@ -24,7 +24,7 @@ class State:
     functions = {}
     tables = {}
     vars = {}
-    
+
 
 # class ResolveTables:
 #     def __init__(self, state):
@@ -42,7 +42,7 @@ class State:
 #         return self._resolve_tables(expr)
 
 
-class ExprCompiler:
+class CompileSQL_Expr:
     def __init__(self, state):
         self.state = state
         # self.context = Context()
@@ -74,14 +74,14 @@ class ExprCompiler:
         # assert all(len(e.names) == 1 for e in exprs_sql), exprs_sql
         proj_types = [e.types[0] for e in exprs_sql]
         # proj_names = [e.names[0] for e in exprs_sql]
-        sql = f'SELECT {proj_sql} FROM ({table_sql.sql})' 
+        sql = f'SELECT {proj_sql} FROM ({table_sql.sql})'
         return CompiledSQL(sql, proj_types, [])
 
     def Selection(self, sel):
         table_sql = self._sqlexpr(sel.table)
         exprs_sql = [self._sqlexpr(e) for e in sel.exprs]
         where_sql = ' AND '.join(e.sql for e in exprs_sql)
-        sql = f'SELECT * FROM ({table_sql.sql}) WHERE ({where_sql})' 
+        sql = f'SELECT * FROM ({table_sql.sql}) WHERE ({where_sql})'
         return CompiledSQL(sql, table_sql.types, table_sql.names)
 
     def NamedTable(self, nt):
@@ -96,7 +96,7 @@ class ExprCompiler:
         exprs_sql = [self._sqlexpr(e) for e in cmp.exprs]
         assert all(len(e.types) == 1 for e in exprs_sql)
         types = [e.types[0] for e in exprs_sql]
-        assert all(t==types[0] for t in types[1:]), types
+        # assert all(t==types[0] for t in types[1:]), types
 
         return CompiledSQL(cmp.op.join(e.sql for e in exprs_sql), [cmp.type])
 
@@ -118,11 +118,12 @@ class ExprCompiler:
         # assert v.type is StrType, v
         if isinstance(v.type, StringType):
             return CompiledSQL('"%s"' % v.value, [v.type])
+        elif isinstance(v.type, IntegerType):
+            return CompiledSQL('%s' % v.value, [v.type])
         assert False
 
     def NamedExpr(self, ne):
         expr_sql = self._sqlexpr(ne.expr)
-        print('@@', ne)
         # TODO add name here
         return CompiledSQL(expr_sql.sql, expr_sql.types, expr_sql.names)
 
@@ -161,6 +162,10 @@ class ExprCompiler:
         join_sql = ' JOIN '.join(e.sql for e in exprs_sql)
         return CompiledSQL(join_sql, sum([e.types for e in exprs_sql], []))
 
+    def RowRef(self, rowref):
+        # TODO: assert type?
+        return CompiledSQL(str(rowref.row_id), [rowref.type])
+
 class ResolveIdentifiers:
 
     def __init__(self, state):
@@ -171,7 +176,7 @@ class ResolveIdentifiers:
         self.context = Context()
 
     Value = NotImplemented
-    
+
     def _resolve_exprs(self, expr: Expr):
         return self._resolve_expr_list(expr.exprs)
 
@@ -230,8 +235,8 @@ class ResolveIdentifiers:
         if basename in args:
             obj = args[basename]
         elif basename in self.state.vars:
-            assert False
-        elif basename in self.state.tables: 
+            obj = self.state.vars[basename]
+        elif basename in self.state.tables:
             obj = self.state.tables[basename]
         else:
             # Check if basename is a column in the current table
@@ -239,7 +244,7 @@ class ResolveIdentifiers:
             path = ident.name
             assert obj
 
-        
+
         for name in path:
             assert isinstance(obj.type, TabularType)
 
@@ -261,7 +266,7 @@ class ResolveIdentifiers:
         #     print('@@', table[basename])
         #     import pdb
         #     pdb.set_trace()
-        
+
         ident.resolved = obj
         return ident.resolved
 
@@ -280,13 +285,13 @@ class ResolveIdentifiers:
     def AliasedTable(self, aliased):
         # TODO clunky code. Put into generic methods
         self._resolve_expr(aliased.table)
-        resolved = aliased.table.resolved_table 
+        resolved = aliased.table.resolved_table
         columns = [copy(c) for c in resolved.columns]
         renamed_table = NamedTable(columns, aliased.name)
         for c in columns:
             c.table = aliased #renamed_table
         aliased.resolved_table = renamed_table
-        
+
     def FuncCall(self, call: FuncCall):
         if call.name in ('join', 'freejoin'):
             assert not call.args.pos_args
@@ -337,6 +342,9 @@ class ResolveIdentifiers:
 class CompileSQL_Stmts:
     def __init__(self, state):
         self.state = state
+        self.resolver = ResolveIdentifiers(self.state)
+        self.resolver.context.append({'args': []})
+        self.sqlexpr = CompileSQL_Expr(self.state)
 
     def to_sql(self, ast_node):
         ast_type = type(ast_node)
@@ -374,16 +382,18 @@ class CompileSQL_Stmts:
                 for c in self.state.tables[addrow.table].columns[1:]
                 if not isinstance(c.type, BackRefType)]
 
-        # values = [self._sqlexpr(v, {}) for v in addrow.args]
-        # # TODO verify types
-        # q = ['INSERT INTO', addrow.table.name, 
-        #      "(", ', '.join(cols), ")",
-        #      "VALUES",
-        #      "(", ', '.join(v.sql for v in values), ")",
-        # ]
-        # insert = ' '.join(q) + ';'
-        # return insert
-        return ''
+        for v in addrow.args:
+            self.resolver.resolve(v)
+        values = [self.sqlexpr.compile(v) for v in addrow.args]
+        # TODO verify types
+        q = ['INSERT INTO', addrow.table,
+             "(", ', '.join(cols), ")",
+             "VALUES",
+             "(", ', '.join(v.sql for v in values), ")",
+        ]
+        insert = ' '.join(q) + ';'
+        return insert
+
 
 class Interpreter:
     def __init__(self, sqlengine):
@@ -392,6 +402,7 @@ class Interpreter:
 
         self.sqldecl = CompileSQL_Stmts(self.state)
         self.resolver = ResolveIdentifiers(self.state)
+        self.sqlexpr = CompileSQL_Expr(self.state)
 
     def _add_table(self, table):
         self.state.tables[table.name] = table
@@ -417,9 +428,10 @@ class Interpreter:
         if addrow.as_:
             rowid ,= self.sqlengine.query('SELECT last_insert_rowid();')[0]
             table = self.state.tables[addrow.table]
-            idcol ,= [c for c in table.columns if c.name == 'id']
-            compare = Compare('=', [idcol, Value(rowid, IntegerType())])
-            self.state.vars[addrow.as_] = Projection(table, [compare] )
+            # idcol ,= [c for c in table.columns if c.name == 'id']
+            # compare = Compare('=', [idcol, Value(rowid, IntegerType())])
+            v = RowRef(table, rowid)
+            self.state.vars[addrow.as_] = v # Projection(table, [compare] )
 
     def _def_function(self, func: Function):
         assert func.name not in self.state.functions
@@ -435,21 +447,28 @@ class Interpreter:
         else:
             raise ValueError(c)
 
-    def call_func(self, fname, args):
+    def _compile_func(self, fname, args):
         args = [Value.from_pyobj(a) for a in args]
         funccall = FuncCall(fname, FuncArgs(args, {}))
         self.resolver.resolve(funccall)
         # return funccall
-        funccall_sql = self._sqlexpr(funccall)
-        return funccall_sql
+        return self.sqlexpr.compile(funccall)
         # return self._query_as_struct(funccall_sql)
+
+    def call_func(self, fname, args):
+        sql = self._compile_func(fname, args)
+        assert isinstance(sql, CompiledSQL)
+        return self._query_as_struct(sql)
+
+    def _query_as_struct(self, compiled_sql):
+        res = self.sqlengine.query(compiled_sql.sql)
+        return res
+        # return [ self._make_struct(row, compiled_sql) for row in res ]
 
     def execute_code(self, code):
         for s in parse(code):
             self.run_stmt(s)
 
-    def _sqlexpr(self, expr):
-        return ExprCompiler(self).compile(expr)
 
 
 def _test(fn):
@@ -473,16 +492,17 @@ def _test(fn):
 
     for name, f in i.state.functions.items():
         print('***', name, '***', f.params)
-        print(f.expr)
+        # print(f.expr)
         f = i.call_func(name, ["hello" for p in f.params or []])
-        print(f.sql)
+        print(f)
+        # print(f.sql)
         # print(f.to_tree().pretty())
         # expr = deepcopy(f.expr)
         # (i.resolver.resolve(expr))
         # print(expr)
         print('-'*20)
 
-            
+
 def test():
     # _test("preql/simple1.pql")
     _test("preql/simple2.pql")
