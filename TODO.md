@@ -1,7 +1,8 @@
 # First things first
 
-
 - Offset + limit
+
+- Order by !!
 
 # More stuff
 

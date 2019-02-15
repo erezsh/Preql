@@ -203,10 +203,17 @@ class Query(TabularExpr):
     table: Expr
     selection: list
     projection: list
+    order: list
 
     __types__ = {
         'table': TabularType,
     }
+
+@dataclass
+class OrderSpecifier(Expr):
+    expr: Expr
+    asc: bool
+    
 
 # @dataclass
 # class Projection(TabularExpr):

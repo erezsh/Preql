@@ -76,15 +76,23 @@ class CompileSQL_Expr:
         if query.projection:
             exprs_sql = [self._sqlexpr(e) for e in query.projection]
             proj_sql = ', '.join(e.sql for e in exprs_sql)
-
             proj_types = [e.types[0] for e in exprs_sql]
         else:
             proj_sql = '*'
             proj_types = table_sql.types
 
+        if query.order:
+            exprs_sql = [self._sqlexpr(e) for e in query.order]
+            order_sql = ', '.join(e.sql for e in exprs_sql)
+        else:
+            order_sql = None
+
+
         sql = f'SELECT {proj_sql} FROM ({table_sql.sql})'
         if where_sql:
             sql += ' WHERE ' + where_sql
+        if order_sql:
+            sql += ' ORDER BY ' + order_sql
         return CompiledSQL(sql, proj_types, [])
 
     # def Projection(self, proj):
@@ -184,6 +192,11 @@ class CompileSQL_Expr:
         # TODO: assert type?
         return CompiledSQL(str(rowref.row_id), [rowref.type])
 
+    def OrderSpecifier(self, order_spec):
+        expr_sql = self._sqlexpr(order_spec.expr)
+        spec_sql = expr_sql.sql + ' ' + ('ASC' if order_spec.asc else 'DESC')
+        return CompiledSQL(spec_sql, expr_sql.types, expr_sql.names)
+
 class ResolveIdentifiers:
 
     def __init__(self, state):
@@ -230,7 +243,11 @@ class ResolveIdentifiers:
         self.context.append({'table': query.resolved_table})
         self._resolve_expr_list(query.selection)
         self._resolve_expr_list(query.projection)
+        self._resolve_expr_list(query.order)
         self.context.pop()
+
+    def OrderSpecifier(self, order_spec):
+        self._resolve_expr(order_spec.expr)
 
     # def Projection(self, proj: Projection):
     #     assert proj.resolved_table, proj
@@ -529,8 +546,8 @@ def _test(fn):
 
 
 def test():
-    # _test("preql/simple1.pql")
-    _test("preql/simple2.pql")
+    _test("preql/simple1.pql")
+    # _test("preql/simple2.pql")
     # _test("preql/tree.pql")
 
 if __name__ == '__main__':

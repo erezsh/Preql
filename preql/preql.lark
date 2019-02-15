@@ -19,17 +19,17 @@ typemod: PK | NULLABLE
 func_def: name func_params? "=" expr _NL
 func_params: "(" name ("," name)* ")"
 
-?query: molecule selection projection?
-      | molecule selection? projection
-
-?query2: molecule projection selection
+?query: molecule (selection | projection | order)+
 
 selection: "[" [compare ("," compare)*] "]"
+projection: "{" named_expr ("," named_expr)* "}"
+order: "order" "(" (order_asc|order_desc)+ ")"
+order_asc: "+"? expr
+order_desc: "-" expr
 
 // groupby: "groupby" _refs
 // _refs: ref ("," ref)*
 
-projection: "{" named_expr ("," named_expr)* "}"
 
 ?compare: molecule compare_op molecule
 
@@ -45,7 +45,7 @@ ARITH_OP: "+"
      | func_call
      | identifier
      | array
-     | query | query2
+     | query
      | "(" expr ")"
 
 array: "[" molecule ("," molecule)* "]"

@@ -2,6 +2,7 @@ from lark import Lark, Transformer, Discard, v_args
 from lark.indenter import Indenter
 
 from .ast_classes import *
+from .utils import classify
 
 class PythonIndenter(Indenter):
     NL_type = '_NL'
@@ -49,16 +50,35 @@ class ToAST(Transformer):
     assign = as_args(tuple)
     assigns = as_args(list)
 
+    def order_asc(self, expr):
+        return OrderSpecifier(expr, True)
+    def order_desc(self, expr):
+        return OrderSpecifier(expr, False)
+
     # Query
-    def query(self, tab, sel, proj):
-        return Query(tab, sel or [], proj or [])
+    def query(self, table, *elems):
 
-    def query2(self, tab, proj, sel):
-        return self.query(tab, sel, proj)
+        d = classify(elems, lambda e: e.data)
+        proj_asts = d.get('projection', [])
+        sel_asts = d.get('selection', [])
+        order_asts = d.get('order', [])
+        if len(proj_asts) > 1:
+            raise Exception("Specified more than one projection for the same table")
+        if len(order_asts) > 1:
+            raise Exception("Specified more than one order for the same table")
 
-    selection = as_args(list)
+        projections = proj_asts[0].children if proj_asts else []
+        order = order_asts[0].children if order_asts else []
+        selections = [cmp for sel in sel_asts for cmp in sel.children]
+
+        return Query(table, selections, projections, order)
+
+    # def query2(self, tab, proj, sel):
+    #     return self.query(tab, sel, proj)
+
+    # selection = as_args(list)
     # func_args = as_args(list)
-    projection = as_args(list)
+    # projection = as_args(list)
     func_params = as_args(list)
     func_def = Function
     func_call = FuncCall
