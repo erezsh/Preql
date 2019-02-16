@@ -1,8 +1,6 @@
 # First things first
 
-- Offset + limit
-
-- Order by !!
+- Do autojoins
 
 - Use method syntax?
     Table order(name) :limit(3) 
@@ -41,7 +39,15 @@
 
 - Better validation and error messages
 
+- Offset without limit
+
+- Fix bug1.pql
+
+- Automatically deduce tables? Maybe use SQLAlchemy for it?
+
 # Done Already
 - Named joins to support recursion and other stuff
 - Two-step: Bind + type inference -> generate sql
 - Explicit joins
+- Order by !!
+- Offset + limit

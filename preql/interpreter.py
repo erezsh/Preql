@@ -43,9 +43,10 @@ class State:
 
 
 class CompileSQL_Expr:
-    def __init__(self, state):
+    def __init__(self, state, mention_table: bool):
         self.state = state
         # self.context = Context()
+        self.mention_table = mention_table
 
     def compile(self, expr):
         return self._sqlexpr(expr)
@@ -127,8 +128,9 @@ class CompileSQL_Expr:
         return CompiledSQL(cmp.op.join(e.sql for e in exprs_sql), [cmp.type])
 
     def Column(self, col):
+        # TODO always create aliased table on joins, and remove mention_table?
         prefix = ''
-        if isinstance(col.table, AliasedTable):
+        if isinstance(col.table, AliasedTable) or self.mention_table:
             prefix = col.table.name + '.'
         return CompiledSQL(prefix + col.name, [col.type], [col.name])
 
@@ -217,6 +219,8 @@ class ResolveIdentifiers:
         # self.vars = interp.vars
         # self.tables = interp.tables
         self.context = Context()
+        self.autojoins = []
+        self.autojoined = False
 
     Value = NotImplemented
 
@@ -250,13 +254,27 @@ class ResolveIdentifiers:
         return self._resolve_expr(expr)
 
     def Query(self, query: Query):
+        assert not self.autojoined, "Not implemented yet"
+
         self._resolve_expr(query.table)
+
+        assert not self.autojoins   # should be cleared by this point
+
         query.resolved_table = query.table.resolved_table
         self.context.append({'table': query.resolved_table})
         self._resolve_expr_list(query.selection)
         self._resolve_expr_list(query.projection)
         self._resolve_expr_list(query.order)
         self.context.pop()
+
+        # TODO: Verify there are no freejoins. Are explicit autojoins allowed?
+        for needed_table in self.autojoins:
+            assert needed_table != query.table
+            query.table = AutoJoin([query.table, needed_table])
+
+        self.autojoins = []
+        self.autojoined = True
+
 
     def OrderSpecifier(self, order_spec):
         self._resolve_expr(order_spec.expr)
@@ -299,20 +317,23 @@ class ResolveIdentifiers:
             path = ident.name
             assert obj
 
+        if path:
+            assert isinstance(obj.type, TabularType), obj
 
-        for name in path:
-            assert isinstance(obj.type, TabularType)
+            for name in path:
+                prev_obj = obj
+                obj = obj.resolved_table[name]
 
-            obj = obj.resolved_table[name]
-
-            if isinstance(obj.type, RelationalType):
-                # assert False
-                pass
-            elif isinstance(obj.type, TabularType):
-                pass
-            else:
-                assert isinstance(obj.type, AtomType), obj
-                pass
+                if isinstance(obj.type, RelationalType):
+                    # assert False
+                    obj = self.state.tables[obj.type.table_name]
+                    if obj not in self.autojoins:
+                        self.autojoins.append(obj)
+                elif isinstance(obj.type, TabularType):
+                    pass
+                else:
+                    assert isinstance(obj.type, AtomType), obj
+                    pass
 
 
         # if len(ident.name)>1:
@@ -407,9 +428,6 @@ class ResolveIdentifiers:
 class CompileSQL_Stmts:
     def __init__(self, state):
         self.state = state
-        self.resolver = ResolveIdentifiers(self.state)
-        self.resolver.context.append({'args': []})
-        self.sqlexpr = CompileSQL_Expr(self.state)
 
     def to_sql(self, ast_node):
         ast_type = type(ast_node)
@@ -447,9 +465,13 @@ class CompileSQL_Stmts:
                 for c in self.state.tables[addrow.table].columns[1:]
                 if not isinstance(c.type, BackRefType)]
 
+
+        resolver = ResolveIdentifiers(self.state)
+        resolver.context.append({'args': []})
         for v in addrow.args:
-            self.resolver.resolve(v)
-        values = [self.sqlexpr.compile(v) for v in addrow.args]
+            resolver.resolve(v)
+        expr_compiler = CompileSQL_Expr(self.state, resolver.autojoined)
+        values = [expr_compiler.compile(v) for v in addrow.args]
         # TODO verify types
         q = ['INSERT INTO', addrow.table,
              "(", ', '.join(cols), ")",
@@ -470,8 +492,6 @@ class Interpreter:
         self.state.functions['offset'] = BuiltinFunction('offset', ['tab', 'start'], Offset())
 
         self.sqldecl = CompileSQL_Stmts(self.state)
-        self.resolver = ResolveIdentifiers(self.state)
-        self.sqlexpr = CompileSQL_Expr(self.state)
 
     def _add_table(self, table):
         self.state.tables[table.name] = table
@@ -517,12 +537,15 @@ class Interpreter:
             raise ValueError(c)
 
     def _compile_func(self, fname, args):
+
         args = [Value.from_pyobj(a) for a in args]
         funccall = FuncCall(fname, FuncArgs(args, {}))
-        self.resolver.resolve(funccall)
-        # return funccall
-        print('@@', funccall.to_tree().pretty())
-        return self.sqlexpr.compile(funccall)
+
+        resolver = ResolveIdentifiers(self.state)
+        resolver.resolve(funccall)
+        expr_compiler = CompileSQL_Expr(self.state, resolver.autojoined)
+
+        return expr_compiler.compile(funccall)
         # return self._query_as_struct(funccall_sql)
 
     def call_func(self, fname, args):
@@ -577,8 +600,8 @@ def _test(fn):
 
 
 def test():
-    _test("preql/simple1.pql")
-    # _test("preql/simple2.pql")
+    # _test("preql/simple1.pql")
+    _test("preql/simple2.pql")
     # _test("preql/tree.pql")
 
 if __name__ == '__main__':

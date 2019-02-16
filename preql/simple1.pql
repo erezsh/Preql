@@ -11,6 +11,9 @@ by_country(c) = Person[country=c]
 english2 = by_country("England") order(-name) {name}
 english3 = by_country("England") {name} order(-id)
 
+person1 = Person :limit(1)
+person1b = Person :limit(1) :offset(1) 
+
 # _table_func(t, c) = t[country=c]
 
 # _f2(t) = _table_func(t, "England")
@@ -19,8 +22,6 @@ english3 = by_country("England") {name} order(-id)
 
 # demography = Person {country, count(id)}
 
-person1 = Person :limit(1)
-person2 = Person :limit(1) :offset(1) 
 
 # _page(tabl, num, size) = tabl :limit(1) #:offset(num*size) :limit(size)
 # page_test = Person:_page(0, 40)
