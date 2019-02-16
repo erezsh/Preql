@@ -59,19 +59,38 @@ class ToAST(Transformer):
     def query(self, table, *elems):
 
         d = classify(elems, lambda e: e.data)
-        proj_asts = d.get('projection', [])
-        sel_asts = d.get('selection', [])
-        order_asts = d.get('order', [])
+        proj_asts = d.pop('projection', [])
+        sel_asts = d.pop('selection', [])
+        order_asts = d.pop('order', [])
+        func_trees = d.pop('query_user_func', [])
+        assert not d, d
         if len(proj_asts) > 1:
             raise Exception("Specified more than one projection for the same table")
         if len(order_asts) > 1:
             raise Exception("Specified more than one order for the same table")
+        # if len(func_trees) > 1:
+        #     raise Exception("Specified more than one limit for the same table")
 
         projections = proj_asts[0].children if proj_asts else []
         order = order_asts[0].children if order_asts else []
         selections = [cmp for sel in sel_asts for cmp in sel.children]
+        funcs = [func.children[0] for func in func_trees]
 
-        return Query(table, selections, projections, order)
+        obj = Query(table, selections, projections, order)
+        for f in funcs:
+            if f.args.named_args:
+                raise NotImplementedError("No support for named args yet in this scenario")
+            new_args = FuncArgs([obj] + f.args.pos_args, {})
+            obj = FuncCall(f.name, new_args)
+        
+        return obj
+
+    def range(self, start, end):
+        if start:
+            start = Value(start, IntegerType())
+        if end:
+            end = Value(end, IntegerType())
+        return Range(start, end)
 
     # def query2(self, tab, proj, sel):
     #     return self.query(tab, sel, proj)
@@ -106,6 +125,9 @@ class ToAST(Transformer):
 
     def null(self):
         return Value.from_pyobj(None)
+
+    def number(self, num):
+        return Value.from_pyobj(int(num))
 
     @as_args
     def array(self, v):

@@ -77,6 +77,6 @@ def test3():
     # i.animals() - Requires advanced type system
 
 # print('---------')
-test1()
+# test1()
 # print('---------')
 # test2()

@@ -19,11 +19,19 @@ typemod: PK | NULLABLE
 func_def: name func_params? "=" expr _NL
 func_params: "(" name ("," name)* ")"
 
-?query: molecule (selection | projection | order)+
+?query: molecule query_func+
+
+?query_func : selection
+            | projection
+            | order
+            | groupby
+            | query_user_func
 
 selection: "[" [compare ("," compare)*] "]"
 projection: "{" named_expr ("," named_expr)* "}"
 order: "order" "(" (order_asc|order_desc)+ ")"
+groupby: "groupby" "(" name+ ")"
+query_user_func: ":" func_call
 order_asc: "+"? expr
 order_desc: "-" expr
 
@@ -38,7 +46,7 @@ order_desc: "-" expr
 ?arith_expr: expr ARITH_OP molecule
            | molecule
 
-ARITH_OP: "+"
+ARITH_OP: "+" | "*"
 
 !compare_op: "<" | ">" | "=" | "!=" | "<>"
 ?molecule: atom
@@ -51,12 +59,21 @@ ARITH_OP: "+"
 array: "[" molecule ("," molecule)* "]"
 
 func_call: name func_args
-func_args: "(" [named_expr ("," named_expr)*] ")"
+func_args: "(" _func_args ")"
+_func_args: named_expr ("," named_expr)*
+          |
+
 named_expr: [name "="] expr
 
-?atom: NUMBER -> number
+?atom: number
       | STRING -> string
       | "null" -> null
+      | range
+
+number: SIGNED_FLOAT | SIGNED_INT
+
+range: SIGNED_INT? ".." SIGNED_INT
+     | SIGNED_INT ".." SIGNED_INT?
 
 
 identifier: name ("." name)*
@@ -68,10 +85,21 @@ COMMENT: /#[^\n]*/
 // _NL: /\n+/
 _NL: ( /\r?\n[\t ]*/ | COMMENT )+
 
+DECIMAL: INT "." INT
+       | INT "." /(?![.])/
+       | "." INT
+
+// float = /-?\d+(\.\d+)?([eE][+-]?\d+)?/
+_EXP: ("e"|"E") SIGNED_INT
+FLOAT: INT _EXP
+     | DECIMAL _EXP?
+SIGNED_FLOAT: ["+"|"-"] FLOAT
+SIGNED_INT: ["+"|"-"] INT
+
 
 %import common.CNAME -> NAME
 %import common.WS_INLINE
-%import common.NUMBER
+%import common.INT
 %import common.ESCAPED_STRING -> STRING
 %ignore WS_INLINE
 %ignore /\\[\t \f]*\r?\n/   // LINE_CONT

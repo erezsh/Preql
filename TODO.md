@@ -4,6 +4,17 @@
 
 - Order by !!
 
+- Use method syntax?
+    Table order(name) :limit(3) 
+    Table groupby(name, date) order(-date)
+    Table :offset(2)
+    Table :range(1..2)
+    Table :page(1, 40)
+
+- Possible groupby syntax:
+    Table {name, date ==> count(id), some_aray}
+    Table {count(id), some_array foreach name, date}
+
 # More stuff
 
 - Many-to-many
@@ -26,6 +37,9 @@
 
 - Lift query selections / projections when possible (for example through a join)
 
+- Import
+
+- Better validation and error messages
 
 # Done Already
 - Named joins to support recursion and other stuff

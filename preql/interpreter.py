@@ -17,7 +17,7 @@ class Context(list):
         for d in self[::-1]:
             if name in d:
                 return d[name]
-        raise KeyError(name)
+        raise KeyError(name, d.keys())
 
 @dataclass
 class State:
@@ -197,6 +197,18 @@ class CompileSQL_Expr:
         spec_sql = expr_sql.sql + ' ' + ('ASC' if order_spec.asc else 'DESC')
         return CompiledSQL(spec_sql, expr_sql.types, expr_sql.names)
 
+    def Limit(self, lim):
+        table_sql = self._sqlexpr(lim.args['tab'])
+        limit_sql = self._sqlexpr(lim.args['maxlen'])
+        sql = table_sql.sql + ' LIMIT ' + limit_sql.sql
+        return CompiledSQL(sql, table_sql.types, table_sql.names)
+
+    def Offset(self, offset):
+        table_sql = self._sqlexpr(offset.args['tab'])
+        start_sql = self._sqlexpr(offset.args['start'])
+        sql = table_sql.sql + ' OFFSET ' + start_sql.sql
+        return CompiledSQL(sql, table_sql.types, table_sql.names)
+
 class ResolveIdentifiers:
 
     def __init__(self, state):
@@ -279,7 +291,11 @@ class ResolveIdentifiers:
             obj = self.state.tables[basename]
         else:
             # Check if basename is a column in the current table
-            obj = self.context.get('table')
+            try:
+                obj = self.context.get('table')
+            except KeyError:
+                raise Exception("Failed to resolve identifier", ident, args)
+
             path = ident.name
             assert obj
 
@@ -379,6 +395,14 @@ class ResolveIdentifiers:
         call.resolved = expr
         return table
 
+    def Limit(self, lim):
+        lim.args = self.context.get('args')
+        # TODO ???
+
+    def Offset(self, offset):
+        offset.args = self.context.get('args')
+        # TODO ???
+
 
 class CompileSQL_Stmts:
     def __init__(self, state):
@@ -436,10 +460,14 @@ class CompileSQL_Stmts:
         return insert
 
 
+
+
 class Interpreter:
     def __init__(self, sqlengine):
         self.sqlengine = sqlengine
         self.state = State()
+        self.state.functions['limit'] = BuiltinFunction('limit', ['tab', 'maxlen'], Limit())
+        self.state.functions['offset'] = BuiltinFunction('offset', ['tab', 'start'], Offset())
 
         self.sqldecl = CompileSQL_Stmts(self.state)
         self.resolver = ResolveIdentifiers(self.state)
@@ -533,8 +561,11 @@ def _test(fn):
     print('vars:', i.state.vars)
 
     for name, f in i.state.functions.items():
+        if isinstance(f, BuiltinFunction) or f.name.startswith('_'):
+            continue
+
         print('***', name, '***', f.params)
-        # print(f.expr)
+        print(f.expr)
         f = i.call_func(name, ["hello" for p in f.params or []])
         print(f)
         # print(f.sql)

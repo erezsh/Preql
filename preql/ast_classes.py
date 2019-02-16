@@ -11,7 +11,9 @@ class Dataclass:
             return
         for name, type_ in self.__annotations__.items():
             value = getattr(self, name)
-            assert value is None or isinstance(value, type_), (name, value, type_)
+            if value is not None and not isinstance(value, type_):
+                raise TypeError(f"[{self.__class__.__name__}] Attribute {name} expected value of type {type_}, instead got {value}")
+            # assert value is None or isinstance(value, type_), (name, value, type_)
 
 class Ast(Dataclass):
     def _to_tree(self, expr):
@@ -72,6 +74,9 @@ class BoolType(AtomType):
 class IntegerType(AtomType):
     pass
 
+class RangeType(AtomType):
+    pass
+
 @dataclass
 class IdType(AtomType): # IntegerType?
     table: str
@@ -118,7 +123,16 @@ class Value(Expr):
             return cls(None, NullType())
         if isinstance(obj, str):
             return cls(obj, StringType())
+        elif isinstance(obj, int):
+            return cls(obj, IntegerType())
         assert False
+
+@dataclass
+class Range(Expr):
+    start: Expr
+    end: Expr
+
+    type = RangeType()
 
 class Resolvable:
     @property
@@ -215,6 +229,7 @@ class OrderSpecifier(Expr):
     asc: bool
     
 
+
 # @dataclass
 # class Projection(TabularExpr):
 #     table: Expr
@@ -275,6 +290,15 @@ class Count(Expr):
     exprs: list
     type: IntegerType
 
+@dataclass
+class Limit(Expr):
+    args: dict = None
+
+@dataclass
+class Offset(Expr):
+    args: dict = None
+
+
 ##################################################
 #                 Declarations
 ##################################################
@@ -299,6 +323,11 @@ class Function(Declaration):
 
     param_types: list = None
     return_type: Type = None
+
+
+@dataclass
+class BuiltinFunction(Function):
+    pass
 
 
 @dataclass
