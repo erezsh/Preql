@@ -147,7 +147,7 @@ class Resolvable:
         return rt
 
 @dataclass
-class Identifier(Expr, Resolvable):
+class Identifier(Resolvable, Expr):
     "Any reference; Prior to type resolution"
     name: list
     resolved: object = None
@@ -218,6 +218,7 @@ class Query(TabularExpr):
     selection: list
     projection: list
     order: list
+    aggregates: list
 
     __types__ = {
         'table': TabularType,
@@ -273,9 +274,13 @@ class NamedExpr(Expr):
     name: str   # nullable
     expr: Expr
 
+    @property
+    def type(self):
+        return self.expr.type
+
 
 @dataclass
-class FuncCall(Expr, Resolvable):
+class FuncCall(Resolvable, Expr):
     name: str
     args: FuncArgs
     resolved: object = None
@@ -285,10 +290,11 @@ class FuncCall(Expr, Resolvable):
         return [self.args]
 
 
+
 @dataclass
 class Count(Expr):
     exprs: list
-    type: IntegerType
+    type = IntegerType()
 
 @dataclass
 class Limit(Expr):

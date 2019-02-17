@@ -24,19 +24,16 @@ func_params: "(" name ("," name)* ")"
 ?query_func : selection
             | projection
             | order
-            | groupby
             | query_user_func
 
 selection: "[" [compare ("," compare)*] "]"
-projection: "{" named_expr ("," named_expr)* "}"
+projection: "{" proj_exprs ["=>" proj_exprs] "}"
+proj_exprs: named_expr ("," named_expr)*
+
 order: "order" "(" (order_asc|order_desc)+ ")"
-groupby: "groupby" "(" name+ ")"
 query_user_func: ":" func_call
 order_asc: "+"? expr
 order_desc: "-" expr
-
-// groupby: "groupby" _refs
-// _refs: ref ("," ref)*
 
 
 ?compare: molecule compare_op molecule

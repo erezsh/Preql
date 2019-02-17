@@ -22,8 +22,12 @@ english_speakers = Person[country.language="en"]
 person_and_language = Person {name, country.language}
 others_from_my_country = Person [country=me.country, id!=me.id]
 
-# population_count = Country {name, count(citizens)}
-# citizens_list = Country {name, citizens}     # array_agg
+population_count = Person {country.name => count(id)}
+
+population_count2 = Country {name => count(citizens)}
+
+# citizens_list = Country {name => citizens.name}     # array_agg
+
 
 
 # explicit_join = (

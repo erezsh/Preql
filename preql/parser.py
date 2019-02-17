@@ -55,6 +55,8 @@ class ToAST(Transformer):
     def order_desc(self, expr):
         return OrderSpecifier(expr, False)
 
+    proj_exprs = as_args(list)
+
     # Query
     def query(self, table, *elems):
 
@@ -71,12 +73,16 @@ class ToAST(Transformer):
         # if len(func_trees) > 1:
         #     raise Exception("Specified more than one limit for the same table")
 
-        projections = proj_asts[0].children if proj_asts else []
+        if proj_asts:
+            projections, aggregates = proj_asts[0].children
+        else:
+            projections = aggregates = None
+
         order = order_asts[0].children if order_asts else []
         selections = [cmp for sel in sel_asts for cmp in sel.children]
         funcs = [func.children[0] for func in func_trees]
 
-        obj = Query(table, selections, projections, order)
+        obj = Query(table, selections, projections or [], order, aggregates or [])
         for f in funcs:
             if f.args.named_args:
                 raise NotImplementedError("No support for named args yet in this scenario")

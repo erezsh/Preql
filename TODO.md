@@ -1,6 +1,6 @@
 # First things first
 
-- Do RowRef vars using LazyQueries
+- Allow updating of rows
 
 - Use method syntax?
     Table order(name) :limit(3) 

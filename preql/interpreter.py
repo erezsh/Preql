@@ -83,12 +83,19 @@ class CompileSQL_Expr:
             where_sql = ' AND '.join(e.sql for e in exprs_sql)
 
         if query.projection:
-            exprs_sql = [self._sqlexpr(e) for e in query.projection]
+            exprs_sql = [self._sqlexpr(e) for e in query.projection + query.aggregates]
             proj_sql = ', '.join(e.sql for e in exprs_sql)
             proj_types = [e.types[0] for e in exprs_sql]
         else:
             proj_sql = '*'
             proj_types = table_sql.types
+        
+        # TODO groupby changes projection types
+        if query.aggregates:
+            exprs_sql = [self._sqlexpr(e) for e in query.projection]
+            groupby_sql = ', '.join(e.sql for e in exprs_sql)
+        else:
+            groupby_sql = None
 
         if query.order:
             exprs_sql = [self._sqlexpr(e) for e in query.order]
@@ -97,11 +104,15 @@ class CompileSQL_Expr:
             order_sql = None
 
 
+
+
         sql = f'SELECT {proj_sql} FROM ({table_sql.sql})'
         if where_sql:
             sql += ' WHERE ' + where_sql
         if order_sql:
             sql += ' ORDER BY ' + order_sql
+        if groupby_sql:
+            sql += ' GROUP BY ' + groupby_sql
         return CompiledSQL(sql, proj_types, [])
 
     # def Projection(self, proj):
@@ -274,10 +285,18 @@ class ResolveIdentifiers:
 
         assert not self.autojoins   # should be cleared by this point
 
+
         query.resolved_table = query.table.resolved_table
         self.context.append({'table': query.resolved_table})
         self._resolve_expr_list(query.selection)
         self._resolve_expr_list(query.projection)
+        self._resolve_expr_list(query.aggregates)
+
+        # if query.aggregates:
+        #     import pdb
+        #     pdb.set_trace()
+
+        # self._resolve_expr_list(query.groupby or [])   # XXX not needed because it shares with projection. Ugly?
         self._resolve_expr_list(query.order)
         self.context.pop()
 
@@ -307,7 +326,7 @@ class ResolveIdentifiers:
     #     self.context.pop()
 
     def Identifier(self, ident: Identifier):
-        assert not ident.resolved
+        assert not ident.resolved, ident
 
         basename = ident.name[0]
         # assert not ident.name[1:]   # TODO
@@ -319,19 +338,6 @@ class ResolveIdentifiers:
             obj = args[basename]
         elif basename in self.state.vars:
             obj = self.state.vars[basename]
-
-            # if isinstance(obj, RowRef):
-            #     if len(path) > 1:
-            #         raise NotImplementedError("No generic implementation yet")
-            #     if path:
-            #         attr ,= path
-            #         if attr == 'id':
-            #             obj = Value(obj.row_id, IntegerType())
-            #         else:
-            #             self.required_rows.append((RowRef, attr))
-            #     else:
-            #         obj = Value(obj.row_id, IntegerType())
-            #     path = []
 
         elif basename in self.state.tables:
             obj = self.state.tables[basename]
@@ -349,7 +355,6 @@ class ResolveIdentifiers:
             assert isinstance(obj.type, TabularType), obj
 
             for name in path:
-                prev_obj = obj
                 obj = obj.resolved_table[name]
 
                 if isinstance(obj.type, RelationalType):
@@ -364,15 +369,15 @@ class ResolveIdentifiers:
                         self.required_rows.append(obj.rowref)
                 else:
                     assert isinstance(obj, (Column, Value))
-                    assert isinstance(obj.type, AtomType), obj
+                    if isinstance(obj.type, BackRefType):
+                        obj = self.state.tables[obj.type.to_table]
+                        if obj not in self.autojoins:
+                            self.autojoins.append(obj)
+                        obj = obj.resolved_table['id']  # XXX hack, shouldn't work like this
+                    else:
+                        assert isinstance(obj.type, AtomType), obj
 
 
-        # if len(ident.name)>1:
-        #     table = self.context.get('table')
-        #     print('@@', table)
-        #     print('@@', table[basename])
-        #     import pdb
-        #     pdb.set_trace()
         if isinstance(obj, AliasedTable):
             obj = obj.resolved_table['id']     # XXX a bit of a hack to support freejoins
 
@@ -531,7 +536,7 @@ class Interpreter:
             if c.backref:
                 assert isinstance(c.type, RelationalType), c
                 ref_to = self.state.tables[c.type.table_name]
-                backrefs.append((ref_to, Column(c.backref, c.name, False, False, type=BackRefType(table.name))))
+                backrefs.append((ref_to, Column(c.backref, c.name, False, False, type=BackRefType(table.name), table=table)))
 
         for ref_to, col in backrefs:
             ref_to.columns.append(col)
