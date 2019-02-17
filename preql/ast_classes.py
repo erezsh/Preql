@@ -353,9 +353,29 @@ class Column(Expr, Declaration):
 
 
 @dataclass
-class RowRef(Expr):
+class RowRef(TabularExpr):
     table: Expr
     row_id: int
+
+    @property
+    def resolved_table(self):   # XXX is this really necessary here?
+        return self
+
+    def __getitem__(self, col):
+        if col == 'id':
+            return Value(self.row_id, IntegerType())
+        return ValueRef(self, col)
+
+    @property
+    def autoname(self):
+        return '__row%d' % id(self)
+
+@dataclass
+class ValueRef(Expr):
+    rowref: RowRef
+    column: str
+
+
 
 
 ### Declaration references, resolved by identifier

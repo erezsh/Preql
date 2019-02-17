@@ -43,13 +43,21 @@ class State:
 
 
 class CompileSQL_Expr:
-    def __init__(self, state, mention_table: bool):
+    def __init__(self, state, mention_table: bool, required_rows: list):
         self.state = state
         # self.context = Context()
         self.mention_table = mention_table
+        self.required_rows = required_rows
 
     def compile(self, expr):
-        return self._sqlexpr(expr)
+        sql = self._sqlexpr(expr)
+        if self.required_rows:
+            with_parts = [ f'{r.autoname} AS (SELECT * FROM {r.table.name} WHERE id={r.row_id})'
+                          for r in self.required_rows]
+            with_sql = 'WITH ' + ', '.join(with_parts)
+            sql.sql = with_sql + sql.sql
+
+        return sql
 
     def _sqlexpr(self, ast_node) -> CompiledSQL:
         ast_type = type(ast_node)
@@ -194,6 +202,11 @@ class CompileSQL_Expr:
         # TODO: assert type?
         return CompiledSQL(str(rowref.row_id), [rowref.type])
 
+    def ValueRef(self, valueref):
+        # TODO get actual type
+        sql = f'(SELECT {valueref.column} FROM {valueref.rowref.autoname})'
+        return CompiledSQL(sql, [None])
+
     def OrderSpecifier(self, order_spec):
         expr_sql = self._sqlexpr(order_spec.expr)
         spec_sql = expr_sql.sql + ' ' + ('ASC' if order_spec.asc else 'DESC')
@@ -221,6 +234,7 @@ class ResolveIdentifiers:
         self.context = Context()
         self.autojoins = []
         self.autojoined = False
+        self.required_rows = []
 
     Value = NotImplemented
 
@@ -305,6 +319,20 @@ class ResolveIdentifiers:
             obj = args[basename]
         elif basename in self.state.vars:
             obj = self.state.vars[basename]
+
+            # if isinstance(obj, RowRef):
+            #     if len(path) > 1:
+            #         raise NotImplementedError("No generic implementation yet")
+            #     if path:
+            #         attr ,= path
+            #         if attr == 'id':
+            #             obj = Value(obj.row_id, IntegerType())
+            #         else:
+            #             self.required_rows.append((RowRef, attr))
+            #     else:
+            #         obj = Value(obj.row_id, IntegerType())
+            #     path = []
+
         elif basename in self.state.tables:
             obj = self.state.tables[basename]
         else:
@@ -329,11 +357,14 @@ class ResolveIdentifiers:
                     obj = self.state.tables[obj.type.table_name]
                     if obj not in self.autojoins:
                         self.autojoins.append(obj)
-                elif isinstance(obj.type, TabularType):
-                    pass
+                # elif isinstance(obj.type, TabularType):
+                #     assert False
+                elif isinstance(obj, ValueRef):
+                    if obj.rowref not in self.required_rows:
+                        self.required_rows.append(obj.rowref)
                 else:
+                    assert isinstance(obj, (Column, Value))
                     assert isinstance(obj.type, AtomType), obj
-                    pass
 
 
         # if len(ident.name)>1:
@@ -398,7 +429,6 @@ class ResolveIdentifiers:
             else:
                 assert False, call
             return
-
 
         f = self.state.functions[call.name]
         expr = deepcopy(f.expr)
@@ -470,7 +500,7 @@ class CompileSQL_Stmts:
         resolver.context.append({'args': []})
         for v in addrow.args:
             resolver.resolve(v)
-        expr_compiler = CompileSQL_Expr(self.state, resolver.autojoined)
+        expr_compiler = CompileSQL_Expr(self.state, resolver.autojoined, resolver.required_rows)
         values = [expr_compiler.compile(v) for v in addrow.args]
         # TODO verify types
         q = ['INSERT INTO', addrow.table,
@@ -480,7 +510,6 @@ class CompileSQL_Stmts:
         ]
         insert = ' '.join(q) + ';'
         return insert
-
 
 
 
@@ -543,7 +572,7 @@ class Interpreter:
 
         resolver = ResolveIdentifiers(self.state)
         resolver.resolve(funccall)
-        expr_compiler = CompileSQL_Expr(self.state, resolver.autojoined)
+        expr_compiler = CompileSQL_Expr(self.state, resolver.autojoined, resolver.required_rows)
 
         return expr_compiler.compile(funccall)
         # return self._query_as_struct(funccall_sql)

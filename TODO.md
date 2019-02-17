@@ -1,6 +1,6 @@
 # First things first
 
-- Do autojoins
+- Do RowRef vars using LazyQueries
 
 - Use method syntax?
     Table order(name) :limit(3) 
@@ -45,9 +45,15 @@
 
 - Automatically deduce tables? Maybe use SQLAlchemy for it?
 
+- Add support for procedural constructs (for, if, etc.)
+
+- var name = query  creates a temporary table, for efficiency
+
+
 # Done Already
 - Named joins to support recursion and other stuff
 - Two-step: Bind + type inference -> generate sql
 - Explicit joins
 - Order by !!
 - Offset + limit
+- Do autojoins
