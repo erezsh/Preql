@@ -357,6 +357,15 @@ class Column(Expr, Declaration):
         return '-> %s.%s' % (self.table.name, self.name)
 
 
+@dataclass
+class AggregatedColumn(Expr):
+    column: Column
+
+    @property
+    def type(self):
+        return ArrayType(self.column.type)
+
+
 
 @dataclass
 class RowRef(TabularExpr):

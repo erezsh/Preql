@@ -13,11 +13,13 @@ class CompiledSQL:
 
 
 class Context(list):
-    def get(self, name):
+    def get(self, name, default=KeyError):
         for d in self[::-1]:
             if name in d:
                 return d[name]
-        raise KeyError(name, d.keys())
+        if default is KeyError:
+            raise KeyError(name, d.keys())
+        return default
 
 @dataclass
 class State:
@@ -235,6 +237,11 @@ class CompileSQL_Expr:
         sql = table_sql.sql + ' OFFSET ' + start_sql.sql
         return CompiledSQL(sql, table_sql.types, table_sql.names)
 
+    def AggregatedColumn(self, aggcol):
+        col_sql = self._sqlexpr(aggcol.column)
+        sql = f'group_concat({col_sql.sql})'
+        return CompiledSQL(sql, [aggcol.type])
+
 class ResolveIdentifiers:
 
     def __init__(self, state):
@@ -290,7 +297,10 @@ class ResolveIdentifiers:
         self.context.append({'table': query.resolved_table})
         self._resolve_expr_list(query.selection)
         self._resolve_expr_list(query.projection)
+
+        self.context.append({'aggregated': True})
         self._resolve_expr_list(query.aggregates)
+        self.context.pop()
 
         # if query.aggregates:
         #     import pdb
@@ -332,6 +342,7 @@ class ResolveIdentifiers:
         # assert not ident.name[1:]   # TODO
 
         args = self.context.get('args')
+        aggregated = self.context.get('aggregated', False)
 
         path = ident.name[1:]
         if basename in args:
@@ -373,13 +384,19 @@ class ResolveIdentifiers:
                         obj = self.state.tables[obj.type.to_table]
                         if obj not in self.autojoins:
                             self.autojoins.append(obj)
-                        obj = obj.resolved_table['id']  # XXX hack, shouldn't work like this
+                        # obj = obj.resolved_table['id']  # XXX hack, shouldn't work like this
                     else:
                         assert isinstance(obj.type, AtomType), obj
 
 
         if isinstance(obj, AliasedTable):
             obj = obj.resolved_table['id']     # XXX a bit of a hack to support freejoins
+
+        if aggregated:
+            if isinstance(obj, NamedTable):
+                obj = obj.resolved_table['id']  # XXX hack, shouldn't work like this
+            assert isinstance(obj, Column), obj
+            obj = AggregatedColumn(obj)
 
         ident.resolved = obj
         return ident.resolved
@@ -426,11 +443,13 @@ class ResolveIdentifiers:
 
         assert not call.args.named_args # TODO
 
-        if call.name in ('to_array', 'count'):
+        if call.name in ('count',):
             args = call.args.pos_args
             self._resolve_expr_list(args)
             if call.name == 'count':
-                call.resolved = Count(args)
+                assert all(isinstance(arg.type, ArrayType) for arg in args), args
+                # XXX find proper way to remove aggregate
+                call.resolved = Count([arg.resolved.column for arg in args])
             else:
                 assert False, call
             return
