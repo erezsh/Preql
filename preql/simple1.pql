@@ -1,6 +1,6 @@
 table Person:
-    name: Str
-    country: Str
+    name: string
+    country: string
 
 add Person("Erez Shinan", "Israel")
 add Person("Eric Blaire", "England")

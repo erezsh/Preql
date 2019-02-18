@@ -1,9 +1,9 @@
 table Country:
-    name: Str
-    language: Str
+    name: string
+    language: string
 
 table Person:
-    name: Str
+    name: string
     country: Country -> citizens
     
 

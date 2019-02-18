@@ -17,7 +17,7 @@ def _parser(start):
     return Lark.open('preql.lark', rel_to=__file__, start=start, parser='lalr', postlex=PythonIndenter(), lexer='standard', maybe_placeholders=True)
 
 parser = _parser('start')
-query_parser = _parser('query')
+expr_parser = _parser('expr')
 
 as_args = v_args(inline=False)
 
@@ -144,8 +144,9 @@ class ToAST(Transformer):
         # return Type.from_str(typename), typemod
         try:
             return {
-                "Int": IntegerType,
-                "Str": StringType,
+                "integer": IntegerType,
+                "string": StringType,
+                "float": FloatType,
             }[typename]()
         except KeyError:
             return RelationalType(typename)
@@ -165,9 +166,9 @@ def parse(s):
     t = ToAST().transform(t)
     return t
 
-def parse_query(q):
-    t = query_parser.parse(q.strip())
-    # t = ToAST().transform(t)
+def parse_expr(q):
+    t = expr_parser.parse(q.strip())
+    t = ToAST().transform(t)
     return t
 
 

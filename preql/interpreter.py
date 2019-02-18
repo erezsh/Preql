@@ -2,7 +2,7 @@ from copy import copy, deepcopy
 from contextlib import suppress
 
 from .ast_classes import *
-from .parser import parse, parse_query
+from .parser import parse, parse_expr
 
 
 @dataclass
@@ -18,7 +18,7 @@ class Context(list):
             if name in d:
                 return d[name]
         if default is KeyError:
-            raise KeyError(name, d.keys())
+            raise KeyError(name)
         return default
 
 @dataclass
@@ -54,7 +54,7 @@ class CompileSQL_Expr:
     def compile(self, expr):
         sql = self._sqlexpr(expr)
         if self.required_rows:
-            with_parts = [ f'{r.autoname} AS (SELECT * FROM {r.table.name} WHERE id={r.row_id})'
+            with_parts = [ f'{r.autoname} AS (SELECT * FROM ({r.table.name}) WHERE id={r.row_id})'
                           for r in self.required_rows]
             with_sql = 'WITH ' + ', '.join(with_parts)
             sql.sql = with_sql + sql.sql
@@ -117,21 +117,6 @@ class CompileSQL_Expr:
             sql += ' GROUP BY ' + groupby_sql
         return CompiledSQL(sql, proj_types, [])
 
-    # def Projection(self, proj):
-    #     # TODO names
-    #     exprs_sql = [self._sqlexpr(e) for e in proj.exprs]
-    #     assert all(len(e.types) == 1 for e in exprs_sql)
-    #     # assert all(len(e.names) == 1 for e in exprs_sql), exprs_sql
-    #     # proj_names = [e.names[0] for e in exprs_sql]
-    #     sql = f'SELECT {proj_sql} FROM ({table_sql.sql})'
-    #     return CompiledSQL(sql, proj_types, [])
-
-    # def Selection(self, sel):
-    #     table_sql = self._sqlexpr(sel.table)
-    #     exprs_sql = [self._sqlexpr(e) for e in sel.exprs]
-    #     sql = f'SELECT * FROM ({table_sql.sql}) WHERE ({where_sql})'
-    #     return CompiledSQL(sql, table_sql.types, table_sql.names)
-
     def NamedTable(self, nt):
         # XXX returns columns? Just IdType?
         return CompiledSQL(nt.name, [nt], [nt.name])
@@ -177,12 +162,22 @@ class CompileSQL_Expr:
         return CompiledSQL(expr_sql.sql, expr_sql.types, expr_sql.names)
 
     def Count(self, cnt):
-        if cnt.exprs:
-            exprs_sql = [self._sqlexpr(e) for e in cnt.exprs]
-            count_sql = ', '.join(e.sql for e in exprs_sql)
+        assert len(cnt.exprs) == 1
+
+        if isinstance(cnt.exprs[0].type, TabularType):
+            table_sql = self._sqlexpr(cnt.exprs[0])
+            sql = f'SELECT count(*) FROM ({table_sql.sql})'
         else:
-            count_sql = '*'
-        return CompiledSQL(f'count({count_sql})', [cnt.type])
+
+            if cnt.exprs:
+                exprs_sql = [self._sqlexpr(e) for e in cnt.exprs]
+                count_sql = ', '.join(e.sql for e in exprs_sql)
+            else:
+                count_sql = '*'
+
+            sql = f'count({count_sql})'
+
+        return CompiledSQL(sql, [cnt.type])
 
     def _find_relation(self, tables):
         resolved_tables = [t.resolved_table for t in tables]
@@ -217,7 +212,7 @@ class CompileSQL_Expr:
 
     def ValueRef(self, valueref):
         # TODO get actual type
-        sql = f'(SELECT {valueref.column} FROM {valueref.rowref.autoname})'
+        sql = f'(SELECT {valueref.column} FROM ({valueref.rowref.autoname}))'
         return CompiledSQL(sql, [None])
 
     def OrderSpecifier(self, order_spec):
@@ -239,8 +234,14 @@ class CompileSQL_Expr:
 
     def AggregatedColumn(self, aggcol):
         col_sql = self._sqlexpr(aggcol.column)
-        sql = f'group_concat({col_sql.sql})'
-        return CompiledSQL(sql, [aggcol.type])
+        # sql = f'group_concat({col_sql.sql})'
+        return CompiledSQL(col_sql.sql, [aggcol.type])
+
+    def MakeArray(self, mkarr):
+        expr_sql = self._sqlexpr(mkarr.expr)
+        sql = f'group_concat({expr_sql.sql})'
+        return CompiledSQL(sql, [mkarr.type])
+
 
 class ResolveIdentifiers:
 
@@ -300,6 +301,10 @@ class ResolveIdentifiers:
 
         self.context.append({'aggregated': True})
         self._resolve_expr_list(query.aggregates)
+        for agg in query.aggregates:
+            assert isinstance(agg, NamedExpr)
+            if isinstance(agg.type, ArrayType):
+                agg.expr = MakeArray(agg.expr)
         self.context.pop()
 
         # if query.aggregates:
@@ -322,18 +327,6 @@ class ResolveIdentifiers:
     def OrderSpecifier(self, order_spec):
         self._resolve_expr(order_spec.expr)
 
-    # def Projection(self, proj: Projection):
-    #     assert proj.resolved_table, proj
-    #     self._resolve_exprs(proj)
-    #     self.context.pop()
-    #     # TODO return projected table
-
-    # def Selection(self, sel: Selection):
-    #     sel.resolved_table = sel.table.resolved_table
-    #     assert sel.resolved_table, sel
-    #     self.context.append({'table': sel.resolved_table})
-    #     self._resolve_exprs(sel)
-    #     self.context.pop()
 
     def Identifier(self, ident: Identifier):
         assert not ident.resolved, ident
@@ -341,7 +334,7 @@ class ResolveIdentifiers:
         basename = ident.name[0]
         # assert not ident.name[1:]   # TODO
 
-        args = self.context.get('args')
+        args = self.context.get('args', {})
         aggregated = self.context.get('aggregated', False)
 
         path = ident.name[1:]
@@ -443,15 +436,17 @@ class ResolveIdentifiers:
 
         assert not call.args.named_args # TODO
 
-        if call.name in ('count',):
+        if call.name == 'count':
             args = call.args.pos_args
+            assert len(args) == 1, "Count of multiple fields not implemented"
+            # XXX find proper way to remove aggregate
+            # call.resolved = Count([arg.resolved.column for arg in args])
+
             self._resolve_expr_list(args)
-            if call.name == 'count':
-                assert all(isinstance(arg.type, ArrayType) for arg in args), args
-                # XXX find proper way to remove aggregate
-                call.resolved = Count([arg.resolved.column for arg in args])
-            else:
-                assert False, call
+
+            assert all(isinstance(arg.type, (ArrayType, TabularType)) for arg in args), args
+            call.resolved = Count(args)
+
             return
 
         f = self.state.functions[call.name]
@@ -494,8 +489,10 @@ class CompileSQL_Stmts:
 
         if isinstance(column.type, RelationalType):
             c = f'{column.name} INTEGER{mod}'
-            fk = f'FOREIGN KEY({column.name}) REFERENCES {column.type.table_name}({column.type.column_name})'
-            return c + ", " + fk
+            # TODO why is this an issue? in imdb_test
+            # fk = f'FOREIGN KEY({column.name}) REFERENCES {column.type.table_name}({column.type.column_name})'
+            # return c + ", " + fk
+            return c
         elif isinstance(column.type, BackRefType):
             return None
         elif isinstance(column.type, IdType):
@@ -504,13 +501,15 @@ class CompileSQL_Stmts:
             sql_type = {
                 IntegerType(): 'INTEGER',
                 StringType(): 'VARCHAR(4000)',
+                FloatType(): 'FLOAT'
                 # 'real': 'REAL',
             }[column.type]
             return f'{column.name} {sql_type}{mod}'
 
     def NamedTable(self, table: NamedTable):
+        # TODO: If table exists, make sure schema is correct!!
         cols = [self.to_sql(r) for r in table.columns]
-        return ' '.join(['CREATE TABLE', table.name, '(\n ', ',\n  '.join(
+        return ' '.join(['CREATE TABLE IF NOT EXISTS', table.name, '(\n ', ',\n  '.join(
                 c for c in cols if c is not None
             ), '\n);'])
 
@@ -603,6 +602,16 @@ class Interpreter:
 
     def call_func(self, fname, args):
         sql = self._compile_func(fname, args)
+        assert isinstance(sql, CompiledSQL)
+        return self._query_as_struct(sql)
+
+    def eval_expr(self, code):
+        expr_ast = parse_expr(code)
+
+        resolver = ResolveIdentifiers(self.state)
+        resolver.resolve(expr_ast)
+        expr_compiler = CompileSQL_Expr(self.state, resolver.autojoined, resolver.required_rows)
+        sql = expr_compiler.compile(expr_ast)
         assert isinstance(sql, CompiledSQL)
         return self._query_as_struct(sql)
 

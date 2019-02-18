@@ -74,6 +74,9 @@ class BoolType(AtomType):
 class IntegerType(AtomType):
     pass
 
+class FloatType(AtomType):
+    pass
+
 class RangeType(AtomType):
     pass
 
@@ -295,6 +298,14 @@ class FuncCall(Resolvable, Expr):
 class Count(Expr):
     exprs: list
     type = IntegerType()
+
+@dataclass
+class MakeArray(Expr):
+    expr: Expr
+
+    @property
+    def type(self):
+        return ArrayType(self.expr.type)
 
 @dataclass
 class Limit(Expr):
