@@ -4,7 +4,9 @@
 
 (Preql is currently at the pre-alpha stage, and isn't ready for real-world use yet)
 
-## Why?
+Preql aims to provide the most common and necessary features for working with real-world relational data, with clean syntax and code that's easy to work with.
+
+## But why?
 
 Modern SQL databases offer an amazing set of features for working with complex data. They're fast, reliable, and support a wide range of useful operations and features.
 
@@ -23,7 +25,9 @@ Note: Preql doesn't intend to support every SQL feature out there. It aims to pr
 ## Example
 
 ```ruby
+        #
         # Table definitions
+        #
         table Country:
             name: string
             language: string
@@ -31,31 +35,49 @@ Note: Preql doesn't intend to support every SQL feature out there. It aims to pr
         table Person:
             name: string
             age: integer?
-            country: Country -> citizens         # Define a foreign-key with backref
+            country: Country -> citizens         # Define a foreign-key with a backref
 
+        #
         # Inserts
-        add Country("England", "en") as england
+        #
         add Country("United States", "en") as us
+        add Country("England", "en") as england         # Save as variable
         add Country("France", "fr") as france
-        add Person("George Orwell", country=england)
+        add Person("George Orwell", country=england)    # Use the variable whenever you like
         ...
 
-        # Query definitions
-        adults = Person [age >= 18]
-        adults_with_country = adults {name, country.name}
-        english_speakers = Person [country.language = "en"]
-        population_count = Country {name, count(citizens)}
+        #
+        # Query definitions (i.e defines local functions)
+        #
+        adults = Person [age >= 18]         # Square-brackets create a filter
+        count_adults = count( adults )      # Construct queries using other queries
+        count_adults2 = adults:count()      # Use post-fix syntax
+        others_from_my_country = Person [country=me.country, id!=me.id]     # More variable use
+
+        # Auto-join examples
+        adults_with_country = adults {name, country.name}   # Curly-braces choose attributes
+        english_speakers = Person [country.language = "en"] {id, name, country.name}
+
+        # Group-by examples
+        population_count = Country {name => count(citizens)}
+        citizens_list = Country {name => citizens.name}     # Creates an array of Person names
+
+        # Example of an explicit automatic join. Equivalent to: english_speakers
+        english_speakers__explicit_join = (
+            join(c = Country[language="en"], p = Person)
+            { p.id, p.name, c.name }
+        )
+
+        # Example of a free join (like in SQL). Equivalent to: english_speakers
+        english_speakers___free_join = (
+            freejoin(c = Country, p = Person)
+            [c.language="en", p.country = c]
+            { p.id, p.name, c.name }
+        )
+
+
+
 ```
-
-
-
-##
-
-Preql has a different emphasis than SQL. That comes into play in a few ways:
-
-Preql has features that SQL doesn't, but also it isn't trying to provide a feature-complete alternative to SQL. The goal is to provide the most common and necessary features for working with real-world relational data, with clean syntax and code that's easy to work with.
-
-For example, while Preql supports nested queries, its syntax isn't optimized for that. Instead, the recommended style is to create named queries for each part, and then to combine them incrementally to create the full query.
 
 
 ## Who is this for?
