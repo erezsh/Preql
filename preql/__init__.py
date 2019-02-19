@@ -1,1 +1,1 @@
-# from .api import Interface as Preql
+from .api import Interface as Preql

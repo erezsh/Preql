@@ -20,8 +20,9 @@ class SqliteEngine(SqlEngine):
 
 
 class Interface:
-    def __init__(self):
-        self.interp = Interpreter(SqliteEngine())
+    def __init__(self, db_uri=None):
+        # TODO actually parse uri
+        self.interp = Interpreter(SqliteEngine(db_uri))
 
     def __call__(self, q, *args, **kw):
         return self.interp.execute_code(q, *args, **kw)
@@ -32,9 +33,12 @@ class Interface:
             return self.interp.call_func(fname, args)
         return delegate
 
+    # def __getitem__(self, pq):
+    #     sql = self._compiler.compile_query(pq)
+    #     return self._query(sql, [])
+
     def __getitem__(self, pq):
-        sql = self._compiler.compile_query(pq)
-        return self._query(sql, [])
+        return self.interp.eval_expr(pq)
 
     def load(self, fn, rel_to=None):
         """Load content filename as Preql code

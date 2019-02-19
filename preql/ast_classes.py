@@ -308,6 +308,11 @@ class MakeArray(Expr):
         return ArrayType(self.expr.type)
 
 @dataclass
+class Round(Expr):
+    expr: Expr
+    type = FloatType()
+
+@dataclass
 class Limit(Expr):
     args: dict = None
 

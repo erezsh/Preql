@@ -13,9 +13,9 @@
     Table {name, date ==> count(id), some_aray}
     Table {count(id), some_array foreach name, date}
 
-# More stuff
-
 - Many-to-many
+
+# More stuff
 
 - Auto-Join via connecting table? (i.e. graph traverse). Or just for m2m
 

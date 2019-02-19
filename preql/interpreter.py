@@ -179,6 +179,12 @@ class CompileSQL_Expr:
 
         return CompiledSQL(sql, [cnt.type])
 
+    def Round(self, rnd):
+        expr_sql = self._sqlexpr(rnd.expr)
+        sql = f'round({expr_sql.sql})'
+        return CompiledSQL(sql, [rnd.type])
+
+
     def _find_relation(self, tables):
         resolved_tables = [t.resolved_table for t in tables]
         assert all(isinstance(t, NamedTable) for t in resolved_tables)
@@ -448,6 +454,15 @@ class ResolveIdentifiers:
             call.resolved = Count(args)
 
             return
+        elif call.name == 'round':
+            args = call.args.pos_args
+            assert len(args) == 1, "Count of multiple fields not implemented"
+            self._resolve_expr_list(args)
+
+            assert isinstance(args[0].type, FloatType)
+            call.resolved = Round(args[0])
+            return
+
 
         f = self.state.functions[call.name]
         expr = deepcopy(f.expr)
