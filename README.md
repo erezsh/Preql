@@ -19,10 +19,13 @@ Preql attempts to fix this. Here's some of the features that it offers:
 - First-class functions
 - Automatic table joins based on table definitions
 - Portable - can compile to different dialects, based on the target database (future feature)
+- Better interface with procedural programming languages
 
 Note: Preql doesn't intend to support every SQL feature out there. It aims to provide the popular and most-used features, and allow embedded SQL for the edge-cases.
 
 ## Example
+
+The following code examples are all implemented and working already.
 
 ```ruby
         #
@@ -61,6 +64,10 @@ Note: Preql doesn't intend to support every SQL feature out there. It aims to pr
         # Group-by examples
         population_count = Country {name => count(citizens)}
         citizens_list = Country {name => citizens.name}     # Creates an array of Person names
+
+        # Order-by & limit examples
+        youngest_first = Person order(age)
+        oldest = Person order(-age) :limit(1)
 
         # Example of an explicit automatic join. Equivalent to: english_speakers
         english_speakers__explicit_join = (
