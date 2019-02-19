@@ -4,7 +4,7 @@ stmts: stmt+
 ?stmt: table_def | func_def | add_row
 
 add_row: "add" name "(" arguments ")" as_? _NL
-arguments: atom ("," atom)* ","?
+arguments: molecule ("," molecule)* ","?
 
 as_: "as" name
 // assigns: assign ("," assign)* ","?
@@ -12,49 +12,68 @@ as_: "as" name
 
 table_def: "table" name ":" _NL _INDENT table_def_stmt+ _DEDENT
 ?table_def_stmt: col_def
-col_def: name ":" type ["->" name] _NL
-type: name typemod?
+col_def: name ":" type typemod? ["->" name] _NL
+type: name
 typemod: PK | NULLABLE
 
 func_def: name func_params? "=" expr _NL
 func_params: "(" name ("," name)* ")"
 
-?query: atom as_? selection groupby? projection?
-      | atom as_? selection? groupby? projection
-      | atom as_ selection? groupby? projection?
+?query: molecule query_func+
+
+?query_func : selection
+            | projection
+            | order
+            | query_user_func
 
 selection: "[" [compare ("," compare)*] "]"
+projection: "{" proj_exprs ["=>" proj_exprs] "}"
+proj_exprs: named_expr ("," named_expr)*
 
-groupby: "groupby" _refs
+order: "order" "(" (order_asc|order_desc)+ ")"
+query_user_func: ":" func_call
+order_asc: "+"? expr
+order_desc: "-" expr
 
-projection: "{" atom ("," atom)* "}"
 
-?compare: atom compare_op atom
+?compare: molecule compare_op molecule
 
 ?expr: arith_expr
 
-!?arith_expr: expr "+" atom
-           | atom
+?arith_expr: expr ARITH_OP molecule
+           | molecule
+
+ARITH_OP: "+" | "*"
 
 !compare_op: "<" | ">" | "=" | "!=" | "<>"
-?atom: value
+?molecule: atom
      | func_call
-     | ref            // or ref
-     | list
+     | identifier
+     | array
      | query
      | "(" expr ")"
 
-list: "[" atom ("," atom)* "]"
+array: "[" molecule ("," molecule)* "]"
 
 func_call: name func_args
-func_args: "(" [expr ("," expr)*] ")"
+func_args: "(" _func_args ")"
+_func_args: named_expr ("," named_expr)*
+          |
 
-?value: NUMBER -> number
+named_expr: [name "="] expr
+
+?atom: number
       | STRING -> string
+      | "null" -> null
+      | range
 
-_refs: ref ("," ref)*
+number: SIGNED_FLOAT | SIGNED_INT
 
-ref: name ("." name)*
+range: SIGNED_INT? ".." SIGNED_INT
+     | SIGNED_INT ".." SIGNED_INT?
+
+
+identifier: name ("." name)*
 name: NAME
 
 PK: "pk"
@@ -63,10 +82,21 @@ COMMENT: /#[^\n]*/
 // _NL: /\n+/
 _NL: ( /\r?\n[\t ]*/ | COMMENT )+
 
+DECIMAL: INT "." INT
+       | INT "." /(?![.])/
+       | "." INT
+
+// float = /-?\d+(\.\d+)?([eE][+-]?\d+)?/
+_EXP: ("e"|"E") SIGNED_INT
+FLOAT: INT _EXP
+     | DECIMAL _EXP?
+SIGNED_FLOAT: ["+"|"-"] FLOAT
+SIGNED_INT: ["+"|"-"] INT
+
 
 %import common.CNAME -> NAME
 %import common.WS_INLINE
-%import common.NUMBER
+%import common.INT
 %import common.ESCAPED_STRING -> STRING
 %ignore WS_INLINE
 %ignore /\\[\t \f]*\r?\n/   // LINE_CONT

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from .interpreter import Interpreter
 
 class SqlEngine:
@@ -12,17 +14,18 @@ class SqliteEngine(SqlEngine):
         dargs = {}
         c = self._conn.cursor()
         for i, s in enumerate(sql.split('\n')):
-            print(' ...' if i else 'SQL>', s)
+            print('    ' if i else 'SQL>', s)
         c.execute(sql, dargs)
         return c.fetchall()
 
 
 class Interface:
-    def __init__(self):
-        self.interp = Interpreter(SqliteEngine())
+    def __init__(self, db_uri=None):
+        # TODO actually parse uri
+        self.interp = Interpreter(SqliteEngine(db_uri))
 
     def __call__(self, q, *args, **kw):
-        return self.interp.execute(q, *args, **kw)
+        return self.interp.execute_code(q, *args, **kw)
 
     def __getattr__(self, fname):
         def delegate(*args, **kw):
@@ -30,23 +33,54 @@ class Interface:
             return self.interp.call_func(fname, args)
         return delegate
 
+    # def __getitem__(self, pq):
+    #     sql = self._compiler.compile_query(pq)
+    #     return self._query(sql, [])
+
     def __getitem__(self, pq):
-        sql = self._compiler.compile_query(pq)
-        return self._query(sql, [])
+        return self.interp.eval_expr(pq)
+
+    def load(self, fn, rel_to=None):
+        """Load content filename as Preql code
+
+        If rel_to is provided, the function will find the filename in relation to it.
+        """
+        if rel_to:
+            fn = Path(rel_to).parent / fn
+        with open(fn, encoding='utf8') as f:
+            self(f.read())
 
 
 def test1():
-    a = open("preql/simple1.pql").read()
     i = Interface()
-    i(a)
+    i.load('simple1.pql', rel_to=__file__)
     print(i.english())
     print(i.by_country('Israel'))
     print(i.english2())
 
 def test2():
-    a = open("preql/simple2.pql").read()
+    i = Interface()
+    i.load('simple2.pql', rel_to=__file__)
+    # print(i.english_speakers())
+    # print(i.person_and_language())
+    # print(i.from_my_country())
+    # print(i.population_count())
+    # print(i.citizens_list())
+    # print(i.explicit_join2())
+    print(i.explicit_join())
+
+def test3():
+    a = open("preql/tree.pql").read()
     i = Interface()
     i(a)
-    print(i.english_speakers())
+    lion = i.lion()
+    print(lion)
+    print(i.up(lion['id']))
 
-test2()
+    # i.up() - requires join aliases!
+    # i.animals() - Requires advanced type system
+
+# print('---------')
+# test1()
+# print('---------')
+# test2()
