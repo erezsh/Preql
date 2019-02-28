@@ -1,21 +1,31 @@
 # First things first
 
+- Explicit joins
+- Named joins to support recursion and other stuff
+- Order by + asc/desc
+- Offset + limit
+- Do autojoins
+
 - Allow updating of rows
 
-- Use method syntax?
-    Table order(name) :limit(3) 
-    Table groupby(name, date) order(-date)
-    Table :offset(2)
-    Table :range(1..2)
-    Table :page(1, 40)
-
-- Possible groupby syntax:
-    Table {name, date ==> count(id), some_aray}
-    Table {count(id), some_array foreach name, date}
+- Use method syntax
+    Table .offset(2)
+    Table .range(1..2)
+    Table .page(1, 40)
 
 - Many-to-many
 
+- date fields
+
+- Always include id by default in projection?
+    - Pros: Makes autojoin & ORM usually work
+    - Cons: May be confusing
+
 # More stuff
+
+- Table.count() = count(self)
+
+- Enums
 
 - Auto-Join via connecting table? (i.e. graph traverse). Or just for m2m
 
@@ -51,9 +61,3 @@
 
 
 # Done Already
-- Named joins to support recursion and other stuff
-- Two-step: Bind + type inference -> generate sql
-- Explicit joins
-- Order by !!
-- Offset + limit
-- Do autojoins

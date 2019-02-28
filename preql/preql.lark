@@ -3,7 +3,7 @@
 stmts: stmt+
 ?stmt: table_def | func_def | add_row
 
-add_row: "add" name "(" arguments ")" as_? _NL
+add_row: "add" name "(" arguments ")" [as_] _NL
 arguments: molecule ("," molecule)* ","?
 
 as_: "as" name
@@ -12,69 +12,64 @@ as_: "as" name
 
 table_def: "table" name ":" _NL _INDENT table_def_stmt+ _DEDENT
 ?table_def_stmt: col_def
-col_def: name ":" type typemod? ["->" name] _NL
+col_def: name ":" type [typemod] ["->" name] _NL
 type: name
 typemod: PK | NULLABLE
 
-func_def: name func_params? "=" expr _NL
+func_def: name [func_params] "=" expr _NL
 func_params: "(" name ("," name)* ")"
 
-?query: molecule query_func+
+sel_exprs: expr ("," expr)*
+selection: molecule "[" sel_exprs "]"
 
-?query_func : selection
-            | projection
-            | order
-            | query_user_func
-
-selection: "[" [compare ("," compare)*] "]"
-projection: "{" proj_exprs ["=>" proj_exprs] "}"
+projection: molecule "{" proj_exprs ["=>" proj_exprs] "}"
 proj_exprs: named_expr ("," named_expr)*
 
-order: "order" "(" (order_asc|order_desc)+ ")"
-query_user_func: ":" func_call
-order_asc: "+"? expr
-order_desc: "-" expr
 
+?expr: compare
 
-?compare: molecule compare_op molecule
+?compare: compare compare_op arith_expr
+        | arith_expr
 
-?expr: arith_expr
-
-?arith_expr: expr ARITH_OP molecule
+?arith_expr: arith_expr arith_op molecule
            | molecule
 
-ARITH_OP: "+" | "*"
+!arith_op: "+" | "*"
 
-!compare_op: "<" | ">" | "=" | "!=" | "<>"
+!compare_op: "<" | ">" | "=" | "!=" | "<>" | ">=" | "<="
 ?molecule: atom
      | func_call
-     | identifier
+     | getattr
      | array
-     | query
+     | selection
+     | projection
+     | ref
      | "(" expr ")"
+     | "-" molecule -> neg
+     | "^" molecule -> desc
 
 array: "[" molecule ("," molecule)* "]"
 
-func_call: name func_args
+func_call: molecule func_args
 func_args: "(" _func_args ")"
 _func_args: named_expr ("," named_expr)*
           |
 
-named_expr: [name "="] expr
+named_expr: [name ":"] expr
 
-?atom: number
+?atom: SIGNED_INT -> int
+      | SIGNED_FLOAT -> float
       | STRING -> string
       | "null" -> null
       | range
-
-number: SIGNED_FLOAT | SIGNED_INT
 
 range: SIGNED_INT? ".." SIGNED_INT
      | SIGNED_INT ".." SIGNED_INT?
 
 
-identifier: name ("." name)*
+getattr: molecule "." name
 name: NAME
+ref: name
 
 PK: "pk"
 NULLABLE: "?"

@@ -67,7 +67,7 @@ The following code examples are all implemented and working already.
 
         # Order-by & limit examples
         youngest_first = Person order(age)
-        oldest = Person order(-age) :limit(1)
+        oldest_person = Person order(-age) :limit(1)
 
         # Example of an explicit automatic join. Equivalent to: english_speakers
         english_speakers__explicit_join = (

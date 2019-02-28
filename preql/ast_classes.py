@@ -1,19 +1,8 @@
 from enum import Enum
-from dataclasses import dataclass as _dataclass
-
-dataclass = _dataclass
 
 from lark import Tree
 
-class Dataclass:
-    def __post_init__(self):
-        if not hasattr(self, '__annotations__'):
-            return
-        for name, type_ in self.__annotations__.items():
-            value = getattr(self, name)
-            if value is not None and not isinstance(value, type_):
-                raise TypeError(f"[{self.__class__.__name__}] Attribute {name} expected value of type {type_}, instead got {value}")
-            # assert value is None or isinstance(value, type_), (name, value, type_)
+from .utils import Dataclass, dataclass
 
 class Ast(Dataclass):
     def _to_tree(self, expr):
@@ -22,9 +11,6 @@ class Ast(Dataclass):
         return expr
 
     def to_tree(self):
-        if getattr(self, 'resolved', False):
-            return self.resolved.to_tree()
-
         children = []
         for name, type_ in self.__annotations__.items():
             value = getattr(self, name)
@@ -35,7 +21,6 @@ class Ast(Dataclass):
 
             children.append(t)
         return Tree(self.__class__.__name__, children)
-    pass
 
 
 
@@ -101,7 +86,7 @@ class ArrayType(ValueType):
 ##################################################
 
 class Expr(Ast):
-    type: Type = None
+    pass
 
 @dataclass
 class Arith(Expr):
@@ -109,11 +94,17 @@ class Arith(Expr):
     exprs: list
 
 @dataclass
+class Neg(Expr):
+    expr: Expr
+
+@dataclass
+class Desc(Expr):
+    expr: Expr
+
+@dataclass
 class Compare(Expr):
     op: str
     exprs: list
-
-    type = BoolType()
 
 @dataclass
 class Value(Expr):
@@ -128,6 +119,8 @@ class Value(Expr):
             return cls(obj, StringType())
         elif isinstance(obj, int):
             return cls(obj, IntegerType())
+        elif isinstance(obj, float):
+            return cls(obj, FloatType())
         assert False
 
 @dataclass
@@ -137,131 +130,31 @@ class Range(Expr):
 
     type = RangeType()
 
-class Resolvable:
-    @property
-    def type(self):
-        if self.resolved:
-            return self.resolved.type
-
-    @property
-    def resolved_table(self):
-        rt = self.resolved.resolved_table
-        assert rt, self.resolved
-        return rt
 
 @dataclass
-class Identifier(Resolvable, Expr):
-    "Any reference; Prior to type resolution"
-    name: list
-    resolved: object = None
-
-    def __repr__(self):
-        if self.resolved:
-            return "Identifier(%s, resolved=%r)" % ('.'.join(self.name), self.resolved)
-
-        return "Identifier(%s)" % '.'.join(self.name)
-
-
-class TabularExpr(Expr):
-    type = TabularType()
-    resolved_table = None
+class Reference(Expr):
+    name: str
 
 @dataclass
-class Table(TabularExpr):
-    columns: list
-
-    def __getitem__(self, name):
-        cols = [c for c in self.columns if c.name == name]
-        if not cols:
-            raise KeyError("No such column: %s" % name)
-        col ,= cols
-        return col
-
-    @property
-    def relations(self):
-        return [c for c in self.columns if isinstance(c.type, RelationalType)]
-
-    @property
-    def id(self):
-        x ,= [c for c in self.columns if isinstance(c.type, IdType)]
-        return x
-
-    @property
-    def resolved_table(self):
-        return self
-
-
-@dataclass
-class Join(TabularExpr):
-    exprs: list
-
-    __types__ = {
-        'exprs': [TabularType]
-    }
-
-    def __getitem__(self, name):
-        exprs = [c for c in self.exprs if c.name == name]
-        if not exprs:
-            raise KeyError("No such alias: %s" % name)
-        expr ,= exprs
-        return expr
-
-@dataclass
-class FreeJoin(Join):
-    pass
-
-@dataclass
-class AutoJoin(Join):
-    pass
-
-
-@dataclass
-class Query(TabularExpr):
-    table: Expr
-    selection: list
-    projection: list
-    order: list
-    aggregates: list
-
-    __types__ = {
-        'table': TabularType,
-    }
+class GetAttribute(Expr):
+    obj: Expr
+    attr: str
 
 @dataclass
 class OrderSpecifier(Expr):
     expr: Expr
     asc: bool
     
-
-
-# @dataclass
-# class Projection(TabularExpr):
-#     table: Expr
-#     exprs: list
-
-#     __types__ = {
-#         'table': TabularType,
-#     }
-
-# @dataclass
-# class Selection(TabularExpr):
-#     table: Expr
-#     exprs: list
-
-#     __types__ = {
-#         'table': TabularType,
-#         'exprs': [BoolType]
-#     }
-
-#     @property
-#     def type(self):
-#         return self.table.type
+@dataclass
+class Projection(Expr):
+    table: Expr
+    fields: list
+    agg_fields: list
 
 @dataclass
-class AliasedTable(TabularExpr):
+class Selection(Expr):
     table: Expr
-    name: str
-
+    conds: list
 
 @dataclass
 class FuncArgs(Expr):
@@ -283,46 +176,14 @@ class NamedExpr(Expr):
 
 
 @dataclass
-class FuncCall(Resolvable, Expr):
-    name: str
+class FuncCall(Expr):
+    obj: Expr
     args: FuncArgs
-    resolved: object = None
 
-    @property
-    def exprs(self):
-        return [self.args]
-
-
-
-@dataclass
-class Count(Expr):
-    exprs: list
-    type = IntegerType()
-
-@dataclass
-class MakeArray(Expr):
-    expr: Expr
-
-    @property
-    def type(self):
-        return ArrayType(self.expr.type)
-
-@dataclass
-class Round(Expr):
-    expr: Expr
-    type = FloatType()
-
-@dataclass
-class Limit(Expr):
-    args: dict = None
-
-@dataclass
-class Offset(Expr):
-    args: dict = None
 
 
 ##################################################
-#                 Declarations
+#                 Statements
 ##################################################
 
 class Stmt(Ast):
@@ -334,11 +195,15 @@ class AddRow(Stmt):
     args: list
     as_: str
 
+##################################################
+#                 Declarations
+##################################################
+
 class Declaration(Stmt):
     pass
 
 @dataclass
-class Function(Declaration):
+class FunctionDef(Declaration):
     name: str
     params: list
     expr: Expr
@@ -348,16 +213,19 @@ class Function(Declaration):
 
 
 @dataclass
-class BuiltinFunction(Function):
-    pass
-
-
-@dataclass
-class NamedTable(Table, Declaration):
+class TableDef(Declaration):
     name: str
+    columns: dict
 
     def __repr__(self):
         return '<NamedTable:%s>' % self.name
+
+    # def get_column(self, name):
+    #     cols = [c for c in self.columns if c.name == name]
+    #     if not cols:
+    #         raise AttributeError("No such column: %s" % name)
+    #     col ,= cols
+    #     return col
 
 @dataclass
 class Column(Expr, Declaration):
@@ -365,90 +233,11 @@ class Column(Expr, Declaration):
     backref: str  # Handled in type?
     is_nullable: bool
     is_pk: bool
-
     type: Type
-    table: Table = None
+    table: TableDef = None
 
     def to_tree(self):
         return '-> %s.%s' % (self.table.name, self.name)
 
 
-@dataclass
-class AggregatedColumn(Expr):
-    column: Column
 
-    @property
-    def type(self):
-        return ArrayType(self.column.type)
-
-
-
-@dataclass
-class RowRef(TabularExpr):
-    table: Expr
-    row_id: int
-
-    @property
-    def resolved_table(self):   # XXX is this really necessary here?
-        return self
-
-    def __getitem__(self, col):
-        if col == 'id':
-            return Value(self.row_id, IntegerType())
-        return ValueRef(self, col)
-
-    @property
-    def autoname(self):
-        return '__row%d' % id(self)
-
-@dataclass
-class ValueRef(Expr):
-    rowref: RowRef
-    column: str
-
-
-
-
-### Declaration references, resolved by identifier
-
-# class DeclRef(Expr):
-#     "Objects that refer to declared objects"
-#     pass
-
-# @dataclass
-# class ColumnRef(Expr):
-#     # tab: TabularExpr
-#     column: Column
-
-#     @property
-#     def type(self):
-#         return self.column.type
-
-#     def __repr__(self):
-#         return 'ColumnRef:%s' % self.column.name
-
-
-# @dataclass
-# class TableRef(TabularExpr):
-#     table: Table
-
-#     type = TabularType
-
-#     def __repr__(self):
-#         return 'TableRef:%s' % self.table.name
-
-#     def __getitem__(self, name):
-#         col ,= [c for c in self.table if c.name == name]
-#         return col
-
-
-# @dataclass    # Query?
-# class RowRef(Expr):
-#     tab: TabularExpr
-#     row_id: int
-
-#     type: TabularType
-
-##################################################
-#                 Statements
-##################################################

@@ -37,14 +37,14 @@ table movies_directors:
   movie_id: movies
 
 
-count_by_year(T) = T {year => count(id)}
+# count_by_year(T) = T {year => count(id)}
 
 """
 
 
 def main():
     preql = Preql('imdb.db')
-    preql(schema)
+    preql.exec(schema)
 
     # print(i.call_func('count_best_movies_by_year', []))
 
@@ -56,13 +56,42 @@ def main():
 
     # print(i.eval_expr('movies [rank > 9] :limit(5) {name => genres.genre}'))
 
-    print( preql['count(movies)'] )
-    print( preql['count(movies [rank>9])'] )
+    # print( preql( 'count(movies)' ) )
+    # print( preql( 'count(movies [rank>9])' ) )
 
-    print( preql['movies :count()'] )
-    print( preql['movies [rank>9] :count()'] )
+    # print( preql( 'movies :count()' ) )
+    # print( preql( 'movies [rank>9] :count()' ) )
 
-    print( preql['movies {round(rank) => count(id)}'] )
+    # print( preql( 'movies {round(rank) => count(id)}' ) )
+
+    # print( preql( 'movies[ rank > 9 ].limit(5)' ) )
+    # return
+    print( preql( 'movies.order(-name).count()' ) )
+
+    print( preql( 'movies' ) )
+    print( preql( 'movies.count()' ) )
+    print( preql( 'movies[ rank > 9 ].count()' ) )
+    print( preql( 'movies[ rank > 9 ]' ) )
+
+    print( preql( 'movies {name}' ) )
+    print( preql( 'movies {n:name, r:rank}' ) )
+    print( preql( 'movies [rank>9] {n:name, r:rank}' ) )
+    print( preql( 'movies {year => count(id)}' ) )
+    print( preql( 'movies {round(rank) => count(id)}' ) )
+    print( preql( 'movies {n:name, r:rank} [r>9].count()' ) )
+
+    ### MORE TESTS
+    # movies[rank >= 9.9, year>2000]  
+
+
+    # print( preql( 'movies {r: round(rank) => c: count(id)}[ r > 9] ' ) )
+
+    
+
+    # print( preql( 'movies[id=0]' ) )
+    # print( preql( 'movies(1)' ) )
+
+    preql.start_repl()
 
     # print(i.eval_query('count_by_year( movies [rank > 9] )'))     # TODO: Not implemented yet
 
