@@ -43,15 +43,22 @@ class String(Primitive):
 
 @dataclass
 class Row(Object):
+    table: object
     attrs: dict
 
     def repr(self):
         attrs = ['%s: %r' % kv for kv in self.attrs.items()]
         return '{' + ', '.join(attrs) +'}'
 
+    def __repr__(self):
+        return self.repr()
+
 @dataclass
 class Table(Object):
     def getattr(self, name):
+        if name in self.columns:
+            return self.columns[name]
+
         if name == 'count':
             # TODO table should have a method dict
             return CountTable(self)
@@ -65,14 +72,11 @@ class Table(Object):
             # TODO table should have a method dict
             return OrderTable(self)
         
-        try:
-            col = self.tabledef.columns[name]
-        except KeyError:
-            raise NameError(name)
+        raise NameError(name)
+        # if isinstance(obj, ast.Column): # TODO bad smell
+        #     obj = ColumnRef(obj)
 
-        return ColumnRef(col)
-
-        # raise AttributeError(name)
+        # return obj
 
     def _repr_table(self, query_engine, name):
         preview_limit = 3
@@ -102,20 +106,42 @@ class Table(Object):
         sql_text = self.to_sql().text
         if limit is not None:   # TODO use Query.limit, not this hack
             sql_text = 'SELECT * FROM (' + sql_text + ') LIMIT %d' % limit
-        sql = CompiledSQL(sql_text, ObjectFromTuples(self))
+        else:
+            sql_text = 'SELECT * FROM (' + sql_text + ')'
+        sql = CompiledSQL(sql_text, self)
         return query_engine.query(sql)
 
-@dataclass
-class ObjectFromTuples(Dataclass):   # TODO what is this
-    table: Table
+    def cols_by_type(self, type_):
+        return {name: c.col for name, c in self.columns.items()
+                if isinstance(c.col.type, type_)}
 
-    def __call__(self, rows):
-        names = self.table.projection_names
-        x = []
-        for row in rows:
-            assert len(row) == len(names), (row, names)
-            x.append( Row(dict(zip(names, row))) )
-        return x
+    def from_sql_tuple(self, tup):
+        names = self.projection_names
+        assert len(tup) == len(names), (tup, names)
+        return Row(self, dict(zip(names, tup)))
+
+    def from_sql_tuples(self, tuples):
+        return [self.from_sql_tuple(row) for row in tuples]
+
+    @property
+    def tuple_width(self):
+        return len(self.projection_names)
+
+    def repr(self, query_engine):
+        return self._repr_table(query_engine, None)
+
+
+# @dataclass
+# class ObjectFromTuples(Dataclass):   # TODO what is this
+#     table: Table
+
+#     def __call__(self, rows):
+#         names = self.table.projection_names
+#         x = []
+#         for row in rows:
+#             assert len(row) == len(names), (row, names)
+#             x.append( Row(dict(zip(names, row))) )
+#         return x
 
 
 
@@ -123,10 +149,14 @@ class ObjectFromTuples(Dataclass):   # TODO what is this
 @dataclass
 class ColumnRef(Object):   # TODO proper hierarchy
     col: ast.Column
+    table_alias: str = None
 
     def to_sql(self):
         # TODO use table name
-        return CompiledSQL(self.col.name, self)
+        sql = self.col.name
+        if self.table_alias:
+            sql = self.table_alias + '.' + sql
+        return CompiledSQL(sql, self)
 
 
     @property
@@ -137,8 +167,12 @@ class ColumnRef(Object):   # TODO proper hierarchy
 class StoredTable(Table):
     tabledef: ast.TableDef
 
-    def funcname(self, parameter_list):
-        pass
+    def __post_init__(self):
+        for c in self.tabledef.columns.values():
+            assert isinstance(c, ast.Column), type(c)
+
+        self.columns = {name:ColumnRef(c) 
+                        for name, c in self.tabledef.columns.items()}
 
     def repr(self, query_engine):
         # count = self.count(query_engine)
@@ -154,7 +188,27 @@ class StoredTable(Table):
 
     @property
     def projection_names(self):
-        return [c.name for c in self.tabledef.columns.values() if not isinstance(c.type, ast.BackRefType)]
+        return [c.col.name for c in self.columns.values() 
+                if not isinstance(c.col.type, ast.BackRefType)]
+
+
+@dataclass
+class AliasedTable(Table):
+    table: Table
+    alias: str
+
+    @property
+    def columns(self):
+        return {name:ColumnRef(c.col, self.alias)
+                for name, c in self.table.columns.items()}
+
+    @property
+    def projection_names(self):
+        return self.table.projection_names
+
+    def to_sql(self):
+        return self.table.to_sql()
+
 
 @dataclass
 class TableMethod(Function):
@@ -163,8 +217,9 @@ class TableMethod(Function):
 @dataclass
 class CountTable(TableMethod):
 
-    def call(self, query_engine, args):
+    def call(self, query_engine, args, named_args):
         assert not args, args
+        assert not named_args
         return self.table.count(query_engine)
 
     def repr(self, query_engine):
@@ -172,19 +227,22 @@ class CountTable(TableMethod):
 
 @dataclass
 class LimitTable(TableMethod):
-    def call(self, query_engine, args):
+    def call(self, query_engine, args, named_args):
+        assert not named_args
         limit ,= args
         return Query(self.table, limit=limit)
 
 class OffsetTable(TableMethod):
-    def call(self, query_engine, args):
+    def call(self, query_engine, args, named_args):
+        assert not named_args
         offset ,= args
         return Query(self.table, offset=offset)
 
 
 @dataclass
 class OrderTable(TableMethod):
-    def call(self, query_engine, args):
+    def call(self, query_engine, args, named_args):
+        assert not named_args
         return Query(self.table, order=args)
 
 
@@ -218,8 +276,8 @@ class Round(Function):  # TODO not exactly function
 class SqlFunction(Function):
     f: object
 
-    def call(self, query_engine, args):
-        return self.f(*args)
+    def call(self, query_engine, args, named_args):
+        return self.f(*args, **named_args)
 
 @dataclass
 class UserFunction(Function):
@@ -305,8 +363,21 @@ class Query(Table):
             return [f.name for f in self.fields + self.agg_fields]
         return self.table.projection_names
 
+    @property
+    def columns(self):
+        if self.fields:
+            print('$$$', list(self.table.columns.keys()))
+            print('%%%', self.fields, self.agg_fields)
+            cols = {f.name: self.table.columns[f.expr.name]
+                    for f in self.fields + self.agg_fields}
+
+            return cols
+        else:
+            return self.table.columns
+
     @property   # TODO better mechanism?
     def tabledef(self):
+        assert False
         t = self.table.tabledef
         if self.fields:
             cols = {f.name: t.columns[f.expr.name]
@@ -361,3 +432,85 @@ class NamedExpr(Object):   # XXX this is bad but I'm lazy
     @property
     def name(self):
         return self._name or self.expr.name
+
+@dataclass
+class RowRef(Object):
+    relation: Table
+    row_id: int
+
+    def to_sql(self):
+        return CompiledSQL(str(self.row_id), Table)
+
+@dataclass
+class AutoJoin(Table):
+    tables: dict
+
+    def __init__(self, **tables):
+        self.tables = {n:AliasedTable(t, n) for n,t in tables.items()}
+
+    @property
+    def columns(self):
+        return self.tables
+
+    # @property
+    # def projection_names(self):
+    #     return self.tables.keys()
+
+    def to_sql(self):
+        assert len(self.tables) == 2
+
+        ids =       [list(t.cols_by_type(ast.IdType).items())
+                     for t in self.tables.values()]
+        relations = [list(t.cols_by_type(ast.RelationalType).values())
+                     for t in self.tables.values()]
+
+        ids0, ids1 = ids
+        id0 ,= ids0
+        id1 ,= ids1
+        name1, name2 = list(self.tables)
+        
+        assert len(ids) == 2
+        assert len(relations) == 2
+    
+        table1 = id0[1].type.table
+        table2 = id1[1].type.table
+
+        to_join  = [(name1, c, name2) for c in relations[0] if c.type.table_name == table2]
+        to_join += [(name2, c, name1) for c in relations[1] if c.type.table_name == table1]
+        if len(to_join) > 1:
+            raise Exception("More than 1 relation between %s <-> %s" % (table1.name, table2.name))
+        to_join ,= to_join
+        src_table, rel, dst_table = to_join
+
+        exprs_sql = ['(%s) %s' % (t.to_sql().text, name) for name, t in self.tables.items()]
+        join_sql = ' JOIN '.join(e for e in exprs_sql)
+
+        print(type(src_table), src_table)
+        join_sql += ' ON ' + f'{src_table}.{rel.name} = {dst_table}.id'   # rel.type.column_name
+
+        return CompiledSQL(join_sql, None)
+
+    # def _find_relation(self, tables):
+    #     resolved_tables = [t.resolved_table for t in tables]
+    #     assert all(isinstance(t, NamedTable) for t in resolved_tables)
+    #     table1, table2 = resolved_tables     # currently just 2 tables for now
+    #     table1_name = table1.id.type.table
+    #     table2_name = table2.id.type.table
+    #     relations = [(table1, c, table2) for c in table1.relations if c.type.table_name == table2_name]
+    #     relations += [(table2, c, table1) for c in table2.relations if c.type.table_name == table1_name]
+    #     if len(relations) > 1:
+    #         raise Exception("More than 1 relation between %s <-> %s" % (table1.name, table2.name))
+    #     rel ,= relations
+    #     src_table, rel, dst_table = rel
+    #     return rel
+
+
+    def from_sql_tuple(self, tup):
+        items = {}
+        for name, tbl in self.tables.items():
+            subset = tup[:tbl.tuple_width]
+            items[name] = tbl.from_sql_tuple(subset)
+
+            tup = tup[tbl.tuple_width:]
+
+        return Row(self, items)

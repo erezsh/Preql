@@ -21,6 +21,8 @@
     - Pros: Makes autojoin & ORM usually work
     - Cons: May be confusing
 
+- Throw error on duplicate projection names
+
 # More stuff
 
 - Table.count() = count(self)

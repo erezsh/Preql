@@ -1,3 +1,4 @@
+from copy import copy
 from enum import Enum
 
 from lark import Tree
@@ -218,7 +219,7 @@ class TableDef(Declaration):
     columns: dict
 
     def __repr__(self):
-        return '<NamedTable:%s>' % self.name
+        return '<TableDef:%s>' % self.name
 
     # def get_column(self, name):
     #     cols = [c for c in self.columns if c.name == name]
@@ -226,6 +227,21 @@ class TableDef(Declaration):
     #         raise AttributeError("No such column: %s" % name)
     #     col ,= cols
     #     return col
+
+    # def cols_by_type(self, type_):
+    #     return {name: c for name, c in self.columns.items()
+    #             if isinstance(c.type, type_)}
+
+    # def make_alias(self, new_name):
+    #     t = AliasedTableDef(new_name, {
+    #         name: copy(c) for name, c in self.columns.items()
+    #     })
+    #     for c in t.columns.values():
+    #         c.table = t
+    #     return t
+    
+class AliasedTableDef(TableDef):
+    pass
 
 @dataclass
 class Column(Expr, Declaration):

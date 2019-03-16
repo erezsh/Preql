@@ -117,24 +117,27 @@ class EvalAst:
     def FuncCall(self, funccall: ast.FuncCall):
         func_obj = self._eval(funccall.obj)
         # assert isinstance(func_obj, Function)
-
-        assert not funccall.args.named_args
+        pos_args = funccall.args.pos_args
+        named_args = funccall.args.named_args
 
         if isinstance(func_obj, pql.OrderTable):
             with self.context.push(table=func_obj.table):
-                args = self._eval_list(funccall.args.pos_args)
+                args = self._eval_list(pos_args)
 
-            return func_obj.call(self.query_engine, args)
+            return func_obj.call(self.query_engine, args, named_args)
         elif isinstance(func_obj, pql.UserFunction):
-            args = self._eval_list(funccall.args.pos_args)
+            assert not named_args
+
+            args = self._eval_list(pos_args)
             params = func_obj.funcdef.params or []
             assert len(args) == len(params) # TODO actual param resolution
             args = dict(zip(params, args))
             with self.context.push(args=args):
                 return self._eval(func_obj.funcdef.expr)
 
-        args = self._eval_list(funccall.args.pos_args)
-        x = func_obj.call(self.query_engine, args)
+        args = self._eval_list(pos_args)
+        named_args = {name:self._eval(expr) for name,expr in named_args.items()}
+        x = func_obj.call(self.query_engine, args, named_args)
         return x
 
     def Selection(self, sel: ast.Selection):
@@ -204,6 +207,7 @@ class EvalAst:
 pql_functions = {
     'round': pql.Round,
     'count': pql.CountField,
+    'join': pql.AutoJoin,
 }
 
 
@@ -245,7 +249,7 @@ class Interpreter:
             table = self.state.namespace[addrow.table]
             # idcol ,= [c for c in table.columns if c.name == 'id']
             # compare = Compare('=', [idcol, Value(rowid, IntegerType())])
-            v = ast.RowRef(table, rowid)
+            v = pql.RowRef(table, rowid)
             self.state.namespace[addrow.as_] = v # Projection(table, [compare] )
 
     def _def_function(self, func: ast.FunctionDef):
@@ -283,10 +287,12 @@ class Interpreter:
         return obj
 
     def _query_as_struct(self, compiled_sql):
+        # import pdb
+        # pdb.set_trace()
         res = self.sqlengine.query(compiled_sql.text)
-        if not isinstance(compiled_sql.type, pql.ObjectFromTuples): # XXX hackish
-            res = res[0][0]
-        return compiled_sql.type(res)
+        if isinstance(compiled_sql.type, pql.Table): # XXX hackish
+            return compiled_sql.type.from_sql_tuples(res)
+        return compiled_sql.type(res[0][0])
 
     def execute_code(self, code):
         for s in parse(code):
