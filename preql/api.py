@@ -68,9 +68,7 @@ class Interface:
 
     def __call__(self, pq):
         res = self.interp.eval_expr(pq)
-        # if isinstance(res, pql.Table):
-        #     return TableWrapper(res, self.interp)
-        return res
+        return self._wrap_result(res)
 
     def load(self, fn, rel_to=None):
         """Load content filename as Preql code

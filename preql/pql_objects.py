@@ -104,6 +104,7 @@ class Table(Object):
 
     def query(self, query_engine, limit=None):
         sql_text = self.to_sql().text
+        print('###', sql_text)
         if limit is not None:   # TODO use Query.limit, not this hack
             sql_text = 'SELECT * FROM (' + sql_text + ') LIMIT %d' % limit
         else:
@@ -116,16 +117,16 @@ class Table(Object):
                 if isinstance(c.col.type, type_)}
 
     def from_sql_tuple(self, tup):
-        names = self.projection_names
-        assert len(tup) == len(names), (tup, names)
-        return Row(self, dict(zip(names, tup)))
+        proj = self.projection
+        assert len(tup) == len(proj), (tup, proj)
+        return Row(self, dict(zip(proj, tup)))
 
     def from_sql_tuples(self, tuples):
         return [self.from_sql_tuple(row) for row in tuples]
 
     @property
     def tuple_width(self):
-        return len(self.projection_names)
+        return len(self.projection)
 
     def repr(self, query_engine):
         return self._repr_table(query_engine, None)
@@ -161,7 +162,13 @@ class ColumnRef(Object):   # TODO proper hierarchy
 
     @property
     def name(self):
+        if self.table_alias:
+           return '%s.%s' % (self.table_alias, self.col.name)
         return self.col.name
+
+    @property
+    def type(self):
+        return self.col.type
 
 @dataclass
 class StoredTable(Table):
@@ -187,9 +194,15 @@ class StoredTable(Table):
         return self.tabledef.name
 
     @property
-    def projection_names(self):
-        return [c.col.name for c in self.columns.values() 
-                if not isinstance(c.col.type, ast.BackRefType)]
+    def projection(self):
+        return {c.col.name:c.col.type for c in self.columns.values() 
+                if not isinstance(c.col.type, ast.BackRefType)}
+
+    @property
+    def sql_namespace(self):
+        return {c.col.name:c.col.type for c in self.columns.values() 
+                if not isinstance(c.col.type, ast.BackRefType)}
+
 
 
 @dataclass
@@ -203,8 +216,8 @@ class AliasedTable(Table):
                 for name, c in self.table.columns.items()}
 
     @property
-    def projection_names(self):
-        return self.table.projection_names
+    def projection(self):
+        return self.table.projection
 
     def to_sql(self):
         return self.table.to_sql()
@@ -250,6 +263,7 @@ class OrderTable(TableMethod):
 @dataclass
 class CountField(Function): # TODO not exactly function
     obj: ColumnRef
+    type = Integer
 
     def to_sql(self):
         obj_sql = self.obj.to_sql()
@@ -296,16 +310,6 @@ class Query(Table):
     order: list = None
     offset: Object = None
     limit: Object = None
-
-    # def __init__(self, table, conds=None, fields=None, agg_fields=None,
-    #                           order=None, offset=None, limit=None):
-    #     self.table = table
-    #     self.conds = conds
-    #     self.fields = fields
-    #     self.agg_fields = agg_fields
-    #     self.order = order
-    #     self.offset = offset
-    #     self.limit = limit
 
     def to_sql(self):
         # TODO assert all boolean?
@@ -358,16 +362,16 @@ class Query(Table):
         return self._repr_table(query_engine, None)
 
     @property
-    def projection_names(self):
+    def projection(self):
         if self.fields:
-            return [f.name for f in self.fields + self.agg_fields]
-        return self.table.projection_names
+            return {f.name:f.type for f in self.fields + self.agg_fields}
+        return self.table.projection
 
     @property
     def columns(self):
         if self.fields:
-            print('$$$', list(self.table.columns.keys()))
-            print('%%%', self.fields, self.agg_fields)
+            # print('$$$', list(self.table.columns.keys()))
+            # print('%%%', self.fields, self.agg_fields)
             cols = {f.name: self.table.columns[f.expr.name]
                     for f in self.fields + self.agg_fields}
 
@@ -433,6 +437,11 @@ class NamedExpr(Object):   # XXX this is bad but I'm lazy
     def name(self):
         return self._name or self.expr.name
 
+    @property
+    def type(self):
+        return self.expr.type
+
+
 @dataclass
 class RowRef(Object):
     relation: Table
@@ -452,8 +461,9 @@ class AutoJoin(Table):
     def columns(self):
         return self.tables
 
-    # @property
-    # def projection_names(self):
+    @property
+    def projection_names(self):
+        raise NotImplementedError()
     #     return self.tables.keys()
 
     def to_sql(self):
