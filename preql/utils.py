@@ -1,5 +1,5 @@
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 class FzSet(frozenset):
     def __repr__(self):
@@ -91,7 +91,7 @@ def make_define_decorator(base_class, frozen=True):
             value = getattr(obj, name)
             if value is not None:
                 if isinstance(type_, list):
-                    assert isinstance(value, list)
+                    assert isinstance(value, list), value
                     elem_type ,= type_
                     for elem in value:
                         if not isinstance(elem, elem_type):
@@ -100,8 +100,13 @@ def make_define_decorator(base_class, frozen=True):
                 elif not isinstance(value, type_):
                     raise TypeError(f'{type(obj).__name__}.{name} expects type {type_}, instead got {value!r}')
 
+    def _init_var(self, name, value):
+        # TODO ensure in _init
+        object.__setattr__(self, name, value)
+
     def decorator(cls):
         cls.__post_init__ = _post_init
+        cls._init_var = _init_var
         c = dataclass(cls, frozen=frozen)
         attrs = c.__dict__.copy()
         return type(cls.__name__, (c, base_class), attrs)

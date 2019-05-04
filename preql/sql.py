@@ -24,9 +24,13 @@ class Primitive(Sql):
 class TableRef(Sql):
     type: object
     name: str
+    # alias: str
 
     def compile(self):
-        return CompiledSQL(self.name, self.type)
+        sql = self.name
+        # if self.alias:
+        #     sql += ' ' + self.alias
+        return CompiledSQL(sql, self.type)
 
 @sqlclass
 class TableField(Sql):
@@ -95,34 +99,44 @@ class Desc(Sql):
 @sqlclass
 class ColumnRef(Sql):
     name: str
-    table_name: str = None
+    # table_name: str = None
 
     def compile(self):
         s = self.name
-        if self.table_name:
-            s = self.table_name + '.' + s
+        # if self.table_name:
+        #     s = self.table_name + '.' + s
+        return CompiledSQL(s, self)
+
+@sqlclass
+class ColumnAlias(Sql):
+    name: str
+    alias: str
+    # table_name: str = None
+
+    def compile(self):
+        s = '%s AS %s' % (self.name, self.alias)
+        # if self.table_name:
+        #     s = self.table_name + '.' + s
         return CompiledSQL(s, self)
 
 
 @sqlclass
-class Query(Sql):
+class Select(Sql):
     type: object
     table: Sql
+    fields: [Sql]
     conds: [Sql] = None
-    fields: [Sql] = None
     group_by: [Sql] = None
     order: [Sql] = None
     offset: Sql = None
     limit: Sql = None
 
+    def _init(self):
+        assert self.fields, self
+
     def compile(self):
-        # assert self.fields
-        if self.fields:
-            print('@@', self.fields)
-            fields_sql = [f.compile() for f in self.fields]
-            select_sql = ', '.join(f.text for f in fields_sql)
-        else:
-            select_sql = '*'    # XXX Bad! Pass everything by name
+        fields_sql = [f.compile() for f in self.fields]
+        select_sql = ', '.join(f.text for f in fields_sql)
 
         sql = f'SELECT {select_sql} FROM ({self.table.compile().text})'
 
@@ -152,7 +166,7 @@ class Join(Sql):
     conds: [Sql]
 
     def compile(self):
-        tables_sql = ['(%s) %s' % (t.compile().text, name) for name, t in self.tables.items()]
+        tables_sql = ['(%s)' % (t.compile().text) for name, t in self.tables.items()]
         join_sql = ' JOIN '.join(e for e in tables_sql)
 
         join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)

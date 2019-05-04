@@ -56,7 +56,7 @@ class CompileSQL_Stmts:
 
     def AddRow(self, addrow: ast.AddRow):
         cols = [c.name
-                for c in self.state.namespace[addrow.table].tabledef.columns.values()
+                for c in self.state.namespace[addrow.table].columns.values()
                 if not isinstance(c.type, (ast.BackRefType, ast.IdType))]
 
         values = EvalAst(self.state, self.interp)._eval_list(addrow.args)
@@ -78,6 +78,8 @@ class EvalAst:
         self.query_engine = query_engine
         self.context = Context()
 
+        self._tables = {}
+
     def _eval(self, ast_node) -> pql.Object:
         ast_type = type(ast_node)
         assert issubclass(ast_type, ast.Expr), (ast_node)
@@ -91,9 +93,16 @@ class EvalAst:
     def eval(self, ast_node):
         return self._eval(ast_node)
 
+    def get_table(self, name):
+        if name not in self._tables:
+            self._tables[name] = pql.JoinableTable( pql.StoredTable( self.state.namespace[name], self ) )
+        return self._tables[name]
+
     def Reference(self, ref: ast.Reference):
         if ref.name in self.state.namespace:
             obj = self.state.namespace[ref.name]
+            if isinstance(obj, ast.TableDef):
+                obj = pql.JoinableTable(pql.StoredTable(obj, self))   # TODO generic interface?
         else:
             try:
                 args = self.context.get('args')
@@ -151,7 +160,7 @@ class EvalAst:
 
     def Projection(self, proj: ast.Projection):
         obj = self._eval(proj.table)
-        assert isinstance(obj, pql.Table)
+        assert isinstance(obj, pql.Table), obj
         with self.context.push(table=obj):
             fields = self._eval_list(proj.fields)
             agg_fields = self._eval_list(proj.agg_fields or [])
@@ -224,14 +233,14 @@ class Interpreter:
 
     def _add_table(self, table):
         assert table.name not in self.state.namespace
-        self.state.namespace[table.name] = pql.StoredTable(table)
+        self.state.namespace[table.name] = table #pql.StoredTable(table, self)
 
         backrefs = []
 
         for c in table.columns.values():
             if c.backref:
                 assert isinstance(c.type, ast.RelationalType), c
-                ref_to = self.state.namespace[c.type.table_name].tabledef
+                ref_to = self.state.namespace[c.type.table_name]
                 backrefs.append((ref_to, ast.Column(c.backref, c.name, False, False, type=ast.BackRefType(table.name), table=table)))
 
         for ref_to, col in backrefs:

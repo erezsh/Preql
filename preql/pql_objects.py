@@ -1,10 +1,18 @@
 from .utils import dataclass, Dataclass, Context
+from .utils import dataclass, make_define_decorator, field
 from . import ast_classes as ast
 from . import sql
 
 
 class Object(Dataclass):
-    pass
+    tuple_width = 1
+
+    def from_sql_tuple(self, tup):
+        obj ,= tup
+        return obj
+
+pql_object = make_define_decorator(Object)
+
 
 class Function(Object):
     pass
@@ -18,26 +26,26 @@ class Primitive(Object):
     def to_sql(self):
         return sql.Primitive(type(self), self.repr(None))
 
-@dataclass
+@pql_object
 class Integer(Primitive):
     value: int
 
-@dataclass
+@pql_object
 class Bool(Primitive):
     value: bool
 
-@dataclass
+@pql_object
 class Float(Primitive):
     value: float
 
-@dataclass
+@pql_object
 class String(Primitive):
     value: str
 
     def repr(self, sql_engine):
         return '"%s"' % self.value
 
-@dataclass
+@pql_object
 class Row(Object):
     table: object
     attrs: dict
@@ -49,7 +57,9 @@ class Row(Object):
     def __repr__(self):
         return self.repr()
 
-@dataclass
+
+
+@pql_object
 class Table(Object):
     def getattr(self, name):
         if name in self.columns:
@@ -86,13 +96,13 @@ class Table(Object):
         return '\n'.join(lines)
 
     def count(self, query_engine):
-        return query_engine.query( sql.Count(self.to_sql()) )
+        return query_engine.query( sql.Select(Integer, self.to_sql(), fields=[sql.CountField(sql.Primitive(None, '*'))]) )
 
     def to_sql(self):
         raise NotImplementedError()
 
     def query(self, query_engine, limit=None):
-        s = sql.Query(self, self.to_sql(), limit=limit)
+        s = sql.Select(self, self.to_sql(), [sql.Primitive(None, '*')], limit=sql.Primitive(int, str(limit)) if limit!=None else None)
         return query_engine.query(s)
 
 
@@ -101,9 +111,13 @@ class Table(Object):
                 if isinstance(c.col.type, type_)}
 
     def from_sql_tuple(self, tup):
-        proj = self.projection
-        assert len(tup) == len(proj), (tup, proj)
-        return Row(self, dict(zip(proj, tup)))
+        items = {}
+        for name, col in self.columns.items():
+            subset = tup[:col.tuple_width]
+            items[col.name] = col.from_sql_tuple(subset)
+            tup = tup[col.tuple_width:]
+
+        return Row(self, items)
 
     def from_sql_tuples(self, tuples):
         return [self.from_sql_tuple(row) for row in tuples]
@@ -115,42 +129,23 @@ class Table(Object):
     def repr(self, query_engine):
         return self._repr_table(query_engine, None)
 
-
-@dataclass
-class ColumnRef(Object):   # TODO proper hierarchy
-    col: ast.Column
-    table_alias: str = None
-
-    def to_sql(self):
-        return sql.ColumnRef(self.col.name, self.table_alias)
-
-
-    @property
-    def name(self):
-        if self.table_alias:
-           return '%s.%s' % (self.table_alias, self.col.name)
-        return self.col.name
-
-    @property
-    def type(self):
-        return self.col.type
-
-@dataclass
+@pql_object
 class StoredTable(Table):
     tabledef: ast.TableDef
+    query_state: object
 
-    def __post_init__(self):
+    def _init(self):
         for c in self.tabledef.columns.values():
             assert isinstance(c, ast.Column), type(c)
-
-        self.columns = {name:ColumnRef(c) 
-                        for name, c in self.tabledef.columns.items()}
+        self.columns = {name:ColumnRef(c, self) for name, c in self.tabledef.columns.items()}
 
     def repr(self, query_engine):
         return self._repr_table(query_engine, self.name)
 
     def to_sql(self):
-        return sql.TableRef(self, self.name)
+        table_ref = sql.TableRef(self, self.name)
+        columns = [sql.ColumnAlias(c.name, c.sql_alias) for c in self.columns.values() if not isinstance(c.type, ast.BackRefType)]
+        return sql.Select(self, table_ref, columns)
 
     @property
     def name(self):
@@ -167,12 +162,86 @@ class StoredTable(Table):
                 if not isinstance(c.col.type, ast.BackRefType)}
 
 
+MAKE_ALIAS = iter(range(1000))
 
-@dataclass
+@pql_object
+class JoinableTable(Table):
+    table: StoredTable
+    joins: [StoredTable] = None
+
+    def _init(self):
+        object.__setattr__(self, 'joins', list(self.joins or ()))   # XXX ugly but best Python can do
+
+    @property
+    def query_state(self):
+        return self.table.query_state
+
+    @property
+    def name(self):
+        return self.table.name
+
+    @property
+    def columns(self):
+        return {name:ColumnRef(c.col, self, c.sql_alias) for name, c in self.table.columns.items()}
+
+    # @property
+    # def projection(self):
+    #     return self.table.projection
+
+    def to_sql(self):
+        if self.joins:
+            x ,= self.joins
+            table = AutoJoin([self.table, x])
+            return table.to_sql()
+
+        return self.table.to_sql()
+
+
+
+@pql_object
+class ColumnRef(Object):   # TODO proper hierarchy
+    col: ast.Column
+    table: Table
+    sql_alias: str = None
+    relation: Table = None
+
+    def _init(self):
+        if self.sql_alias is None:
+            self._init_var('sql_alias', self.col.name + str(next(MAKE_ALIAS)))  # XXX ugly but that's the best Python has to offer
+        if isinstance(self.type, ast.RelationalType):
+            relation = self.table.query_state.get_table(self.type.table_name)
+            self._init_var('relation', relation)
+
+    def to_sql(self):
+        return sql.ColumnRef(self.sql_alias)
+
+    @property
+    def name(self):
+        return self.col.name
+
+    @property
+    def type(self):
+        return self.col.type
+
+    def getattr(self, name):
+        assert isinstance(self.type, ast.RelationalType)
+        if self.relation not in self.table.joins:
+            self.table.joins.append(self.relation)
+        return self.relation.columns[name]
+
+    def from_sql_tuple(self, tup):
+        if isinstance(self.type, ast.RelationalType):
+            # TODO return object instead of id
+            pass
+
+        return super().from_sql_tuple(tup)
+
+
+
+@pql_object
 class TableField(Table):
     "Table as a column"
-    table: Table
-    alias: str
+    table: JoinableTable
 
     @property
     def projection(self):
@@ -180,7 +249,8 @@ class TableField(Table):
 
     @property
     def columns(self):
-        return {name:ColumnRef(c.col, self.alias)
+        assert False
+        return {name:ColumnRef(c.col, self)
                 for name, c in self.table.columns.items()}
 
 
@@ -190,16 +260,17 @@ class TableField(Table):
     @property
     def type(self):
         return self.table
+
     @property
     def name(self):
         return self.alias
 
 
-@dataclass
+@pql_object
 class TableMethod(Function):
     table: Table
 
-@dataclass
+@pql_object
 class CountTable(TableMethod):
 
     def call(self, query_engine, args, named_args):
@@ -210,7 +281,7 @@ class CountTable(TableMethod):
     def repr(self, query_engine):
         return f'<CountTable function>'
 
-@dataclass
+@pql_object
 class LimitTable(TableMethod):
     def call(self, query_engine, args, named_args):
         assert not named_args
@@ -224,7 +295,7 @@ class OffsetTable(TableMethod):
         return Query(self.table, offset=offset)
 
 
-@dataclass
+@pql_object
 class OrderTable(TableMethod):
     def call(self, query_engine, args, named_args):
         assert not named_args
@@ -232,7 +303,7 @@ class OrderTable(TableMethod):
 
 
 
-@dataclass
+@pql_object
 class CountField(Function): # TODO not exactly function
     obj: ColumnRef
     type = Integer
@@ -244,7 +315,7 @@ class CountField(Function): # TODO not exactly function
     def name(self):
         return f'count_{self.obj.name}'
 
-@dataclass
+@pql_object
 class Round(Function):  # TODO not exactly function
     obj: Object
 
@@ -256,14 +327,14 @@ class Round(Function):  # TODO not exactly function
         return f'round_{self.obj.name}'
 
 
-@dataclass
+@pql_object
 class SqlFunction(Function):
     f: object
 
     def call(self, query_engine, args, named_args):
         return self.f(*args, **named_args)
 
-@dataclass
+@pql_object
 class UserFunction(Function):
     funcdef: ast.FunctionDef
 
@@ -271,7 +342,7 @@ class UserFunction(Function):
     #     return self
 
 
-@dataclass
+@pql_object
 class Query(Table):
     table: Table
     conds: list = None
@@ -287,13 +358,13 @@ class Query(Table):
 
     def to_sql(self):
         # TODO assert types?
-        fields = self.fields or [] #list(self.columns.values())
+        fields = self.fields or list(self.columns.values())
         agg_fields = self.agg_fields or []
-        return sql.Query(
+        return sql.Select(
             type = self,
             table = self.table.to_sql(),
-            conds = [c.to_sql() for c in self.conds or []],
             fields = [f.to_sql() for f in fields + agg_fields],
+            conds = [c.to_sql() for c in self.conds or []],
             group_by = [f.to_sql() for f in fields] if agg_fields else [],
             order = [o.to_sql() for o in self.order or []],
             offset = self.offset.to_sql() if self.offset else None,
@@ -313,10 +384,7 @@ class Query(Table):
     @property
     def columns(self):
         if self.fields:
-            cols = {f.name: self.table.columns[f.expr.name]
-                    for f in self.fields + self.agg_fields}
-
-            return cols
+            return {f.name: f for f in self.fields + self.agg_fields}
         else:
             return self.table.columns
 
@@ -334,7 +402,7 @@ class Query(Table):
 
 
 
-@dataclass
+@pql_object
 class Compare(Object): # TODO Op? Function?
     op: str
     exprs: list
@@ -342,7 +410,7 @@ class Compare(Object): # TODO Op? Function?
     def to_sql(self):
         return sql.Compare(self.op, [e.to_sql() for e in self.exprs])
 
-@dataclass
+@pql_object
 class Arith(Object): # TODO Op? Function?
     op: str
     exprs: list
@@ -350,21 +418,21 @@ class Arith(Object): # TODO Op? Function?
     def to_sql(self):
         return sql.Arith(self.op, [e.to_sql() for e in self.exprs])
 
-@dataclass
+@pql_object
 class Neg(Object): # TODO Op? Function?
     expr: Object
 
     def to_sql(self):
         return sql.Neg(self.expr.to_sql())
 
-@dataclass
+@pql_object
 class Desc(Object): # TODO Op? Function?
     expr: Object
 
     def to_sql(self):
         return sql.Desc(self.expr.to_sql())
 
-@dataclass
+@pql_object
 class NamedExpr(Object):   # XXX this is bad but I'm lazy
     _name: str
     expr: Object
@@ -380,38 +448,41 @@ class NamedExpr(Object):   # XXX this is bad but I'm lazy
     def type(self):
         return self.expr.type
 
+    @property
+    def tuple_width(self):
+        return self.expr.tuple_width
 
-@dataclass
+    def from_sql_tuple(self, tup):
+        return self.expr.from_sql_tuple(tup)
+
+
+@pql_object
 class RowRef(Object):
-    relation: Table
+    relation: object
     row_id: int
 
     def to_sql(self):
         return sql.Primitive(Integer, str(self.row_id)) # XXX type = table?
 
-@dataclass
+@pql_object
 class AutoJoin(Table):
-    tables: dict
-
-    def __init__(self, **tables):
-        self._tables = tables
+    tables: [Table]
 
     @property
     def columns(self):
-        return {n:TableField(t, n) for n,t in self._tables.items()}
+        return {t.name:TableField(t) for t in self.tables}
 
     @property
     def projection_names(self):
         raise NotImplementedError()
 
     def to_sql(self):
-        tables = self.columns
+        tables = self.tables
         assert len(tables) == 2
 
-        ids =       [list(t.cols_by_type(ast.IdType).items())
-                     for t in tables.values()]
+        ids =       [list(t.cols_by_type(ast.IdType).items()) for t in tables]
         relations = [list(t.cols_by_type(ast.RelationalType).values())
-                     for t in tables.values()]
+                     for t in tables]
 
         ids0, ids1 = ids
         id0 ,= ids0
@@ -431,8 +502,10 @@ class AutoJoin(Table):
         to_join ,= to_join
         src_table, rel, dst_table = to_join
 
-        tables = {name: t.table.to_sql() for name, t in tables.items()}
-        conds = [sql.Compare('=', [sql.ColumnRef(rel.name, src_table), sql.ColumnRef('id', dst_table)])]
+        tables = {t.name: t.to_sql() for t in tables}
+        key_col = src_table.columns[rel.name].sql_alias
+        dst_id = dst_table.columns['id'].sql_alias
+        conds = [sql.Compare('=', [sql.ColumnRef(key_col), sql.ColumnRef(dst_id)])]
         return sql.Join(self, tables, conds)
 
         # conds += ' ON ' + f'{src_table}.{rel.name} = {dst_table}.id'   # rel.type.column_name
@@ -460,12 +533,12 @@ class AutoJoin(Table):
     #     return rel
 
 
-    def from_sql_tuple(self, tup):
-        items = {}
-        for name, tbl in self.columns.items():
-            subset = tup[:tbl.tuple_width]
-            items[name] = tbl.from_sql_tuple(subset)
+    # def from_sql_tuple(self, tup):
+    #     items = {}
+    #     for name, tbl in self.columns.items():
+    #         subset = tup[:tbl.tuple_width]
+    #         items[name] = tbl.from_sql_tuple(subset)
 
-            tup = tup[tbl.tuple_width:]
+    #         tup = tup[tbl.tuple_width:]
 
-        return Row(self, items)
+    #     return Row(self, items)
