@@ -6,6 +6,7 @@ from . import ast_classes as ast
 from . import pql_objects as pql
 from .parser import parse, parse_expr
 from .utils import dataclass, Dataclass, Context
+from .sql import Sql
 
 
 
@@ -273,12 +274,8 @@ class Interpreter:
         obj = EvalAst(self.state, self).eval(funccall)
         return obj
 
-        # sql = self._compile_func(fname, args)
-        # assert isinstance(sql, CompiledSQL)
-        # return self._query_as_struct(sql)
-
-    def query(self, compiled_sql: pql.CompiledSQL):
-        return self._query_as_struct(compiled_sql)
+    def query(self, sql: Sql):
+        return self._query_as_struct(sql.compile())
 
     def eval_expr(self, code):
         expr_ast = parse_expr(code)
@@ -287,8 +284,6 @@ class Interpreter:
         return obj
 
     def _query_as_struct(self, compiled_sql):
-        # import pdb
-        # pdb.set_trace()
         res = self.sqlengine.query(compiled_sql.text)
         if isinstance(compiled_sql.type, pql.Table): # XXX hackish
             return compiled_sql.type.from_sql_tuples(res)

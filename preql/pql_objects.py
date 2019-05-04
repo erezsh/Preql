@@ -1,10 +1,6 @@
 from .utils import dataclass, Dataclass, Context
 from . import ast_classes as ast
-
-@dataclass
-class CompiledSQL:
-    text: str
-    type: object
+from . import sql
 
 
 class Object(Dataclass):
@@ -20,7 +16,8 @@ class Primitive(Object):
         return repr(self.value)
 
     def to_sql(self):
-        return CompiledSQL(self.repr(None), self)
+        # return CompiledSQL(self.repr(None), self)
+        return sql.Primitive(type(self), self.repr(None))
 
 @dataclass
 class Integer(Primitive):
@@ -95,22 +92,26 @@ class Table(Object):
 
     def count(self, query_engine):
         # TODO Optimization: remove query order when running count
-        sql = self.to_sql()
-        sql = CompiledSQL(f'SELECT count(*) from ({sql.text})', Integer)
-        return query_engine.query(sql)
+        # sql = self.to_sql()
+        # sql = CompiledSQL(f'SELECT count(*) from ({sql.text})', Integer)
+        # return query_engine.query(sql)
+        return query_engine.query( sql.Count(self.to_sql()) )
 
     def to_sql(self):
         raise NotImplementedError()
 
     def query(self, query_engine, limit=None):
-        sql_text = self.to_sql().text
-        print('###', sql_text)
-        if limit is not None:   # TODO use Query.limit, not this hack
-            sql_text = 'SELECT * FROM (' + sql_text + ') LIMIT %d' % limit
-        else:
-            sql_text = 'SELECT * FROM (' + sql_text + ')'
-        sql = CompiledSQL(sql_text, self)
-        return query_engine.query(sql)
+        # sql_text = self.to_sql().text
+        # print('###', sql_text)
+        # if limit is not None:   # TODO use Query.limit, not this hack
+        #     sql_text = 'SELECT * FROM (' + sql_text + ') LIMIT %d' % limit
+        # else:
+        #     sql_text = 'SELECT * FROM (' + sql_text + ')'
+        # sql = CompiledSQL(sql_text, self)
+        # return query_engine.query(sql)
+        s = sql.Query(self, self.to_sql(), limit=limit)
+        return query_engine.query(s)
+
 
     def cols_by_type(self, type_):
         return {name: c.col for name, c in self.columns.items()
@@ -154,10 +155,11 @@ class ColumnRef(Object):   # TODO proper hierarchy
 
     def to_sql(self):
         # TODO use table name
-        sql = self.col.name
-        if self.table_alias:
-            sql = self.table_alias + '.' + sql
-        return CompiledSQL(sql, self)
+        # sql = self.col.name
+        # if self.table_alias:
+        #     sql = self.table_alias + '.' + sql
+        return sql.ColumnRef(self.col.name, self.table_alias)
+        # return CompiledSQL(sql, self)
 
 
     @property
@@ -187,7 +189,8 @@ class StoredTable(Table):
         return self._repr_table(query_engine, self.name)
 
     def to_sql(self):
-        return CompiledSQL(self.name, self)
+        # return CompiledSQL(self.name, self)
+        return sql.StoredTable(self, self.name)
 
     @property
     def name(self):
@@ -266,8 +269,9 @@ class CountField(Function): # TODO not exactly function
     type = Integer
 
     def to_sql(self):
-        obj_sql = self.obj.to_sql()
-        return CompiledSQL(f'count({obj_sql.text})', Integer)
+        # obj_sql = self.obj.to_sql()
+        # return CompiledSQL(f'count({obj_sql.text})', Integer)
+        return sql.CountField( self.obj.to_sql() )
     
     @property
     def name(self):
@@ -278,8 +282,9 @@ class Round(Function):  # TODO not exactly function
     obj: Object
 
     def to_sql(self):
-        obj_sql = self.obj.to_sql()
-        return CompiledSQL(f'round({obj_sql.text})', Integer)
+        # obj_sql = self.obj.to_sql()
+        # return CompiledSQL(f'round({obj_sql.text})', Integer)
+        return sql.Round( self.obj.to_sql() )
 
     @property
     def name(self):
@@ -312,51 +317,20 @@ class Query(Table):
     limit: Object = None
 
     def to_sql(self):
-        # TODO assert all boolean?
-        table_sql = self.table.to_sql()
+        # TODO assert types?
+        fields = self.fields or [] #list(self.columns.values())
+        agg_fields = self.agg_fields or []
+        return sql.Query(
+            type = self,
+            table = self.table.to_sql(),
+            conds = [c.to_sql() for c in self.conds or []],
+            fields = [f.to_sql() for f in fields + agg_fields],
+            group_by = [f.to_sql() for f in fields] if agg_fields else [],
+            order = [o.to_sql() for o in self.order or []],
+            offset = self.offset.to_sql() if self.offset else None,
+            limit = self.limit.to_sql() if self.limit else None,
+        )
 
-        if self.conds:
-            conds_sql = [c.to_sql() for c in self.conds]
-            where_sql = ' AND '.join(c.text for c in conds_sql)
-        else:
-            where_sql = ''
-
-        if self.fields:
-            fields_sql = [f.to_sql() for f in self.fields + self.agg_fields]
-            # TODO assert all boolean?
-            select_sql = ', '.join(f.text for f in fields_sql)
-        else:
-            select_sql = '*'
-
-        if self.agg_fields:
-            agg_sql = [f.to_sql() for f in self.fields]
-            groupby_sql = ', '.join(e.text for e in agg_sql)
-        else:
-            groupby_sql = None
-
-        sql = f'SELECT {select_sql} FROM ({table_sql.text})'
-        if where_sql:
-            sql += ' WHERE ' + where_sql
-        # if order_sql:
-        #     sql += ' ORDER BY ' + order_sql
-        if groupby_sql:
-            sql += ' GROUP BY ' + groupby_sql
-
-        if self.limit:
-            sql += ' LIMIT ' + self.limit.to_sql().text
-        elif self.offset:
-            sql += ' LIMIT -1'  # XXX Sqlite only
-
-        if self.offset:
-            sql += ' OFFSET ' + self.offset.to_sql().text
-
-
-        if self.order:
-            order_exprs_sql = [o.to_sql() for o in self.order]
-            order_sql = ', '.join(o.text for o in order_exprs_sql)
-            sql += ' ORDER BY ' +  order_sql
-
-        return CompiledSQL(sql, self.table)
 
     def repr(self, query_engine):
         return self._repr_table(query_engine, None)
@@ -370,8 +344,6 @@ class Query(Table):
     @property
     def columns(self):
         if self.fields:
-            # print('$$$', list(self.table.columns.keys()))
-            # print('%%%', self.fields, self.agg_fields)
             cols = {f.name: self.table.columns[f.expr.name]
                     for f in self.fields + self.agg_fields}
 
@@ -399,7 +371,7 @@ class Compare(Object): # TODO Op? Function?
     exprs: list
 
     def to_sql(self):
-        return CompiledSQL(self.op.join(e.to_sql().text for e in self.exprs), self)
+        return sql.Compare(self.op, [e.to_sql() for e in self.exprs])
 
 @dataclass
 class Arith(Object): # TODO Op? Function?
@@ -407,23 +379,24 @@ class Arith(Object): # TODO Op? Function?
     exprs: list
 
     def to_sql(self):
-        return CompiledSQL(self.op.join(e.to_sql().text for e in self.exprs), self)
+        # return CompiledSQL(self.op.join(e.to_sql().text for e in self.exprs), self)
+        return sql.Arith(self.op, [e.to_sql() for e in self.exprs])
 
 @dataclass
 class Neg(Object): # TODO Op? Function?
     expr: Object
 
     def to_sql(self):
-        sql = self.expr.to_sql()
-        return CompiledSQL("-" + sql.text, sql.type)
+        return sql.Neg(self.expr.to_sql())
 
 @dataclass
 class Desc(Object): # TODO Op? Function?
     expr: Object
 
     def to_sql(self):
-        sql = self.expr.to_sql()
-        return CompiledSQL(sql.text + " DESC", sql.type)
+        # sql = self.expr.to_sql()
+        # return CompiledSQL(sql.text + " DESC", sql.type)
+        return sql.Desc(self.expr.to_sql())
 
 @dataclass
 class NamedExpr(Object):   # XXX this is bad but I'm lazy
@@ -448,7 +421,8 @@ class RowRef(Object):
     row_id: int
 
     def to_sql(self):
-        return CompiledSQL(str(self.row_id), Table)
+        # return CompiledSQL(str(self.row_id), Table)
+        return sql.Primitive(Integer, str(self.row_id)) # XXX type = table?
 
 @dataclass
 class AutoJoin(Table):
@@ -492,13 +466,19 @@ class AutoJoin(Table):
         to_join ,= to_join
         src_table, rel, dst_table = to_join
 
-        exprs_sql = ['(%s) %s' % (t.to_sql().text, name) for name, t in self.tables.items()]
-        join_sql = ' JOIN '.join(e for e in exprs_sql)
+        tables = {name: t.to_sql() for name, t in self.tables.items()}
+        conds = [sql.Compare('=', [sql.ColumnRef(rel.name, src_table), sql.ColumnRef('id', dst_table)])]
+        return sql.Join(self, tables, conds)
 
-        print(type(src_table), src_table)
-        join_sql += ' ON ' + f'{src_table}.{rel.name} = {dst_table}.id'   # rel.type.column_name
+        # conds += ' ON ' + f'{src_table}.{rel.name} = {dst_table}.id'   # rel.type.column_name
 
-        return CompiledSQL(join_sql, None)
+        # exprs_sql = ['(%s) %s' % (t.to_sql().text, name) for name, t in self.tables.items()]
+        # join_sql = ' JOIN '.join(e for e in exprs_sql)
+
+        # print(type(src_table), src_table)
+        # join_sql += ' ON ' + f'{src_table}.{rel.name} = {dst_table}.id'   # rel.type.column_name
+
+        # return CompiledSQL(join_sql, None)
 
     # def _find_relation(self, tables):
     #     resolved_tables = [t.resolved_table for t in tables]
