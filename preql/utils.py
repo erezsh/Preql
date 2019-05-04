@@ -43,19 +43,9 @@ def bfs(initial, expand):
 
 
 
-class Dataclass:
-    def __post_init__(self):
-        if not hasattr(self, '__annotations__'):
-            return
-        for name, type_ in self.__annotations__.items():
-            value = getattr(self, name)
-            if value is not None and not isinstance(value, type_):
-                raise TypeError(f"[{self.__class__.__name__}] Attribute {name} expected value of type {type_}, instead got {value}")
-            # assert value is None or isinstance(value, type_), (name, value, type_)
-
-
 
 from contextlib import contextmanager
+
 
 
 
@@ -79,3 +69,53 @@ class Context(list):
         finally:
             self.pop()
             assert x == len(self)
+
+
+
+import inspect
+def make_define_decorator(base_class, frozen=True):
+
+    def _post_init(obj):
+        if inspect.isclass(obj):
+            return
+
+        assert isinstance(obj, base_class)
+
+        if hasattr(obj, '_init'):
+            obj._init()
+
+        if not hasattr(obj, '__annotations__'):
+            return
+
+        for name, type_ in obj.__annotations__.items():
+            value = getattr(obj, name)
+            if value is not None:
+                if isinstance(type_, list):
+                    assert isinstance(value, list)
+                    elem_type ,= type_
+                    for elem in value:
+                        if not isinstance(elem, elem_type):
+                            raise TypeError(f'{type(obj).__name__}.{name} expects type {type_}, instead got element {elem!r}')
+
+                elif not isinstance(value, type_):
+                    raise TypeError(f'{type(obj).__name__}.{name} expects type {type_}, instead got {value!r}')
+
+    def decorator(cls):
+        cls.__post_init__ = _post_init
+        c = dataclass(cls, frozen=frozen)
+        attrs = c.__dict__.copy()
+        return type(cls.__name__, (c, base_class), attrs)
+
+    return decorator
+                                  
+
+class Dataclass:
+    def __post_init__(self):
+        if not hasattr(self, '__annotations__'):
+            return
+        for name, type_ in self.__annotations__.items():
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, type_):
+                raise TypeError(f"[{self.__class__.__name__}] Attribute {name} expected value of type {type_}, instead got {value}")
+            # assert value is None or isinstance(value, type_), (name, value, type_)
+

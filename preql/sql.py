@@ -1,4 +1,4 @@
-from .utils import dataclass
+from .utils import dataclass, make_define_decorator
 
 @dataclass
 class CompiledSQL:
@@ -10,7 +10,9 @@ class Sql:
     pass
 
 
-@dataclass
+sqlclass = make_define_decorator(Sql)
+
+@sqlclass
 class Primitive(Sql):
     type: object
     text: str
@@ -18,15 +20,25 @@ class Primitive(Sql):
     def compile(self):
         return CompiledSQL(self.text, self.type)
 
-@dataclass
-class StoredTable(Sql):
+@sqlclass
+class TableRef(Sql):
     type: object
     name: str
 
     def compile(self):
         return CompiledSQL(self.name, self.type)
 
-@dataclass
+@sqlclass
+class TableField(Sql):
+    type: object
+    alias: str
+    columns: dict
+
+    def compile(self):
+        # return CompiledSQL(self.name, self.type)
+        return CompiledSQL(', '.join(f'{self.alias}.{c}' for c in self.columns.keys()), self.type)
+
+@sqlclass
 class CountField(Sql):
     field: Sql
     type = int  # TODO correct object
@@ -34,7 +46,7 @@ class CountField(Sql):
     def compile(self):
         return CompiledSQL(f'count({self.field.compile().text})', self.type)
 
-@dataclass
+@sqlclass
 class RoundField(Sql):
     field: Sql
     type = float  # TODO correct object
@@ -43,10 +55,10 @@ class RoundField(Sql):
         return CompiledSQL(f'round({self.field.compile().text})', self.type)
 
 
-@dataclass
+@sqlclass
 class Compare(Sql):
     op: str
-    exprs: list
+    exprs: [Sql]
 
     def __post_init__(self):
         for f in self.exprs or ():
@@ -55,15 +67,15 @@ class Compare(Sql):
     def compile(self):
         return CompiledSQL(self.op.join(e.compile().text for e in self.exprs), bool)    # TODO proper type
 
-@dataclass
+@sqlclass
 class Arith(Sql):
     op: str
-    exprs: list
+    exprs: [Sql]
 
     def compile(self):
         return CompiledSQL(self.op.join(e.compile().text for e in self.exprs), object)    # TODO derive proper type
 
-@dataclass
+@sqlclass
 class Neg(Sql):
     expr: Sql
 
@@ -71,7 +83,7 @@ class Neg(Sql):
         s = self.expr.compile()
         return CompiledSQL("-" + s.text, s.type)
 
-@dataclass
+@sqlclass
 class Desc(Sql):
     expr: Sql
 
@@ -80,7 +92,7 @@ class Desc(Sql):
         return CompiledSQL(s.text + " DESC", s.type)
 
 
-@dataclass
+@sqlclass
 class ColumnRef(Sql):
     name: str
     table_name: str = None
@@ -92,29 +104,21 @@ class ColumnRef(Sql):
         return CompiledSQL(s, self)
 
 
-@dataclass
+@sqlclass
 class Query(Sql):
     type: object
     table: Sql
-    conds: list = None
-    fields: list = None
-    group_by: list = None
-    order: list = None
+    conds: [Sql] = None
+    fields: [Sql] = None
+    group_by: [Sql] = None
+    order: [Sql] = None
     offset: Sql = None
     limit: Sql = None
-
-    def __post_init__(self):
-        for f in self.fields or ():
-            assert isinstance(f, Sql), f
-        for f in self.group_by or ():
-            assert isinstance(f, Sql), f
-        for f in self.conds or ():
-            assert isinstance(f, Sql), f
-
 
     def compile(self):
         # assert self.fields
         if self.fields:
+            print('@@', self.fields)
             fields_sql = [f.compile() for f in self.fields]
             select_sql = ', '.join(f.text for f in fields_sql)
         else:
@@ -141,11 +145,11 @@ class Query(Sql):
 
         return CompiledSQL(sql, self.type)
 
-@dataclass
+@sqlclass
 class Join(Sql):
     type: object
     tables: dict
-    conds: list
+    conds: [Sql]
 
     def compile(self):
         tables_sql = ['(%s) %s' % (t.compile().text, name) for name, t in self.tables.items()]
@@ -153,4 +157,4 @@ class Join(Sql):
 
         join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)
 
-        return CompiledSQL(join_sql, object)    # TODO joined type
+        return CompiledSQL(join_sql, self.type)    # TODO joined type

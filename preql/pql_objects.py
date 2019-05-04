@@ -16,7 +16,6 @@ class Primitive(Object):
         return repr(self.value)
 
     def to_sql(self):
-        # return CompiledSQL(self.repr(None), self)
         return sql.Primitive(type(self), self.repr(None))
 
 @dataclass
@@ -70,10 +69,6 @@ class Table(Object):
             return OrderTable(self)
         
         raise NameError(name)
-        # if isinstance(obj, ast.Column): # TODO bad smell
-        #     obj = ColumnRef(obj)
-
-        # return obj
 
     def _repr_table(self, query_engine, name):
         preview_limit = 3
@@ -91,24 +86,12 @@ class Table(Object):
         return '\n'.join(lines)
 
     def count(self, query_engine):
-        # TODO Optimization: remove query order when running count
-        # sql = self.to_sql()
-        # sql = CompiledSQL(f'SELECT count(*) from ({sql.text})', Integer)
-        # return query_engine.query(sql)
         return query_engine.query( sql.Count(self.to_sql()) )
 
     def to_sql(self):
         raise NotImplementedError()
 
     def query(self, query_engine, limit=None):
-        # sql_text = self.to_sql().text
-        # print('###', sql_text)
-        # if limit is not None:   # TODO use Query.limit, not this hack
-        #     sql_text = 'SELECT * FROM (' + sql_text + ') LIMIT %d' % limit
-        # else:
-        #     sql_text = 'SELECT * FROM (' + sql_text + ')'
-        # sql = CompiledSQL(sql_text, self)
-        # return query_engine.query(sql)
         s = sql.Query(self, self.to_sql(), limit=limit)
         return query_engine.query(s)
 
@@ -133,33 +116,13 @@ class Table(Object):
         return self._repr_table(query_engine, None)
 
 
-# @dataclass
-# class ObjectFromTuples(Dataclass):   # TODO what is this
-#     table: Table
-
-#     def __call__(self, rows):
-#         names = self.table.projection_names
-#         x = []
-#         for row in rows:
-#             assert len(row) == len(names), (row, names)
-#             x.append( Row(dict(zip(names, row))) )
-#         return x
-
-
-
-
 @dataclass
 class ColumnRef(Object):   # TODO proper hierarchy
     col: ast.Column
     table_alias: str = None
 
     def to_sql(self):
-        # TODO use table name
-        # sql = self.col.name
-        # if self.table_alias:
-        #     sql = self.table_alias + '.' + sql
         return sql.ColumnRef(self.col.name, self.table_alias)
-        # return CompiledSQL(sql, self)
 
 
     @property
@@ -184,13 +147,10 @@ class StoredTable(Table):
                         for name, c in self.tabledef.columns.items()}
 
     def repr(self, query_engine):
-        # count = self.count(query_engine)
-        # return f'<Table:{self.name} count={count.value}>'
         return self._repr_table(query_engine, self.name)
 
     def to_sql(self):
-        # return CompiledSQL(self.name, self)
-        return sql.StoredTable(self, self.name)
+        return sql.TableRef(self, self.name)
 
     @property
     def name(self):
@@ -209,21 +169,30 @@ class StoredTable(Table):
 
 
 @dataclass
-class AliasedTable(Table):
+class TableField(Table):
+    "Table as a column"
     table: Table
     alias: str
+
+    @property
+    def projection(self):
+        return self.table.projection
 
     @property
     def columns(self):
         return {name:ColumnRef(c.col, self.alias)
                 for name, c in self.table.columns.items()}
 
-    @property
-    def projection(self):
-        return self.table.projection
 
     def to_sql(self):
-        return self.table.to_sql()
+        return sql.TableField(self.table, self.alias, self.table.columns)
+
+    @property
+    def type(self):
+        return self.table
+    @property
+    def name(self):
+        return self.alias
 
 
 @dataclass
@@ -269,8 +238,6 @@ class CountField(Function): # TODO not exactly function
     type = Integer
 
     def to_sql(self):
-        # obj_sql = self.obj.to_sql()
-        # return CompiledSQL(f'count({obj_sql.text})', Integer)
         return sql.CountField( self.obj.to_sql() )
     
     @property
@@ -282,8 +249,6 @@ class Round(Function):  # TODO not exactly function
     obj: Object
 
     def to_sql(self):
-        # obj_sql = self.obj.to_sql()
-        # return CompiledSQL(f'round({obj_sql.text})', Integer)
         return sql.Round( self.obj.to_sql() )
 
     @property
@@ -315,6 +280,10 @@ class Query(Table):
     order: list = None
     offset: Object = None
     limit: Object = None
+
+    @property
+    def name(self):
+        raise NotImplementedError('Who dares ask the name of he who cannot be named?')
 
     def to_sql(self):
         # TODO assert types?
@@ -379,7 +348,6 @@ class Arith(Object): # TODO Op? Function?
     exprs: list
 
     def to_sql(self):
-        # return CompiledSQL(self.op.join(e.to_sql().text for e in self.exprs), self)
         return sql.Arith(self.op, [e.to_sql() for e in self.exprs])
 
 @dataclass
@@ -394,8 +362,6 @@ class Desc(Object): # TODO Op? Function?
     expr: Object
 
     def to_sql(self):
-        # sql = self.expr.to_sql()
-        # return CompiledSQL(sql.text + " DESC", sql.type)
         return sql.Desc(self.expr.to_sql())
 
 @dataclass
@@ -421,7 +387,6 @@ class RowRef(Object):
     row_id: int
 
     def to_sql(self):
-        # return CompiledSQL(str(self.row_id), Table)
         return sql.Primitive(Integer, str(self.row_id)) # XXX type = table?
 
 @dataclass
@@ -429,29 +394,29 @@ class AutoJoin(Table):
     tables: dict
 
     def __init__(self, **tables):
-        self.tables = {n:AliasedTable(t, n) for n,t in tables.items()}
+        self._tables = tables
 
     @property
     def columns(self):
-        return self.tables
+        return {n:TableField(t, n) for n,t in self._tables.items()}
 
     @property
     def projection_names(self):
         raise NotImplementedError()
-    #     return self.tables.keys()
 
     def to_sql(self):
-        assert len(self.tables) == 2
+        tables = self.columns
+        assert len(tables) == 2
 
         ids =       [list(t.cols_by_type(ast.IdType).items())
-                     for t in self.tables.values()]
+                     for t in tables.values()]
         relations = [list(t.cols_by_type(ast.RelationalType).values())
-                     for t in self.tables.values()]
+                     for t in tables.values()]
 
         ids0, ids1 = ids
         id0 ,= ids0
         id1 ,= ids1
-        name1, name2 = list(self.tables)
+        name1, name2 = list(tables)
         
         assert len(ids) == 2
         assert len(relations) == 2
@@ -466,7 +431,7 @@ class AutoJoin(Table):
         to_join ,= to_join
         src_table, rel, dst_table = to_join
 
-        tables = {name: t.to_sql() for name, t in self.tables.items()}
+        tables = {name: t.table.to_sql() for name, t in tables.items()}
         conds = [sql.Compare('=', [sql.ColumnRef(rel.name, src_table), sql.ColumnRef('id', dst_table)])]
         return sql.Join(self, tables, conds)
 
@@ -497,7 +462,7 @@ class AutoJoin(Table):
 
     def from_sql_tuple(self, tup):
         items = {}
-        for name, tbl in self.tables.items():
+        for name, tbl in self.columns.items():
             subset = tup[:tbl.tuple_width]
             items[name] = tbl.from_sql_tuple(subset)
 
