@@ -40,7 +40,7 @@ class TableField(Sql):
 
     def compile(self):
         # return CompiledSQL(self.name, self.type)
-        return CompiledSQL(', '.join(f'{self.alias}.{c}' for c in self.columns.keys()), self.type)
+        return CompiledSQL(', '.join(f'{c.sql_alias}' for c in self.columns.values()), self.type)
 
 @sqlclass
 class CountField(Sql):
@@ -49,6 +49,28 @@ class CountField(Sql):
 
     def compile(self):
         return CompiledSQL(f'count({self.field.compile().text})', self.type)
+
+@sqlclass
+class RoundField(Sql):
+    field: Sql
+    type = float  # TODO correct object
+
+    def compile(self):
+        return CompiledSQL(f'round({self.field.compile().text})', self.type)
+
+class Sqlite_Split:
+    def __init__(self, type_):
+        self.type = type_
+
+@sqlclass
+class MakeArray(Sql):
+    field: Sql
+    type = list  # TODO correct object
+
+    def compile(self):
+        # Sqlite Specific
+        t = self.type
+        return CompiledSQL(f'group_concat({self.field.compile().text})', Sqlite_Split(t))
 
 @sqlclass
 class RoundField(Sql):
@@ -135,6 +157,7 @@ class Select(Sql):
         assert self.fields, self
 
     def compile(self):
+
         fields_sql = [f.compile() for f in self.fields]
         select_sql = ', '.join(f.text for f in fields_sql)
 

@@ -160,6 +160,11 @@ class EvalAst:
 
     def Projection(self, proj: ast.Projection):
         obj = self._eval(proj.table)
+        if isinstance(obj, pql.ColumnRef):
+            assert isinstance(obj.type, ast.BackRefType)
+            import pdb
+            pdb.set_trace()
+
         assert isinstance(obj, pql.Table), obj
         with self.context.push(table=obj):
             fields = self._eval_list(proj.fields)
@@ -217,7 +222,7 @@ class EvalAst:
 pql_functions = {
     'round': pql.Round,
     'count': pql.CountField,
-    'join': pql.AutoJoin,
+    'join': pql.create_autojoin,
 }
 
 

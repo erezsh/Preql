@@ -96,6 +96,14 @@ def make_define_decorator(base_class, frozen=True):
                     for elem in value:
                         if not isinstance(elem, elem_type):
                             raise TypeError(f'{type(obj).__name__}.{name} expects type {type_}, instead got element {elem!r}')
+                
+                elif isinstance(type_, dict):
+                    assert isinstance(value, dict), value
+                    keys = tuple(type_.keys())
+                    values = tuple(type_.values())
+                    for k, v in value.items():
+                        if not (isinstance(k, keys) and isinstance(v, values)):
+                            raise TypeError(f'{type(obj).__name__}.{name} expects type {type_}, instead got {k!r}:{v!r}')
 
                 elif not isinstance(value, type_):
                     raise TypeError(f'{type(obj).__name__}.{name} expects type {type_}, instead got {value!r}')
