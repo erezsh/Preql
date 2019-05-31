@@ -53,8 +53,7 @@ The following code examples are all implemented and working already.
         # Query definitions (i.e defines local functions)
         #
         adults = Person [age >= 18]         # Square-brackets create a filter
-        count_adults = count( adults )      # Construct queries using other queries
-        count_adults2 = adults:count()      # Use post-fix syntax
+        count_adults = adults.count()     # Construct queries using other queries
         others_from_my_country = Person [country=me.country, id!=me.id]     # More variable use
 
         # Auto-join examples
@@ -67,7 +66,7 @@ The following code examples are all implemented and working already.
 
         # Order-by & limit examples
         youngest_first = Person order(age)
-        oldest_person = Person order(-age) :limit(1)
+        oldest_person = Person order(-age).limit(1)
 
         # Example of an explicit automatic join. Equivalent to: english_speakers
         english_speakers__explicit_join = (
