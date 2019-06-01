@@ -4,6 +4,7 @@ from pathlib import Path
 from .interpreter import Interpreter
 from . import pql_objects as pql
 from . import ast_classes as ast
+from .exceptions import PreqlError
 
 class SqlEngine:
     pass
@@ -101,6 +102,9 @@ class Interface:
                 # Evaluate
                 try:
                     res = self(code)
+                except PreqlError as e:
+                    print(e)
+                    continue
                 except Exception as e:
                     print("Error:")
                     logging.exception(e)

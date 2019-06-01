@@ -1,8 +1,9 @@
-from lark import Lark, Transformer, Discard, v_args
+from lark import Lark, Transformer, Discard, v_args, UnexpectedInput
 from lark.indenter import Indenter
 
 from . import ast_classes as ast
 from .utils import classify
+from . import exceptions
 
 class PythonIndenter(Indenter):
     NL_type = '_NL'
@@ -171,14 +172,29 @@ class ToAST(Transformer):
     neg = ast.Neg
     desc = ast.Desc
 
-
 def parse(s):
     t = parser.parse(s.rstrip() + '\n')
     t = ToAST().transform(t)
     return t
 
 def parse_expr(q):
-    t = expr_parser.parse(q.strip())
+    try:
+        t = expr_parser.parse(q.strip())
+    except UnexpectedInput as e:
+        message = e.match_examples(expr_parser.parse, {
+            'Unexpected expression. Did you forget an operator?': ['a 1', '1 1', 'a a', 'a[b] 1'],
+            'Misplaced operator': ['[]', '{}', '()', 'a[{}]', 'a[()]', 'a({})', 'a([])', 'a{()}', 'a{[]}'],
+            'Mismatched bracket': ['a[)', 'a{)', 'a(]'],
+            'Unclosed bracket': ['a[', 'a{', 'a(', 'a[[', 'a{{', 'a(('],
+            'Superfluous closing bracket': [']', 'a]'],
+            'Selection is empty (a condition is required)': ['a[]'],
+            'Projection is empty (an expression is required)': ['a{}'],
+        })
+        if not message:
+            raise
+        raise exceptions.PreqlError_Syntax('Syntax Error: ' + message, e.get_context(q), e.line, e.column)
+
+
     t = ToAST().transform(t)
     return t
 

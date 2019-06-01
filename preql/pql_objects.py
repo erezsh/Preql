@@ -2,6 +2,7 @@ from .utils import dataclass, Dataclass, Context
 from .utils import dataclass, make_define_decorator, field
 from . import ast_classes as ast
 from . import sql
+from .exceptions import PreqlError_Attribute
 
 
 class Object(Dataclass):
@@ -80,7 +81,7 @@ class Table(Object):
             # TODO table should have a method dict
             return OrderTable(self)
         
-        raise NameError(name)
+        raise PreqlError_Attribute(self.name, name)
 
     def get_column(self, name):
         col = self._columns[name]
@@ -387,6 +388,8 @@ class Query(Table):
     order: list = None
     offset: Object = None
     limit: Object = None
+
+    name = '<Query Object>'
 
     def _init(self):
         for f in self.fields or []:

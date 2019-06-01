@@ -14,12 +14,13 @@ But at the same time, the interface to these features, which is the SQL language
 
 Even "new" SQL still has an incredibly clunky syntax, a confusing standard library, and no support for real abstractions, such as objects or first-class functions. It also looks very different for every database, making portability nearly impossible.
 
-Preql attempts to fix this. Here's some of the features that it offers:
-- Modern syntax and semantics, inspired by Python and others
+Preql attempts to fix this, with the following features:
+- Modern syntax and semantics, inspired by Python and other contemporary languages
 - First-class functions
-- Automatic table joins based on table definitions
+- Session variables
+- An object model, with automatic table joins based on definition (optional)
 - Portable - can compile to different dialects, based on the target database (future feature)
-- Better interface with procedural programming languages
+- Simple interface for use with REST or other programming languages
 
 Note: Preql doesn't intend to support every SQL feature out there. It aims to provide the popular and most-used features, and allow embedded SQL for the edge-cases.
 

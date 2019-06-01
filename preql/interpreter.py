@@ -7,6 +7,7 @@ from . import pql_objects as pql
 from .parser import parse, parse_expr
 from .utils import dataclass, Dataclass, Context
 from .sql import Sql
+from .exceptions import PreqlError_MissingName
 
 
 
@@ -113,7 +114,7 @@ class EvalAst:
             try:
                 table = self.context.get('table')
             except KeyError:
-                raise NameError(ref.name)
+                raise PreqlError_MissingName(ref.name)
 
             return table.getattr(ref.name)
 
