@@ -7,12 +7,10 @@ def main():
 
     print( list(preql('Person {name, city.country.name}' ) ) )
     print( list(preql('Person {city.country.language => name}' ) ) )
+    print( list(preql('Country {name => cities.citizens.name}' ) ) )
 
-    print( list(preql('City {country.name => citizens}' ) ) )
-
-    # print( list(preql('Person {country {name}}' ) ) )
+    # print( list(preql('City {country.name => citizens}' ) ) )
 
     preql.start_repl()
-    # print( list(preql.use_join() ) )
 
 main()

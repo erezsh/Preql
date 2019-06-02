@@ -65,7 +65,7 @@ class Table(Object):
     def getattr(self, name):
         try:
             return self.get_column(name)
-        except KeyError:
+        except PreqlError_Attribute:
             pass
 
         if name == 'count':
@@ -255,8 +255,9 @@ class ColumnRef(Object):   # TODO proper hierarchy
                 self.table.joins.append(self.relation)
             col = self.relation.get_column(name)
 
-        assert not isinstance(col.type, ast.BackRefType)
-        return ColumnRef(col.col, col.table, col.sql_alias, col.relation, self.name + '.' + col.name)
+        new_col = ColumnRef(col.col, col.table, col.sql_alias, col.relation, self.name + '.' + col.name)
+        new_col.invoked_by_user()
+        return new_col
 
     def from_sql_tuple(self, tup):
         if isinstance(self.type, ast.RelationalType):
@@ -359,11 +360,6 @@ class Query(Table):
         for f in self.fields or []:
             if isinstance(f.type, ast.BackRefType) or isinstance(f.expr, CountField): # XXX What happens if it's inside some expression??
                 raise TypeError('Misplaced column "%s". Aggregated columns must appear after the aggregation operator "=>" ' % f.name)
-
-
-    @property
-    def name(self):
-        raise NotImplementedError('Who dares ask the name of he who cannot be named?')
 
     def to_sql(self):
         # TODO assert types?
