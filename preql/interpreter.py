@@ -239,7 +239,7 @@ class Interpreter:
 
     def _add_table(self, table):
         assert table.name not in self.state.namespace
-        self.state.namespace[table.name] = table #pql.StoredTable(table, self)
+        self.state.namespace[table.name] = table
 
         backrefs = []
 
@@ -263,10 +263,8 @@ class Interpreter:
         if addrow.as_:
             rowid ,= self.sqlengine.query('SELECT last_insert_rowid();')[0]
             table = self.state.namespace[addrow.table]
-            # idcol ,= [c for c in table.columns if c.name == 'id']
-            # compare = Compare('=', [idcol, Value(rowid, IntegerType())])
             v = pql.RowRef(table, rowid)
-            self.state.namespace[addrow.as_] = v # Projection(table, [compare] )
+            self.state.namespace[addrow.as_] = v
 
     def _def_function(self, func: ast.FunctionDef):
         assert func.name not in self.state.namespace

@@ -84,7 +84,11 @@ class Table(Object):
         raise PreqlError_Attribute(self.name, name)
 
     def get_column(self, name):
-        col = self._columns[name]
+        try:
+            col = self._columns[name]
+        except KeyError:
+            raise PreqlError_Attribute(self.name, name)
+
         col.invoked_by_user()
         return col
 
@@ -217,14 +221,6 @@ class ColumnRef(Object):   # TODO proper hierarchy
             relation = self.table.query_state.get_table(self.type.table_name)
             self._init_var('relation', relation)
 
-        # if isinstance(self.type, ast.BackRefType):
-        #     self._init_var('backref', self.table.query_state.get_table(self.col.table.name)) # XXX kinda awkward
-
-        # if isinstance(self.type, ast.BackRefType):
-        #     backref = self.table.query_state.get_table(self.col.table.name) # XXX kinda awkward
-        #     if backref not in self.table.joins:
-        #         self.table.joins.append(backref)
-
     def invoked_by_user(self):
         if isinstance(self.type, ast.BackRefType):
             if not self.backref:
@@ -237,13 +233,6 @@ class ColumnRef(Object):   # TODO proper hierarchy
     def to_sql(self):
         if isinstance(self.type, ast.BackRefType):
             assert self.backref
-        #     backref = self.table.query_state.get_table(self.col.table.name) # XXX kinda awkward
-        #     if backref not in self.table.joins:
-        #         self.table.joins.append(backref)
-        #     # import pdb
-        #     # pdb.set_trace()
-        #     # return sql.ColumnRef(self.name)
-        #     # return table.to_sql()
             return ( self.backref.get_column('id').to_sql() )
 
         return sql.ColumnRef(self.sql_alias)
@@ -275,31 +264,6 @@ class ColumnRef(Object):   # TODO proper hierarchy
             pass
 
         return super().from_sql_tuple(tup)
-
-
-
-# @pql_object
-# class TableField(Table):
-#     "Table as a column"
-#     table: JoinableTable
-
-#     @property
-#     def columns(self):
-#         assert False
-#         return {name:ColumnRef(c.col, self)
-#                 for name, c in self.table.columns.items()}
-
-
-#     def to_sql(self):
-#         return sql.TableField(self.table, self.alias, self.table.columns)
-
-#     @property
-#     def type(self):
-#         return self.table
-
-#     @property
-#     def name(self):
-#         return self.alias
 
 
 @pql_object
@@ -448,18 +412,6 @@ class Query(Table):
             return {f.name: f for f in self.fields + self.agg_fields}
         else:
             return self.table._columns
-
-    # @property   # TODO better mechanism?
-    # def tabledef(self):
-    #     assert False
-    #     t = self.table.tabledef
-    #     if self.fields:
-    #         cols = {f.name: t.columns[f.expr.name]
-    #                 for f in self.fields + self.agg_fields}
-
-    #         return ast.TableDef(None, cols)
-    #     else:
-    #         return t
 
 
 
@@ -614,38 +566,3 @@ class AutoJoin(Table):
         dst_id = dst_table.get_column('id').sql_alias
         conds = [sql.Compare('=', [sql.ColumnRef(key_col), sql.ColumnRef(dst_id)])]
         return sql.Join(self, tables, conds)
-
-        # conds += ' ON ' + f'{src_table}.{rel.name} = {dst_table}.id'   # rel.type.column_name
-
-        # exprs_sql = ['(%s) %s' % (t.to_sql().text, name) for name, t in self.tables.items()]
-        # join_sql = ' JOIN '.join(e for e in exprs_sql)
-
-        # print(type(src_table), src_table)
-        # join_sql += ' ON ' + f'{src_table}.{rel.name} = {dst_table}.id'   # rel.type.column_name
-
-        # return CompiledSQL(join_sql, None)
-
-    # def _find_relation(self, tables):
-    #     resolved_tables = [t.resolved_table for t in tables]
-    #     assert all(isinstance(t, NamedTable) for t in resolved_tables)
-    #     table1, table2 = resolved_tables     # currently just 2 tables for now
-    #     table1_name = table1.id.type.table
-    #     table2_name = table2.id.type.table
-    #     relations = [(table1, c, table2) for c in table1.relations if c.type.table_name == table2_name]
-    #     relations += [(table2, c, table1) for c in table2.relations if c.type.table_name == table1_name]
-    #     if len(relations) > 1:
-    #         raise Exception("More than 1 relation between %s <-> %s" % (table1.name, table2.name))
-    #     rel ,= relations
-    #     src_table, rel, dst_table = rel
-    #     return rel
-
-
-    # def from_sql_tuple(self, tup):
-    #     items = {}
-    #     for name, tbl in self.columns.items():
-    #         subset = tup[:tbl.tuple_width]
-    #         items[name] = tbl.from_sql_tuple(subset)
-
-    #         tup = tup[tbl.tuple_width:]
-
-    #     return Row(self, items)

@@ -24,13 +24,9 @@ class Primitive(Sql):
 class TableRef(Sql):
     type: object
     name: str
-    # alias: str
 
     def compile(self):
-        sql = self.name
-        # if self.alias:
-        #     sql += ' ' + self.alias
-        return CompiledSQL(sql, self.type)
+        return CompiledSQL(self.name, self.type)
 
 @sqlclass
 class TableField(Sql):
@@ -39,7 +35,6 @@ class TableField(Sql):
     columns: dict
 
     def compile(self):
-        # return CompiledSQL(self.name, self.type)
         return CompiledSQL(', '.join(f'{c.sql_alias}' for c in self.columns.values()), self.type)
 
 @sqlclass
@@ -70,7 +65,7 @@ class MakeArray(Sql):
     def compile(self):
         # Sqlite Specific
         t = self.type
-        return CompiledSQL(f'group_concat({self.field.compile().text})', Sqlite_Split(t))
+        return CompiledSQL(f'group_concat({self.field.compile().text}, "\x01|\x02")', Sqlite_Split(t))
 
 @sqlclass
 class RoundField(Sql):
@@ -121,24 +116,17 @@ class Desc(Sql):
 @sqlclass
 class ColumnRef(Sql):
     name: str
-    # table_name: str = None
 
     def compile(self):
-        s = self.name
-        # if self.table_name:
-        #     s = self.table_name + '.' + s
-        return CompiledSQL(s, self)
+        return CompiledSQL(self.name, self)
 
 @sqlclass
 class ColumnAlias(Sql):
     name: str
     alias: str
-    # table_name: str = None
 
     def compile(self):
         s = '%s AS %s' % (self.name, self.alias)
-        # if self.table_name:
-        #     s = self.table_name + '.' + s
         return CompiledSQL(s, self)
 
 

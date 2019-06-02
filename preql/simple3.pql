@@ -1,0 +1,55 @@
+table Country:
+    name: string
+    language: string
+
+table City:
+    name: string
+    country: Country -> cities
+
+table Person:
+    name: string
+    city: City -> citizens
+    
+
+add Country("Israel", "he") as isr
+add Country("England", "en") as eng
+add Country("United States", "en") as us
+
+add City("Tel Aviv", isr) as telaviv
+add City("Raanana", isr) as raanana
+add City("London", eng) as london
+add City("Washington", us) as wash
+
+add Person("Erez Shinan", raanana) as me
+add Person("Ephraim Kishon", telaviv)
+add Person("Eric Blaire", london)
+add Person("H.G. Wells", london)
+add Person("John Steinbeck", wash)
+
+
+# english_speakers = Person[country.language="en"]
+# person_and_language = Person {name, country.language}
+# # others_from_my_country = Person [country=me.country, id!=me.id]
+
+# country_by_language = Country {language => name}
+
+# population_count = Person {country.name => count(id)}
+
+# # population_count2 = Country {name => count(citizens)}
+
+# # citizens_list = Country {name => citizens.name}     # array_agg
+
+
+
+# explicit_join = (
+#     join(c: Country[language="en"], p: Person)
+#     # { p.id, p.name, country: c.name }
+# )
+
+# # use_join = explicit_join() { p.id, p.name, country: c.name}
+
+# # explicit_join2 = (
+# #    freejoin(c = Country, p = Person)
+# #    [c.language="en", p.country = c]
+# #    { p.id, p.name, c.name }
+# # )
