@@ -18,6 +18,15 @@ pql_object = make_define_decorator(Object)
 class Function(Object):
     pass
 
+class Null(Object):
+    def repr(self, query_engine):
+        return 'null'
+
+    def to_sql(self):
+        return sql.null
+
+null = Null()
+
 class Primitive(Object):
     value = None
 
@@ -152,16 +161,22 @@ class Table(Object):
 class StoredTable(Table):
     tabledef: ast.TableDef
     query_state: object
+    __columns = None
 
     def _init(self):
         for c in self.tabledef.columns.values():
             assert isinstance(c, ast.Column), type(c)
-        self._columns = {name:ColumnRef(c, self) for name, c in self.tabledef.columns.items()}
+
+    @property
+    def _columns(self): # Lazy to avoid self-recursion through columnref.relation
+        if self.__columns is None:
+            self.__columns = {name:ColumnRef(c, self) for name, c in self.tabledef.columns.items()}
+        return self.__columns
 
     def repr(self, query_engine):
         return self._repr_table(query_engine, self.name)
 
-    def to_sql(self):
+    def to_sql(self, context=None):
         table_ref = sql.TableRef(self, self.name)
         columns = [sql.ColumnAlias(c.name, c.sql_alias) for c in self.projection.values()]
         return sql.Select(self, table_ref, columns)
@@ -193,11 +208,18 @@ class JoinableTable(Table):
     def _columns(self):
         return {name:ColumnRef(c.col, self, c.sql_alias) for name, c in self.table._columns.items()}
 
-    def to_sql(self):
+    def to_sql(self, context=None):
         if self.joins:
             x ,= self.joins
+            if context and x in context['autojoined']:
+                return self.table.to_sql()
+
             table = AutoJoin([self.table, x])
-            return table.to_sql()
+            if context is None:
+                context = {'autojoined': [x]}
+            else:
+                context['autojoined'].append(x)
+            return table.to_sql(context)
 
         return self.table.to_sql()
 
@@ -211,8 +233,8 @@ class ColumnRef(Object):   # TODO proper hierarchy
     relation: Table = None
     pql_name: str = None
 
-    backref: Table = None
-    invoked: bool = False
+    backref = None
+    invoked = False
 
     def _init(self):
         if self.sql_alias is None:
@@ -227,8 +249,8 @@ class ColumnRef(Object):   # TODO proper hierarchy
                 backref = self.table.query_state.get_table(self.col.table.name) # XXX kinda awkward
                 if backref not in self.table.joins:
                     self.table.joins.append(backref)
-                self._init_var('backref', backref)
-                self._init_var('invoked', True)
+                self.backref = backref
+                self.invoked = True
 
     def to_sql(self):
         if isinstance(self.type, ast.BackRefType):
@@ -255,6 +277,7 @@ class ColumnRef(Object):   # TODO proper hierarchy
                 self.table.joins.append(self.relation)
             col = self.relation.get_column(name)
 
+        # TODO Store ColumnRef for correct re-use?
         new_col = ColumnRef(col.col, col.table, col.sql_alias, col.relation, self.name + '.' + col.name)
         new_col.invoked_by_user()
         return new_col
@@ -361,7 +384,7 @@ class Query(Table):
             if isinstance(f.type, ast.BackRefType) or isinstance(f.expr, CountField): # XXX What happens if it's inside some expression??
                 raise TypeError('Misplaced column "%s". Aggregated columns must appear after the aggregation operator "=>" ' % f.name)
 
-    def to_sql(self):
+    def to_sql(self, context=None):
         # TODO assert types?
         fields = self.fields or list(self.projection.values())
         agg_fields = self.agg_fields or []
@@ -516,6 +539,7 @@ class TableField(Table):
     def getattr(self, name):
         col = super().getattr(name)
         assert not isinstance(col.type, ast.BackRefType)
+        # TODO Store ColumnRef for correct re-use?
         return ColumnRef(col.col, col.table, col.sql_alias, col.relation, self.name + '.' + col.name)
 
 
@@ -531,7 +555,7 @@ class AutoJoin(Table):
     def _columns(self):
         return {t.name:TableField(t) for t in self.tables}
 
-    def to_sql(self):
+    def to_sql(self, context=None):
         tables = self.tables
         assert len(tables) == 2
 
@@ -552,12 +576,17 @@ class AutoJoin(Table):
 
         to_join  = [(name1, c, name2) for c in relations[0] if c.type.table_name == table2]
         to_join += [(name2, c, name1) for c in relations[1] if c.type.table_name == table1]
+
+        if len(to_join) == 2 and list(reversed(to_join[1])) == list(to_join[0]):    # TODO XXX ugly hack!! This won't scale, figure out how to prevent this case
+            to_join = to_join[:1]
+
         if len(to_join) > 1:
-            raise Exception("More than 1 relation between %s <-> %s" % (table1.name, table2.name))
+            raise Exception("More than 1 relation between %s <-> %s" % (table1, table2))
+
         to_join ,= to_join
         src_table, rel, dst_table = to_join
 
-        tables = {t.name: t.to_sql() for t in tables}
+        tables = [src_table.to_sql(context), dst_table.to_sql(context)]
         key_col = src_table.get_column(rel.name).sql_alias
         dst_id = dst_table.get_column('id').sql_alias
         conds = [sql.Compare('=', [sql.ColumnRef(key_col), sql.ColumnRef(dst_id)])]

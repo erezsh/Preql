@@ -13,6 +13,13 @@ class Sql:
 sqlclass = make_define_decorator(Sql)
 
 @sqlclass
+class Null(Sql):
+    def compile(self):
+        return CompiledSQL('null', None)    # TODO null type
+
+null = Null()
+
+@sqlclass
 class Primitive(Sql):
     type: object
     text: str
@@ -173,11 +180,11 @@ class Select(Sql):
 @sqlclass
 class Join(Sql):
     type: object
-    tables: dict
+    tables: list
     conds: [Sql]
 
     def compile(self):
-        tables_sql = ['(%s)' % (t.compile().text) for name, t in self.tables.items()]
+        tables_sql = ['(%s)' % (t.compile().text) for t in self.tables]
         join_sql = ' JOIN '.join(e for e in tables_sql)
 
         join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)

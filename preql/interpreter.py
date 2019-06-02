@@ -66,7 +66,7 @@ class CompileSQL_Stmts:
         q = ['INSERT INTO', addrow.table,
              "(", ', '.join(cols), ")",
              "VALUES",
-             "(", ', '.join(v.to_sql().text for v in values), ")",
+             "(", ', '.join(v.to_sql().compile().text for v in values), ")",
         ]
         insert = ' '.join(q) + ';'
         return insert
@@ -200,6 +200,8 @@ class EvalAst:
             return pql.Float(val.value)
         if isinstance(val.type, ast.StringType):
             return pql.String(val.value)
+        if isinstance(val.type, ast.NullType):
+            return pql.null
         raise NotImplementedError(val)
 
     def Arith(self, arith: ast.Arith):

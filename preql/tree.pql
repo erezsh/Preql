@@ -6,7 +6,7 @@
 
 
 table Tree:
-    value: Str
+    value: string
     parent: Tree? -> children
 
 add Tree("Animal", null) as animal
