@@ -30,6 +30,10 @@ class RowWrapper:
     def __repr__(self):
         return self._row.repr()
 
+    def __getitem__(self, item):
+        return self._row.attrs[item]
+
+
 class TableWrapper:
     def __init__(self, pql_table, interp):
         self._pql_table = pql_table
@@ -45,6 +49,12 @@ class TableWrapper:
         return (RowWrapper(row) for row in self._query())
     
 
+def python_to_pql(value):
+    if value is None:
+        return pql.null
+    elif isinstance(value, str):
+        return pql.String(value)
+    assert False, value
 
 class Interface:
     def __init__(self, db_uri=None):
@@ -67,8 +77,10 @@ class Interface:
         return res
 
 
-    def __call__(self, pq):
-        res = self.interp.eval_expr(pq)
+    def __call__(self, pq, **args):
+        pql_args = {name: python_to_pql(value) for name, value in args.items()}
+
+        res = self.interp.eval_expr(pq, pql_args)
         return self._wrap_result(res)
 
     def load(self, fn, rel_to=None):

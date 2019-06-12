@@ -47,9 +47,11 @@ proj_exprs: named_expr ("," named_expr)*
      | "(" expr ")"
      | "-" molecule -> neg
      | "^" molecule -> desc
+     | new
 
 array: "[" molecule ("," molecule)* "]"
 
+new: "new" name func_args
 func_call: molecule func_args
 func_args: "(" _func_args ")"
 _func_args: named_expr ("," named_expr)*

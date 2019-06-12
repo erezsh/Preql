@@ -7,6 +7,7 @@ from . import pql_objects as pql
 from .parser import parse, parse_expr
 from .utils import dataclass, Dataclass, Context
 from .sql import Sql
+from . import sql
 from .exceptions import PreqlError_MissingName
 
 
@@ -31,7 +32,7 @@ class CompileSQL_Stmts:
 
         if isinstance(column.type, ast.RelationalType):
             c = f'{column.name} INTEGER{mod}'
-            # TODO why is this an issue? in imdb_test
+            # TODO Added all foreign keys in the end! (can't be in middle of table)
             # fk = f'FOREIGN KEY({column.name}) REFERENCES {column.type.table_name}({column.type.column_name})'
             # return c + ", " + fk
             return c
@@ -91,8 +92,9 @@ class EvalAst:
     def _eval_list(self, l):
         return [self._eval(e) for e in l]
 
-    def eval(self, ast_node):
-        return self._eval(ast_node)
+    def eval(self, ast_node, args = {}):
+        with self.context.push(args=args):
+            return self._eval(ast_node)
 
     def get_table(self, name):
         if name not in self._tables:
@@ -124,6 +126,28 @@ class EvalAst:
     def GetAttribute(self, getattr: ast.GetAttribute):
         obj = self._eval(getattr.obj)
         return obj.getattr(getattr.attr)
+
+    def NewRow(self, newrow: ast.NewRow):
+        table = self.state.namespace[newrow.table]
+        assert not newrow.args.named_args, "Not supported yet"
+
+        cols = [c.name
+                for c in table.columns.values()
+                if not isinstance(c.type, (ast.BackRefType, ast.IdType))]
+
+        values = self._eval_list(newrow.args.pos_args)
+
+        assert len(cols) == len(values)
+
+        # # TODO verify types
+
+        insert = sql.Insert(table.name, cols, [v.to_sql() for v in values])
+        assert not self.query_engine.query(insert)
+
+        rowid = self.query_engine.query(sql.LastRowId())
+        return pql.RowRef(table, rowid)
+
+
 
     def FuncCall(self, funccall: ast.FuncCall):
         func_obj = self._eval(funccall.obj)
@@ -292,9 +316,9 @@ class Interpreter:
     def query(self, sql: Sql):
         return self._query_as_struct(sql.compile())
 
-    def eval_expr(self, code):
+    def eval_expr(self, code, args):
         expr_ast = parse_expr(code)
-        obj = EvalAst(self.state, self).eval(expr_ast)
+        obj = EvalAst(self.state, self).eval(expr_ast, args)
 
         return obj
 
@@ -302,7 +326,8 @@ class Interpreter:
         res = self.sqlengine.query(compiled_sql.text)
         if isinstance(compiled_sql.type, pql.Table): # XXX hackish
             return compiled_sql.type.from_sql_tuples(res)
-        return compiled_sql.type(res[0][0])
+        if compiled_sql.type is not None:
+            return compiled_sql.type(res[0][0])
 
     def execute_code(self, code):
         for s in parse(code):

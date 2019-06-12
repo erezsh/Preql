@@ -52,6 +52,9 @@ class ToAST(Transformer):
     def add_row(self, table, args, as_name):
         return ast.AddRow(table, args, as_name)
 
+    def new(self, table, args):
+        return ast.NewRow(table, args)
+
     assign = as_args(tuple)
     assigns = as_args(list)
 

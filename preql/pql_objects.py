@@ -366,7 +366,6 @@ class UserFunction(Function):
     # def call(self, query_engine, args):
     #     return self
 
-
 @pql_object
 class Query(Table):
     table: Table

@@ -181,6 +181,11 @@ class FuncCall(Expr):
     obj: Expr
     args: FuncArgs
 
+@dataclass
+class NewRow(Expr):
+    table: str
+    args: FuncArgs
+
 
 
 ##################################################

@@ -93,7 +93,12 @@ class Compare(Sql):
             assert isinstance(f, Sql), f
 
     def compile(self):
-        return CompiledSQL(self.op.join(e.compile().text for e in self.exprs), bool)    # TODO proper type
+        # TODO move this null business to pql, where better optimization can happen
+        # XXX (and also, this suberts the concept of a separate sql layer)
+        elems = [e.compile().text for e in self.exprs]
+        compare = self.op.join(elems)
+        is_null = ' AND '.join('%s is NULL'%e for e in elems)
+        return CompiledSQL('((%s) OR (%s))' % (compare, is_null), bool)    # TODO proper type
 
 @sqlclass
 class Arith(Sql):
@@ -135,6 +140,30 @@ class ColumnAlias(Sql):
     def compile(self):
         s = '%s AS %s' % (self.name, self.alias)
         return CompiledSQL(s, self)
+
+@sqlclass
+class Insert(Sql):
+    table: str
+    cols: [str]
+    values: [Sql]
+
+    type = None
+
+    def compile(self):
+
+        q = ['INSERT INTO', self.table,
+             "(", ', '.join(self.cols), ")",
+             "VALUES",
+             "(", ', '.join(v.compile().text for v in self.values), ")",
+        ]
+        insert = ' '.join(q) + ';'
+        return CompiledSQL(insert, None)
+
+class LastRowId(Sql):
+    type = int
+
+    def compile(self):
+        return CompiledSQL('SELECT last_insert_rowid()', int)
 
 
 @sqlclass
