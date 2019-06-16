@@ -122,7 +122,7 @@ class Value(Expr):
             return cls(obj, IntegerType())
         elif isinstance(obj, float):
             return cls(obj, FloatType())
-        assert False
+        assert False, obj
 
 @dataclass
 class Range(Expr):

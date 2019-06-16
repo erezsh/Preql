@@ -10,17 +10,41 @@ class SqlEngine:
     pass
 
 class SqliteEngine(SqlEngine):
-    def __init__(self, filename=None):
+    def __init__(self, filename=None, debug=True):
         import sqlite3
         self._conn = sqlite3.connect(filename or ':memory:')
+        self._debug = debug
 
     def query(self, sql):
         dargs = {}
         c = self._conn.cursor()
-        for i, s in enumerate(sql.split('\n')):
-            print('    ' if i else 'SQL>', s)
+        print('##', sql)
+        if self._debug:
+            for i, s in enumerate(sql.split('\n')):
+                print('    ' if i else 'SQL>', s)
         c.execute(sql, dargs)
         return c.fetchall()
+
+    def addmany(self, table, cols, values):
+        assert all(len(v)==len(cols) for v in values)
+
+        c = self._conn.cursor()
+        qmarks = ','.join(['?'] * len(cols))
+        cols_str = ','.join(cols)
+        sql = f'INSERT INTO {table} ({cols_str}) VALUES ({qmarks})'
+        if self._debug:
+            print('SQL>', sql, end=' ')
+        ids = []
+        for v in values:
+            c.execute(sql, v)
+            ids.append(c.lastrowid)
+        # c.executemany(sql, values)
+        assert len(ids) == len(set(ids))
+        inserted = len(ids)
+        if self._debug:
+            print('-- Inserted %d rows' % inserted)
+        assert inserted == len(values)
+        return ids
 
 
 class RowWrapper:
@@ -96,6 +120,12 @@ class Interface:
     def _functions(self):
         return {name:f for name,f in self.interp.state.namespace.items()
                 if isinstance(f, ast.FunctionDef)}
+
+    def add_many(self, table, values):
+        cols = [c.name
+                for c in self.interp.state.namespace[table].columns.values()
+                if not isinstance(c.type, (ast.BackRefType, ast.IdType))]
+        return self.interp.sqlengine.addmany(table, cols, values)
 
     def start_repl(self):
         from prompt_toolkit import prompt

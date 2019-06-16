@@ -324,8 +324,11 @@ class Interpreter:
 
     def _query_as_struct(self, compiled_sql):
         res = self.sqlengine.query(compiled_sql.text)
+        print('@@', compiled_sql.type, compiled_sql)
         if isinstance(compiled_sql.type, pql.Table): # XXX hackish
             return compiled_sql.type.from_sql_tuples(res)
+        if isinstance(compiled_sql.type, sql.Sql):
+            return compiled_sql.type.create_value(res)
         if compiled_sql.type is not None:
             return compiled_sql.type(res[0][0])
 

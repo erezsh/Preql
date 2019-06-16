@@ -178,7 +178,7 @@ class StoredTable(Table):
 
     def to_sql(self, context=None):
         table_ref = sql.TableRef(self, self.name)
-        columns = [sql.ColumnAlias(c.name, c.sql_alias) for c in self.projection.values()]
+        columns = [sql.ColumnAlias(sql.ColumnRef(c.name), c.sql_alias) for c in self.projection.values()]
         return sql.Select(self, table_ref, columns)
 
     @property
@@ -224,6 +224,9 @@ class JoinableTable(Table):
         return self.table.to_sql()
 
 
+def make_alias(base):
+    return base + str(next(MAKE_ALIAS))
+
 
 @pql_object
 class ColumnRef(Object):   # TODO proper hierarchy
@@ -238,7 +241,7 @@ class ColumnRef(Object):   # TODO proper hierarchy
 
     def _init(self):
         if self.sql_alias is None:
-            self._init_var('sql_alias', self.col.name + str(next(MAKE_ALIAS)))  # XXX ugly but that's the best Python has to offer
+            self._init_var('sql_alias', make_alias(self.col.name))  # XXX ugly but that's the best Python has to offer
         if isinstance(self.type, ast.RelationalType):
             relation = self.table.query_state.get_table(self.type.table_name)
             self._init_var('relation', relation)
@@ -287,7 +290,10 @@ class ColumnRef(Object):   # TODO proper hierarchy
             # TODO return object instead of id
             pass
 
-        return super().from_sql_tuple(tup)
+        res = super().from_sql_tuple(tup)
+        if isinstance(res, list):
+            res = [self.from_sql_tuple([elem]) for elem in res]
+        return res
 
 
 @pql_object
@@ -366,6 +372,50 @@ class UserFunction(Function):
     # def call(self, query_engine, args):
     #     return self
 
+def safezip(*args):
+    assert len({len(a) for a in args}) == 1
+    return zip(*args)
+
+@pql_object
+class Array(Primitive):
+    expr: Object
+    type = ast.ArrayType
+    
+    @property
+    def name(self):
+        return self.expr.name
+
+    def invoked_by_user(self):
+        self.expr.invoked_by_user()
+
+    def to_sql(self):
+        return sql.MakeArray(self.expr.to_sql())
+    # def to_sql(self):
+    #     return self.expr.to_sql()
+
+
+
+@pql_object
+class ColumnValueRef(Object):   # The new ColumnRef?
+    expr: Object
+    sql_alias: str
+
+    def invoked_by_user(self):
+        return self.expr.invoked_by_user()
+
+    @property
+    def type(self):
+        return self.expr.type
+    
+    def to_sql(self):
+        return sql.ColumnRef(self.sql_alias)
+
+    @property
+    def name(self):
+        return self.expr.name
+
+
+
 @pql_object
 class Query(Table):
     table: Table
@@ -378,58 +428,68 @@ class Query(Table):
 
     name = '<Query Object>'
 
+    aliases = None
+    queried_fields = None
+    _agg_fields = None
+
     def _init(self):
         for f in self.fields or []:
             if isinstance(f.type, ast.BackRefType) or isinstance(f.expr, CountField): # XXX What happens if it's inside some expression??
                 raise TypeError('Misplaced column "%s". Aggregated columns must appear after the aggregation operator "=>" ' % f.name)
 
+        projection = {name:c for name, c in self.table._columns.items() 
+                     if not isinstance(c.type, ast.BackRefType) or c.invoked}
+
+        self.queried_fields = self.fields or list(projection.values())
+        print('###', self.agg_fields)
+        self._agg_fields = [Array(f) if not isinstance(f.expr, (CountField, Array)) else f
+                            for f in self.agg_fields or []]  # TODO By expr type (if array or not)
+        # self.aliases = [make_alias(f.name) for f in (self.queried_fields or []) + (self.agg_fields or [])]
+
+        for f in self.queried_fields + self._agg_fields:
+            alias = getattr(f, 'sql_alias', None)
+            if alias is None:
+                f.sql_alias = make_alias(f.name)
+
+        # self._columns = {f.name: f for f in self.queried_fields + self._agg_fields}
+        self._columns = {f.name: ColumnValueRef(f, f.sql_alias) for f in self.queried_fields + self._agg_fields}
+
     def to_sql(self, context=None):
         # TODO assert types?
-        fields = self.fields or list(self.projection.values())
-        agg_fields = self.agg_fields or []
+        fields = [(f.to_sql(), f.sql_alias) for f in self.queried_fields]
+        agg_fields = [(f.to_sql(), f.sql_alias) for f in self._agg_fields]
 
         # Wrap array types with MakeArray
-        agg_fields = [sql.MakeArray(f.to_sql()) if not isinstance(f.expr, CountField) else f.to_sql() for f in agg_fields]  # TODO be smarter about figuring that out
-
-        fields = [f.to_sql() for f in fields]
+        # agg_fields = self.agg_fields or []
+        # agg_fields = [(sql.MakeArray(f.to_sql()) if not isinstance(f.expr, CountField) else f.to_sql(), f.sql_alias)
+        #               for f in agg_fields]  # TODO By expr type (if array or not)
+        
+        sql_fields = [sql.ColumnAlias(f, a) for f, a in fields + agg_fields]
+        # import pdb
+        # pdb.set_trace()
 
         return sql.Select(
             type = self,
             table = self.table.to_sql(),
-            fields = fields + agg_fields,
+            fields = sql_fields,
             conds = [c.to_sql() for c in self.conds or []],
-            group_by = fields if agg_fields else [],
+            group_by = [f for f,a in fields] if agg_fields else [],
             order = [o.to_sql() for o in self.order or []],
             offset = self.offset.to_sql() if self.offset else None,
             limit = self.limit.to_sql() if self.limit else None,
         )
 
-    def _to_sql(self):
-        # TODO assert types?
-        fields = self.fields or list(self.projection.values())
-        agg_fields = self.agg_fields or []
-        return sql.Select(
-            type = self,
-            table = self.table.to_sql(),
-            fields = [f.to_sql() for f in fields + agg_fields],
-            conds = [c.to_sql() for c in self.conds or []],
-            group_by = [f.to_sql() for f in fields] if agg_fields else [],
-            order = [o.to_sql() for o in self.order or []],
-            offset = self.offset.to_sql() if self.offset else None,
-            limit = self.limit.to_sql() if self.limit else None,
-        )
-
-
+    def from_sql_tuple(self, tup):
+        if self.agg_fields:
+            flen = len(self.fields)
+            tup = list(tup[:flen]) + [v if isinstance(f.expr, CountField)  # TODO Fix for anything that isn't array
+                                        else f.from_sql_tuple([sql.MakeArray.clean_value(v)])
+                                        for f, v in safezip(self.agg_fields, tup[flen:])]
+        return super().from_sql_tuple(tup)
 
     def repr(self, query_engine):
         return self._repr_table(query_engine, None)
 
-    @property
-    def _columns(self):
-        if self.fields:
-            return {f.name: f for f in self.fields + self.agg_fields}
-        else:
-            return self.table._columns
 
 
 
@@ -438,8 +498,18 @@ class Compare(Object): # TODO Op? Function?
     op: str
     exprs: list
 
+    type = ast.BoolType()
+
     def to_sql(self):
-        return sql.Compare(self.op, [e.to_sql() for e in self.exprs])
+        assert len(self.exprs) == 2  # XXX Otherwise NULL handling needs to be smarter
+        nulls = any(expr is null for expr in self.exprs)
+        if nulls:
+            assert self.op == '='   # XXX others not supported right now
+            op = ' is '
+        else:
+            op = self.op
+
+        return sql.Compare(op, [e.to_sql() for e in self.exprs])
 
 @pql_object
 class Arith(Object): # TODO Op? Function?
@@ -473,7 +543,13 @@ class NamedExpr(Object):   # XXX this is bad but I'm lazy
 
     @property
     def name(self):
-        return self._name or self.expr.name
+        if self._name:
+            return self._name
+        try:
+            return self.expr.name
+        except AttributeError:
+            self._init_var('_name', type(self.expr).__name__ + str(next(MAKE_ALIAS)))  # XXX ugly but that's the best Python has to offer
+            return self._name
 
     @property
     def type(self):

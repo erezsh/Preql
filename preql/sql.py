@@ -69,10 +69,16 @@ class MakeArray(Sql):
     field: Sql
     type = list  # TODO correct object
 
+    _sp = "\x01|\x02"
+
     def compile(self):
         # Sqlite Specific
         t = self.type
-        return CompiledSQL(f'group_concat({self.field.compile().text}, "\x01|\x02")', Sqlite_Split(t))
+        return CompiledSQL(f'group_concat({self.field.compile().text}, "{self._sp}")', self)
+
+    @classmethod
+    def clean_value(cls, value):
+        return value.split(cls._sp)
 
 @sqlclass
 class RoundField(Sql):
@@ -97,8 +103,10 @@ class Compare(Sql):
         # XXX (and also, this suberts the concept of a separate sql layer)
         elems = [e.compile().text for e in self.exprs]
         compare = self.op.join(elems)
-        is_null = ' AND '.join('%s is NULL'%e for e in elems)
-        return CompiledSQL('((%s) OR (%s))' % (compare, is_null), bool)    # TODO proper type
+        # XXX is_null correction creates performance issues in sqlite
+        # is_null = ' AND '.join('%s is NULL'%e for e in elems)
+        # sql = '((%s) OR (%s))' % (compare, is_null)   
+        return CompiledSQL(compare, bool)    # TODO proper type
 
 @sqlclass
 class Arith(Sql):
@@ -134,11 +142,11 @@ class ColumnRef(Sql):
 
 @sqlclass
 class ColumnAlias(Sql):
-    name: str
+    value: Sql
     alias: str
 
     def compile(self):
-        s = '%s AS %s' % (self.name, self.alias)
+        s = '%s AS %s' % (self.value.compile().text, self.alias)
         return CompiledSQL(s, self)
 
 @sqlclass
