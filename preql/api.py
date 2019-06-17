@@ -18,7 +18,6 @@ class SqliteEngine(SqlEngine):
     def query(self, sql):
         dargs = {}
         c = self._conn.cursor()
-        print('##', sql)
         if self._debug:
             for i, s in enumerate(sql.split('\n')):
                 print('    ' if i else 'SQL>', s)

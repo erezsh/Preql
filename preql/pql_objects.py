@@ -379,7 +379,6 @@ def safezip(*args):
 @pql_object
 class Array(Primitive):
     expr: Object
-    type = ast.ArrayType
     
     @property
     def name(self):
@@ -390,8 +389,10 @@ class Array(Primitive):
 
     def to_sql(self):
         return sql.MakeArray(self.expr.to_sql())
-    # def to_sql(self):
-    #     return self.expr.to_sql()
+
+    @property
+    def type(self):
+        return ast.ArrayType(self.expr.type)
 
 
 
@@ -429,7 +430,7 @@ class Query(Table):
     name = '<Query Object>'
 
     aliases = None
-    queried_fields = None
+    _fields = None
     _agg_fields = None
 
     def _init(self):
@@ -440,33 +441,23 @@ class Query(Table):
         projection = {name:c for name, c in self.table._columns.items() 
                      if not isinstance(c.type, ast.BackRefType) or c.invoked}
 
-        self.queried_fields = self.fields or list(projection.values())
-        print('###', self.agg_fields)
+        self._fields = self.fields or list(projection.values())
         self._agg_fields = [Array(f) if not isinstance(f.expr, (CountField, Array)) else f
                             for f in self.agg_fields or []]  # TODO By expr type (if array or not)
-        # self.aliases = [make_alias(f.name) for f in (self.queried_fields or []) + (self.agg_fields or [])]
 
-        for f in self.queried_fields + self._agg_fields:
+        for f in self._fields + self._agg_fields:
             alias = getattr(f, 'sql_alias', None)
             if alias is None:
                 f.sql_alias = make_alias(f.name)
 
-        # self._columns = {f.name: f for f in self.queried_fields + self._agg_fields}
-        self._columns = {f.name: ColumnValueRef(f, f.sql_alias) for f in self.queried_fields + self._agg_fields}
+        self._columns = {f.name: ColumnValueRef(f, f.sql_alias) for f in self._fields + self._agg_fields}
 
     def to_sql(self, context=None):
         # TODO assert types?
-        fields = [(f.to_sql(), f.sql_alias) for f in self.queried_fields]
+        fields = [(f.to_sql(), f.sql_alias) for f in self._fields]
         agg_fields = [(f.to_sql(), f.sql_alias) for f in self._agg_fields]
 
-        # Wrap array types with MakeArray
-        # agg_fields = self.agg_fields or []
-        # agg_fields = [(sql.MakeArray(f.to_sql()) if not isinstance(f.expr, CountField) else f.to_sql(), f.sql_alias)
-        #               for f in agg_fields]  # TODO By expr type (if array or not)
-        
         sql_fields = [sql.ColumnAlias(f, a) for f, a in fields + agg_fields]
-        # import pdb
-        # pdb.set_trace()
 
         return sql.Select(
             type = self,
@@ -480,11 +471,9 @@ class Query(Table):
         )
 
     def from_sql_tuple(self, tup):
-        if self.agg_fields:
-            flen = len(self.fields)
-            tup = list(tup[:flen]) + [v if isinstance(f.expr, CountField)  # TODO Fix for anything that isn't array
-                                        else f.from_sql_tuple([sql.MakeArray.clean_value(v)])
-                                        for f, v in safezip(self.agg_fields, tup[flen:])]
+        tup = [v if not isinstance(f.type, ast.ArrayType)
+                 else f.from_sql_tuple([sql.MakeArray(None).import_value(v)])  # XXX hackish
+                 for f, v in safezip(self._fields + self._agg_fields, tup)]
         return super().from_sql_tuple(tup)
 
     def repr(self, query_engine):

@@ -32,7 +32,7 @@ class CompileSQL_Stmts:
 
         if isinstance(column.type, ast.RelationalType):
             c = f'{column.name} INTEGER{mod}'
-            # TODO Added all foreign keys in the end! (can't be in middle of table)
+            # TODO Add all foreign keys in the end! (can't be in middle of table)
             # fk = f'FOREIGN KEY({column.name}) REFERENCES {column.type.table_name}({column.type.column_name})'
             # return c + ", " + fk
             return c
@@ -324,18 +324,11 @@ class Interpreter:
 
     def _query_as_struct(self, compiled_sql):
         res = self.sqlengine.query(compiled_sql.text)
-        print('@@', compiled_sql.type, compiled_sql)
-        if isinstance(compiled_sql.type, pql.Table): # XXX hackish
-            return compiled_sql.type.from_sql_tuples(res)
-        if isinstance(compiled_sql.type, sql.Sql):
-            return compiled_sql.type.create_value(res)
-        if compiled_sql.type is not None:
-            return compiled_sql.type(res[0][0])
+        return compiled_sql.type.import_value(res)
 
     def execute_code(self, code):
         for s in parse(code):
             self.run_stmt(s)
-
 
 
 def _test(fn):

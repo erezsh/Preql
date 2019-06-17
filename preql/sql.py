@@ -1,13 +1,12 @@
 from .utils import dataclass, make_define_decorator
 
+class Sql:
+    pass
+
 @dataclass
 class CompiledSQL:
     text: str
-    type: object
-
-
-class Sql:
-    pass
+    type: Sql
 
 
 sqlclass = make_define_decorator(Sql)
@@ -20,12 +19,21 @@ class Null(Sql):
 null = Null()
 
 @sqlclass
-class Primitive(Sql):
+class Atom(Sql):
+    def import_value(self, value):
+        return self.type(value[0][0])
+
+
+@sqlclass
+class Primitive(Atom):
     type: object
     text: str
 
     def compile(self):
-        return CompiledSQL(self.text, self.type)
+        return CompiledSQL(self.text, self)
+
+
+
 
 @sqlclass
 class TableRef(Sql):
@@ -33,7 +41,7 @@ class TableRef(Sql):
     name: str
 
     def compile(self):
-        return CompiledSQL(self.name, self.type)
+        return CompiledSQL(self.name, self)
 
 @sqlclass
 class TableField(Sql):
@@ -42,7 +50,7 @@ class TableField(Sql):
     columns: dict
 
     def compile(self):
-        return CompiledSQL(', '.join(f'{c.sql_alias}' for c in self.columns.values()), self.type)
+        return CompiledSQL(', '.join(f'{c.sql_alias}' for c in self.columns.values()), self)
 
 @sqlclass
 class CountField(Sql):
@@ -50,7 +58,7 @@ class CountField(Sql):
     type = int  # TODO correct object
 
     def compile(self):
-        return CompiledSQL(f'count({self.field.compile().text})', self.type)
+        return CompiledSQL(f'count({self.field.compile().text})', self)
 
 @sqlclass
 class RoundField(Sql):
@@ -58,11 +66,7 @@ class RoundField(Sql):
     type = float  # TODO correct object
 
     def compile(self):
-        return CompiledSQL(f'round({self.field.compile().text})', self.type)
-
-class Sqlite_Split:
-    def __init__(self, type_):
-        self.type = type_
+        return CompiledSQL(f'round({self.field.compile().text})', self)
 
 @sqlclass
 class MakeArray(Sql):
@@ -76,9 +80,8 @@ class MakeArray(Sql):
         t = self.type
         return CompiledSQL(f'group_concat({self.field.compile().text}, "{self._sp}")', self)
 
-    @classmethod
-    def clean_value(cls, value):
-        return value.split(cls._sp)
+    def import_value(self, value):
+        return value.split(self._sp)
 
 @sqlclass
 class RoundField(Sql):
@@ -86,7 +89,7 @@ class RoundField(Sql):
     type = float  # TODO correct object
 
     def compile(self):
-        return CompiledSQL(f'round({self.field.compile().text})', self.type)
+        return CompiledSQL(f'round({self.field.compile().text})', self)
 
 
 @sqlclass
@@ -99,13 +102,8 @@ class Compare(Sql):
             assert isinstance(f, Sql), f
 
     def compile(self):
-        # TODO move this null business to pql, where better optimization can happen
-        # XXX (and also, this suberts the concept of a separate sql layer)
         elems = [e.compile().text for e in self.exprs]
         compare = self.op.join(elems)
-        # XXX is_null correction creates performance issues in sqlite
-        # is_null = ' AND '.join('%s is NULL'%e for e in elems)
-        # sql = '((%s) OR (%s))' % (compare, is_null)   
         return CompiledSQL(compare, bool)    # TODO proper type
 
 @sqlclass
@@ -114,7 +112,7 @@ class Arith(Sql):
     exprs: [Sql]
 
     def compile(self):
-        return CompiledSQL(self.op.join(e.compile().text for e in self.exprs), object)    # TODO derive proper type
+        return CompiledSQL(self.op.join(e.compile().text for e in self.exprs), self)    # TODO derive proper type
 
 @sqlclass
 class Neg(Sql):
@@ -122,7 +120,7 @@ class Neg(Sql):
 
     def compile(self):
         s = self.expr.compile()
-        return CompiledSQL("-" + s.text, s.type)
+        return CompiledSQL("-" + s.text, s)
 
 @sqlclass
 class Desc(Sql):
@@ -130,7 +128,7 @@ class Desc(Sql):
 
     def compile(self):
         s = self.expr.compile()
-        return CompiledSQL(s.text + " DESC", s.type)
+        return CompiledSQL(s.text + " DESC", s)
 
 
 @sqlclass
@@ -165,13 +163,17 @@ class Insert(Sql):
              "(", ', '.join(v.compile().text for v in self.values), ")",
         ]
         insert = ' '.join(q) + ';'
-        return CompiledSQL(insert, None)
+        return CompiledSQL(insert, self)
 
-class LastRowId(Sql):
+    def import_value(self, value):
+        assert not value
+        return None
+
+class LastRowId(Atom):
     type = int
 
     def compile(self):
-        return CompiledSQL('SELECT last_insert_rowid()', int)
+        return CompiledSQL('SELECT last_insert_rowid()', self)
 
 
 @sqlclass
@@ -212,7 +214,11 @@ class Select(Sql):
         if self.order:
             sql += ' ORDER BY ' + ', '.join(o.compile().text for o in self.order)
 
-        return CompiledSQL(sql, self.type)
+        return CompiledSQL(sql, self)
+
+    def import_value(self, value):
+        return self.type.from_sql_tuples(value)
+
 
 @sqlclass
 class Join(Sql):
@@ -226,4 +232,4 @@ class Join(Sql):
 
         join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)
 
-        return CompiledSQL(join_sql, self.type)    # TODO joined type
+        return CompiledSQL(join_sql, self)    # TODO joined type
