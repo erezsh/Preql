@@ -66,3 +66,32 @@ class BasicTests(TestCase):
         assert preql.person_and_country().json() == res
         # print( preql.person_and_country_join().json() )   # TODO
         # print( preql.person_and_country_freejoin().json() )
+
+    def test_m2m(self):
+        preql = Preql()
+        preql.exec('''
+            table A:
+                value: integer
+
+            table B:
+                value: integer
+
+            table A_B:
+                a: A -> ab
+                b: B -> ab
+            
+        ''')
+
+        As = preql.add_many('A', [[x] for x in range(10)])
+        Bs = preql.add_many('B', [[x] for x in range(10)])
+        ABs = preql.add_many('A_B', [
+            [a,b]
+            for i, a in enumerate(As)
+            for j, b in enumerate(Bs)
+            if i*2 == j
+            ])
+
+        res = [{'a': 0, 'b': 0}, {'a': 1, 'b': 2}, {'a': 2, 'b': 4}, {'a': 3, 'b': 6}, {'a': 4, 'b': 8}]
+        assert (preql('A_B {a: a.value, b: b.value}').json()) == res
+        assert (preql('A {a: value, b: ab.b.value}').json()) == res
+        assert (preql('B {a: ab.a.value, b: value}').json()) == res

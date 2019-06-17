@@ -75,6 +75,10 @@ class Row(Object):
 
 @pql_object
 class Table(Object):
+    @property
+    def base_table(self):   # For autojoins
+        return self
+
     def getattr(self, name):
         try:
             return self.get_column(name)
@@ -133,7 +137,7 @@ class Table(Object):
 
     def cols_by_type(self, type_):
         return {name: c.col for name, c in self._columns.items()
-                if isinstance(c.col.type, type_)}
+                if isinstance(c.type, type_)}
 
     def from_sql_tuple(self, tup):
         items = {}
@@ -213,19 +217,17 @@ class JoinableTable(Table):
         return {name:ColumnRef(c.col, self, c.sql_alias) for name, c in self.table._columns.items()}
 
     def to_sql(self, context=None):
-        if self.joins:
-            x ,= self.joins
-            if context and x in context['autojoined']:
-                return self.table.to_sql()
+        context = context or {}
 
-            table = AutoJoin([self.table, x])
-            if context is None:
-                context = {'autojoined': [x]}
-            else:
-                context['autojoined'].append(x)
-            return table.to_sql(context)
+        table = self.table
+        for join in self.joins:
+            if join not in context.get('autojoined', []):
+                table = AutoJoin([table, join])
+                if 'autojoined' not in context:
+                    context = {'autojoined': []}
+                context['autojoined'].append(join)
 
-        return self.table.to_sql()
+        return table.to_sql(context)
 
 
 def make_alias(base):
@@ -611,7 +613,7 @@ class TableVariable(Table):
 
 @pql_object
 class TableField(Table):
-    table: TableVariable
+    table: Table
     type = Table
 
     @property
@@ -643,6 +645,12 @@ def create_autojoin(*args, **kwargs):
 class AutoJoin(Table):
     tables: [Table]
 
+    name = '<Autojoin>'
+
+    @property
+    def base_table(self):   # For autojoins
+        return self.tables[0]
+
     @property
     def _columns(self):
         return {t.name:TableField(t) for t in self.tables}
@@ -651,8 +659,8 @@ class AutoJoin(Table):
         tables = self.tables
         assert len(tables) == 2
 
-        ids =       [list(t.cols_by_type(ast.IdType).items()) for t in tables]
-        relations = [list(t.cols_by_type(ast.RelationalType).values())
+        ids =       [list(t.base_table.cols_by_type(ast.IdType).items()) for t in tables]
+        relations = [list(t.base_table.cols_by_type(ast.RelationalType).values())
                      for t in tables]
 
         ids0, ids1 = ids
@@ -679,7 +687,7 @@ class AutoJoin(Table):
         src_table, rel, dst_table = to_join
 
         tables = [src_table.to_sql(context), dst_table.to_sql(context)]
-        key_col = src_table.get_column(rel.name).sql_alias
-        dst_id = dst_table.get_column('id').sql_alias
+        key_col = src_table.base_table.get_column(rel.name).sql_alias
+        dst_id = dst_table.base_table.get_column('id').sql_alias
         conds = [sql.Compare('=', [sql.ColumnRef(key_col), sql.ColumnRef(dst_id)])]
         return sql.Join(self, tables, conds)
