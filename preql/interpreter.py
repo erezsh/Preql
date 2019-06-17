@@ -12,9 +12,9 @@ from .exceptions import PreqlError_MissingName
 
 
 
-@dataclass
 class State:
-    namespace = {}
+    def __init__(self):
+        self.namespace = {}
 
 class CompileSQL_Stmts:
     def __init__(self, state, interp):
@@ -198,7 +198,10 @@ class EvalAst:
         return pql.Query(obj, fields=fields, agg_fields=agg_fields)
 
     def NamedExpr(self, ne: ast.NamedExpr): # XXX it's bad but i'm lazy
-        return pql.NamedExpr(ne.name, self._eval(ne.expr))
+        expr = self._eval(ne.expr)
+        if ne.name is None:
+            return expr
+        return pql.NamedExpr(ne.name, expr)
 
     def Compare(self, cmp: ast.Compare):
         exprs = self._eval_list(cmp.exprs)
@@ -249,6 +252,7 @@ class EvalAst:
 pql_functions = {
     'round': pql.Round,
     'count': pql.CountField,
+    'limit': pql.LimitField,
     'join': pql.create_autojoin,
 }
 
@@ -264,7 +268,8 @@ class Interpreter:
         self.sqldecl = CompileSQL_Stmts(self.state, self)
 
     def _add_table(self, table):
-        assert table.name not in self.state.namespace
+        if table.name in self.state.namespace:
+            raise Exception("Table already defined: %s" % table.name)
         self.state.namespace[table.name] = table
 
         backrefs = []

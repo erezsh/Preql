@@ -12,6 +12,10 @@ class Object(Dataclass):
         obj ,= tup
         return obj
 
+    def from_sql_tuples(self, tuples):
+        row ,= tuples
+        return type(self)(self.from_sql_tuple(row))
+
 pql_object = make_define_decorator(Object)
 
 
@@ -117,7 +121,7 @@ class Table(Object):
         return '\n'.join(lines)
 
     def count(self, query_engine):
-        return query_engine.query( sql.Select(Integer, self.to_sql(), fields=[sql.CountField(sql.Primitive(None, '*'))]) )
+        return query_engine.query( sql.Select(Integer(), self.to_sql(), fields=[sql.CountField(sql.Primitive(None, '*'))]) )
 
     def to_sql(self):
         raise NotImplementedError()
@@ -225,11 +229,34 @@ class JoinableTable(Table):
 
 
 def make_alias(base):
-    return base + str(next(MAKE_ALIAS))
+    return base.replace('.', '_') + str(next(MAKE_ALIAS))
+
+
+class ColumnRefBase:    # XXX Temporary
+    pass
+
+@pql_object
+class ColumnValueRef(ColumnRefBase):   # The new ColumnRef?
+    expr: Object
+    sql_alias: str
+
+    def invoked_by_user(self):
+        return self.expr.invoked_by_user()
+
+    @property
+    def type(self):
+        return self.expr.type
+    
+    def to_sql(self):
+        return sql.ColumnRef(self.sql_alias)
+
+    @property
+    def name(self):
+        return self.expr.name
 
 
 @pql_object
-class ColumnRef(Object):   # TODO proper hierarchy
+class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
     col: ast.Column
     table: Table
     sql_alias: str = None
@@ -335,8 +362,8 @@ class OrderTable(TableMethod):
 
 @pql_object
 class CountField(Function): # TODO not exactly function
-    obj: ColumnRef
-    type = Integer
+    obj: ColumnRefBase
+    type = Integer()
 
     def to_sql(self):
         return sql.CountField( self.obj.to_sql() )
@@ -344,6 +371,26 @@ class CountField(Function): # TODO not exactly function
     @property
     def name(self):
         return f'count_{self.obj.name}'
+
+@pql_object
+class LimitField(Function): # TODO not exactly function
+    obj: ColumnRefBase
+    limit: Integer
+
+    def to_sql(self):
+        return sql.LimitField(self.obj.to_sql(), self.limit.value)
+    
+    @property
+    def name(self):
+        return f'limit_{self.obj.name}'
+
+    @property
+    def type(self):
+        return self.obj.type
+
+    def from_sql_tuple(self, tup):
+        raise NotImplementedError()
+    
 
 @pql_object
 class Round(Function):  # TODO not exactly function
@@ -396,25 +443,6 @@ class Array(Primitive):
 
 
 
-@pql_object
-class ColumnValueRef(Object):   # The new ColumnRef?
-    expr: Object
-    sql_alias: str
-
-    def invoked_by_user(self):
-        return self.expr.invoked_by_user()
-
-    @property
-    def type(self):
-        return self.expr.type
-    
-    def to_sql(self):
-        return sql.ColumnRef(self.sql_alias)
-
-    @property
-    def name(self):
-        return self.expr.name
-
 
 
 @pql_object
@@ -435,14 +463,14 @@ class Query(Table):
 
     def _init(self):
         for f in self.fields or []:
-            if isinstance(f.type, ast.BackRefType) or isinstance(f.expr, CountField): # XXX What happens if it's inside some expression??
+            if isinstance(f.type, ast.BackRefType) or isinstance(f.type, Integer): # XXX Do correct type check
                 raise TypeError('Misplaced column "%s". Aggregated columns must appear after the aggregation operator "=>" ' % f.name)
 
         projection = {name:c for name, c in self.table._columns.items() 
                      if not isinstance(c.type, ast.BackRefType) or c.invoked}
 
         self._fields = self.fields or list(projection.values())
-        self._agg_fields = [Array(f) if not isinstance(f.expr, (CountField, Array)) else f
+        self._agg_fields = [Array(f) if not isinstance(f.type, Integer) else f
                             for f in self.agg_fields or []]  # TODO By expr type (if array or not)
 
         for f in self._fields + self._agg_fields:

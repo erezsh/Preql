@@ -61,6 +61,18 @@ class CountField(Sql):
         return CompiledSQL(f'count({self.field.compile().text})', self)
 
 @sqlclass
+class LimitField(Sql):
+    field: Sql
+    limit: int
+    # type = int  # TODO correct object
+
+    def compile(self):
+        return CompiledSQL(self.field.compile().text, self)
+        
+    def import_value(self, value):
+        assert False
+
+@sqlclass
 class RoundField(Sql):
     field: Sql
     type = float  # TODO correct object
@@ -144,7 +156,10 @@ class ColumnAlias(Sql):
     alias: str
 
     def compile(self):
-        s = '%s AS %s' % (self.value.compile().text, self.alias)
+        if isinstance(self.value, ColumnRef) and self.value.name == self.alias:
+            s = self.alias  # This is just for beauty, it's not necessary for function
+        else:
+            s = '%s AS %s' % (self.value.compile().text, self.alias)
         return CompiledSQL(s, self)
 
 @sqlclass

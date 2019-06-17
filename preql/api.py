@@ -65,6 +65,9 @@ class TableWrapper:
     def __repr__(self):
         return self._pql_table.repr(self._interp)
 
+    def json(self):
+        return [row.attrs for row in self._query()]
+
     def _query(self):
         return self._pql_table.query(self._interp, None)
 
@@ -77,6 +80,8 @@ def python_to_pql(value):
         return pql.null
     elif isinstance(value, str):
         return pql.String(value)
+    elif isinstance(value, int):
+        return pql.Integer(value)
     assert False, value
 
 class Interface:
