@@ -95,3 +95,38 @@ class BasicTests(TestCase):
         assert (preql('A_B {a: a.value, b: b.value}').json()) == res
         assert (preql('A {a: value, b: ab.b.value}').json()) == res
         assert (preql('B {a: ab.a.value, b: value}').json()) == res
+
+        assert (preql('B [ab.a.value=2] {value}').json()) == [{'value': 4}]
+
+        assert (preql('A_B [a.value=2] {v:b.value}').json()) == [{'v': 4}]
+
+        res = [{'a.value': 0, 'b.value': 0}, {'a.value': 1, 'b.value': 2},
+               {'a.value': 2, 'b.value': 4}, {'a.value': 3, 'b.value': 6},
+               {'a.value': 4, 'b.value': 8}]
+        assert (preql('A_B {a.value, b.value}').json() ) == res
+        assert (preql('A_B {a, b} {a.value, b.value}').json() ) == res
+
+    def test_self_reference(self):
+        preql = Preql()
+        preql.exec('''
+            table Person:
+                name: string
+                parent: Person? -> children
+        ''')
+
+        abraham = preql('new Person("Abraham", null)').row_id
+        isaac = preql('new Person("Isaac", ab)', ab=abraham).row_id
+        jacob = preql('new Person("Jacob", isaac)', isaac=isaac).row_id
+        esau = preql('new Person("Esau", isaac)', isaac=isaac).row_id
+
+        assert (preql('Person[name="Jacob"] {name: parent.name}').json()) == [{'name': 'Isaac'}]
+        # assert (preql('Person[name="Jacob"] {name: parent.parent.name}').json()) == [{'name': 'Abraham'}] # TODO
+
+        res = [{'name': 'Abraham', 'count_children': 1}, {'name': 'Isaac', 'count_children': 2}]
+        assert ( preql('Person {name => count(children)}').json()) == res
+
+        res = [{'name': 'Abraham', 'children.name': ['Isaac']}, {'name': 'Isaac', 'children.name': ['Jacob', 'Esau']}]
+        assert ( preql('Person {name => children.name}').json()) == res
+
+        # assert ( preql('Person {name => children.name}').json()) == res
+

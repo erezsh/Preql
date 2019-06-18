@@ -220,9 +220,9 @@ class JoinableTable(Table):
         context = context or {}
 
         table = self.table
-        for join in self.joins:
+        for fwd, join in self.joins:
             if join not in context.get('autojoined', []):
-                table = AutoJoin([table, join])
+                table = AutoJoin([table, join] if fwd else [join, table])
                 if 'autojoined' not in context:
                     context = {'autojoined': []}
                 context['autojoined'].append(join)
@@ -256,6 +256,15 @@ class ColumnValueRef(ColumnRefBase):   # The new ColumnRef?
     def name(self):
         return self.expr.name
 
+    def getattr(self, attr):
+        col = self.expr.getattr(attr)
+        # import pdb
+        # pdb.set_trace()
+        return col
+        # new_col = ColumnRef(col.col, col.table, self.sql_alias, col.relation, col.name)
+        # new_col.invoked_by_user()
+        # return new_col
+
 
 @pql_object
 class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
@@ -267,6 +276,7 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
 
     backref = None
     invoked = False
+    joined = False  # XXX how is it different than invoked?
 
     def _init(self):
         if self.sql_alias is None:
@@ -279,8 +289,8 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
         if isinstance(self.type, ast.BackRefType):
             if not self.backref:
                 backref = self.table.query_state.get_table(self.col.table.name) # XXX kinda awkward
-                if backref not in self.table.joins:
-                    self.table.joins.append(backref)
+                if (False, backref) not in self.table.joins:
+                    self.table.joins.append((False, backref))
                 self.backref = backref
                 self.invoked = True
 
@@ -288,6 +298,11 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
         if isinstance(self.type, ast.BackRefType):
             assert self.backref
             return ( self.backref.get_column('id').to_sql() )
+        
+        if self.joined:
+            assert isinstance(self.type, ast.RelationalType)
+            col_refs = [c.to_sql() for c in self.relation.projection.values()]
+            return sql.ColumnRefs(col_refs)
 
         return sql.ColumnRef(self.sql_alias)
 
@@ -301,12 +316,13 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
 
     def getattr(self, name):
         if isinstance(self.type, ast.BackRefType):
-            assert self.backref in self.table.joins
+            assert (False, self.backref) in self.table.joins
             col = self.backref.get_column(name)
         else:
             assert isinstance(self.type, ast.RelationalType)
-            if self.relation not in self.table.joins:
-                self.table.joins.append(self.relation)
+            if (True, self.relation) not in self.table.joins:
+                self.table.joins.append((True, self.relation))
+            self.joined = True
             col = self.relation.get_column(name)
 
         # TODO Store ColumnRef for correct re-use?
@@ -471,6 +487,9 @@ class Query(Table):
         projection = {name:c for name, c in self.table._columns.items() 
                      if not isinstance(c.type, ast.BackRefType) or c.invoked}
 
+        # if self.fields is None:
+        #     import pdb
+        #     pdb.set_trace()
         self._fields = self.fields or list(projection.values())
         self._agg_fields = [Array(f) if not isinstance(f.type, Integer) else f
                             for f in self.agg_fields or []]  # TODO By expr type (if array or not)
@@ -487,7 +506,13 @@ class Query(Table):
         fields = [(f.to_sql(), f.sql_alias) for f in self._fields]
         agg_fields = [(f.to_sql(), f.sql_alias) for f in self._agg_fields]
 
-        sql_fields = [sql.ColumnAlias(f, a) for f, a in fields + agg_fields]
+        # Alias all fields, except composite fields (due to foreign key expansion)
+        # This works under the assumption that the columns inside don't change, but only propagate up as they are
+        # XXX Does this hold for sophisiticated projections? Columns transformations?
+        sql_fields = [sql.ColumnAlias(f, a)
+                      if not isinstance(f, sql.ColumnRefs)
+                      else f
+                      for f, a in fields + agg_fields]
 
         return sql.Select(
             type = self,

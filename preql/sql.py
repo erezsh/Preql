@@ -151,6 +151,15 @@ class ColumnRef(Sql):
         return CompiledSQL(self.name, self)
 
 @sqlclass
+class ColumnRefs(Sql):
+    "For grouping"
+
+    refs: [ColumnRef]
+
+    def compile(self):
+        return CompiledSQL(', '.join([r.compile().text for r in self.refs]), self)
+
+@sqlclass
 class ColumnAlias(Sql):
     value: Sql
     alias: str
