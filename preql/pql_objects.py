@@ -510,10 +510,7 @@ class Query(Table):
             if isinstance(f.type, ast.BackRefType) or isinstance(f.type, Integer): # XXX Do correct type check
                 raise TypeError('Misplaced column "%s". Aggregated columns must appear after the aggregation operator "=>" ' % f.name)
 
-        projection = {name:c for name, c in self.table._columns.items() 
-                     if not isinstance(c.type, ast.BackRefType) or c.invoked}
-
-        self._fields = self.fields or list(projection.values())
+        self._fields = self.fields or list(self.table._columns.values())
         self._agg_fields = [Array(f) if not isinstance(f.type, Integer) else f
                             for f in self.agg_fields or []]  # TODO By expr type (if array or not)
 
@@ -522,11 +519,15 @@ class Query(Table):
             if alias is None:
                 f.sql_alias = make_alias(f.name)
 
-        self._columns = {f.name: ColumnValueRef(f, f.sql_alias) for f in self._fields + self._agg_fields}
+    @property
+    def _columns(self):
+        return {f.name: ColumnValueRef(f, f.sql_alias) for f in self._fields + self._agg_fields}
 
     def to_sql(self, context=None):
         # TODO assert types?
-        fields = [(f.to_sql(), f.sql_alias) for f in self._fields]
+        fields = [(f.to_sql(), f.sql_alias) for f in self._fields
+                  if not isinstance(f.type, ast.BackRefType) or f.invoked ]
+
         agg_fields = [(f.to_sql(), f.sql_alias) for f in self._agg_fields]
 
         # Alias all fields, except composite fields (due to foreign key expansion)

@@ -168,4 +168,4 @@ class BasicTests(TestCase):
 
         assert( preql('A[ab.b.name="b1", children.ab.b.name="b2"] {name}').json() ) == [{'name': 'a1'}]
         # print( preql('A {children.ab.b.name}').json() )
-        # print( preql('A[ab.b.name="b1"] {children}').json() ) # TODO get it to work
+        # print( preql('A[ab.b.name="b1"] {children.name}').json() ) # TODO get it to work
