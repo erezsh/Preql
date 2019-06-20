@@ -130,3 +130,42 @@ class BasicTests(TestCase):
 
         # assert ( preql('Person {name => children.name}').json()) == res
 
+    def test_m2m_with_self_reference(self):
+        preql = Preql()
+        preql.exec('''
+            table A:
+                name: string
+                parent: A? -> children
+
+            table B:
+                name: string
+                parent: B? -> children
+
+            table A_B:
+                a: A -> ab
+                b: B -> ab
+
+        ''')
+
+        a1 = preql('new A("a1", null)').row_id
+        a2 = preql('new A("a2", a1)', a1=a1).row_id
+        a3 = preql('new A("a3", a1)', a1=a1).row_id
+
+        b1 = preql('new B("b1", null)').row_id
+        b2 = preql('new B("b2", null)').row_id
+
+        preql('new A_B(a1, b1)', a1=a1, b1=b1).row_id
+        preql('new A_B(a2, b2)', a2=a2, b2=b2).row_id
+
+        # TODO Table identity is messed up!
+        # The rules should be as followed (at least for now):
+        # * Reference always brings a new table ( so join(A,A) will joins two separate selects )
+        # * get_attr should returns a new table, but cached, according to the originating table
+        #   so {ab} creates a new reference, and {children.ab} creates yet another new reference
+        #   so that two separate joins occur!
+        res = [{'ab.b.name': 'b1', 'children.ab.b.name': 'b2'}]
+        assert( preql('A {ab.b.name, children.ab.b.name}').json() ) == res
+
+        assert( preql('A[ab.b.name="b1", children.ab.b.name="b2"] {name}').json() ) == [{'name': 'a1'}]
+        # print( preql('A {children.ab.b.name}').json() )
+        # print( preql('A[ab.b.name="b1"] {children}').json() ) # TODO get it to work

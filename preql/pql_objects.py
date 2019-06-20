@@ -75,6 +75,19 @@ class Row(Object):
 
 @pql_object
 class Table(Object):
+    """
+    All tables (either real or ephemeral) must provide the following interface:
+        - List of columns for PQL, that are available as attributes
+        - List of columns for SQL, that will be used for query (unstructured, ofc)
+
+    Table identity is meaningful. References to the same table, under the same context,
+    should return the same table.
+
+    base_table exists so that nested autojoins will know which table to join against.
+    """
+
+
+
     @property
     def base_table(self):   # For autojoins
         return self
@@ -141,12 +154,12 @@ class Table(Object):
 
     def from_sql_tuple(self, tup):
         items = {}
-        for name, col in self.projection.items():
+        for name, col in self.sql_projection.items():
             subset = tup[:col.tuple_width]
             items[name] = col.from_sql_tuple(subset)
             tup = tup[col.tuple_width:]
 
-        assert not tup, (tup, self.projection)
+        assert not tup, (tup, self.sql_projection)
 
         return Row(self, items)
 
@@ -154,13 +167,13 @@ class Table(Object):
         return [self.from_sql_tuple(row) for row in tuples]
 
     @property
-    def projection(self):
+    def sql_projection(self):
         return {name:c for name, c in self._columns.items() 
                 if not isinstance(c.type, ast.BackRefType) or c.invoked}
 
     @property
     def tuple_width(self):
-        return len(self.projection)
+        return len(self.sql_projection)
 
     def repr(self, query_engine):
         return self._repr_table(query_engine, None)
@@ -181,12 +194,12 @@ class StoredTable(Table):
             self.__columns = {name:ColumnRef(c, self) for name, c in self.tabledef.columns.items()}
         return self.__columns
 
-    def repr(self, query_engine):
-        return self._repr_table(query_engine, self.name)
+    # def repr(self, query_engine):
+    #     return self._repr_table(query_engine, self.name)
 
     def to_sql(self, context=None):
         table_ref = sql.TableRef(self, self.name)
-        columns = [sql.ColumnAlias(sql.ColumnRef(c.name), c.sql_alias) for c in self.projection.values()]
+        columns = [sql.ColumnAlias(sql.ColumnRef(c.name), c.sql_alias) for c in self.sql_projection.values()]
         return sql.Select(self, table_ref, columns)
 
     @property
@@ -198,36 +211,44 @@ MAKE_ALIAS = iter(range(1000))
 
 @pql_object
 class JoinableTable(Table):
-    table: StoredTable
-    joins: [StoredTable] = None
+    """
+    When one of the relations/backrefs in this table is being used explicitely,
+    the method add_autojoin is called. The tables provided to add_autojoin will then 
+    be included when creating the SQL query.
+
+
+    """
+    tabledef: ast.TableDef
+    query_state: object
+
+    table = None
+    _joins = None
 
     def _init(self):
-        object.__setattr__(self, 'joins', list(self.joins or ()))   # XXX ugly but best Python can do
-
-    @property
-    def query_state(self):
-        return self.table.query_state
+        self._joins = []
+        self.table = StoredTable(self.tabledef, self.query_state)
 
     @property
     def name(self):
-        return self.table.name
+        return self.tabledef.name
 
     @property
     def _columns(self):
         return {name:ColumnRef(c.col, self, c.sql_alias) for name, c in self.table._columns.items()}
 
+    def add_autojoin(self, table, is_fwd):
+        # if (table, is_fwd) not in self._joins:    # XXX is there a point to this?
+        self._joins.append((table, is_fwd))
+
+
     def to_sql(self, context=None):
-        context = context or {}
 
+        # XXX Do this in add_autojoin?
         table = self.table
-        for fwd, join in self.joins:
-            if join not in context.get('autojoined', []):
-                table = AutoJoin([table, join] if fwd else [join, table])
-                if 'autojoined' not in context:
-                    context = {'autojoined': []}
-                context['autojoined'].append(join)
+        for to_join, is_fwd in self._joins:
+            table = AutoJoin([table, to_join], is_fwd)
 
-        return table.to_sql(context)
+        return table.to_sql()
 
 
 def make_alias(base):
@@ -271,9 +292,9 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
     col: ast.Column
     table: Table
     sql_alias: str = None
-    relation: Table = None
     pql_name: str = None
 
+    _relation = None
     backref = None
     invoked = False
     joined = False  # XXX how is it different than invoked?
@@ -281,27 +302,33 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
     def _init(self):
         if self.sql_alias is None:
             self._init_var('sql_alias', make_alias(self.col.name))  # XXX ugly but that's the best Python has to offer
-        if isinstance(self.type, ast.RelationalType):
-            relation = self.table.query_state.get_table(self.type.table_name)
-            self._init_var('relation', relation)
+
+    
+    @property
+    def relation(self):
+        assert isinstance(self.type, ast.RelationalType)
+        if self._relation is None:
+            self._relation = self.table.query_state.get_table(id(self), self.type.table_name)
+        return self._relation
 
     def invoked_by_user(self):
         if isinstance(self.type, ast.BackRefType):
             if not self.backref:
-                backref = self.table.query_state.get_table(self.col.table.name) # XXX kinda awkward
-                if (False, backref) not in self.table.joins:
-                    self.table.joins.append((False, backref))
+                backref = self.table.query_state.get_table(id(self), self.col.table.name) # XXX kinda awkward
+                self.table.add_autojoin(backref, False)
                 self.backref = backref
                 self.invoked = True
+            assert self.invoked
 
     def to_sql(self):
         if isinstance(self.type, ast.BackRefType):
-            assert self.backref
+            assert self.backref and self.invoked
+            # TODO include all fields in sql?
             return ( self.backref.get_column('id').to_sql() )
         
         if self.joined:
             assert isinstance(self.type, ast.RelationalType)
-            col_refs = [c.to_sql() for c in self.relation.projection.values()]
+            col_refs = [c.to_sql() for c in self.relation.sql_projection.values()]
             return sql.ColumnRefs(col_refs)
 
         return sql.ColumnRef(self.sql_alias)
@@ -316,17 +343,16 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
 
     def getattr(self, name):
         if isinstance(self.type, ast.BackRefType):
-            assert (False, self.backref) in self.table.joins
+            assert (self.backref, False) in self.table._joins
             col = self.backref.get_column(name)
         else:
             assert isinstance(self.type, ast.RelationalType)
-            if (True, self.relation) not in self.table.joins:
-                self.table.joins.append((True, self.relation))
+            self.table.add_autojoin(self.relation, True)
             self.joined = True
             col = self.relation.get_column(name)
 
         # TODO Store ColumnRef for correct re-use?
-        new_col = ColumnRef(col.col, col.table, col.sql_alias, col.relation, self.name + '.' + col.name)
+        new_col = ColumnRef(col.col, col.table, col.sql_alias, self.name + '.' + col.name)
         new_col.invoked_by_user()
         return new_col
 
@@ -487,9 +513,6 @@ class Query(Table):
         projection = {name:c for name, c in self.table._columns.items() 
                      if not isinstance(c.type, ast.BackRefType) or c.invoked}
 
-        # if self.fields is None:
-        #     import pdb
-        #     pdb.set_trace()
         self._fields = self.fields or list(projection.values())
         self._agg_fields = [Array(f) if not isinstance(f.type, Integer) else f
                             for f in self.agg_fields or []]  # TODO By expr type (if array or not)
@@ -650,7 +673,7 @@ class TableField(Table):
         return self.table.name
 
     def to_sql(self):
-        return sql.TableField(self, self.name, self.projection)
+        return sql.TableField(self, self.name, self.sql_projection)
 
     def invoked_by_user(self):
         pass
@@ -659,7 +682,7 @@ class TableField(Table):
         col = super().getattr(name)
         assert not isinstance(col.type, ast.BackRefType)
         # TODO Store ColumnRef for correct re-use?
-        return ColumnRef(col.col, col.table, col.sql_alias, col.relation, self.name + '.' + col.name)
+        return ColumnRef(col.col, col.table, col.sql_alias, self.name + '.' + col.name)
 
 
 def create_autojoin(*args, **kwargs):
@@ -669,6 +692,7 @@ def create_autojoin(*args, **kwargs):
 @pql_object
 class AutoJoin(Table):
     tables: [Table]
+    is_fwd: bool = True
 
     name = '<Autojoin>'
 
@@ -683,6 +707,8 @@ class AutoJoin(Table):
     def to_sql(self, context=None):
         tables = self.tables
         assert len(tables) == 2
+        if not self.is_fwd:
+            tables = list(reversed(tables))    # Necessary distinction for self-reference
 
         ids =       [list(t.base_table.cols_by_type(ast.IdType).items()) for t in tables]
         relations = [list(t.base_table.cols_by_type(ast.RelationalType).values())

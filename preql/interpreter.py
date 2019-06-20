@@ -96,16 +96,17 @@ class EvalAst:
         with self.context.push(args=args):
             return self._eval(ast_node)
 
-    def get_table(self, name):
-        if name not in self._tables:
-            self._tables[name] = pql.JoinableTable( pql.StoredTable( self.state.namespace[name], self ) )
-        return self._tables[name]
+    def get_table(self, base_table, name):
+        key = base_table, name
+        if key not in self._tables:
+            self._tables[key] = pql.JoinableTable(   self.state.namespace[name], self   )
+        return self._tables[key]
 
     def Reference(self, ref: ast.Reference):
         if ref.name in self.state.namespace:
             obj = self.state.namespace[ref.name]
             if isinstance(obj, ast.TableDef):
-                obj = pql.JoinableTable(pql.StoredTable(obj, self))   # TODO generic interface?
+                obj = pql.JoinableTable(obj, self)   # TODO generic interface?
         else:
             try:
                 args = self.context.get('args')
