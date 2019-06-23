@@ -42,10 +42,11 @@ class ToAST(Transformer):
         return table
 
     typemod = as_args(list)
-    def col_def(self, name, type_, typemod, backref):
+    def col_def(self, name, type_, backref):
+        type_, nullable = type_
         if backref:
-            assert isinstance(type_, ast.RelationalType) # TODO nice error
-        return ast.Column(name, backref, typemod and '?' in typemod, False, type=type_)
+            assert isinstance(type_, (ast.RelationalType, ast.ManyToManyType)) # TODO nice error
+        return ast.Column(name, backref, nullable, False, type=type_)
 
     # Add Row
     arguments = as_args(list)
@@ -152,17 +153,28 @@ class ToAST(Transformer):
     def array(self, v):
         return ast.Value(v, ast.ArrayType(ast.AnyType()))
 
-    typename = str
-    def type(self, typename):
-        # return Type.from_str(typename), typemod
+    def m2m(self, type_):
+        type_, nullable = type_
+        if not isinstance(type_, ast.RelationalType):
+            raise NotImplementedError("Doesn't support arrays yet")
+        assert not nullable
+
+        return ast.ManyToManyType(type_), False
+
+    typemod = as_args(list)
+    def type(self, name, typemod):
+        nullable = '?' in (typemod or [])
         try:
-            return {
+            type_ = {
                 "integer": ast.IntegerType,
                 "string": ast.StringType,
                 "float": ast.FloatType,
-            }[typename]()
+            }[name]()
         except KeyError:
-            return ast.RelationalType(typename)
+            type_ = ast.RelationalType(name)
+
+        # TODO this should return a type, not tuple
+        return type_, nullable
 
     # Operations
     compare_op = str

@@ -40,11 +40,15 @@ class TabularType(ValueType):
 
 @dataclass
 class RelationalType(Type):  # TablularType?
-    "Signifies a relationship between tables"
+    "Signifies a simple foreignkey relationship between tables"
 
     table_name: str
     column_name: str = 'id'
     # backref_name: str
+
+@dataclass
+class ManyToManyType(Type):
+    to_table: RelationalType
 
 @dataclass
 class BackRefType(Type):

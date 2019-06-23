@@ -12,8 +12,12 @@ as_: "as" name
 
 table_def: "table" name ":" _NL _INDENT table_def_stmt+ _DEDENT
 ?table_def_stmt: col_def
-col_def: name ":" type [typemod] ["->" name] _NL
-type: name
+col_def: name ":" coltype ["->" name] _NL
+?coltype: type
+        | m2m
+type: name [typemod]
+m2m: "[" type "]"
+
 typemod: PK | NULLABLE
 
 func_def: name [func_params] "=" expr _NL

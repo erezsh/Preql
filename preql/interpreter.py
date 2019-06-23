@@ -38,6 +38,8 @@ class CompileSQL_Stmts:
             return c
         elif isinstance(column.type, ast.BackRefType):
             return None
+        elif isinstance(column.type, ast.ManyToManyType):
+            return None
         elif isinstance(column.type, ast.IdType):
             return f'{column.name} INTEGER{mod}'
         else:
@@ -134,7 +136,7 @@ class EvalAst:
 
         cols = [c.name
                 for c in table.columns.values()
-                if not isinstance(c.type, (ast.BackRefType, ast.IdType))]
+                if not isinstance(c.type, (ast.BackRefType, ast.IdType, ast.ManyToManyType))]
 
         values = self._eval_list(newrow.args.pos_args)
 
@@ -277,9 +279,13 @@ class Interpreter:
 
         for c in table.columns.values():
             if c.backref:
-                assert isinstance(c.type, ast.RelationalType), c
-                ref_to = self.state.namespace[c.type.table_name]
-                backrefs.append((ref_to, ast.Column(c.backref, c.name, False, False, type=ast.BackRefType(table.name), table=table)))
+                if isinstance(c.type, ast.ManyToManyType):
+                    ref_to = self.state.namespace[c.type.to_table.table_name]
+                    backrefs.append((ref_to, ast.Column(c.backref, c.name, False, False, type=ast.ManyToManyType(ast.RelationalType(table.name)), table=table)))
+                else:
+                    assert isinstance(c.type, ast.RelationalType), c
+                    ref_to = self.state.namespace[c.type.table_name]
+                    backrefs.append((ref_to, ast.Column(c.backref, c.name, False, False, type=ast.BackRefType(table.name), table=table)))
 
         for ref_to, col in backrefs:
             assert col.name not in ref_to.columns

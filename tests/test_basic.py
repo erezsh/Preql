@@ -169,3 +169,27 @@ class BasicTests(TestCase):
         assert( preql('A[ab.b.name="b1", children.ab.b.name="b2"] {name}').json() ) == [{'name': 'a1'}]
         # print( preql('A {children.ab.b.name}').json() )
         # print( preql('A[ab.b.name="b1"] {children.name}').json() ) # TODO get it to work
+
+    # def test_m2m_syntax(self):
+    #     preql = Preql()
+    #     preql.exec('''
+    #         table A:
+    #             name: string
+    #             parent: A? -> children
+
+    #         table B:
+    #             name: string
+    #             parent: B? -> children
+    #             a_set: [A] -> b_set
+
+    #     ''')
+
+    #     a1 = preql('new A("a1", null)').row_id
+    #     a2 = preql('new A("a2", a1)', a1=a1).row_id
+    #     a3 = preql('new A("a3", a1)', a1=a1).row_id
+
+    #     b1 = preql('new B("b1", null)').row_id
+    #     b2 = preql('new B("b2", null)').row_id
+
+        
+        # print( preql('new B:a_set', b1=b1) )
