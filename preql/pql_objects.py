@@ -567,6 +567,10 @@ class Query(Table):
 
 
 
+def is_null(expr):
+    return sql.Compare('is', [expr, sql.null])
+def is_not_null(expr):
+    return sql.Compare('is not', [expr, sql.null])
 
 @pql_object
 class Compare(Object): # TODO Op? Function?
@@ -580,11 +584,28 @@ class Compare(Object): # TODO Op? Function?
         nulls = any(expr is null for expr in self.exprs)
         if nulls:
             assert self.op == '='   # XXX others not supported right now
-            op = ' is '
+            op = 'is'
+            # != -> is not
         else:
             op = self.op
 
-        return sql.Compare(op, [e.to_sql() for e in self.exprs])
+        exprs = [e.to_sql() for e in self.exprs]
+        compare = sql.Compare(op, exprs)
+
+        if op == '!=':
+            # XXX Very hacky!!!
+            # Exists to override SQL behavior where (a != b) is NULL if one of them is NULL
+
+            assert not nulls
+            assert len(exprs) == 2
+            e1, e2 = exprs
+            compare = sql.Arith('OR', [
+                compare,
+                sql.Arith('AND', [is_null(e1), is_not_null(e2)]),
+                sql.Arith('AND', [is_null(e2), is_not_null(e1)]),
+              ])
+
+        return compare
 
 @pql_object
 class Arith(Object): # TODO Op? Function?

@@ -156,12 +156,13 @@ class Interface:
                     logging.exception(e)
                     continue
 
+
                 if isinstance(res, pql.Object):
                     res = res.repr(self.interp) 
 
                 # Print
                 print(res)
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             print('Exiting Preql interaction')
 
 

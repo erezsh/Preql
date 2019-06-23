@@ -100,8 +100,15 @@ class BasicTests(TestCase):
             ])
 
         res = [{'a': 0, 'b': 0}, {'a': 1, 'b': 2}, {'a': 2, 'b': 4}, {'a': 3, 'b': 6}, {'a': 4, 'b': 8}]
+
         assert (preql('A_B {a: a.value, b: b.value}').json()) == res
+
+        res = [{'a': 0, 'b': 0}, {'a': 1, 'b': 2}, {'a': 2, 'b': 4}, {'a': 3, 'b': 6}, {'a': 4, 'b': 8},
+               {'a': 5, 'b': None}, {'a': 6, 'b': None}, {'a': 7, 'b': None}, {'a': 8, 'b': None}, {'a': 9, 'b': None}]
         assert (preql('A {a: value, b: ab.b.value}').json()) == res
+
+        res = [{'a': 0, 'b': 0}, {'a': None, 'b': 1}, {'a': 1, 'b': 2}, {'a': None, 'b': 3}, {'a': 2, 'b': 4},
+               {'a': None, 'b': 5}, {'a': 3, 'b': 6}, {'a': None, 'b': 7}, {'a': 4, 'b': 8}, {'a': None, 'b': 9}]
         assert (preql('B {a: ab.a.value, b: value}').json()) == res
 
         assert (preql('B [ab.a.value=2] {value}').json()) == [{'value': 4}]
@@ -130,10 +137,14 @@ class BasicTests(TestCase):
         assert (preql('Person[name="Jacob"] {name: parent.name}').json()) == [{'name': 'Isaac'}]
         # assert (preql('Person[name="Jacob"] {name: parent.parent.name}').json()) == [{'name': 'Abraham'}] # TODO
 
-        res = [{'name': 'Abraham', 'count_children': 1}, {'name': 'Isaac', 'count_children': 2}]
-        assert ( preql('Person {name => count(children)}').json()) == res
+        res = [{'name': 'Abraham', 'c': 1}, {'name': 'Isaac', 'c': 2}]
+        assert ( preql('Person {name => c: count(children)} [c>0]').json()) == res
 
-        res = [{'name': 'Abraham', 'children.name': ['Isaac']}, {'name': 'Isaac', 'children.name': ['Jacob', 'Esau']}]
+        res = [{'name': 'Abraham', 'children.name': ['Isaac']},
+               {'name': 'Esau', 'children.name': []},
+               {'name': 'Isaac', 'children.name': ['Esau', 'Jacob']},
+               {'name': 'Jacob', 'children.name': []}]
+
         assert ( preql('Person {name => children.name}').json()) == res
 
         # assert ( preql('Person {name => children.name}').json()) == res
@@ -171,7 +182,11 @@ class BasicTests(TestCase):
         # * get_attr should returns a new table, but cached, according to the originating table
         #   so {ab} creates a new reference, and {children.ab} creates yet another new reference
         #   so that two separate joins occur!
-        res = [{'ab.b.name': 'b1', 'children.ab.b.name': 'b2'}]
+        # res = [{'ab.b.name': 'b1', 'children.ab.b.name': 'b2'}]
+        res = [{'ab.b.name': 'b1', 'children.ab.b.name': None},
+               {'ab.b.name': 'b1', 'children.ab.b.name': 'b2'},
+               {'ab.b.name': 'b2', 'children.ab.b.name': None},
+               {'ab.b.name': None, 'children.ab.b.name': None}]
         assert( preql('A {ab.b.name, children.ab.b.name}').json() ) == res
 
         assert( preql('A[ab.b.name="b1", children.ab.b.name="b2"] {name}').json() ) == [{'name': 'a1'}]

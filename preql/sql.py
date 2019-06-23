@@ -117,7 +117,7 @@ class Compare(Sql):
 
     def compile(self):
         elems = [e.compile().text for e in self.exprs]
-        compare = self.op.join(elems)
+        compare = (' %s ' % self.op).join(elems)
         return CompiledSQL(compare, bool)    # TODO proper type
 
 @sqlclass
@@ -126,7 +126,8 @@ class Arith(Sql):
     exprs: [Sql]
 
     def compile(self):
-        return CompiledSQL(self.op.join(e.compile().text for e in self.exprs), self)    # TODO derive proper type
+        x = (' %s ' % self.op).join(e.compile().text for e in self.exprs)
+        return CompiledSQL('(%s)'%x, self)    # TODO derive proper type
 
 @sqlclass
 class Neg(Sql):
