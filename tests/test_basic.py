@@ -53,7 +53,7 @@ class BasicTests(TestCase):
         assert preql.population_count2().json() == res  # XXX automatic name might change
 
         res = [{'name': 'England', 'citizens.name': ['Eric Blaire', 'H.G. Wells']},
-               {'name': 'Israel', 'citizens.name': ['Erez Shinan', 'Ephraim Kishon']},
+               {'name': 'Israel', 'citizens.name': ['Ephraim Kishon', 'Erez Shinan']},
                {'name': 'United States', 'citizens.name': ['John Steinbeck']}]
         assert preql.citizens_list().json() == res
 
@@ -69,6 +69,11 @@ class BasicTests(TestCase):
 
         res = [{'c': 1, 'name': ['United States']}, {'c': 2, 'name': ['England', 'Israel']}]
         assert preql('Country {name => c: count(citizens)} {c => name}').json() == res
+
+        # Test that empty countries are still included (i.e left-join, not inner join)
+        aus = preql('new Country("Australia", "mumbo-jumbo")').row_id
+        assert preql('Country {name => c: count(citizens)} [name="Australia"]').json() == [{'name': 'Australia', 'c': 0}]
+        assert preql('Country {name => names: citizens.name} [name="Australia"]').json() == [{'name': 'Australia', 'names': []}]
 
     def test_m2m(self):
         preql = Preql()

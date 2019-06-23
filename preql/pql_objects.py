@@ -746,7 +746,10 @@ class AutoJoin(Table):
         src_table, rel, dst_table = to_join
 
         tables = [src_table.to_sql(context), dst_table.to_sql(context)]
+        if not self.is_fwd:
+            tables.reverse()    # XXX hacky
+
         key_col = src_table.base_table.get_column(rel.name).sql_alias
         dst_id = dst_table.base_table.get_column('id').sql_alias
         conds = [sql.Compare('=', [sql.ColumnRef(key_col), sql.ColumnRef(dst_id)])]
-        return sql.Join(self, tables, conds)
+        return sql.Join(self, tables, conds, '' if self.is_fwd else 'left')

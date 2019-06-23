@@ -93,6 +93,8 @@ class MakeArray(Sql):
         return CompiledSQL(f'group_concat({self.field.compile().text}, "{self._sp}")', self)
 
     def import_value(self, value):
+        if value is None:
+            return []
         return value.split(self._sp)
 
 @sqlclass
@@ -249,10 +251,12 @@ class Join(Sql):
     type: object
     tables: list
     conds: [Sql]
+    join_op: str
 
     def compile(self):
         tables_sql = ['(%s)' % (t.compile().text) for t in self.tables]
-        join_sql = ' JOIN '.join(e for e in tables_sql)
+        join_op = ' %s JOIN ' % self.join_op.upper()
+        join_sql = join_op.join(e for e in tables_sql)
 
         join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)
 
