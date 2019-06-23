@@ -67,6 +67,9 @@ class BasicTests(TestCase):
         # print( preql.person_and_country_join().json() )   # TODO
         # print( preql.person_and_country_freejoin().json() )
 
+        res = [{'c': 1, 'name': ['United States']}, {'c': 2, 'name': ['England', 'Israel']}]
+        assert preql('Country {name => c: count(citizens)} {c => name}').json() == res
+
     def test_m2m(self):
         preql = Preql()
         preql.exec('''

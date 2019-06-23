@@ -20,7 +20,8 @@ pql_object = make_define_decorator(Object)
 
 
 class Function(Object):
-    pass
+    def invoked_by_user(self):
+        pass    # XXX More complicated than that?
 
 class Null(Object):
     def repr(self, query_engine):
@@ -286,6 +287,10 @@ class ColumnValueRef(ColumnRefBase):   # The new ColumnRef?
         # new_col.invoked_by_user()
         # return new_col
 
+    @property
+    def invoked(self):
+        return self.expr.invoked
+
 
 @pql_object
 class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
@@ -507,7 +512,7 @@ class Query(Table):
 
     def _init(self):
         for f in self.fields or []:
-            if isinstance(f.type, ast.BackRefType) or isinstance(f.type, Integer): # XXX Do correct type check
+            if isinstance(f.type, ast.BackRefType): # or isinstance(f.type, Integer): # XXX Do correct type check
                 raise TypeError('Misplaced column "%s". Aggregated columns must appear after the aggregation operator "=>" ' % f.name)
 
         self._fields = self.fields or list(self.table._columns.values())
@@ -550,9 +555,11 @@ class Query(Table):
         )
 
     def from_sql_tuple(self, tup):
+        fields = [f for f in self._fields + self._agg_fields
+                  if not isinstance(f.type, ast.BackRefType) or f.invoked ]
         tup = [v if not isinstance(f.type, ast.ArrayType)
                  else f.from_sql_tuple([sql.MakeArray(None).import_value(v)])  # XXX hackish
-                 for f, v in safezip(self._fields + self._agg_fields, tup)]
+                 for f, v in safezip(fields, tup)]
         return super().from_sql_tuple(tup)
 
     def repr(self, query_engine):
