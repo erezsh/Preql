@@ -72,6 +72,9 @@ class Row(Object):
     def __repr__(self):
         return self.repr()
 
+    def getattr(self, attr):
+        return self.attrs[attr]
+
 
 
 @pql_object
@@ -179,6 +182,11 @@ class Table(Object):
     def repr(self, query_engine):
         return self._repr_table(query_engine, None)
 
+    def __repr__(self):
+        assert False
+        return '%s:%s { %s }' % (type(self).__name__, self.name, self._columns)
+
+
 @pql_object
 class StoredTable(Table):
     tabledef: ast.TableDef
@@ -206,6 +214,9 @@ class StoredTable(Table):
     @property
     def name(self):
         return self.tabledef.name
+
+    def __repr__(self):
+        return 'StoredTable(%s)' % self.name
 
 
 MAKE_ALIAS = iter(range(1000))
@@ -237,19 +248,22 @@ class JoinableTable(Table):
     def _columns(self):
         return {name:ColumnRef(c.col, self, c.sql_alias) for name, c in self.table._columns.items()}
 
-    def add_autojoin(self, table, is_fwd):
+    def add_autojoin(self, table, is_fwd, col):
         # if (table, is_fwd) not in self._joins:    # XXX is there a point to this?
-        self._joins.append((table, is_fwd))
+        self._joins.append((table, is_fwd, col))
 
 
     def to_sql(self, context=None):
 
         # XXX Do this in add_autojoin?
         table = self.table
-        for to_join, is_fwd in self._joins:
-            table = AutoJoin([table, to_join], is_fwd)
+        for to_join, is_fwd, col in self._joins:
+            table = AutoJoin([table, to_join], is_fwd, col)
 
         return table.to_sql()
+
+    def __repr__(self):
+        return 'JoinableTable(%s)' % self.name
 
 
 def make_alias(base):
@@ -320,7 +334,7 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
         if isinstance(self.type, ast.BackRefType):
             if not self.backref:
                 backref = self.table.query_state.get_table(id(self), self.col.table.name) # XXX kinda awkward
-                self.table.add_autojoin(backref, False)
+                self.table.add_autojoin(backref, False, self)
                 self.backref = backref
                 self.invoked = True
             assert self.invoked
@@ -348,11 +362,11 @@ class ColumnRef(ColumnRefBase):   # TODO proper hierarchy
 
     def getattr(self, name):
         if isinstance(self.type, ast.BackRefType):
-            assert (self.backref, False) in self.table._joins
+            assert (self.backref, False, self) in self.table._joins
             col = self.backref.get_column(name)
         else:
             assert isinstance(self.type, ast.RelationalType)
-            self.table.add_autojoin(self.relation, True)
+            self.table.add_autojoin(self.relation, True, self)
             self.joined = True
             col = self.relation.get_column(name)
 
@@ -583,9 +597,10 @@ class Compare(Object): # TODO Op? Function?
         assert len(self.exprs) == 2  # XXX Otherwise NULL handling needs to be smarter
         nulls = any(expr is null for expr in self.exprs)
         if nulls:
-            assert self.op == '='   # XXX others not supported right now
-            op = 'is'
-            # != -> is not
+            op = {
+                '=': 'is',
+                '!=': 'is not',
+            }[self.op]
         else:
             op = self.op
 
@@ -668,11 +683,29 @@ class NamedExpr(Object):   # XXX this is bad but I'm lazy
 
 @pql_object
 class RowRef(Object):
-    relation: object
+    table: object
     row_id: int
+    _query_engine: object
 
     def to_sql(self):
         return sql.Primitive(Integer, str(self.row_id)) # XXX type = table?
+
+    def getattr(self, attr):
+        if attr == 'id':
+            return self.row_id
+
+        # TODO check column exists in table
+        # TODO use Pql object instead of constructing sql myself?
+        table = self._query_engine.eval_expr(self.table.name, {})
+        query = Query(table,
+                      conds=[Compare('=', [table._columns['id'], Integer(self.row_id)])],
+                      fields=[table._columns[attr]]
+                      )
+        res ,= query.query(self._query_engine)
+        return res.getattr(attr)
+
+    def repr(self):
+        return 'RowRef(table=%r, id=%d)' % (self.table, self.row_id)
 
 
 @pql_object
@@ -722,6 +755,7 @@ def create_autojoin(*args, **kwargs):
 class AutoJoin(Table):
     tables: [Table]
     is_fwd: bool = True
+    col: ColumnRefBase = None
 
     name = '<Autojoin>'
 
@@ -740,8 +774,7 @@ class AutoJoin(Table):
             tables = list(reversed(tables))    # Necessary distinction for self-reference
 
         ids =       [list(t.base_table.cols_by_type(ast.IdType).items()) for t in tables]
-        relations = [list(t.base_table.cols_by_type(ast.RelationalType).values())
-                     for t in tables]
+        relations = [list(t.base_table.cols_by_type(ast.RelationalType).values()) for t in tables]
 
         ids0, ids1 = ids
         id0 ,= ids0
@@ -754,8 +787,9 @@ class AutoJoin(Table):
         table1 = id0[1].type.table
         table2 = id1[1].type.table
 
-        to_join  = [(name1, c, name2) for c in relations[0] if c.type.table_name == table2]
-        to_join += [(name2, c, name1) for c in relations[1] if c.type.table_name == table1]
+        col_name = self.col.col.backref
+        to_join  = [(name1, c, name2) for c in relations[0] if c.type.table_name == table2 and (self.is_fwd or c.name==col_name)]
+        to_join += [(name2, c, name1) for c in relations[1] if c.type.table_name == table1 and (self.is_fwd or c.name==col_name)]
 
         if len(to_join) == 2 and list(reversed(to_join[1])) == list(to_join[0]):    # TODO XXX ugly hack!! This won't scale, figure out how to prevent this case
             to_join = to_join[:1]

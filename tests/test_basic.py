@@ -71,7 +71,7 @@ class BasicTests(TestCase):
         assert preql('Country {name => c: count(citizens)} {c => name}').json() == res
 
         # Test that empty countries are still included (i.e left-join, not inner join)
-        aus = preql('new Country("Australia", "mumbo-jumbo")').row_id
+        aus = preql('new Country("Australia", "mumbo-jumbo")').id
         assert preql('Country {name => c: count(citizens)} [name="Australia"]').json() == [{'name': 'Australia', 'c': 0}]
         assert preql('Country {name => names: citizens.name} [name="Australia"]').json() == [{'name': 'Australia', 'names': []}]
 
@@ -129,10 +129,10 @@ class BasicTests(TestCase):
                 parent: Person? -> children
         ''')
 
-        abraham = preql('new Person("Abraham", null)').row_id
-        isaac = preql('new Person("Isaac", ab)', ab=abraham).row_id
-        jacob = preql('new Person("Jacob", isaac)', isaac=isaac).row_id
-        esau = preql('new Person("Esau", isaac)', isaac=isaac).row_id
+        abraham = preql('new Person("Abraham", null)').id
+        isaac = preql('new Person("Isaac", ab)', ab=abraham).id
+        jacob = preql('new Person("Jacob", isaac)', isaac=isaac).id
+        esau = preql('new Person("Esau", isaac)', isaac=isaac).id
 
         assert (preql('Person[name="Jacob"] {name: parent.name}').json()) == [{'name': 'Isaac'}]
         # assert (preql('Person[name="Jacob"] {name: parent.parent.name}').json()) == [{'name': 'Abraham'}] # TODO
@@ -166,15 +166,15 @@ class BasicTests(TestCase):
 
         ''')
 
-        a1 = preql('new A("a1", null)').row_id
-        a2 = preql('new A("a2", a1)', a1=a1).row_id
-        a3 = preql('new A("a3", a1)', a1=a1).row_id
+        a1 = preql('new A("a1", null)').id
+        a2 = preql('new A("a2", a1)', a1=a1).id
+        a3 = preql('new A("a3", a1)', a1=a1).id
 
-        b1 = preql('new B("b1", null)').row_id
-        b2 = preql('new B("b2", null)').row_id
+        b1 = preql('new B("b1", null)').id
+        b2 = preql('new B("b2", null)').id
 
-        preql('new A_B(a1, b1)', a1=a1, b1=b1).row_id
-        preql('new A_B(a2, b2)', a2=a2, b2=b2).row_id
+        preql('new A_B(a1, b1)', a1=a1, b1=b1).id
+        preql('new A_B(a2, b2)', a2=a2, b2=b2).id
 
         # TODO Table identity is messed up!
         # The rules should be as followed (at least for now):

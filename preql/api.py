@@ -15,13 +15,12 @@ class SqliteEngine(SqlEngine):
         self._conn = sqlite3.connect(filename or ':memory:')
         self._debug = debug
 
-    def query(self, sql):
-        dargs = {}
+    def query(self, sql, qargs=(), quiet=False):
         c = self._conn.cursor()
-        if self._debug:
+        if self._debug and not quiet:
             for i, s in enumerate(sql.split('\n')):
                 print('    ' if i else 'SQL>', s)
-        c.execute(sql, dargs)
+        c.execute(sql, qargs)
         return c.fetchall()
 
     def addmany(self, table, cols, values):
@@ -54,7 +53,10 @@ class RowWrapper:
         return self._row.repr()
 
     def __getitem__(self, item):
-        return self._row.attrs[item]
+        return self._row.getattr(item)
+
+    def __getattr__(self, attr):
+        return self[attr]
 
 
 class TableWrapper:
@@ -85,9 +87,10 @@ def python_to_pql(value):
     assert False, value
 
 class Interface:
-    def __init__(self, db_uri=None):
+    def __init__(self, db_uri=None, debug=True):
         # TODO actually parse uri
-        self.interp = Interpreter(SqliteEngine(db_uri))
+        self.engine = SqliteEngine(db_uri, debug=debug)
+        self.interp = Interpreter(self.engine)
 
     def exec(self, q, *args, **kw):
         return self.interp.execute_code(q, *args, **kw)
@@ -102,6 +105,8 @@ class Interface:
         "Wraps Preql result in a Python-friendly object"
         if isinstance(res, pql.Table):
             return TableWrapper(res, self.interp)
+        elif isinstance(res, pql.RowRef):
+            return RowWrapper(res)
         return res
 
 
@@ -130,6 +135,9 @@ class Interface:
                 for c in self.interp.state.namespace[table].columns.values()
                 if not isinstance(c.type, (ast.BackRefType, ast.IdType))]
         return self.interp.sqlengine.addmany(table, cols, values)
+
+    def add(self, table, values):
+        return self.add_many(table, [values])
 
     def start_repl(self):
         from prompt_toolkit import prompt

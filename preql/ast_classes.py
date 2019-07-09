@@ -264,5 +264,7 @@ class Column(Expr, Declaration):
     def to_tree(self):
         return '-> %s.%s' % (self.table.name, self.name)
 
+    def __repr__(self):
+        return 'Column(%s, ...)' % self.name
 
 

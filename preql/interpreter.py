@@ -148,7 +148,7 @@ class EvalAst:
         assert not self.query_engine.query(insert)
 
         rowid = self.query_engine.query(sql.LastRowId())
-        return pql.RowRef(table, rowid)
+        return pql.RowRef(table, rowid, self.query_engine)
 
 
 
