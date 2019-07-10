@@ -177,7 +177,14 @@ class ToAST(Transformer):
         return type_, nullable
 
     # Operations
+    def contains_op(self, *args):
+        return ' '.join(args)
+
+    def contains(self, a, op, b):
+        return ast.Contains(op, [a, b])
+
     compare_op = str
+
     def compare(self, a, op, b):
         return ast.Compare(op, [a, b])
 

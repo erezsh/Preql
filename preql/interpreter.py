@@ -206,6 +206,11 @@ class EvalAst:
             return expr
         return pql.NamedExpr(ne.name, expr)
 
+    def Contains(self, contains: ast.Contains):
+        exprs = self._eval_list(contains.exprs)
+        assert len(exprs) == 2
+        return pql.Contains(contains.op, exprs)
+
     def Compare(self, cmp: ast.Compare):
         exprs = self._eval_list(cmp.exprs)
         assert len(exprs) == 2

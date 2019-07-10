@@ -75,6 +75,9 @@ class TableWrapper:
 
     def __iter__(self):
         return (RowWrapper(row) for row in self._query())
+
+    def __len__(self):
+        return self._pql_table.count(self._interp).value
     
 
 def python_to_pql(value):

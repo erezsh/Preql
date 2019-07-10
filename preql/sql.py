@@ -105,6 +105,17 @@ class RoundField(Sql):
     def compile(self):
         return CompiledSQL(f'round({self.field.compile().text})', self)
 
+@sqlclass
+class Contains(Sql):
+    op: str
+    exprs: [Sql]
+
+    def compile(self):
+        assert self.op
+        elems = ['(%s)' % e.compile().text for e in self.exprs]
+        contains = (' %s ' % self.op).join(elems)
+        return CompiledSQL(contains, bool)    # TODO proper type
+
 
 @sqlclass
 class Compare(Sql):

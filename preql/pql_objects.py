@@ -587,6 +587,19 @@ def is_not_null(expr):
     return sql.Compare('is not', [expr, sql.null])
 
 @pql_object
+class Contains(Object):
+    op: str
+    exprs: list
+
+    type = ast.BoolType()
+
+    def to_sql(self):
+        assert len(self.exprs) == 2
+        exprs = [e.to_sql() for e in self.exprs]
+        return sql.Contains(self.op, exprs)
+
+
+@pql_object
 class Compare(Object): # TODO Op? Function?
     op: str
     exprs: list

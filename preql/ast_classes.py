@@ -112,6 +112,11 @@ class Compare(Expr):
     exprs: list
 
 @dataclass
+class Contains(Expr):
+    op: str
+    exprs: list
+
+@dataclass
 class Value(Expr):
     value: object
     type: ValueType

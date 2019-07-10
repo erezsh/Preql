@@ -30,13 +30,14 @@ projection: molecule "{" proj_exprs ["=>" proj_exprs] "}"
 proj_exprs: named_expr ("," named_expr)*
 
 
-?expr: compare
+?expr: contains
 
-?compare: compare compare_op arith_expr
-        | arith_expr
+!contains_op: "in" | "not" "in"
+?contains: (contains contains_op)? compare
 
-?arith_expr: arith_expr arith_op molecule
-           | molecule
+?compare: (compare compare_op)? arith_expr
+
+?arith_expr: (arith_expr arith_op)? molecule
 
 !arith_op: "+" | "*"
 
