@@ -25,6 +25,12 @@
 
 # More stuff
 
+- Differenciate between join and left-join according to ! or ?
+
+- smart not-in ("in" is a simple join, but "not in" requires a separate query)
+
+- auto rename sql-keywords (to allow column names like "group")
+
 - Table.count() = count(self)
 
 - Enums

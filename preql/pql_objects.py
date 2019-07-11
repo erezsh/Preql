@@ -219,7 +219,7 @@ class StoredTable(Table):
         return 'StoredTable(%s)' % self.name
 
 
-MAKE_ALIAS = iter(range(1000))
+MAKE_ALIAS = iter(range(100000))
 
 @pql_object
 class JoinableTable(Table):
@@ -250,8 +250,9 @@ class JoinableTable(Table):
 
     def add_autojoin(self, table, is_fwd, col):
         # if (table, is_fwd) not in self._joins:    # XXX is there a point to this?
-        self._joins.append((table, is_fwd, col))
-
+        join = (table, is_fwd, col)
+        if join not in self._joins:
+            self._joins.append(join)
 
     def to_sql(self, context=None):
 
