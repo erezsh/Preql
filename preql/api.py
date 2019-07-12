@@ -58,6 +58,11 @@ class RowWrapper:
     def __getattr__(self, attr):
         return self[attr]
 
+    def __getstate__(self):
+        return self._row
+    def __setstate__(self, x):
+        self._row = x
+
 
 class TableWrapper:
     def __init__(self, pql_table, interp):

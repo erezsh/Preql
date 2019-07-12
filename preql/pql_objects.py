@@ -75,6 +75,13 @@ class Row(Object):
     def getattr(self, attr):
         return self.attrs[attr]
 
+    def __getstate__(self):
+        # TODO pickle table (real issue is sql connection)
+        return self.attrs
+
+    def __setstate__(self, state):
+        object.__setattr__(self, 'attrs', state)
+
 
 
 @pql_object
