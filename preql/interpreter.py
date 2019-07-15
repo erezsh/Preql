@@ -145,7 +145,7 @@ class EvalAst:
         # # TODO verify types
 
         insert = sql.Insert(table.name, cols, [v.to_sql() for v in values])
-        assert not self.query_engine.query(insert)
+        assert not self.query_engine.query(insert, commit=True)
 
         rowid = self.query_engine.query(sql.LastRowId())
         return pql.RowRef(table, rowid, self.query_engine)
@@ -330,8 +330,11 @@ class Interpreter:
         obj = EvalAst(self.state, self).eval(funccall)
         return obj
 
-    def query(self, sql: Sql):
-        return self._query_as_struct(sql.compile())
+    def query(self, sql: Sql, commit=False):
+        res = self._query_as_struct(sql.compile())
+        if commit:
+            self.sqlengine.commit()
+        return res
 
     def eval_expr(self, code, args):
         expr_ast = parse_expr(code)

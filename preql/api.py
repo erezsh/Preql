@@ -23,6 +23,9 @@ class SqliteEngine(SqlEngine):
         c.execute(sql, qargs)
         return c.fetchall()
 
+    def commit(self):
+        self._conn.commit()
+
     def addmany(self, table, cols, values):
         assert all(len(v)==len(cols) for v in values)
 
@@ -57,6 +60,9 @@ class RowWrapper:
 
     def __getattr__(self, attr):
         return self[attr]
+
+    def __iter__(self):
+        return iter(self._row)
 
     def __getstate__(self):
         return self._row
@@ -142,10 +148,13 @@ class Interface:
         cols = [c.name
                 for c in self.interp.state.namespace[table].columns.values()
                 if not isinstance(c.type, (ast.BackRefType, ast.IdType))]
-        return self.interp.sqlengine.addmany(table, cols, values)
+        return self.engine.addmany(table, cols, values)
 
     def add(self, table, values):
         return self.add_many(table, [values])
+
+    def commit(self):
+        return self.engine.commit()
 
     def start_repl(self):
         from prompt_toolkit import prompt
