@@ -306,7 +306,7 @@ class Interpreter:
         if addrow.as_:
             rowid ,= self.sqlengine.query('SELECT last_insert_rowid();')[0]
             table = self.state.namespace[addrow.table]
-            v = pql.RowRef(table, rowid)
+            v = pql.RowRef(table, rowid, self)
             self.state.namespace[addrow.as_] = v
 
     def _def_function(self, func: ast.FunctionDef):

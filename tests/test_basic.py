@@ -63,7 +63,7 @@ class BasicTests(TestCase):
                {'id': 4, 'name': 'H.G. Wells', 'country.name': 'England'},
                {'id': 5, 'name': 'John Steinbeck', 'country.name': 'United States'}]
 
-        assert preql.person_and_country().json() == res
+        assert preql.person_and_country().json() == res, preql.person_and_country().json()
         # print( preql.person_and_country_join().json() )   # TODO
         # print( preql.person_and_country_freejoin().json() )
 

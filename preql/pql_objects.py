@@ -226,7 +226,6 @@ class StoredTable(Table):
         return 'StoredTable(%s)' % self.name
 
 
-MAKE_ALIAS = iter(range(100000))
 
 @pql_object
 class JoinableTable(Table):
@@ -274,6 +273,7 @@ class JoinableTable(Table):
         return 'JoinableTable(%s)' % self.name
 
 
+MAKE_ALIAS = iter(range(2**32))
 def make_alias(base):
     return base.replace('.', '_') + str(next(MAKE_ALIAS))
 
@@ -680,7 +680,7 @@ class NamedExpr(Object):   # XXX this is bad but I'm lazy
         try:
             return self.expr.name
         except AttributeError:
-            self._init_var('_name', type(self.expr).__name__ + str(next(MAKE_ALIAS)))  # XXX ugly but that's the best Python has to offer
+            self._init_var('_name', make_alias(type(self.expr).__name__))  # XXX ugly but that's the best Python has to offer
             return self._name
 
     @property

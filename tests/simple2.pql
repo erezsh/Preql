@@ -27,8 +27,9 @@ country_by_language = Country {language => name}
 population_count = Person {country.name => count(id)}
 population_count2 = Country {name => count(citizens)}
 
-# citizens_list = Country {name => citizens.name}     # array_agg
+citizens_list = Country {name => citizens.name}
 
+person_and_country = Person {id, name, country.name}
 
 
 explicit_join = (
