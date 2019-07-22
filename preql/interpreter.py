@@ -145,7 +145,8 @@ class EvalAst:
         # # TODO verify types
 
         insert = sql.Insert(table.name, cols, [v.to_sql() for v in values])
-        assert not self.query_engine.query(insert, commit=True)
+        # assert not self.query_engine.query(insert, commit=True)
+        assert not self.query_engine.query(insert, commit=False)
 
         rowid = self.query_engine.query(sql.LastRowId())
         return pql.RowRef(table, rowid, self.query_engine)

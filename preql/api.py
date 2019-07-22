@@ -27,7 +27,7 @@ class SqliteEngine(SqlEngine):
         self._conn.commit()
 
     def addmany(self, table, cols, values):
-        assert all(len(v)==len(cols) for v in values)
+        assert all(len(v)==len(cols) for v in values), (cols, values[0])
 
         c = self._conn.cursor()
         qmarks = ','.join(['?'] * len(cols))
