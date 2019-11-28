@@ -1,0 +1,111 @@
+stmts: _NL? stmt+
+?stmt: (table_def | struct_def | func_def | var_decl | print | expr) //| add_row
+
+table_def: "table" name "{" _sep? col_defs? "}" _NL
+col_defs: (col_def _sep)* col_def _sep?
+col_def: name ":" coltype ["->" expr]
+?coltype: type
+        | m2m
+type: name [typemod]
+m2m: "[" type "]"
+
+struct_def: "struct" name "{" _sep? member_defs? "}" _NL
+member_defs: (member_def _sep)* member_def _sep?
+member_def: name ":" type
+
+
+typemod: PK | NULLABLE
+
+func_def: "func" name func_params "=" expr _NL
+var_decl: name "=" expr _NL
+print: "print" expr _NL
+func_params: "(" (param ("," param)*)? ")"
+param: name    // TODO type? default value?
+
+_sep: "," | "," _NL | _NL
+expr_list: (expr _sep)* expr
+selection: molecule "[" expr_list "]"
+
+projection: molecule "{" proj_exprs "}"
+          | molecule "{" proj_exprs _NL? "=>" _NL? proj_exprs "}" -> projection_grouped
+          | molecule "{" "=>" _NL? proj_exprs "}" -> projection_grouped_nokeys
+          | molecule "{" proj_exprs _NL? "=>" "}" -> projection_grouped_novalues
+
+proj_exprs: named_expr (_sep named_expr)* _sep?
+
+order: molecule "order" "{" expr_list "}"
+
+
+?expr: contains | like
+
+like: molecule "~" molecule
+
+!contains_op: "in" | "not" "in"
+?contains: (contains contains_op)? compare
+
+?compare: (compare compare_op)? arith_expr
+
+?arith_expr: (arith_expr arith_op)? molecule
+
+!arith_op: "+" | "*" | "-" | "/" | "&" | "|"
+
+!compare_op: "<" | ">" | "==" | "!=" | "<>" | ">=" | "<="
+?molecule: atom
+     | func_call
+     | getattr
+     | list
+     | selection
+     | projection
+     | order
+     | var
+     | "(" expr ")"
+     | "-" molecule -> neg
+     | "^" molecule -> desc
+     | new
+
+list: "[" molecule (_sep molecule)* "]"
+
+new: "new" name _func_args
+func_call: molecule _func_args
+_func_args: "(" func_args ")"
+func_args: (named_expr ("," named_expr)*)?
+
+named_expr: [name ":"] expr
+
+?atom: SIGNED_INT -> int
+      | SIGNED_FLOAT -> float
+      | STRING -> string
+      | "null" -> null
+      | range
+
+range: SIGNED_INT? ".." SIGNED_INT
+     | SIGNED_INT ".." SIGNED_INT?
+
+
+getattr: molecule "." name
+name: NAME
+var: name
+
+PK: "pk"
+NULLABLE: "?"
+COMMENT: /#[^\n]*/
+_NL: ( /\r?\n[\t ]*/ | COMMENT )+
+
+DECIMAL: INT "." INT
+       | INT "." /(?![.])/
+       | "." INT
+
+_EXP: ("e"|"E") SIGNED_INT
+FLOAT: INT _EXP
+     | DECIMAL _EXP?
+SIGNED_FLOAT: ["+"|"-"] FLOAT
+SIGNED_INT: ["+"|"-"] INT
+
+
+%import common.CNAME -> NAME
+%import common.WS_INLINE
+%import common.INT
+%import common.ESCAPED_STRING -> STRING
+%ignore WS_INLINE
+%ignore /\\[\t \f]*\r?\n/   // LINE_CONT
+%ignore COMMENT
