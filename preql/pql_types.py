@@ -30,6 +30,9 @@ class Primitive(PqlType):
         item ,= row
         return item
 
+    def restructure_result(self, i):
+        return next(i)
+
 primitives_by_pytype = {}
 
 # TODO nullable!!!
@@ -96,11 +99,30 @@ class TableType(Collection):
     def params(self):
         return [c for c in self.columns.values() if c.is_concrete and not c.readonly]
 
+    def flat_length(self):
+        # Maybe memoize
+        return len(self.flatten())
+
+    def import_result(self, arr):
+        return list(self._import_result(arr))
+
+    def _import_result(self, arr):
+        expected_length = self.flat_length()
+        for row in arr:
+            assert len(row) == expected_length
+            i = iter(row)
+            s = ({name: col.type.restructure_result(i) for name, col in self.columns.items()})
+            yield s
+
+
+
 @dataclass
 class StructType(Collection):
     name: str
     members: Dict[str, PqlType]
 
+    def restructure_result(self, i):
+        return ({name: col.restructure_result(i) for name, col in self.members.items()})
 
 
 @dataclass

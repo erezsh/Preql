@@ -183,7 +183,6 @@ def simplify(state: State, c: ast.Const):
 def simplify(state: State, c: ast.Arith):
     return ast.Arith(c.op, simplify_list(state, c.args))
 
-i=0
 @dy
 def simplify(state: State, c: objects.List_):
     return objects.List_(simplify_list(state, c.elems))
@@ -264,10 +263,15 @@ def compile_remote(state: State, lst: objects.List_):
 
     code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
     inst = instanciate_table(state, table_type, code, elems)
-    return add_with(state, inst)
+    return add_as_subquery(state, inst)
+
+@dy
+def compile_remote(state: State, t: types.TableType):
+    i = instanciate_table(state, t, sql.TableName(t, t.name), [])
+    return add_as_subquery(state, i)
 
 
-def add_with(state: State, inst: objects.Instance):
+def add_as_subquery(state: State, inst: objects.Instance):
     name = get_alias(state, inst)
     new_inst = objects.Instance(sql.Name(inst.code.type, name), inst.type, inst.subqueries.update({name: inst.code}))
     return new_inst

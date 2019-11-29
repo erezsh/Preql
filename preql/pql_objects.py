@@ -8,7 +8,7 @@ from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError
 from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType
 from .pql_ast import Expr
-from .sql import Sql
+from .sql import Sql, RawSql
 
 # Functions
 @dataclass
@@ -94,8 +94,8 @@ class Instance:
     subqueries: SafeDict
 
     @classmethod
-    def make(cls, code, type_, instances):
-        return cls(code, type_, merge_subqueries(instances))
+    def make(cls, code, type_, instances, *extra):
+        return cls(code, type_, merge_subqueries(instances), *extra)
 
 
 @dataclass
@@ -116,11 +116,16 @@ class DatumColumnInstance(ColumnInstance):
 class StructColumnInstance(ColumnInstance):
     members: dict
 
+    def flatten(self):
+        return [atom for m in self.members.values() for atom in m.flatten()]
+
 
 def make_column_instance(code, type_):
     if isinstance(type_, StructColumnType):
-        import pdb
-        pdb.set_trace()
+        members = {name: make_column_instance(RawSql(member.type, code.text+'_'+name), member)
+                   for name, member in type_.members.items()}
+        print("@@", members)
+        return StructColumnInstance.make(code, type_, [], members)
     else:
         return DatumColumnInstance.make(code, type_, [])
     assert False, type_
