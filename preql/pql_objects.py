@@ -112,6 +112,9 @@ class DatumColumnInstance(ColumnInstance):
     def flatten(self):
         return [self]
 
+    def remake(self, code):
+        return type(self)(code, self.type, self.subqueries)
+
 @dataclass
 class StructColumnInstance(ColumnInstance):
     members: dict

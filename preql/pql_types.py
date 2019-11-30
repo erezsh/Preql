@@ -132,6 +132,9 @@ class DatumColumnType(ColumnType):
     def remake(self, name):
         return type(self)(name, self.type, self.primary_key, self.readonly)
 
+    def restructure_result(self, i):
+        return self.type.restructure_result(i)
+
 @dataclass
 class StructColumnType(ColumnType):
     name: str

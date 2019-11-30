@@ -26,8 +26,8 @@ _sep: "," | "," _NL | _NL
 expr_list: (expr _sep)* expr
 selection: molecule "[" expr_list "]"
 
-projection: molecule "{" proj_exprs "}"
-          | molecule "{" proj_exprs _NL? "=>" _NL? proj_exprs "}" -> projection_grouped
+projection: molecule "{" _NL? proj_exprs _NL? "}"
+          | molecule "{" _NL? proj_exprs _NL? "=>" _NL? proj_exprs _NL? "}" -> projection_grouped
           | molecule "{" "=>" _NL? proj_exprs "}" -> projection_grouped_nokeys
           | molecule "{" proj_exprs _NL? "=>" "}" -> projection_grouped_novalues
 

@@ -334,6 +334,9 @@ def guess_field_name(f):
         return guess_field_name(f.expr) + "." + f.name
     elif isinstance(f, ast.Name):
         return f.name
+    elif isinstance(f, ast.Projection): # a restructre within a projection
+        return guess_field_name(f.table)
+
     assert False, f
 
 
@@ -375,11 +378,19 @@ class Aggregated(ast.Ast):
 def compile_remote(state: State, proj: ast.Projection):
     table = compile_remote(state, proj.table)
 
-    with state.use_scope(table.columns):
+    columns = table.members if isinstance(table, objects.StructColumnInstance) else table.columns
+
+    with state.use_scope(columns):
         fields = _process_fields(state, proj.fields)
 
-    with state.use_scope({n:Aggregated(c) for n,c in table.columns.items()}):
+    with state.use_scope({n:Aggregated(c) for n,c in columns.items()}):
         agg_fields = _process_fields(state, proj.agg_fields)
+
+    if isinstance(table, objects.StructColumnInstance):
+        members = {name: inst.type for name, (inst, _a) in fields + agg_fields}
+        struct_type = types.StructType(get_alias(state, table.type.name + "_proj"), members)
+        struct_col_type = types.make_column("<this is meaningless?>", struct_type)
+        return objects.make_column_instance(table.code, struct_col_type, [table])
 
     # Make new type
     all_aliases = []
@@ -429,6 +440,9 @@ def compile_remote(state: State, attr: ast.Attr):
 
 @dy
 def compile_remote(state: State, obj: objects.StructColumnInstance):
+    return obj
+@dy
+def compile_remote(state: State, obj: objects.DatumColumnInstance):
     return obj
 
 
