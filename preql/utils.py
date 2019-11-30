@@ -1,5 +1,6 @@
 from typing import _GenericAlias as TypeBase, Any, Union
 from dataclasses import dataclass as _dataclass
+from functools import wraps
 
 def _isinstance(a, b):
     try:
@@ -62,3 +63,11 @@ def safezip(*args):
 
 def split_at_index(arr, idx):
     return arr[:idx], arr[idx:]
+
+
+def listgen(f):
+    @wraps(f)
+    def _f(*args, **kwargs):
+        return list(f(*args, **kwargs))
+    return _f
+

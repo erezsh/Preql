@@ -212,11 +212,14 @@ class SelectValue(Atom):
         return self._compile(f'SELECT {value.text} as value')
 
 
+class AllFields(Sql):
+    def compile(self):
+        return self._compile('*')
+
 @dataclass
 class Select(Table):
-    type: object
     table: Table
-    fields: List[Sql] = ()
+    fields: List[Sql]
     conds: List[Sql] = ()
     group_by: List[Sql] = ()
     order: List[Sql] = ()

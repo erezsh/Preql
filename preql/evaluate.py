@@ -15,6 +15,8 @@
 #         simplify (compute) into the final result
 
 from typing import List, Optional, Any
+from contextlib import contextmanager
+
 from .dispatchy import Dispatchy
 
 from .exceptions import pql_NameNotFound
@@ -70,6 +72,16 @@ class State:
         s.ns = [dict(n) for n in self.ns]
         s.tick = self.tick
         return s
+
+    @contextmanager
+    def use_scope(self, **kwds):
+        x = len(self.ns)
+        self.ns.append(kwds)
+        try:
+            yield
+        finally:
+            self.ns.pop()
+            assert x == len(self.ns)
 
 
 
@@ -169,6 +181,11 @@ def execute(state: State, p: ast.Print):
 
 
 
+# TODO Is simplify even helpful? Why not just compile everything?
+#      evaluate() already compiles anyway, so what's the big deal?
+#      an "optimization" for local tree folding can be added later,
+#      and also prevent compiling lists (which simplify doesn't prevent)
+
 @dy
 def simplify(state: State, n: ast.Name):
     # Don't recurse simplify, to allow granular dereferences
@@ -190,6 +207,19 @@ def simplify(state: State, c: objects.List_):
 @dy
 def simplify(state: State, c: ast.Compare):
     return ast.Compare(c.op, simplify_list(state, c.args))
+
+@dy
+def simplify(state: State, c: ast.Selection):
+    table = simplify(state, c.table)
+    # conds evaluation requires and instance, which is only available in the compilation phase
+    return ast.Selection(table, c.conds)
+
+# @dy
+# def simplify(state: State, attr: ast.Attr):
+#     print("##", attr.expr)
+#     expr = simplify(state, attr.expr)
+#     print("##", expr)
+#     return ast.Attr(expr, attr.name)
 
 def simplify_list(state, x):
     return [simplify(state, e) for e in x]
@@ -270,10 +300,48 @@ def compile_remote(state: State, t: types.TableType):
     i = instanciate_table(state, t, sql.TableName(t, t.name), [])
     return add_as_subquery(state, i)
 
+@dy
+def compile_remote(state: State, sel: ast.Selection):
+    table = compile_remote(state, sel.table)
+
+    with state.use_scope(**table.columns):
+        conds = compile_remote(state, sel.conds)
+
+    code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], conds=[c.code for c in conds])
+    # inst = instanciate_table(state, table.type, code, [table] + conds)
+    inst = objects.TableInstance.make(code, table.type, [table] + conds, table.columns)
+    return add_as_subquery(state, inst)
+
+
+@dy
+def compile_remote(state: State, lst: list):
+    return [compile_remote(state, e) for e in lst]
+
+@dy
+def compile_remote(state: State, cmp: ast.Compare):
+    op = {
+        '==': '='
+    }.get(cmp.op, cmp.op)
+    code = sql.Compare(types.Bool, op, [e.code for e in compile_remote(state, cmp.args)])
+    return objects.Instance.make(code, types.Bool, [])
+
+@dy
+def compile_remote(state: State, attr: ast.Attr):
+    inst = compile_remote(state, attr.expr)
+    return inst.get_attr(attr.name)
+
+@dy
+def compile_remote(state: State, obj: objects.StructColumnInstance):
+    return obj
+
+
 
 def add_as_subquery(state: State, inst: objects.Instance):
     name = get_alias(state, inst)
-    new_inst = objects.Instance(sql.Name(inst.code.type, name), inst.type, inst.subqueries.update({name: inst.code}))
+    if isinstance(inst, objects.TableInstance):
+        new_inst = objects.TableInstance(sql.TableName(inst.code.type, name), inst.type, inst.subqueries.update({name: inst.code}), inst.columns)
+    else:
+        new_inst = objects.Instance(sql.Name(inst.code.type, name), inst.type, inst.subqueries.update({name: inst.code}))
     return new_inst
 
 def evaluate(state, obj):

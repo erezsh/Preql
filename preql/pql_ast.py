@@ -61,7 +61,7 @@ class TableOperation(Expr): pass
 
 @dataclass
 class Selection(TableOperation):
-    table: Expr
+    table: (Expr, types.PqlType)    # XXX find a single base-class
     conds: List[Expr]
 
 @dataclass

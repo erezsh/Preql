@@ -18,7 +18,7 @@ class SqliteInterface(SqlInterface):
         assert isinstance(sql, Sql), sql
         if subqueries:
             subqs = [f"{name} AS ({q.compile().text})" for (name, q) in subqueries.items()]
-            sql_code = 'WITH ' + '     , '.join(subqs) + '\nSELECT * FROM '
+            sql_code = 'WITH ' + ',\n     '.join(subqs) + '\nSELECT * FROM '
         else:
             sql_code = ''
         compiled = sql.compile()

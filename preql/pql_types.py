@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional, Any
 
-from .utils import dataclass
+from .utils import dataclass, listgen
 
 class PqlObject:    # XXX should be in a base module
     "Any object that the user might interact with through the language, as so has to behave like an object inside Preql"
@@ -103,17 +103,14 @@ class TableType(Collection):
         # Maybe memoize
         return len(self.flatten())
 
+    @listgen
     def import_result(self, arr):
-        return list(self._import_result(arr))
-
-    def _import_result(self, arr):
         expected_length = self.flat_length()
         for row in arr:
             assert len(row) == expected_length
             i = iter(row)
             s = ({name: col.type.restructure_result(i) for name, col in self.columns.items()})
             yield s
-
 
 
 @dataclass

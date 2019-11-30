@@ -119,12 +119,14 @@ class StructColumnInstance(ColumnInstance):
     def flatten(self):
         return [atom for m in self.members.values() for atom in m.flatten()]
 
+    def get_attr(self, name):
+        return self.members[name]
+
 
 def make_column_instance(code, type_):
     if isinstance(type_, StructColumnType):
         members = {name: make_column_instance(RawSql(member.type, code.text+'_'+name), member)
                    for name, member in type_.members.items()}
-        print("@@", members)
         return StructColumnInstance.make(code, type_, [], members)
     else:
         return DatumColumnInstance.make(code, type_, [])
