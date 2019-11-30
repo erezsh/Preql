@@ -129,6 +129,9 @@ class DatumColumnType(ColumnType):
     primary_key: bool = False
     readonly: bool = False
 
+    def remake(self, name):
+        return type(self)(name, self.type, self.primary_key, self.readonly)
+
 @dataclass
 class StructColumnType(ColumnType):
     name: str
@@ -137,6 +140,9 @@ class StructColumnType(ColumnType):
 
     def flatten(self):
         return [atom for col in self.members.values() for atom in col.flatten()]
+
+    def remake(self, name):
+        return type(self)(name, self.type, self.members)
 
 @dataclass
 class RelationalColumnType(ColumnType):

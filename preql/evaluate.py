@@ -19,7 +19,7 @@ from contextlib import contextmanager
 
 from .dispatchy import Dispatchy
 
-from .exceptions import pql_NameNotFound
+from .exceptions import pql_NameNotFound, pql_TypeError
 from .utils import safezip, dataclass
 from . import pql_types as types
 from . import pql_objects as objects
@@ -74,9 +74,9 @@ class State:
         return s
 
     @contextmanager
-    def use_scope(self, **kwds):
+    def use_scope(self, scope: dict):
         x = len(self.ns)
-        self.ns.append(kwds)
+        self.ns.append(scope)
         try:
             yield
         finally:
@@ -210,9 +210,16 @@ def simplify(state: State, c: ast.Compare):
 
 @dy
 def simplify(state: State, c: ast.Selection):
+    # TODO: merge nested selection
     table = simplify(state, c.table)
-    # conds evaluation requires and instance, which is only available in the compilation phase
     return ast.Selection(table, c.conds)
+
+@dy
+def simplify(state: State, p: ast.Projection):
+    # TODO: unite nested projection
+    table = simplify(state, p.table)
+    return ast.Projection(table, p.fields, p.groupby, p.agg_fields)
+
 
 # @dy
 # def simplify(state: State, attr: ast.Attr):
@@ -304,12 +311,102 @@ def compile_remote(state: State, t: types.TableType):
 def compile_remote(state: State, sel: ast.Selection):
     table = compile_remote(state, sel.table)
 
-    with state.use_scope(**table.columns):
+    with state.use_scope(table.columns):
         conds = compile_remote(state, sel.conds)
 
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], conds=[c.code for c in conds])
     # inst = instanciate_table(state, table.type, code, [table] + conds)
     inst = objects.TableInstance.make(code, table.type, [table] + conds, table.columns)
+    return add_as_subquery(state, inst)
+
+
+def _ensure_col_instance(i):
+    if isinstance(i, objects.ColumnInstance):
+        return i
+    elif isinstance(i, objects.Instance):
+        if isinstance(i.type, types.Primitive):
+            return objects.make_column_instance(i.code, types.make_column(i.type, '_anonymous_instance'))
+    assert False
+
+
+def guess_field_name(f):
+    if isinstance(f, ast.Attr):
+        return guess_field_name(f.expr) + "." + f.name
+    elif isinstance(f, ast.Name):
+        return f.name
+    assert False, f
+
+
+def _process_fields(state: State, fields):
+    "Returns {var_name: (col_instance, sql_alias)}"
+    processed_fields = {}
+    for f in fields:
+        if f.name in processed_fields:
+            raise pql_TypeError(f"Field '{f.name}' was already used in this projection")
+
+        suggested_name = f.name if f.name else guess_field_name(f.value)
+        name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
+        sql_friendly_name = name.replace(".", "_")
+        unique_name = name
+        i = 1
+        while unique_name in processed_fields:
+            i += 1
+            unique_name = name + str(i)
+
+        v = compile_remote(state, f.value)
+
+        # TODO move to ColInstance
+        if isinstance(v, Aggregated):
+            expr = _ensure_col_instance(v.expr)
+            v = objects.ColumnInstance(Sql("group_concat($(expr.code.text))"), expr.type, [expr])
+        elif isinstance(v, objects.TableInstance):
+            t = types.make_column(name, types.StructType(v.name, v.members))
+            v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
+        v = _ensure_col_instance(v)
+        processed_fields[unique_name] = v, get_alias(state, sql_friendly_name)   # TODO Don't create new alias for fields that don't change?
+
+    return list(processed_fields.items())
+
+@dataclass
+class Aggregated(ast.Ast):
+    expr: types.PqlObject
+
+@dy
+def compile_remote(state: State, proj: ast.Projection):
+    table = compile_remote(state, proj.table)
+
+    with state.use_scope(table.columns):
+        fields = _process_fields(state, proj.fields)
+
+    with state.use_scope({n:Aggregated(c) for n,c in table.columns.items()}):
+        agg_fields = _process_fields(state, proj.agg_fields)
+
+    # Make new type
+    all_aliases = []
+    new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), {}, True)
+    for name, (remote_col, alias) in fields + agg_fields:
+        new_col_type = remote_col.type.remake(name=name)
+        new_table_type.add_column(new_col_type)
+        ci = objects.make_column_instance(sql.Name(new_col_type.type, alias), new_col_type, [remote_col])
+        all_aliases.append((remote_col, ci))
+
+    # Make code
+    sql_fields = [
+        sql.ColumnAlias.make(o.code, n.code)
+        for old, new in all_aliases
+        for o, n in safezip(old.flatten(), new.flatten())
+    ]
+
+    groupby = []
+    if proj.groupby and fields:
+        groupby = [alias for _n, (_r, alias) in fields]
+
+    code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
+
+    # Make Instance
+    columns = {new.type.name:new for old, new in all_aliases}
+    inst = objects.TableInstance.make(code, new_table_type, [table], columns)
+
     return add_as_subquery(state, inst)
 
 

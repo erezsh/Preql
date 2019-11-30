@@ -87,7 +87,7 @@ class List_(Expr):
 # Other
 
 @dataclass
-class Instance:
+class Instance(PqlObject):
     code: Sql
     type: PqlType
 
@@ -123,13 +123,14 @@ class StructColumnInstance(ColumnInstance):
         return self.members[name]
 
 
-def make_column_instance(code, type_):
+def make_column_instance(code, type_, from_instances=[]):
     if isinstance(type_, StructColumnType):
-        members = {name: make_column_instance(RawSql(member.type, code.text+'_'+name), member)
+        struct_sql_name = code.compile().text
+        members = {name: make_column_instance(RawSql(member.type, struct_sql_name+'_'+name), member)
                    for name, member in type_.members.items()}
-        return StructColumnInstance.make(code, type_, [], members)
+        return StructColumnInstance.make(code, type_, from_instances, members)
     else:
-        return DatumColumnInstance.make(code, type_, [])
+        return DatumColumnInstance.make(code, type_, from_instances)
     assert False, type_
 
 
