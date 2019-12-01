@@ -1,5 +1,5 @@
 stmts: _NL? stmt+
-?stmt: (table_def | struct_def | func_def | var_decl | print | expr) //| add_row
+?stmt: (table_def | struct_def | func_def | var_decl | print | expr _NL) //| add_row
 
 table_def: "table" name "{" _sep? col_defs? "}" _NL
 col_defs: (col_def _sep)* col_def _sep?
@@ -58,7 +58,7 @@ like: molecule "~" molecule
      | projection
      | order
      | var
-     | "(" expr ")"
+     | "(" _NL? expr _NL? ")"
      | "-" molecule -> neg
      | "^" molecule -> desc
      | new

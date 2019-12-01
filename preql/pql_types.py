@@ -25,10 +25,10 @@ class Primitive(PqlType):
     def __created__(self):
         primitives_by_pytype[self.pytype] = self
 
-    def import_result(self, res):
-        row ,= res
-        item ,= row
-        return item
+    # def import_result(self, res):
+    #     row ,= res
+    #     item ,= row
+    #     return item
 
     def restructure_result(self, i):
         return next(i)
@@ -48,7 +48,7 @@ Int = Primitive('int', int, False)
 Float = Primitive('float', float, False)
 String = Primitive('string', str, False)
 Bool = Primitive('bool', bool, False)
-Date = Primitive('date', str, False)   # XXX datetime?
+# Date = Primitive('date', str, False)   # XXX datetime?
 
 # Collections
 
@@ -65,9 +65,17 @@ class ListType(Collection):
     def name(self):
         return 'list_%s' % self.elemtype.name
 
-    def import_result(self, arr):
-        assert all(len(e)==1 for e in arr)
-        return [e[0] for e in arr]
+    # def import_result(self, arr):
+    #     assert all(len(e)==1 for e in arr)
+    #     return [e[0] for e in arr]
+
+    def restructure_result(self, res):
+        # return next(res)
+        x = next(res)
+        return x
+
+    def flat_length(self):
+        return 1
 
 @dataclass
 class SetType(Collection):
@@ -103,14 +111,14 @@ class TableType(Collection):
         # Maybe memoize
         return len(self.flatten())
 
-    @listgen
-    def import_result(self, arr):
-        expected_length = self.flat_length()
-        for row in arr:
-            assert len(row) == expected_length
-            i = iter(row)
-            s = ({name: col.type.restructure_result(i) for name, col in self.columns.items()})
-            yield s
+    # @listgen
+    # def import_result(self, arr):
+    #     expected_length = self.flat_length()
+    #     for row in arr:
+    #         assert len(row) == expected_length
+    #         i = iter(row)
+    #         s = ({name: col.type.restructure_result(i) for name, col in self.columns.items()})
+    #         yield s
 
 
 @dataclass

@@ -9,11 +9,12 @@ class Expr(Ast): pass
 
 class Statement(Ast): pass
 
+from lark import Token
 
 @dataclass
 class Name(Expr):
     "Reference to an object (table, tabledef, column (in `where`), instance, etc.)"
-    name: str
+    name: Token
 
 
 @dataclass
@@ -66,7 +67,7 @@ class Selection(TableOperation):
 
 @dataclass
 class Projection(TableOperation):
-    table: Expr
+    table: (Expr, types.PqlType)    # XXX etc.
     fields: List[NamedField]
     groupby: bool = False
     agg_fields: List[NamedField] = ()
@@ -120,6 +121,11 @@ class StructDef(Statement, Definition):
 class VarDef(Statement):
     name: str
     value: Expr
+
+@dataclass
+class FuncDef(Statement):
+    userfunc: types.PqlObject   # XXX Why not use UserFunction?
+
 
 @dataclass
 class Print(Statement):

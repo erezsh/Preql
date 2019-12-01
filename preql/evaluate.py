@@ -31,10 +31,7 @@ Sql = sql.Sql
 dy = Dispatchy()
 
 def _initial_namespace():
-    return {
-        'int': types.Int,
-        'str': types.String,
-    }
+    return {p.name: p for p in types.primitives_by_pytype.values()}
 
 class State:
     def __init__(self, db, fmt):
@@ -49,7 +46,11 @@ class State:
             if name in scope:
                 return scope[name]
 
-        raise pql_NameNotFound(name)
+        meta = dict(
+            line = name.line,
+            column = name.column,
+        )
+        raise pql_NameNotFound(name, meta)
 
     def set_var(self, name, value):
         self.ns[-1][name] = value
@@ -88,7 +89,7 @@ class State:
 
 @dy
 def resolve(state: State, struct_def: ast.StructDef):
-    members = {k:resolve(state, v) for k, v in struct_def.members}
+    members = {str(k):resolve(state, v) for k, v in struct_def.members}
     struct = types.StructType(struct_def.name, members)
     state.set_var(struct_def.name, struct)
     return struct
@@ -158,25 +159,38 @@ def compile_type(type: types.Primitive):
 
 
 @dy
-def execute(state: State, struct_def: ast.StructDef):
+def _execute(state: State, struct_def: ast.StructDef):
     resolve(state, struct_def)
 
 @dy
-def execute(state: State, table_def: ast.TableDef):
+def _execute(state: State, table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
     sql = compile_type(t)
     state.db.query(sql)
 
 @dy
-def execute(state: State, var_def: ast.VarDef):
+def _execute(state: State, var_def: ast.VarDef):
     res = simplify(state, var_def.value)
     state.set_var(var_def.name, res)
 
 @dy
-def execute(state: State, p: ast.Print):
+def _execute(state: State, func_def: ast.FuncDef):
+    # res = simplify(state, func_def.value)
+    func = func_def.userfunc
+    assert isinstance(func, objects.UserFunction)
+    state.set_var(func.name, func)
+
+@dy
+def _execute(state: State, p: ast.Print):
     res = evaluate(state, p.value)
     print(res)
+
+
+def execute(state, stmt):
+    if isinstance(stmt, ast.Statement):
+        return _execute(state, stmt)
+    return evaluate(state, stmt)
 
 
 
@@ -195,6 +209,26 @@ def simplify(state: State, n: ast.Name):
 @dy
 def simplify(state: State, c: ast.Const):
     return c
+
+# @dy
+# def simplify(state: State, a: ast.Attr):
+#     print("@@@@@", a)
+#     return a
+
+@dy
+def simplify(state: State, funccall: ast.FuncCall):
+    func = simplify(state, funccall.func)
+
+    matched = func.match_params(funccall.args)
+    if isinstance(func, objects.UserFunction):
+        args = [(p, simplify(state, a)) for p, a in matched]
+        with state.use_scope({p.name:a for p,a in args}):
+            return simplify(state, func.expr)
+    else:
+        assert False
+
+
+
 
 @dy
 def simplify(state: State, c: ast.Arith):
@@ -251,10 +285,11 @@ def simplify(state: State, new: ast.New):
     for k, v in matched:
         if isinstance(k.type, types.StructType):
             v = evaluate(state, v)
+            v = [x['value'] for x in v] # does it matter if value? Any 1-column table should be fine
             for k2, v2 in safezip(k.flatten(), v):
                 destructured_pairs.append((k2, v2))
         else:
-            destructured_pairs.append((k, v))
+            destructured_pairs.append((k, v.value))
 
     keys = [k.name for (k,_) in destructured_pairs]
     values = [sql_repr(v) for (_,v) in destructured_pairs]
@@ -333,7 +368,7 @@ def guess_field_name(f):
     if isinstance(f, ast.Attr):
         return guess_field_name(f.expr) + "." + f.name
     elif isinstance(f, ast.Name):
-        return f.name
+        return str(f.name)
     elif isinstance(f, ast.Projection): # a restructre within a projection
         return guess_field_name(f.table)
 
@@ -347,7 +382,7 @@ def _process_fields(state: State, fields):
         if f.name in processed_fields:
             raise pql_TypeError(f"Field '{f.name}' was already used in this projection")
 
-        suggested_name = f.name if f.name else guess_field_name(f.value)
+        suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
         sql_friendly_name = name.replace(".", "_")
         unique_name = name
@@ -356,12 +391,15 @@ def _process_fields(state: State, fields):
             i += 1
             unique_name = name + str(i)
 
+
         v = compile_remote(state, f.value)
 
         # TODO move to ColInstance
         if isinstance(v, Aggregated):
             expr = _ensure_col_instance(v.expr)
-            v = objects.ColumnInstance(Sql("group_concat($(expr.code.text))"), expr.type, [expr])
+            list_type = types.ListType(expr.type.type)
+            col_type = types.make_column(get_alias(state, "list"), list_type)
+            v = objects.make_column_instance(sql.MakeArray(list_type, expr.code), col_type, [expr])
         elif isinstance(v, objects.TableInstance):
             t = types.make_column(name, types.StructType(v.name, v.members))
             v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
@@ -373,6 +411,9 @@ def _process_fields(state: State, fields):
 @dataclass
 class Aggregated(ast.Ast):
     expr: types.PqlObject
+
+    def get_attr(self, name):
+        return Aggregated(self.expr.get_attr(name))
 
 @dy
 def compile_remote(state: State, proj: ast.Projection):
@@ -410,7 +451,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
     groupby = []
     if proj.groupby and fields:
-        groupby = [alias for _n, (_r, alias) in fields]
+        groupby = [sql.Name(rc.type.type, alias) for _n, (rc, alias) in fields]
 
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
@@ -444,6 +485,9 @@ def compile_remote(state: State, obj: objects.StructColumnInstance):
 @dy
 def compile_remote(state: State, obj: objects.DatumColumnInstance):
     return obj
+@dy
+def compile_remote(state: State, obj: Aggregated):
+    return obj
 
 
 
@@ -471,14 +515,12 @@ def localize(state, inst):
     return res
 
 
-@dy
-def get_alias(state: State, s: str):
-    state.tick += 1
-    return s + str(state.tick)
+def get_alias(state: State, obj):
+    if isinstance(obj, objects.TableInstance):
+        return get_alias(state, obj.type.name)
 
-@dy
-def get_alias(state: State, ti: objects.TableInstance):
-    return get_alias(state, ti.type.name)
+    state.tick += 1
+    return obj + str(state.tick)
 
 def instanciate_column(state: State, c: types.ColumnType):
     return objects.make_column_instance(RawSql(c.type, get_alias(state, c.name)), c)

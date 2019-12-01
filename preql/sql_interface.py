@@ -1,5 +1,7 @@
 from .sql import Sql, CompiledSQL
 
+from .pql_types import Primitive    # XXX Code smell?
+
 class SqlInterface:
     pass
 
@@ -20,7 +22,10 @@ class SqliteInterface(SqlInterface):
             subqs = [f"{name} AS ({q.compile().text})" for (name, q) in subqueries.items()]
             sql_code = 'WITH ' + ',\n     '.join(subqs) + '\nSELECT * FROM '
         else:
-            sql_code = ''
+            if isinstance(sql.type, Primitive):
+                sql_code = 'SELECT '
+            else:
+                sql_code = ''
         compiled = sql.compile()
         sql_code += compiled.text
         c = self._conn.cursor()
@@ -29,7 +34,7 @@ class SqliteInterface(SqlInterface):
         c.execute(sql_code, qargs)
         res = c.fetchall()
         try:
-            imp = compiled.sql.type.import_result
+            imp = compiled.sql.import_result
         except AttributeError:
             return res
 

@@ -1,6 +1,6 @@
 from typing import List, Any, Optional
 
-from .utils import dataclass, SafeDict
+from .utils import dataclass, SafeDict, listgen
 from . import pql_types as types
 
 @dataclass
@@ -39,8 +39,10 @@ null = Null(types.null)
 @dataclass
 class Atom(Sql):
 
-    def import_result(self, value):
-        return self.type(value[0][0])
+    def import_result(self, res):
+        row ,= res
+        item ,= row
+        return item
 
 
 @dataclass
@@ -52,7 +54,15 @@ class Primitive(Atom):
 
 
 class Table(Sql):
-    pass
+
+    @listgen
+    def import_result(self, arr):
+        expected_length = self.type.flat_length()
+        for row in arr:
+            assert len(row) == expected_length
+            i = iter(row)
+            s = ({name: col.type.restructure_result(i) for name, col in self.type.columns.items()})
+            yield s
 
 @dataclass
 class TableName(Table):
@@ -82,7 +92,7 @@ class MakeArray(Sql):
     field: Sql
     type = list  # TODO correct object
 
-    _sp = "\x01|\x02"
+    _sp = "|"
 
     def compile(self):
         # Sqlite Specific
@@ -90,6 +100,7 @@ class MakeArray(Sql):
         return self._compile(f'group_concat({self.field.compile().text}, "{self._sp}")')
 
     def import_result(self, value):
+        assert False
         if value is None:
             return []
         return value.split(self._sp)
@@ -192,16 +203,16 @@ class Insert(Sql):
         insert = ' '.join(q) + ';'
         return self._compile(insert)
 
-    def import_result(self, value):
-        assert not value
-        return None
+    # def import_result(self, value):
+    #     assert not value
+    #     return None
 
 @dataclass
 class LastRowId(Atom):
     type: types.PqlType = types.Int
 
     def compile(self):
-        return self._compile('SELECT last_insert_rowid()')
+        return self._compile('last_insert_rowid()')
 
 @dataclass
 class SelectValue(Atom):
@@ -255,8 +266,8 @@ class Select(Table):
 
         return self._compile(sql)
 
-    def import_result(self, value):
-        return self.type.from_sql_tuples(value)
+    # def import_result(self, value):
+    #     return self.type.from_sql_tuples(value)
 
 
 @dataclass

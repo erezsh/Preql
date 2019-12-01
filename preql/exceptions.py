@@ -5,6 +5,7 @@ class PreqlError(Exception): pass
 @dataclass
 class pql_NameNotFound(PreqlError):
     name: str
+    meta: dict
 
 @dataclass
 class pql_TypeError(PreqlError):

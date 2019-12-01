@@ -1,11 +1,12 @@
-from lark import Lark, Transformer, v_args
+from lark import Lark, Transformer, v_args, UnexpectedInput
 
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
+from .exceptions import pql_SyntaxError
 
 def token_value(_, t):
-    return t.value
+    return t #.value
 
 @v_args(inline=False)
 def as_list(_, args):
@@ -82,7 +83,7 @@ class T(Transformer):
 
     # Statements / Declarations
     param = objects.Param
-    func_def = objects.UserFunction
+    func_def = lambda self, *args: ast.FuncDef(objects.UserFunction(*args))
     var_decl = ast.VarDef
     struct_def = ast.StructDef
     table_def = ast.TableDef
@@ -104,7 +105,14 @@ parser = Lark.open(
 )
 
 def parse_stmts(s):
-    tree = parser.parse(s, start="stmts")
+    try:
+        tree = parser.parse(s+"\n", start="stmts")
+    except UnexpectedInput as e:
+        # raise pql_SyntaxError(e) from e
+        raise
+
+    # print(tree)
+
     return T().transform(tree)
 
 def parse_expr(s):

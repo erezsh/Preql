@@ -14,7 +14,7 @@ from .sql import Sql, RawSql
 @dataclass
 class Param:
     name: str
-    type: PqlType = None
+    # type: PqlType = None
 
 class Function(PqlObject):
     param_collector = None
@@ -61,8 +61,8 @@ class Function(PqlObject):
 @dataclass
 class UserFunction(Function):
     name: str
-    expr: Expr
     params: List[Param]
+    expr: Expr
     param_collector: Optional[Param] = None
 
 @dataclass
@@ -78,6 +78,7 @@ class InternalFunction(Function):
 @dataclass
 class List_(Expr):
     elems: list
+
 
 # @dataclass
 # class Dict_(Expr):
