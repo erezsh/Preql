@@ -43,7 +43,7 @@ class Function(PqlObject):
 
         for np in named_params:
             try:
-                matched.append(np, args_d.pop(np.name))
+                matched.append((np, args_d.pop(np.name)))
             except KeyError:
                 raise pql_TypeError("Parameter wasn't assigned: %s" % np.name)
 

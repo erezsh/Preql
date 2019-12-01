@@ -11,6 +11,8 @@ def _isinstance(a, b):
 def isa(obj, t):
     if t is Any or t == (Any,):
         return True
+    elif isinstance(t, tuple):
+        return any(isa(obj, opt) for opt in t)
     elif _isinstance(t, TypeBase):
         if t.__origin__ is list:
             return all(isa(item, t.__args__) for item in obj)
@@ -18,7 +20,7 @@ def isa(obj, t):
             kt, vt = t.__args__
             return all(isa(k, kt) and isa(v, vt) for k, v in obj.items())
         elif t.__origin__ is Union:
-            return _isinstance(obj, t.__args__)
+            return isa(obj, t.__args__)
         assert False, t.__origin__
     return _isinstance(obj, t)
 

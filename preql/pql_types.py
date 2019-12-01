@@ -111,6 +111,10 @@ class TableType(Collection):
         # Maybe memoize
         return len(self.flatten())
 
+    def __repr__(self):
+        # return f'TableType({self.name}, [{", ".join(list(self.columns))}])'
+        return f'TableType({self.name})'
+
     # @listgen
     # def import_result(self, arr):
     #     expected_length = self.flat_length()

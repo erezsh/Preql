@@ -11,11 +11,15 @@ class Statement(Ast): pass
 
 from lark import Token
 
+Meta = Optional[dict]
+
 @dataclass
 class Name(Expr):
     "Reference to an object (table, tabledef, column (in `where`), instance, etc.)"
-    name: Token
+    name: (Token, str)
 
+    def __repr__(self):
+        return f'Name({self.name})'
 
 @dataclass
 class Attr(Expr):

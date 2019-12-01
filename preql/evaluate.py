@@ -50,7 +50,7 @@ class State:
             line = name.line,
             column = name.column,
         )
-        raise pql_NameNotFound(name, meta)
+        raise pql_NameNotFound(str(name), meta)
 
     def set_var(self, name, value):
         self.ns[-1][name] = value
@@ -117,7 +117,7 @@ def resolve(state: State, type_: ast.Type) -> types.PqlType:
 
 
 @dy
-def compile_type(table: types.TableType) -> Sql:
+def compile_type_def(table: types.TableType) -> Sql:
     posts = []
     pks = []
     columns = []
@@ -127,7 +127,8 @@ def compile_type(table: types.TableType) -> Sql:
             type_ = compile_type(c.type)
             columns.append( f"{c.name} {type_}" )
             if isinstance(c, types.RelationalColumnType):
-                s = f"FOREIGN KEY({c.name}) REFERENCES {fk.table.name}({fk.column.name})"
+                # TODO any column, using projection / get_attr
+                s = f"FOREIGN KEY({c.name}) REFERENCES {c.type.name}(id)"
                 posts.append(s)
             if c.primary_key:
                 pks.append(c.name)
@@ -141,6 +142,10 @@ def compile_type(table: types.TableType) -> Sql:
         return RawSql(types.null, f"CREATE TEMPORARY TABLE {table.name} (" + ", ".join(columns + posts) + ")")
     else:
         return RawSql(types.null, f"CREATE TABLE if not exists {table.name} (" + ", ".join(columns + posts) + ")")
+
+@dy
+def compile_type(type: types.TableType):
+    return type.name
 
 @dy
 def compile_type(type: types.Primitive):
@@ -166,7 +171,7 @@ def _execute(state: State, struct_def: ast.StructDef):
 def _execute(state: State, table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
-    sql = compile_type(t)
+    sql = compile_type_def(t)
     state.db.query(sql)
 
 @dy
@@ -223,7 +228,8 @@ def simplify(state: State, funccall: ast.FuncCall):
     if isinstance(func, objects.UserFunction):
         args = [(p, simplify(state, a)) for p, a in matched]
         with state.use_scope({p.name:a for p,a in args}):
-            return simplify(state, func.expr)
+            r = simplify(state, func.expr)
+            return r
     else:
         assert False
 
@@ -245,14 +251,16 @@ def simplify(state: State, c: ast.Compare):
 @dy
 def simplify(state: State, c: ast.Selection):
     # TODO: merge nested selection
-    table = simplify(state, c.table)
-    return ast.Selection(table, c.conds)
+    # table = simplify(state, c.table)
+    # return ast.Selection(table, c.conds)
+    return compile_remote(state, c)
 
 @dy
 def simplify(state: State, p: ast.Projection):
     # TODO: unite nested projection
-    table = simplify(state, p.table)
-    return ast.Projection(table, p.fields, p.groupby, p.agg_fields)
+    # table = simplify(state, p.table)
+    # return ast.Projection(table, p.fields, p.groupby, p.agg_fields)
+    return compile_remote(state, p)
 
 
 # @dy
@@ -289,6 +297,7 @@ def simplify(state: State, new: ast.New):
             for k2, v2 in safezip(k.flatten(), v):
                 destructured_pairs.append((k2, v2))
         else:
+            v = simplify(state, v)
             destructured_pairs.append((k, v.value))
 
     keys = [k.name for (k,_) in destructured_pairs]
@@ -307,7 +316,18 @@ def sql_repr(x):
         return sql.null
 
     t = types.primitives_by_pytype[type(x)]
-    return RawSql(t, repr(x))
+    return sql.Primitive(t, repr(x))
+
+
+@dy # Could happen because sometimes simplify(...) calls compile_remote
+def compile_remote(state: State, i: objects.Instance):
+    return i
+@dy
+def compile_remote(state: State, i: objects.TableInstance):
+    return i
+@dy
+def compile_remote(state: State, f: ast.FuncCall):
+    return compile_remote(state, simplify(state, f))
 
 
 @dy
@@ -501,6 +521,9 @@ def add_as_subquery(state: State, inst: objects.Instance):
 
 def evaluate(state, obj):
     obj = simplify(state, obj)
+    if isinstance(obj, objects.Function):   # TODO base class on uncompilable?
+        return obj
+
     code = compile_remote(state, obj)
     res = localize(state, code)
     # if isinstance(obj, objects.List_):
