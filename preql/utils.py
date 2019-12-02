@@ -1,4 +1,4 @@
-from typing import _GenericAlias as TypeBase, Any, Union
+from typing import _GenericAlias as TypeBase, Any, Union, Callable
 from dataclasses import dataclass as _dataclass
 from functools import wraps
 
@@ -21,6 +21,8 @@ def isa(obj, t):
             return all(isa(k, kt) and isa(v, vt) for k, v in obj.items())
         elif t.__origin__ is Union:
             return isa(obj, t.__args__)
+        elif issubclass(t, Callable):
+            return callable(obj)
         assert False, t.__origin__
     return _isinstance(obj, t)
 

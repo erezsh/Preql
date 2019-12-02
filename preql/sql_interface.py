@@ -16,16 +16,19 @@ class SqliteInterface(SqlInterface):
         self._conn = sqlite3.connect(filename or ':memory:')
         self._debug = debug
 
-    def query(self, sql, subqueries=(), qargs=(), quiet=False):
+    def query(self, sql, qargs=(), quiet=False):
         assert isinstance(sql, Sql), sql
-        if subqueries:
-            subqs = [f"{name} AS ({q.compile().text})" for (name, q) in subqueries.items()]
-            sql_code = 'WITH ' + ',\n     '.join(subqs) + '\nSELECT * FROM '
+
+        # if subqueries:
+        #     assert False
+        #     subqs = [f"{name} AS ({q.compile().text})" for (name, q) in subqueries.items()]
+        #     sql_code = 'WITH ' + ',\n     '.join(subqs) + '\nSELECT * FROM '
+        # else:
+        if isinstance(sql.type, Primitive):
+            sql_code = 'SELECT '    # Only for root level
         else:
-            if isinstance(sql.type, Primitive):
-                sql_code = 'SELECT '
-            else:
-                sql_code = ''
+            sql_code = ''
+
         compiled = sql.compile()
         sql_code += compiled.text
         c = self._conn.cursor()

@@ -68,8 +68,8 @@ class UserFunction(Function):
 @dataclass
 class InternalFunction(Function):
     name: str
-    func: Callable
     params: List[Param]
+    func: Callable
     param_collector: Optional[Param] = None
 
 
@@ -141,6 +141,9 @@ def make_column_instance(code, type_, from_instances=[]):
 @dataclass
 class TableInstance(Instance):
     columns: dict
+
+    def remake(self, code):
+        return type(self)(code, self.type, self.subqueries, self.columns)
 
 
 def merge_subqueries(instances):

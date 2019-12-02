@@ -61,7 +61,7 @@ class Table(Sql):
         for row in arr:
             assert len(row) == expected_length
             i = iter(row)
-            s = ({name: col.type.restructure_result(i) for name, col in self.type.columns.items()})
+            s = ({str(name): col.type.restructure_result(i) for name, col in self.type.columns.items()})
             yield s
 
 @dataclass
@@ -245,7 +245,7 @@ class Select(Table):
         fields_sql = [f.compile() for f in self.fields]
         select_sql = ', '.join(f.text for f in fields_sql)
 
-        sql = f'SELECT {select_sql} FROM {self.table.compile().text}'
+        sql = f'SELECT {select_sql} FROM ({self.table.compile().text})'
 
         if self.conds:
             sql += ' WHERE ' + ' AND '.join(c.compile().text for c in self.conds)

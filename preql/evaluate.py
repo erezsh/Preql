@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from .dispatchy import Dispatchy
 
 from .exceptions import pql_NameNotFound, pql_TypeError
-from .utils import safezip, dataclass
+from .utils import safezip, dataclass, SafeDict
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -30,8 +30,8 @@ Sql = sql.Sql
 
 dy = Dispatchy()
 
-def _initial_namespace():
-    return {p.name: p for p in types.primitives_by_pytype.values()}
+
+
 
 class State:
     def __init__(self, db, fmt):
@@ -83,6 +83,26 @@ class State:
         finally:
             self.ns.pop()
             assert x == len(self.ns)
+
+
+def pql_limit(state: State, table: objects.TableInstance, length: objects.Instance):
+    table = compile_remote(state, table)
+    length = compile_remote(state, length)
+    code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], limit=length.code)
+    return table.remake(code=code)
+
+internal_funcs = {
+    'limit': pql_limit
+}
+
+def _initial_namespace():
+    ns = SafeDict({p.name: p for p in types.primitives_by_pytype.values()})
+    ns.update({
+        name: objects.InternalFunction(name, [
+            objects.Param(name) for name, type_ in list(f.__annotations__.items())[1:]
+        ], f) for name, f in internal_funcs.items()
+    })
+    return ns
 
 
 
@@ -225,13 +245,13 @@ def simplify(state: State, funccall: ast.FuncCall):
     func = simplify(state, funccall.func)
 
     matched = func.match_params(funccall.args)
+    args = [(p, simplify(state, a)) for p, a in matched]
     if isinstance(func, objects.UserFunction):
-        args = [(p, simplify(state, a)) for p, a in matched]
         with state.use_scope({p.name:a for p,a in args}):
             r = simplify(state, func.expr)
             return r
     else:
-        assert False
+        return func.func(state, *[v for k,v in args])
 
 
 
@@ -355,12 +375,14 @@ def compile_remote(state: State, lst: objects.List_):
 
     code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
     inst = instanciate_table(state, table_type, code, elems)
-    return add_as_subquery(state, inst)
+    return inst
+    # return add_as_subquery(state, inst)
 
 @dy
 def compile_remote(state: State, t: types.TableType):
     i = instanciate_table(state, t, sql.TableName(t, t.name), [])
-    return add_as_subquery(state, i)
+    return i
+    # return add_as_subquery(state, i)
 
 @dy
 def compile_remote(state: State, sel: ast.Selection):
@@ -372,7 +394,8 @@ def compile_remote(state: State, sel: ast.Selection):
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], conds=[c.code for c in conds])
     # inst = instanciate_table(state, table.type, code, [table] + conds)
     inst = objects.TableInstance.make(code, table.type, [table] + conds, table.columns)
-    return add_as_subquery(state, inst)
+    return inst
+    # return add_as_subquery(state, inst)
 
 
 def _ensure_col_instance(i):
@@ -410,7 +433,6 @@ def _process_fields(state: State, fields):
         while unique_name in processed_fields:
             i += 1
             unique_name = name + str(i)
-
 
         v = compile_remote(state, f.value)
 
@@ -479,7 +501,8 @@ def compile_remote(state: State, proj: ast.Projection):
     columns = {new.type.name:new for old, new in all_aliases}
     inst = objects.TableInstance.make(code, new_table_type, [table], columns)
 
-    return add_as_subquery(state, inst)
+    return inst
+    # return add_as_subquery(state, inst)
 
 
 @dy
