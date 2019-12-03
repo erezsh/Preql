@@ -272,16 +272,16 @@ class Select(Table):
 
 @dataclass
 class Join(Table):
-    type: object
-    tables: List[Table]
-    conds: [Sql]
     join_op: str
+    tables: List[Table]
+    conds: List[Sql]
 
     def compile(self):
         tables_sql = ['(%s)' % (t.compile().text) for t in self.tables]
-        join_op = ' %s JOIN ' % self.join_op.upper()
+        join_op = ' %s ' % self.join_op.upper()
         join_sql = join_op.join(e for e in tables_sql)
 
-        join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)
+        if self.conds:
+            join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)
 
         return self._compile(join_sql)

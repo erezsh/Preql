@@ -14,3 +14,7 @@ class pql_TypeError(PreqlError):
 @dataclass
 class pql_SyntaxError(PreqlError):
     message: str
+
+@dataclass
+class pql_JoinError(PreqlError):
+    message: str

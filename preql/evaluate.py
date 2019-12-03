@@ -19,8 +19,8 @@ from contextlib import contextmanager
 
 from .dispatchy import Dispatchy
 
-from .exceptions import pql_NameNotFound, pql_TypeError
-from .utils import safezip, dataclass, SafeDict
+from .exceptions import pql_NameNotFound, pql_TypeError, pql_JoinError
+from .utils import safezip, dataclass, SafeDict, listgen
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -91,8 +91,73 @@ def pql_limit(state: State, table: objects.TableInstance, length: objects.Instan
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], limit=length.code)
     return table.remake(code=code)
 
+def _join(state: State, join: str, exprs: dict, joinall=False):
+    assert len(exprs) == 2
+    exprs = {name: compile_remote(state, value) for name,value in exprs.items()}
+    assert all(isinstance(x, objects.Instance) for x in exprs.values())
+
+    (a,b) = exprs.values()
+
+    if joinall:
+        tables = (a,b)
+    else:
+        if isinstance(a, objects.ColumnInstanceWithTable) and isinstance(b, objects.ColumnInstanceWithTable):
+            cols = a, b
+        else:
+            assert isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance)    # TODO better error message (TypeError?)
+            cols = _auto_join(state, join, a, b)
+        tables = [c.table for c in cols]
+
+    col_types = {name: types.make_column(name, table.type) for name, table in safezip(exprs, tables)}
+    table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), col_types, False)
+
+    conds = [] if joinall else [sql.Compare(types.Bool, '==', [cols[0].code, cols[1].code])]
+    code = sql.Join(table_type, join, [t.code for t in tables], conds)
+
+    columns = dict(safezip(exprs, tables))
+    return objects.TableInstance.make(code, table_type, [a,b], columns)
+
+def pql_join(state, tables):
+    return _join(state, "JOIN", tables)
+def pql_leftjoin(state, tables):
+    return _join(state, "LEFT JOIN", tables)
+
+def _auto_join(state, join, ta, tb):
+    refs1 = _find_table_reference(ta, tb)
+    refs2 = _find_table_reference(tb, ta)
+    auto_join_count = len(refs1) + len(refs2)
+    if auto_join_count < 1:
+        raise pql_JoinError("Cannot auto-join: No plausible relations found")
+    elif auto_join_count > 1:   # Ambiguity in auto join resolution
+        raise pql_JoinError("Cannot auto-join: Several plausible relations found")
+
+    if len(refs1) == 1:
+        dst, src = refs1[0]
+    elif len(refs2) == 1:
+        src, dst = refs2[0]
+    else:
+        assert False
+
+    return src, dst
+
+
+@listgen
+def _find_table_reference(t1, t2):
+    # XXX TODO need to check TableType too (owner)?
+    for c in t1.columns.values():
+        if isinstance(c.type, types.RelationalColumnType):
+            rel = c.type.type
+            if rel == t2.type:
+                # TODO depends on the query
+                yield (objects.ColumnInstanceWithTable(t2.get_attr('id'), t2), objects.ColumnInstanceWithTable(c, t1))
+
+
 internal_funcs = {
     'limit': pql_limit
+}
+joins = {
+    'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
+    'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param('tables')),
 }
 
 def _initial_namespace():
@@ -102,6 +167,7 @@ def _initial_namespace():
             objects.Param(name) for name, type_ in list(f.__annotations__.items())[1:]
         ], f) for name, f in internal_funcs.items()
     })
+    ns.update(joins)
     return ns
 
 
@@ -245,7 +311,8 @@ def simplify(state: State, funccall: ast.FuncCall):
     func = simplify(state, funccall.func)
 
     matched = func.match_params(funccall.args)
-    args = [(p, simplify(state, a)) for p, a in matched]
+    # args = [(p, simplify(state, a)) for p, a in matched]
+    args = matched
     if isinstance(func, objects.UserFunction):
         with state.use_scope({p.name:a for p,a in args}):
             r = simplify(state, func.expr)
@@ -282,6 +349,10 @@ def simplify(state: State, p: ast.Projection):
     # return ast.Projection(table, p.fields, p.groupby, p.agg_fields)
     return compile_remote(state, p)
 
+
+# @dy
+# def simplify(state: State, d: dict):
+#     return {name: simplify(state, v) for name, v in d.items()}
 
 # @dy
 # def simplify(state: State, attr: ast.Attr):

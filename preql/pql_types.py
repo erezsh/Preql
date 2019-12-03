@@ -115,6 +115,9 @@ class TableType(Collection):
         # return f'TableType({self.name}, [{", ".join(list(self.columns))}])'
         return f'TableType({self.name})'
 
+    def __hash__(self):
+        return hash((self.name, tuple(self.columns.items())))
+
     # @listgen
     # def import_result(self, arr):
     #     expected_length = self.flat_length()

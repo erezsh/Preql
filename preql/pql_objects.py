@@ -50,7 +50,7 @@ class Function(PqlObject):
         assert len(matched) == len(self.params)
         if args_d:  # Still left-over keywords?
             if self.param_collector:
-                matched.append(self.param_collector, args_d)
+                matched.append((self.param_collector, args_d))
             else:
                 raise pql_TypeError(f"Function doesn't accept arguments named $(keys(args_d))")
 
@@ -144,6 +144,30 @@ class TableInstance(Instance):
 
     def remake(self, code):
         return type(self)(code, self.type, self.subqueries, self.columns)
+
+    def get_attr(self, name):
+        return ColumnInstanceWithTable(self.columns[name], self)
+
+
+class ColumnInstanceWithTable(ColumnInstance):
+    column: ColumnInstance
+    table: TableInstance
+
+    def __init__(self, column, table):
+        self.column = column
+        self.table = table
+
+    @property
+    def code(self):
+        return self.column.code
+    @property
+    def type(self):
+        return self.column.type
+    @property
+    def subqueries(self):
+        return self.column.subqueries
+    def flatten(self):
+        return self.column.flatten()
 
 
 def merge_subqueries(instances):

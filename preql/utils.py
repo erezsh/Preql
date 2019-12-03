@@ -33,7 +33,7 @@ def __post_init(self):
     for name, field in self.__dataclass_fields__.items():
         value = getattr(self, name)
         if not isa(value, field.type):
-            raise TypeError(f"[{type(self).__name__}] Attribute {name} expected value of type {field.type}, instead got {value!r}")
+            raise TypeError(f"[{type(self).__name__}] Attribute '{name}' expected value of type {field.type}, instead got {value!r}")
 
     if hasattr(self, '__created__'):
         self.__created__()
