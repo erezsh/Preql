@@ -1,4 +1,4 @@
-from .sql import Sql, CompiledSQL
+from .sql import Sql, CompiledSQL, Select
 
 from .pql_types import Primitive    # XXX Code smell?
 
@@ -24,7 +24,7 @@ class SqliteInterface(SqlInterface):
         #     subqs = [f"{name} AS ({q.compile().text})" for (name, q) in subqueries.items()]
         #     sql_code = 'WITH ' + ',\n     '.join(subqs) + '\nSELECT * FROM '
         # else:
-        if isinstance(sql.type, Primitive):
+        if isinstance(sql.type, Primitive) and not isinstance(sql, Select): # Hacky
             sql_code = 'SELECT '    # Only for root level
         else:
             sql_code = ''

@@ -91,6 +91,21 @@ def pql_limit(state: State, table: objects.TableInstance, length: objects.Instan
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], limit=length.code)
     return table.remake(code=code)
 
+def pql_count(state: State, obj: objects.TableInstance):
+    obj = compile_remote(state, obj)
+
+    if isinstance(obj, objects.TableInstance):
+        code = sql.CountTable(obj.type, obj.code)
+    else:
+        assert isinstance(obj, Aggregated)
+        obj = obj.expr
+        assert isinstance(obj, objects.ColumnInstance), obj
+        code = sql.CountField(types.Int, obj.code)
+
+    return objects.Instance.make(code, types.Int, [obj])
+
+
+
 def _join(state: State, join: str, exprs: dict, joinall=False):
     assert len(exprs) == 2
     exprs = {name: compile_remote(state, value) for name,value in exprs.items()}
@@ -153,7 +168,8 @@ def _find_table_reference(t1, t2):
 
 
 internal_funcs = {
-    'limit': pql_limit
+    'limit': pql_limit,
+    'count': pql_count,
 }
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
@@ -474,7 +490,7 @@ def _ensure_col_instance(i):
         return i
     elif isinstance(i, objects.Instance):
         if isinstance(i.type, types.Primitive):
-            return objects.make_column_instance(i.code, types.make_column(i.type, '_anonymous_instance'))
+            return objects.make_column_instance(i.code, types.make_column('_anonymous_instance', i.type))
     assert False
 
 
@@ -485,7 +501,8 @@ def guess_field_name(f):
         return str(f.name)
     elif isinstance(f, ast.Projection): # a restructre within a projection
         return guess_field_name(f.table)
-
+    elif isinstance(f, ast.FuncCall):
+        return guess_field_name(f.func)
     assert False, f
 
 

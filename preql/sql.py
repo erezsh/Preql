@@ -37,13 +37,15 @@ class Null(Sql):
 null = Null(types.null)
 
 @dataclass
-class Atom(Sql):
-
+class Scalar(Sql):
     def import_result(self, res):
         row ,= res
         item ,= row
         return item
 
+@dataclass
+class Atom(Scalar):
+    pass
 
 @dataclass
 class Primitive(Atom):
@@ -59,7 +61,7 @@ class Table(Sql):
     def import_result(self, arr):
         expected_length = self.type.flat_length()
         for row in arr:
-            assert len(row) == expected_length
+            assert len(row) == expected_length, (expected_length, row)
             i = iter(row)
             s = ({str(name): col.type.restructure_result(i) for name, col in self.type.columns.items()})
             yield s
@@ -72,12 +74,20 @@ class TableName(Table):
         return self._compile(self.name)
 
 @dataclass
-class Count(Sql):
+class CountField(Sql):
     field: Sql
-    type = types.Int  # TODO correct object
 
     def compile(self):
+        assert self.type is types.Int
         return self._compile(f'count({self.field.compile().text})')
+
+@dataclass
+class CountTable(Scalar):
+    table: Table
+
+    def compile(self):
+        return self._compile(f'select count(*) from ({self.table.compile().text})')
+
 
 @dataclass
 class Round(Sql):
