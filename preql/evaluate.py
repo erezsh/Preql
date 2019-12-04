@@ -115,11 +115,10 @@ def pql_enum(state: State, table: ast.Expr):
         new_table_type.add_column(c)
 
     # Added to sqlite3 in 3.25.0: https://www.sqlite.org/windowfunctions.html
-    new_columns = SafeDict({'index': objects.make_column_instance(sql.RawSql(types.Int, "row_number() over ()"), types.Int, [])})
-    for name, col in table.columns.items():
-        new_columns[name] = col
+    index_code = sql.RawSql(types.Int, "row_number() over ()")
+    values = [index_code] + [c.code for c in table.flatten()]
 
-    return instanciate_table(state, new_table_type, table.code, [table], values=[c.code for c in new_columns.values()])
+    return instanciate_table(state, new_table_type, table.code, [table], values=values)
 
 
 def sql_bin_op(state, op, table1, table2, name):
@@ -442,7 +441,6 @@ def simplify(state: State, new: ast.New):
     for k, v in matched:
         if isinstance(k.type, types.StructType):
             v = evaluate(state, v)
-            v = [x['value'] for x in v] # does it matter if value? Any 1-column table should be fine
             for k2, v2 in safezip(k.flatten(), v):
                 destructured_pairs.append((k2, v2))
         else:
@@ -567,6 +565,7 @@ def _process_fields(state: State, fields):
 
         v = compile_remote(state, f.value)
 
+
         # TODO move to ColInstance
         if isinstance(v, Aggregated):
             expr = _ensure_col_instance(v.expr)
@@ -577,7 +576,11 @@ def _process_fields(state: State, fields):
             t = types.make_column(name, types.StructType(v.name, v.members))
             v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
         v = _ensure_col_instance(v)
-        processed_fields[unique_name] = v, get_alias(state, sql_friendly_name)   # TODO Don't create new alias for fields that don't change?
+
+        if isinstance(f.value, ast.Name):   # No modification in projection
+            processed_fields[unique_name] = v, v.code.text
+        else:
+            processed_fields[unique_name] = v, get_alias(state, sql_friendly_name)   # TODO Don't create new alias for fields that don't change?
 
     return list(processed_fields.items())
 

@@ -155,6 +155,9 @@ class TableInstance(Instance):
     def get_attr(self, name):
         return ColumnInstanceWithTable(self.columns[name], self)
 
+    def flatten(self):
+        return [atom for col in self.columns.values() for atom in col.flatten()]
+
 
 class ColumnInstanceWithTable(ColumnInstance):
     column: ColumnInstance
