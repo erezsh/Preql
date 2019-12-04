@@ -202,6 +202,8 @@ def pql_join(state, tables):
     return _join(state, "JOIN", tables)
 def pql_leftjoin(state, tables):
     return _join(state, "LEFT JOIN", tables)
+def pql_joinall(state: State, tables):
+    return _join(state, "JOIN", tables, True)
 
 def _auto_join(state, join, ta, tb):
     refs1 = _find_table_reference(ta, tb)
@@ -242,6 +244,7 @@ internal_funcs = {
 }
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
+    'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param('tables')),
     'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param('tables')),
 }
 
@@ -614,7 +617,7 @@ def _process_fields(state: State, fields):
             col_type = types.make_column(get_alias(state, "list"), list_type)
             v = objects.make_column_instance(sql.MakeArray(list_type, expr.code), col_type, [expr])
         elif isinstance(v, objects.TableInstance):
-            t = types.make_column(name, types.StructType(v.name, v.members))
+            t = types.make_column(name, types.StructType(v.type.name, {n:c.type.type for n,c in v.columns.items()}))
             v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
         v = _ensure_col_instance(v)
 

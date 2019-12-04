@@ -181,6 +181,8 @@ class ColumnInstanceWithTable(ColumnInstance):
         return self.column.subqueries
     def flatten(self):
         return self.column.flatten()
+    def get_attr(self, name):
+        return self.column.get_attr(name)
 
 
 def merge_subqueries(instances):
