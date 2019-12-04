@@ -74,12 +74,13 @@ class TableName(Table):
         return self._compile(self.name)
 
 @dataclass
-class CountField(Sql):
+class FieldFunc(Sql):
+    name: str
     field: Sql
 
     def compile(self):
         assert self.type is types.Int
-        return self._compile(f'count({self.field.compile().text})')
+        return self._compile(f'{self.name}({self.field.compile().text})')
 
 @dataclass
 class CountTable(Scalar):
@@ -206,8 +207,19 @@ class ColumnAlias(Sql):
             s = '%s AS %s' % (value, alias)
         return self._compile(s)
 
+
 @dataclass
 class Insert(Sql):
+    table_name: str
+    query: Sql
+
+    def compile(self):
+        q = f'INSERT INTO {self.table_name} ' + self.query.compile().text
+        return self._compile(q)
+
+
+@dataclass
+class InsertConsts(Sql):
     table: Table
     cols: List[str]
     values: List[Sql]
@@ -241,6 +253,14 @@ class SelectValue(Atom, Table):
         value = self.value.compile()
         return self._compile(f'SELECT {value.text} as value')
 
+@dataclass
+class Values(Table):
+    values: List[Sql]
+
+    def compile(self):
+        values = [v.compile() for v in self.values]
+        code = 'VALUES' + ','.join(f'({v.text})' for v in values)
+        return self._compile(code)
 
 class AllFields(Sql):
     def compile(self):
@@ -303,4 +323,5 @@ class Join(Table):
         if self.conds:
             join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)
 
+        join_sql = 'SELECT * FROM ' + join_sql
         return self._compile(join_sql)

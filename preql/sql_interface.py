@@ -46,7 +46,7 @@ class SqliteInterface(SqlInterface):
     def commit(self):
         self._conn.commit()
 
-    def addmany(self, table, cols, values):
+    def _old_addmany(self, table, cols, values):
         assert all(len(v)==len(cols) for v in values), (cols, values[0])
 
         c = self._conn.cursor()

@@ -91,18 +91,24 @@ def pql_limit(state: State, table: objects.TableInstance, length: objects.Instan
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], limit=length.code)
     return table.remake(code=code)
 
-def pql_count(state: State, obj: objects.TableInstance):
+def _apply_sql_func(state, obj: ast.Expr, table_func, field_func):
     obj = compile_remote(state, obj)
-
     if isinstance(obj, objects.TableInstance):
-        code = sql.CountTable(obj.type, obj.code)
+        code = table_func(obj.type, obj.code)
     else:
         assert isinstance(obj, Aggregated)
         obj = obj.expr
         assert isinstance(obj, objects.ColumnInstance), obj
-        code = sql.CountField(types.Int, obj.code)
+        code = field_func(types.Int, obj.code)
 
     return objects.Instance.make(code, types.Int, [obj])
+
+def pql_count(state: State, obj: ast.Expr):
+    return _apply_sql_func(state, obj, sql.CountTable, lambda t,c: sql.FieldFunc(t, 'count', c))
+
+def pql_sum(state: State, obj: ast.Expr):
+    return _apply_sql_func(state, obj, None, lambda t,c: sql.FieldFunc(t, 'sum', c))
+
 
 def pql_enum(state: State, table: ast.Expr):
     index_name = "index"
@@ -119,6 +125,17 @@ def pql_enum(state: State, table: ast.Expr):
     values = [index_code] + [c.code for c in table.flatten()]
 
     return instanciate_table(state, new_table_type, table.code, [table], values=values)
+
+def pql_temptable(state: State, expr: ast.Expr):
+    expr = compile_remote(state, expr)
+    assert isinstance(expr, objects.TableInstance)
+    name = get_alias(state, "temp_" + expr.type.name)
+    table = types.TableType(name, expr.type.columns, temporary=True)
+    state.db.query(compile_type_def(table))
+    state.db.query(sql.Insert(types.null, name, expr.code))
+    return table
+
+
 
 
 def sql_bin_op(state, op, table1, table2, name):
@@ -163,7 +180,8 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
             cols = _auto_join(state, join, a, b)
         tables = [c.table for c in cols]
 
-    col_types = {name: types.make_column(name, table.type) for name, table in safezip(exprs, tables)}
+    col_types = {name: types.make_column(name, types.StructType(name, {n:c.type.type for n, c in table.columns.items()}))
+                for name, table in safezip(exprs, tables)}
     table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), col_types, False)
 
     conds = [] if joinall else [sql.Compare(types.Bool, '==', [cols[0].code, cols[1].code])]
@@ -210,7 +228,9 @@ def _find_table_reference(t1, t2):
 internal_funcs = {
     'limit': pql_limit,
     'count': pql_count,
+    'sum': pql_sum,
     'enum': pql_enum,
+    'temptable': pql_temptable,
 }
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
@@ -450,7 +470,7 @@ def simplify(state: State, new: ast.New):
     keys = [k.name for (k,_) in destructured_pairs]
     values = [sql_repr(v) for (_,v) in destructured_pairs]
     # sql = RawSql(f"INSERT INTO {table.name} ($keys_str) VALUES ($values_str)")
-    q = sql.Insert(types.null, sql.TableName(table, table.name), keys, values)
+    q = sql.InsertConsts(types.null, sql.TableName(table, table.name), keys, values)
 
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
@@ -500,6 +520,8 @@ def compile_remote(state: State, lst: objects.List_):
     # table_type = types.TableType("array_%s" % elem_type.name, {}, temporary=True)   # Not temporary: ephemeral
     # table_type.add_column(types.DatumColumnType("value", elem_type))
 
+    # TODO use values + subqueries instead of union all (better performance)
+    # e.g. with list(value) as (values(1),(2),(3)) select value from list;
     code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
     inst = instanciate_table(state, table_type, code, elems)
     return inst
