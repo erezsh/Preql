@@ -77,6 +77,9 @@ class ListType(Collection):
     def flat_length(self):
         return 1
 
+    def flatten(self):
+        return [self]
+
 @dataclass
 class SetType(Collection):
     elemtype: PqlType

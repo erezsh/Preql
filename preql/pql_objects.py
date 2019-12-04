@@ -137,6 +137,13 @@ def make_column_instance(code, type_, from_instances=[]):
         return DatumColumnInstance.make(code, type_, from_instances)
     assert False, type_
 
+def make_instance(code, type_, from_instances=[]):
+    if isinstance(type_, ColumnType):
+        return make_column_instance(code, type_, from_instances)
+
+    return Instance.make(code, type_, from_instances)
+
+
 
 @dataclass
 class TableInstance(Instance):

@@ -152,8 +152,17 @@ class Arith(Sql):
         return self._compile('(%s)'%x)
 
 
+@dataclass
 class TableArith(Arith, Table):
-    pass
+    op: str
+    exprs: List[Table]
+
+    def compile(self):
+        # XXX Limit -1 is due to a strange bug in SQLite (fixed in newer versions), where the limit is reset otherwise.
+        tables = [t.compile() for t in self.exprs]
+        selects = [f"SELECT * FROM ({t.text})" for t in tables]
+        code = f" {self.op} ".join(selects) + " LIMIT -1"
+        return self._compile(code)
 
 @dataclass
 class Neg(Sql):
@@ -225,7 +234,7 @@ class LastRowId(Atom):
         return self._compile('last_insert_rowid()')
 
 @dataclass
-class SelectValue(Atom):
+class SelectValue(Atom, Table):
     value: Sql
 
     def compile(self):

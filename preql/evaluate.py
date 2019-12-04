@@ -104,6 +104,47 @@ def pql_count(state: State, obj: objects.TableInstance):
 
     return objects.Instance.make(code, types.Int, [obj])
 
+def pql_enum(state: State, table: ast.Expr):
+    index_name = "index"
+
+    table = compile_remote(state, table)
+
+    new_table_type = types.TableType(get_alias(state, "enum"), {}, True)
+    new_table_type.add_column(types.make_column(index_name, types.Int))
+    for c in table.type.columns.values():
+        new_table_type.add_column(c)
+
+    # Added to sqlite3 in 3.25.0: https://www.sqlite.org/windowfunctions.html
+    new_columns = SafeDict({'index': objects.make_column_instance(sql.RawSql(types.Int, "row_number() over ()"), types.Int, [])})
+    for name, col in table.columns.items():
+        new_columns[name] = col
+
+    return instanciate_table(state, new_table_type, table.code, [table], values=[c.code for c in new_columns.values()])
+
+
+def sql_bin_op(state, op, table1, table2, name):
+    t1 = compile_remote(state, table1)
+    t2 = compile_remote(state, table2)
+    # TODO make sure both table types are compatiable
+    l1 = len(t1.type.flatten())
+    l2 = len(t2.type.flatten())
+    if l1 != l2:
+        raise pql_TypeError(f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
+
+    code = sql.TableArith(t1.type, op, [t1.code, t2.code])
+    return objects.TableInstance.make(code, t1.type, [t1, t2], t1.columns)
+
+def pql_intersect(state, t1, t2):
+    return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
+
+def pql_substract(state, t1, t2):
+    return sql_bin_op(state, "EXCEPT", t1, t2, "substract")
+
+def pql_union(state, t1, t2):
+    return sql_bin_op(state, "UNION", t1, t2, "union")
+
+def pql_concat(state, t1, t2):
+    return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
 
 
 def _join(state: State, join: str, exprs: dict, joinall=False):
@@ -170,6 +211,7 @@ def _find_table_reference(t1, t2):
 internal_funcs = {
     'limit': pql_limit,
     'count': pql_count,
+    'enum': pql_enum,
 }
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
@@ -491,7 +533,8 @@ def _ensure_col_instance(i):
     elif isinstance(i, objects.Instance):
         if isinstance(i.type, types.Primitive):
             return objects.make_column_instance(i.code, types.make_column('_anonymous_instance', i.type))
-    assert False
+
+    assert False, i
 
 
 def guess_field_name(f):
@@ -566,10 +609,10 @@ def compile_remote(state: State, proj: ast.Projection):
     # Make new type
     all_aliases = []
     new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), {}, True)
-    for name, (remote_col, alias) in fields + agg_fields:
+    for name, (remote_col, sql_alias) in fields + agg_fields:
         new_col_type = remote_col.type.remake(name=name)
         new_table_type.add_column(new_col_type)
-        ci = objects.make_column_instance(sql.Name(new_col_type.type, alias), new_col_type, [remote_col])
+        ci = objects.make_column_instance(sql.Name(new_col_type.type, sql_alias), new_col_type, [remote_col])
         all_aliases.append((remote_col, ci))
 
     # Make code
@@ -581,7 +624,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
     groupby = []
     if proj.groupby and fields:
-        groupby = [sql.Name(rc.type.type, alias) for _n, (rc, alias) in fields]
+        groupby = [sql.Name(rc.type.type, sql_alias) for _n, (rc, sql_alias) in fields]
 
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
@@ -611,6 +654,36 @@ def compile_remote(state: State, attr: ast.Attr):
     return inst.get_attr(attr.name)
 
 @dy
+def compile_remote(state: State, c: ast.Contains):
+    args = compile_remote(state, c.args)
+    code = sql.Contains(types.Bool, c.op, [a.code for a in args])
+    return objects.make_instance(code, types.Bool, args)
+
+@dy
+def compile_remote(state: State, arith: ast.Arith):
+    args = compile_remote(state, arith.args)
+
+    assert all(a.code.type==args[0].code.type for a in args), args
+    # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
+
+    if isinstance(args[0], objects.TableInstance):
+        assert isinstance(args[1], objects.TableInstance)
+        # TODO validate types
+
+        ops = {
+            "+": pql_concat,
+            "&": pql_intersect,
+            "|": pql_union,
+            "-": pql_substract,
+        }
+        return ops[arith.op](state, *args)
+
+    # TODO validate all args are compatiable
+    # return Instance(Sql(join([a.code.text for a in args], arith.op)), args[1].type, args)
+    code = sql.Arith(args[0].type, arith.op, [a.code for a in args])
+    return objects.make_instance(code, args[0].type, [])
+
+@dy
 def compile_remote(state: State, obj: objects.StructColumnInstance):
     return obj
 @dy
@@ -635,11 +708,15 @@ def evaluate(state, obj):
     if isinstance(obj, objects.Function):   # TODO base class on uncompilable?
         return obj
 
-    code = compile_remote(state, obj)
-    res = localize(state, code)
+    inst = compile_remote(state, obj)
+    res = localize(state, inst)
     # if isinstance(obj, objects.List_):
     #     assert all(len(x)==1 for x in res)
     #     return [x[0] for x in res]
+    if isinstance(inst.type, types.ListType):
+        assert all(len(e)==1 for e in res)
+        return [e['value'] for e in res]
+
     return res
 
 
@@ -659,14 +736,18 @@ def get_alias(state: State, obj):
 def instanciate_column(state: State, c: types.ColumnType):
     return objects.make_column_instance(RawSql(c.type, get_alias(state, c.name)), c)
 
-def instanciate_table(state: State, t: types.TableType, source: Sql, instances):
+def instanciate_table(state: State, t: types.TableType, source: Sql, instances, values=None):
     columns = {name: instanciate_column(state, c) for name, c in t.columns.items()}
 
-    aliases = [
-        sql.ColumnAlias.make(sql.Name(dinst.type, dinst.type.name), dinst.code)
-        for inst in columns.values()
-        for dinst in inst.flatten()
-    ]
+    atoms = [atom
+                for inst in columns.values()
+                for atom in inst.flatten()
+            ]
+
+    if values is None:
+        values = [sql.Name(atom.type, atom.type.name) for atom in atoms]    # The column value
+
+    aliases = [ sql.ColumnAlias.make(value, atom.code) for value, atom in safezip(values, atoms) ]
 
     code = sql.Select(t, source, aliases)
 
