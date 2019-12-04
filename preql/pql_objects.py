@@ -7,7 +7,7 @@ from typing import List, Optional, Callable
 from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError
 from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType
-from .pql_ast import Expr
+from .pql_ast import Expr, NamedField
 from .sql import Sql, RawSql
 
 # Functions
@@ -22,6 +22,9 @@ class Function(PqlObject):
     def match_params(self, args):
         # TODO Default values (maybe just initialize match_params with them?)
         # total_params = length(params)
+
+        # Canonize args for the rest of the function
+        args = [a if isinstance(a, NamedField) else NamedField(None, a) for a in args]
 
         for i, arg in enumerate(args):
             if arg.name:  # First keyword argument

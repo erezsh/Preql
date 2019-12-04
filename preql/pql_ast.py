@@ -94,7 +94,7 @@ class New(Expr):
 
 @dataclass
 class FuncCall(Expr):
-    func: Expr
+    func: Any   # objects.Function ?
     args: list   # Func args
 
 @dataclass

@@ -46,13 +46,21 @@ class State:
             if name in scope:
                 return scope[name]
 
-        meta = dict(
-            line = name.line,
-            column = name.column,
-        )
+        try:
+            meta = dict(
+                line = name.line,
+                column = name.column,
+            )
+        except AttributeError:
+            meta = dict(
+                line = '?',
+                column = '?',
+            )
+
         raise pql_NameNotFound(str(name), meta)
 
     def set_var(self, name, value):
+        assert not isinstance(value, ast.Name)
         self.ns[-1][name] = value
 
     def get_all_vars(self):
@@ -380,7 +388,10 @@ def simplify(state: State, c: ast.Const):
 
 # @dy
 # def simplify(state: State, a: ast.Attr):
+#     # Happens if attr is a method
 #     print("@@@@@", a)
+#     import pdb
+#     pdb.set_trace()
 #     return a
 
 @dy
@@ -391,7 +402,7 @@ def simplify(state: State, funccall: ast.FuncCall):
     # args = [(p, simplify(state, a)) for p, a in matched]
     args = matched
     if isinstance(func, objects.UserFunction):
-        with state.use_scope({p.name:a for p,a in args}):
+        with state.use_scope({p.name:simplify(state, a) for p,a in args}):
             r = simplify(state, func.expr)
             return r
     else:
@@ -425,6 +436,9 @@ def simplify(state: State, p: ast.Projection):
     # table = simplify(state, p.table)
     # return ast.Projection(table, p.fields, p.groupby, p.agg_fields)
     return compile_remote(state, p)
+@dy
+def simplify(state: State, o: ast.Order):
+    return compile_remote(state, o)
 
 
 # @dy
@@ -503,7 +517,12 @@ def compile_remote(state: State, c: ast.Const):
 
 @dy
 def compile_remote(state: State, n: ast.Name):
-    return compile_remote(state, simplify(state, n))
+    v = simplify(state, n)
+    if v is n:
+        import pdb
+        pdb.set_trace()
+    assert v is not n   # Protect against recursions
+    return compile_remote(state, v)
 
 @dy
 def compile_remote(state: State, lst: objects.List_):
@@ -599,10 +618,7 @@ def _process_fields(state: State, fields):
             v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
         v = _ensure_col_instance(v)
 
-        if isinstance(f.value, ast.Name):   # No modification in projection
-            processed_fields[unique_name] = v, v.code.text
-        else:
-            processed_fields[unique_name] = v, get_alias(state, sql_friendly_name)   # TODO Don't create new alias for fields that don't change?
+        processed_fields[unique_name] = v, get_alias(state, sql_friendly_name)   # TODO Don't create new alias for fields that don't change?
 
     return list(processed_fields.items())
 
@@ -662,6 +678,24 @@ def compile_remote(state: State, proj: ast.Projection):
 
 
 @dy
+def compile_remote(state: State, order: ast.Order):
+    table = compile_remote(state, order.table)
+
+    with state.use_scope(table.columns):
+        fields = compile_remote(state, order.fields)
+
+    code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], order=[c.code for c in fields])
+
+    return objects.TableInstance.make(code, table.type, [table] + fields, table.columns)
+
+@dy
+def compile_remote(state: State, expr: ast.DescOrder):
+    obj = compile_remote(state, expr.value)
+    return obj.remake(code=sql.Desc(obj.type, obj.code))
+
+
+
+@dy
 def compile_remote(state: State, lst: list):
     return [compile_remote(state, e) for e in lst]
 
@@ -708,6 +742,7 @@ def compile_remote(state: State, arith: ast.Arith):
     code = sql.Arith(args[0].type, arith.op, [a.code for a in args])
     return objects.make_instance(code, args[0].type, [])
 
+
 @dy
 def compile_remote(state: State, obj: objects.StructColumnInstance):
     return obj
@@ -738,16 +773,17 @@ def evaluate(state, obj):
     # if isinstance(obj, objects.List_):
     #     assert all(len(x)==1 for x in res)
     #     return [x[0] for x in res]
-    if isinstance(inst.type, types.ListType):
-        assert all(len(e)==1 for e in res)
-        return [e['value'] for e in res]
-
     return res
 
 
 
 def localize(state, inst):
     res = state.db.query(inst.code, inst.subqueries)
+
+    if isinstance(inst.type, types.ListType):
+        assert all(len(e)==1 for e in res)
+        return [e['value'] for e in res]
+
     return res
 
 
