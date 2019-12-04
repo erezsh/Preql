@@ -24,7 +24,7 @@ param: name    // TODO type? default value?
 
 _sep: "," | "," _NL | _NL
 expr_list: (expr _sep)* expr
-selection: molecule "[" expr_list "]"
+selection: molecule "[" _NL? expr_list _NL? "]"
 
 projection: molecule "{" _NL? proj_exprs _NL? "}"
           | molecule "{" _NL? proj_exprs _NL? "=>" _NL? proj_exprs _NL? "}" -> projection_grouped
@@ -63,7 +63,7 @@ like: molecule "~" molecule
      | "^" molecule -> desc
      | new
 
-list: "[" molecule (_sep molecule)* "]"
+list: "[" _NL? molecule (_sep molecule)* _NL? "]"
 
 new: "new" name _func_args
 func_call: molecule _func_args
