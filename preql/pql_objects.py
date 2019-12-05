@@ -187,3 +187,11 @@ class ColumnInstanceWithTable(ColumnInstance):
 
 def merge_subqueries(instances):
     return SafeDict().update(*[i.subqueries for i in instances])
+
+
+@dataclass
+class Aggregated(PqlObject):
+    expr: PqlObject
+
+    def get_attr(self, name):
+        return Aggregated(self.expr.get_attr(name))

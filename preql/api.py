@@ -5,7 +5,6 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interpreter import Interpreter
-from .evaluate import sql_repr
 
 def python_to_pql(value):
     if value is None:
