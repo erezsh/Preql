@@ -1,0 +1,36 @@
+struct Point {
+    x: float
+    y: float
+}
+
+table Box {
+    start: Point
+    end: Point
+}
+
+table Circle {
+    center: Point
+    radius: float
+}
+
+box1 = new Box([1, 1], [10, 10])
+box2 = new Box([1, 1], [2, 2])
+circle1 = new Circle([3,3], 2)
+circl2 = new Circle([20,20], 2)
+
+print Box[start.x < 10]
+print Box[end.x < 10] {start, end}
+
+func circles_contained1() = joinall(c:Circle, b:Box) [
+        c.center.x - c.radius >= b.start.x,
+        c.center.y - c.radius >= b.start.y,
+        c.center.x + c.radius <= b.end.x,
+        c.center.y + c.radius <= b.end.y
+    ] {x:c, s:b.start, b.end} {x.center, r:x.radius, start:s, end}
+
+func circles_contained2() = joinall(c:Circle, b:Box) { c.center, r: c.radius, b.start, b.end} [
+        center.x - r >= start.x,
+        center.y - r >= start.y,
+        center.x + r <= end.x,
+        center.y + r <= end.y
+    ]

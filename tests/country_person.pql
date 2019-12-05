@@ -1,0 +1,20 @@
+table Country {
+    name: string
+    language: string
+}
+
+table Person {
+    name: string
+    country: Country #-> citizens
+}
+
+isr = new Country("Israel", "he")
+eng = new Country("England", language:"en")
+us = new Country(language:"en", name:"United States")
+
+me = new Person("Erez Shinan", isr)
+new Person("Ephraim Kishon", isr)
+new Person("Eric Blaire", eng)
+new Person("H.G. Wells", eng)
+new Person("John Steinbeck", us)
+

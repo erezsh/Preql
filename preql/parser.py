@@ -26,7 +26,7 @@ class T(Transformer):
         return ast.Const(types.Float, float(f))
 
     def null(self):
-        return types.null
+        return ast.Const(types.null, None)
 
     list = v_args(inline=False)(objects.List_)
 

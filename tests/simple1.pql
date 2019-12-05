@@ -1,0 +1,27 @@
+table Person {
+    name: int
+    country: string
+}
+
+new Person("Erez Shinan", "Israel")
+new Person("Eric Blaire", "England")
+new Person("H.G. Wells", "England")
+
+english = Person[country=="England"] {id, name}
+func by_country(c) = Person[country==c]
+english2 = by_country("England") order{^name} {name}
+english3 = by_country("England"){id, n:name} order{n, ^id}
+
+# person1 = Person.limit(1)
+# person1b = Person.offset(1).limit(1)
+# person1c = Person.offset(1)
+
+func _table_func(t, c) = t[country==c]
+func _f2(t) = _table_func(t, "Israel")
+f3 = _f2(Person) {name}
+
+demography = Person {country => population: count(id)}
+
+
+# func _page(tabl, num, size) = tabl.offset(num*size).limit(size)
+# page_test = _page(Person, 2, 40)

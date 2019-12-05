@@ -443,6 +443,10 @@ def simplify(state: State, p: ast.Projection):
 def simplify(state: State, o: ast.Order):
     return compile_remote(state, o)
 
+@dy
+def simplify(state: State, n: types.NullType):
+    return n
+
 
 # @dy
 # def simplify(state: State, d: dict):

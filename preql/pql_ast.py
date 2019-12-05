@@ -59,7 +59,7 @@ class Like(Expr):
 @dataclass
 class NamedField(Expr):
     name: Optional[str]
-    value: Expr
+    value: (Expr, types.PqlType)
 
 
 class TableOperation(Expr): pass

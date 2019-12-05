@@ -20,7 +20,8 @@ class Interpreter:
 
     def eval_expr(self, code, args):
         expr_ast = parse_expr(code)
-        obj = evaluate(self.state, expr_ast)
+        with self.state.use_scope(args):
+            obj = evaluate(self.state, expr_ast)
         return obj
 
     def execute_code(self, code):
@@ -28,5 +29,5 @@ class Interpreter:
             try:
                 execute(self.state, stmt)
             except:
-                print("%%%", stmt)
+                print("Error in statement: ", stmt)
                 raise
