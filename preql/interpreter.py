@@ -29,7 +29,8 @@ class Interpreter:
         obj = simplify(self.state, ast.Name(fname))
         if isinstance(obj, objects.TableInstance):
             assert not args, args
-            return localize(self.state, obj)
+            # return localize(self.state, obj)
+            return obj
 
         funccall = ast.FuncCall(ast.Name(fname), args)
         return evaluate(self.state, funccall)
@@ -40,10 +41,16 @@ class Interpreter:
             obj = evaluate(self.state, expr_ast)
         return obj
 
-    def execute_code(self, code):
-        for stmt in parse_stmts(code):
-            try:
-                execute(self.state, stmt)
-            except:
-                print("Error in statement: ", stmt)
-                raise
+    def execute_code(self, code, args=None):
+        last = None
+
+        # with self.state.use_scope(args or {}):
+        if True:
+            for stmt in parse_stmts(code):
+                try:
+                    last = execute(self.state, stmt)
+                except:
+                    print("Error in statement: ", stmt)
+                    raise
+
+        return last

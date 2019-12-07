@@ -1,5 +1,5 @@
 from .utils import safezip, listgen, SafeDict
-from .exceptions import pql_TypeError
+from .exceptions import pql_TypeError, pql_JoinError
 
 from . import pql_objects as objects
 from . import pql_types as types
@@ -16,23 +16,24 @@ def pql_limit(state: State, table: objects.TableInstance, length: objects.Instan
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], limit=length.code)
     return table.remake(code=code)
 
-def _apply_sql_func(state, obj: ast.Expr, table_func, field_func):
+def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     obj = compile_remote(state, obj)
     if isinstance(obj, objects.TableInstance):
         code = table_func(obj.type, obj.code)
     else:
-        assert isinstance(obj, objects.Aggregated)
+        if not isinstance(obj, objects.Aggregated):
+            raise pql_TypeError(f"Function '{name}' expected a list, but got '{obj.type.type}' instead. Did you forget to group?")
         obj = obj.expr
         assert isinstance(obj, objects.ColumnInstance), obj
-        code = field_func(types.Int, obj.code)
+        code = sql.FieldFunc(types.Int, name, obj.code)
 
     return objects.Instance.make(code, types.Int, [obj])
 
 def pql_count(state: State, obj: ast.Expr):
-    return _apply_sql_func(state, obj, sql.CountTable, lambda t,c: sql.FieldFunc(t, 'count', c))
+    return _apply_sql_func(state, obj, sql.CountTable, 'count')
 
 def pql_sum(state: State, obj: ast.Expr):
-    return _apply_sql_func(state, obj, None, lambda t,c: sql.FieldFunc(t, 'sum', c))
+    return _apply_sql_func(state, obj, None, 'sum')
 
 
 def pql_enum(state: State, table: ast.Expr):

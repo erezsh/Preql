@@ -200,7 +200,7 @@ class BasicTests(TestCase):
         res2 = preql.circles_contained2()
         res3 = preql("temptable(circles_contained2())")
 
-        assert res1 == res2
+        assert res1 == res2, (res1, res2)
         assert res2 == res3
 
 

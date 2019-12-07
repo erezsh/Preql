@@ -3,7 +3,7 @@ from lark import Lark, Transformer, v_args, UnexpectedInput
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
-from .exceptions import pql_SyntaxError
+# from .exceptions import pql_SyntaxError
 
 def token_value(_, t):
     return t #.value

@@ -318,7 +318,7 @@ def guess_field_name(f):
         return guess_field_name(f.table)
     elif isinstance(f, ast.FuncCall):
         return guess_field_name(f.func)
-    return '_anon'
+    return '_'
 
 
 

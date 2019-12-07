@@ -205,7 +205,7 @@ def simplify(state: State, new: ast.New):
     destructured_pairs = []
     for k, v in matched:
         if isinstance(k.type, types.StructType):
-            v = evaluate(state, v)
+            v = localize(state, evaluate(state, v))
             for k2, v2 in safezip(k.flatten(), v):
                 destructured_pairs.append((k2, v2))
         else:
@@ -231,21 +231,24 @@ def add_as_subquery(state: State, inst: objects.Instance):
         new_inst = objects.Instance(sql.Name(inst.code.type, name), inst.type, inst.subqueries.update({name: inst.code}))
     return new_inst
 
+
+
 def evaluate(state, obj):
     obj = simplify(state, obj)
     if isinstance(obj, objects.Function):   # TODO base class on uncompilable?
         return obj
 
     inst = compile_remote(state, obj)
-    res = localize(state, inst)
-    # if isinstance(obj, objects.List_):
-    #     assert all(len(x)==1 for x in res)
-    #     return [x[0] for x in res]
-    return res
+    # res = localize(state, inst)
+    # return promise(state, inst)
+    return inst
 
 
-def localize(state, inst):
-    res = state.db.query(inst.code, inst.subqueries)
+def localize(session, inst):
+    if isinstance(inst, objects.Function):
+        return inst
+
+    res = session.db.query(inst.code, inst.subqueries)
 
     if isinstance(inst.type, types.ListType):
         assert all(len(e)==1 for e in res)
