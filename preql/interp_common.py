@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 from .dispatchy import Dispatchy
-from .exceptions import pql_NameNotFound
+from .exceptions import pql_NameNotFound, pql_TypeError
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -82,3 +82,9 @@ def get_alias(state: State, obj):
 
     state.tick += 1
     return obj + str(state.tick)
+
+
+def assert_type(t, type_, msg):
+    concrete = t.concrete_type()
+    if not isinstance(concrete, type_):
+        raise pql_TypeError(msg % (type_.__name__, concrete))

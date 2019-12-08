@@ -4,7 +4,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify
+from .interp_common import dy, State, get_alias, simplify, assert_type
 
 Sql = sql.Sql
 
@@ -108,6 +108,7 @@ def _ensure_col_instance(i):
 @dy
 def compile_remote(state: State, proj: ast.Projection):
     table = compile_remote(state, proj.table)
+    assert_type(table.type, (types.TableType, types.ListType), "Projection expected an object of type '%s', instead got '%s'")
 
     columns = table.members if isinstance(table, objects.StructColumnInstance) else table.columns
 
@@ -158,6 +159,7 @@ def compile_remote(state: State, proj: ast.Projection):
 @dy
 def compile_remote(state: State, order: ast.Order):
     table = compile_remote(state, order.table)
+    assert_type(table.type, types.TableType, "'order' expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.columns):
         fields = compile_remote(state, order.fields)
@@ -245,6 +247,14 @@ def compile_remote(state: State, i: objects.TableInstance):
 @dy
 def compile_remote(state: State, f: ast.FuncCall):
     return compile_remote(state, simplify(state, f))
+@dy
+def compile_remote(state: State, f: objects.UserFunction):
+    "Functions don't need compilation"
+    return f
+@dy
+def compile_remote(state: State, f: objects.InternalFunction):
+    "Functions don't need compilation"
+    return f
 
 
 @dy
@@ -285,9 +295,12 @@ def compile_remote(state: State, t: types.TableType):
     return i
     # return add_as_subquery(state, i)
 
+
+
 @dy
 def compile_remote(state: State, sel: ast.Selection):
     table = compile_remote(state, sel.table)
+    assert_type(table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.columns):
         conds = compile_remote(state, sel.conds)

@@ -17,6 +17,8 @@
 from typing import List, Optional, Any
 
 from .utils import safezip, dataclass
+from .interp_common import assert_type
+from .exceptions import pql_TypeError
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -122,7 +124,11 @@ def simplify(state: State, c: ast.Const):
 
 @dy
 def simplify(state: State, funccall: ast.FuncCall):
-    func = simplify(state, funccall.func)
+    # func = simplify(state, funccall.func)
+    func = compile_remote(state, funccall.func)
+
+    if not isinstance(func, objects.Function):
+        raise pql_TypeError(f"Error: Object of type '{func.type.concrete_type()}' is not callable")
 
     matched = func.match_params(funccall.args)
     # args = [(p, simplify(state, a)) for p, a in matched]
@@ -197,7 +203,8 @@ def simplify(state: State, new: ast.New):
     # XXX This function has side-effects.
     # Perhaps it belongs in resolve, rather than simplify?
     table = state.get_var(new.type)
-    assert isinstance(table, types.TableType)
+    assert_type(table, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+
     cons = TableConstructor(list(table.params()))
     matched = cons.match_params(new.args)
 
