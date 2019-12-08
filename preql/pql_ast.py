@@ -115,6 +115,7 @@ class Definition:
 class TableDef(Statement, Definition):
     name: str
     columns: List[ColumnDef]
+    # meta: object
 
 @dataclass
 class StructDef(Statement, Definition):

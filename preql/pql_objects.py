@@ -6,9 +6,14 @@ from typing import List, Optional, Callable
 
 from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError
-from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType
+from . import pql_types as types
+from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType, ListType, TableType
 from .pql_ast import Expr, NamedField
 from .sql import Sql, RawSql
+
+
+class Aggregated(ListType):
+    pass
 
 # Functions
 @dataclass
@@ -91,7 +96,7 @@ class List_(Expr):
 # Other
 
 @dataclass
-class Instance(PqlObject):
+class Instance(PqlObject, Expr):
     code: Sql
     type: PqlType
 
@@ -101,10 +106,13 @@ class Instance(PqlObject):
     def make(cls, code, type_, instances, *extra):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
+    def get_attr(self, name):
+        raise NotImplementedError(f"get_attr() not implemented for instance of type {self.type} -- code=({self.code})")
+
 
 @dataclass
 class ColumnInstance(Instance):
-    pass
+    type: ColumnType
     # def flatten(self):
     #     # if isinstance(self.type, types.StructColumnType):
     #     #     return [x for m in self.]
@@ -131,10 +139,12 @@ class StructColumnInstance(ColumnInstance):
 
 
 def make_column_instance(code, type_, from_instances=[]):
-    if isinstance(type_, StructColumnType):
+    kernel = type_.kernel_type()
+
+    if isinstance(kernel, StructColumnType):
         struct_sql_name = code.compile().text
         members = {name: make_column_instance(RawSql(member.type, struct_sql_name+'_'+name), member)
-                   for name, member in type_.members.items()}
+                   for name, member in kernel.members.items()}
         return StructColumnInstance.make(code, type_, from_instances, members)
     else:
         return DatumColumnInstance.make(code, type_, from_instances)
@@ -143,6 +153,8 @@ def make_column_instance(code, type_, from_instances=[]):
 def make_instance(code, type_, from_instances=[]):
     if isinstance(type_, ColumnType):
         return make_column_instance(code, type_, from_instances)
+    # elif isinstance(type_, Aggregated) and isinstance(type_.elemtype, ColumnType):
+    #     return make_column_instance(code, type_, from_instances)
 
     return Instance.make(code, type_, from_instances)
 
@@ -189,9 +201,13 @@ def merge_subqueries(instances):
     return SafeDict().update(*[i.subqueries for i in instances])
 
 
-@dataclass
-class Aggregated(PqlObject):
-    expr: PqlObject
+def aggregated(inst):
+    if isinstance(inst, TableInstance):
+        new_cols = {name:aggregated(c) for name, c in inst.columns.items()}
+        return TableInstance.make(inst.code, Aggregated(inst.type), [inst], new_cols)
 
-    def get_attr(self, name):
-        return Aggregated(self.expr.get_attr(name))
+    elif isinstance(inst, ColumnInstance):
+        return make_column_instance(inst.code, types.make_column(inst.type.name, Aggregated(inst.type.type)), [inst])
+
+    assert not isinstance(inst.type, TableType), inst.type
+    return make_instance(inst.code, Aggregated(inst.type), [inst])

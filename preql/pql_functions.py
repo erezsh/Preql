@@ -21,10 +21,10 @@ def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     if isinstance(obj, objects.TableInstance):
         code = table_func(obj.type, obj.code)
     else:
-        if not isinstance(obj, objects.Aggregated):
-            raise pql_TypeError(f"Function '{name}' expected a list, but got '{obj.type.type}' instead. Did you forget to group?")
-        obj = obj.expr
         assert isinstance(obj, objects.ColumnInstance), obj
+        if not isinstance(obj.type.concrete_type(), objects.Aggregated):
+            raise pql_TypeError(f"Function '{name}' expected a list, but got '{obj.type.type}' instead. Did you forget to group?")
+
         code = sql.FieldFunc(types.Int, name, obj.code)
 
     return objects.Instance.make(code, types.Int, [obj])

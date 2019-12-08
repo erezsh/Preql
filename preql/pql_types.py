@@ -8,6 +8,11 @@ class PqlObject:    # XXX should be in a base module
 class PqlType(PqlObject):
     """PqlType annotates the type of all instances """
 
+    def concrete_type(self):
+        return self
+    def kernel_type(self):
+        return self
+
 
 # Primitives
 class NullType(PqlType): pass
@@ -65,6 +70,9 @@ class ListType(Collection):
     def name(self):
         return 'list_%s' % self.elemtype.name
 
+    def kernel_type(self):
+        return self.elemtype
+
     # def import_result(self, arr):
     #     assert all(len(e)==1 for e in arr)
     #     return [e[0] for e in arr]
@@ -88,6 +96,9 @@ class SetType(Collection):
 class ColumnType(PqlType):
     def flatten(self):
         return [self]
+
+    def concrete_type(self):
+        return self.type
 
     is_concrete = True  # Concrete = actually contains data
     primary_key = False

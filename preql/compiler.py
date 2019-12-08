@@ -75,15 +75,18 @@ def _process_fields(state: State, fields):
         v = compile_remote(state, f.value)
 
 
-        # TODO move to ColInstance
-        if isinstance(v, objects.Aggregated):
-            expr = _ensure_col_instance(v.expr)
-            list_type = types.ListType(expr.type.type)
-            col_type = types.make_column(get_alias(state, "list"), list_type)
-            v = objects.make_column_instance(sql.MakeArray(list_type, expr.code), col_type, [expr])
-        elif isinstance(v, objects.TableInstance):
+        # TODO move to ColInstance?
+        if isinstance(v, objects.TableInstance):
             t = types.make_column(name, types.StructType(v.type.name, {n:c.type.type for n,c in v.columns.items()}))
             v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
+
+        # SQL uses `first` by default on aggregate columns. This will force SQL to create an array by default.
+        # TODO first() method to take advantage of this ability (although it's possible with window functions too)
+        concrete_type = v.type.concrete_type()
+        if isinstance(concrete_type, objects.Aggregated):
+            col_type = types.make_column(get_alias(state, "list"), concrete_type)
+            v = objects.make_column_instance(sql.MakeArray(concrete_type, v.code), col_type, [v])
+
         v = _ensure_col_instance(v)
 
         processed_fields[unique_name] = v, get_alias(state, sql_friendly_name)   # TODO Don't create new alias for fields that don't change?
@@ -111,8 +114,10 @@ def compile_remote(state: State, proj: ast.Projection):
     with state.use_scope(columns):
         fields = _process_fields(state, proj.fields)
 
-    with state.use_scope({n:objects.Aggregated(c) for n,c in columns.items()}):
-        agg_fields = _process_fields(state, proj.agg_fields)
+    agg_fields = []
+    if proj.agg_fields:
+        with state.use_scope({n:objects.aggregated(c) for n,c in columns.items()}):
+            agg_fields = _process_fields(state, proj.agg_fields)
 
     if isinstance(table, objects.StructColumnInstance):
         members = {name: inst.type for name, (inst, _a) in fields + agg_fields}
@@ -220,7 +225,7 @@ def compile_remote(state: State, arith: ast.Arith):
     # TODO validate all args are compatiable
     # return Instance(Sql(join([a.code.text for a in args], arith.op)), args[1].type, args)
     code = sql.Arith(args[0].type, arith.op, [a.code for a in args])
-    return objects.make_instance(code, args[0].type, [])
+    return objects.make_instance(code, args[0].type, args)
 
 
 @dy # Could happen because sometimes simplify(...) calls compile_remote
@@ -295,9 +300,6 @@ def compile_remote(state: State, obj: objects.StructColumnInstance):
     return obj
 @dy
 def compile_remote(state: State, obj: objects.DatumColumnInstance):
-    return obj
-@dy
-def compile_remote(state: State, obj: objects.Aggregated):
     return obj
 
 

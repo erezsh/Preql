@@ -91,6 +91,10 @@ class T(Transformer):
     member_def = as_list
     print = ast.Print
 
+    # @v_args(meta=True)
+    # def table_def(self, args, meta):
+    #     return ast.TableDef(*args, meta)
+
     def __default__(self, data, children, meta):
         raise Exception("Unknown rule:", data)
 

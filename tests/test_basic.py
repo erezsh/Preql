@@ -130,7 +130,7 @@ class BasicTests(TestCase):
             ("England", "Eric Blaire|H.G. Wells"),
             ("Israel", "Erez Shinan|Ephraim Kishon"),
             ("United States", "John Steinbeck"),
-        ]), res
+        ]), list(res)
 
         res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name, count(p.id)}")
         # TODO Array, not string
