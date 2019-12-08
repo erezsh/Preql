@@ -8,14 +8,14 @@ from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError
 from . import pql_types as types
 from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType, ListType, TableType, Aggregated
-from .pql_ast import Expr, NamedField
+from .pql_ast import Expr, NamedField, Ast
 from .sql import Sql, RawSql
 
 
 
 # Functions
 @dataclass
-class Param:
+class Param(Ast):
     name: str
     # type: PqlType = None
 
@@ -27,7 +27,7 @@ class Function(PqlObject):
         # total_params = length(params)
 
         # Canonize args for the rest of the function
-        args = [a if isinstance(a, NamedField) else NamedField(None, a) for a in args]
+        args = [a if isinstance(a, NamedField) else NamedField(None, None, a) for a in args]
 
         for i, arg in enumerate(args):
             if arg.name:  # First keyword argument
@@ -94,7 +94,7 @@ class List_(Expr):
 # Other
 
 @dataclass
-class Instance(PqlObject, Expr):
+class Instance(PqlObject):
     code: Sql
     type: PqlType
 

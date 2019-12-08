@@ -3,7 +3,11 @@ from typing import List, Any, Optional
 from .utils import dataclass
 from . import pql_types as types
 
-class Ast: pass
+Meta = Optional[dict]
+
+@dataclass
+class Ast(types.PqlObject):
+    meta: Meta
 
 class Expr(Ast): pass
 
@@ -11,7 +15,6 @@ class Statement(Ast): pass
 
 from lark import Token
 
-Meta = Optional[dict]
 
 @dataclass
 class Name(Expr):
@@ -35,17 +38,17 @@ class Const(Expr):
 @dataclass
 class Compare(Expr):
     op: str
-    args: List[Expr]
+    args: List[types.PqlObject]
 
 @dataclass
 class Arith(Expr):
     op: str
-    args: List[Expr]
+    args: List[types.PqlObject]
 
 @dataclass
 class Contains(Expr):
     op: str
-    args: List[Expr]
+    args: List[types.PqlObject]
 
 @dataclass
 class DescOrder(Expr):
@@ -98,18 +101,19 @@ class FuncCall(Expr):
     args: list   # Func args
 
 @dataclass
-class Type:
+class Type(Ast):
     name: str
     nullable: bool = False
 
+class Definition:
+    pass
+
 @dataclass
-class ColumnDef:
+class ColumnDef(Ast, Definition):
     name: str
     type: Type
     query: Optional[Expr] = None
 
-class Definition:
-    pass
 
 @dataclass
 class TableDef(Statement, Definition):

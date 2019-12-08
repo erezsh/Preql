@@ -145,15 +145,15 @@ def simplify(state: State, funccall: ast.FuncCall):
 
 @dy
 def simplify(state: State, c: ast.Arith):
-    return ast.Arith(c.op, simplify_list(state, c.args))
+    return ast.Arith(c.meta, c.op, simplify_list(state, c.args))
 
 @dy
 def simplify(state: State, c: objects.List_):
-    return objects.List_(simplify_list(state, c.elems))
+    return objects.List_(c.meta, simplify_list(state, c.elems))
 
 @dy
 def simplify(state: State, c: ast.Compare):
-    return ast.Compare(c.op, simplify_list(state, c.args))
+    return ast.Compare(c.meta, c.op, simplify_list(state, c.args))
 
 @dy
 def simplify(state: State, c: ast.Selection):
@@ -225,7 +225,7 @@ def simplify(state: State, new: ast.New):
 
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
-    return ast.Const(types.Int, rowid)   # Todo Row reference / query
+    return ast.Const(None, types.Int, rowid)   # Todo Row reference / query
 
 
 

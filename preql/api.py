@@ -11,9 +11,9 @@ def python_to_pql(value):
     if value is None:
         return types.null
     elif isinstance(value, str):
-        return ast.Const(types.String, value)
+        return ast.Const(None, types.String, value)
     elif isinstance(value, int):
-        return ast.Const(types.Int, value)
+        return ast.Const(None, types.Int, value)
     assert False, value
 
 

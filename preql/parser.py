@@ -5,30 +5,41 @@ from . import pql_types as types
 from . import pql_objects as objects
 # from .exceptions import pql_SyntaxError
 
-def token_value(_, t):
+def token_value(_, _2, t):
     return t #.value
 
 @v_args(inline=False)
 def as_list(_, args):
     return args
 
-@v_args(inline=True)
+def meta_d(meta):
+    return {
+        'line': meta.line,
+        'column': meta.column,
+    }
+
+def _args_wrapper(f, data, children, meta):
+    return f(meta_d(meta), *children)
+
+@v_args(wrapper=_args_wrapper)
 class T(Transformer):
     name = token_value
 
-    def string(self, s):
-        return ast.Const(types.String, s.value[1:-1])
+    def string(self, meta, s):
+        return ast.Const(meta, types.String, s.value[1:-1])
 
-    def int(self, i):
-        return ast.Const(types.Int, int(i))
+    def int(self, meta, i):
+        return ast.Const(meta, types.Int, int(i))
 
-    def float(self, f):
-        return ast.Const(types.Float, float(f))
+    def float(self, meta, f):
+        return ast.Const(meta, types.Float, float(f))
 
-    def null(self):
-        return ast.Const(types.null, None)
+    def null(self, meta):
+        return ast.Const(meta, types.null, None)
 
-    list = v_args(inline=False)(objects.List_)
+    @v_args(inline=False, meta=True)
+    def list(self, items, meta):
+        return objects.List_(meta_d(meta), items)
 
     expr_list = as_list
     proj_exprs = as_list
@@ -41,24 +52,24 @@ class T(Transformer):
 
 
     # types
-    def typemod(self, *args):
+    def typemod(self, meta, *args):
         return [t.value for t in args]
-    def type(self, name, mods):
+    def type(self, meta, name, mods):
         # TODO pk
-        return ast.Type(name, '?' in (mods or ''))
+        return ast.Type(meta, name, '?' in (mods or ''))
 
     compare_op = token_value
     arith_op = token_value
     contains_op = as_list
 
-    def compare(self, a, op, b):
-        return ast.Compare(op, [a,b])
+    def compare(self, meta, a, op, b):
+        return ast.Compare(meta, op, [a,b])
 
-    def arith_expr(self, a, op, b):
-        return ast.Arith(op, [a,b])
+    def arith_expr(self, meta, a, op, b):
+        return ast.Arith(meta, op, [a,b])
 
-    def contains(self, a, op, b):
-        return ast.Contains(" ".join(op), [a,b])
+    def contains(self, meta, a, op, b):
+        return ast.Contains(meta, " ".join(op), [a,b])
 
     like = ast.Like
     var = ast.Name
@@ -72,18 +83,18 @@ class T(Transformer):
     selection = ast.Selection
     projection = ast.Projection
 
-    def projection_grouped(self, table, keys, values):
-        return ast.Projection(table, keys, True, values)
+    def projection_grouped(self, meta, table, keys, values):
+        return ast.Projection(meta, table, keys, True, values)
 
-    def projection_grouped_nokeys(self, table, values):
-        return ast.Projection(table, [], True, values)
+    def projection_grouped_nokeys(self, meta, table, values):
+        return ast.Projection(meta, table, [], True, values)
 
-    def projection_grouped_novalues(self, table, keys):
-        return ast.Projection(table, keys, True, [])
+    def projection_grouped_novalues(self, meta, table, keys):
+        return ast.Projection(meta, table, keys, True, [])
 
     # Statements / Declarations
     param = objects.Param
-    func_def = lambda self, *args: ast.FuncDef(objects.UserFunction(*args))
+    func_def = lambda self, meta, *args: ast.FuncDef(meta, objects.UserFunction(*args))
     var_decl = ast.VarDef
     struct_def = ast.StructDef
     table_def = ast.TableDef

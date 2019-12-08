@@ -165,7 +165,7 @@ internal_funcs = {
     'substract': pql_substract,
 }
 joins = {
-    'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
-    'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param('tables')),
-    'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param('tables')),
+    'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),
+    'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param(None, 'tables')),
+    'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param(None, 'tables')),
 }

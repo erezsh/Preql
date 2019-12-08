@@ -13,7 +13,7 @@ def initial_namespace():
     ns = SafeDict({p.name: p for p in types.primitives_by_pytype.values()})
     ns.update({
         name: objects.InternalFunction(name, [
-            objects.Param(name) for name, type_ in list(f.__annotations__.items())[1:]
+            objects.Param(None, name) for name, type_ in list(f.__annotations__.items())[1:]
         ], f) for name, f in internal_funcs.items()
     })
     ns.update(joins)
@@ -26,13 +26,13 @@ class Interpreter:
 
 
     def call_func(self, fname, args):
-        obj = simplify(self.state, ast.Name(fname))
+        obj = simplify(self.state, ast.Name(None, fname))
         if isinstance(obj, objects.TableInstance):
             assert not args, args
             # return localize(self.state, obj)
             return obj
 
-        funccall = ast.FuncCall(ast.Name(fname), args)
+        funccall = ast.FuncCall(None, ast.Name(None, fname), args)
         return evaluate(self.state, funccall)
 
     def eval_expr(self, code, args):
