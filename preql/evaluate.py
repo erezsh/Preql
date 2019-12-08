@@ -86,7 +86,8 @@ def _execute(state: State, func_def: ast.FuncDef):
 
 @dy
 def _execute(state: State, p: ast.Print):
-    res = evaluate(state, p.value)
+    inst = evaluate(state, p.value)
+    res = localize(state, inst)
     print(res)
 
 

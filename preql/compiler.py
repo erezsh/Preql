@@ -83,7 +83,7 @@ def _process_fields(state: State, fields):
         # SQL uses `first` by default on aggregate columns. This will force SQL to create an array by default.
         # TODO first() method to take advantage of this ability (although it's possible with window functions too)
         concrete_type = v.type.concrete_type()
-        if isinstance(concrete_type, objects.Aggregated):
+        if isinstance(concrete_type, types.Aggregated):
             col_type = types.make_column(get_alias(state, "list"), concrete_type)
             v = objects.make_column_instance(sql.MakeArray(concrete_type, v.code), col_type, [v])
 

@@ -88,6 +88,9 @@ class ListType(Collection):
     def flatten(self):
         return [self]
 
+class Aggregated(ListType):
+    pass
+
 @dataclass
 class SetType(Collection):
     elemtype: PqlType
@@ -167,7 +170,7 @@ class DatumColumnType(ColumnType):
 @dataclass
 class StructColumnType(ColumnType):
     name: str
-    type: StructType
+    type: (StructType, Aggregated)
     members: Dict[str, ColumnType]
 
     def flatten(self):
@@ -183,12 +186,13 @@ class RelationalColumnType(ColumnType):
     query: Optional[Any] = None # XXX what now?
 
 def make_column(name, type_, query=None):
-    if isinstance(type_, StructType):
+    kernel = type_.kernel_type()
+    if isinstance(kernel, StructType):
         assert not query
         return StructColumnType(name, type_, {
-            n: make_column(name+"_"+n, m) for (n,m) in type_.members.items()
+            n: make_column(name+"_"+n, m) for (n,m) in kernel.members.items()
         })
-    elif query or isinstance(type_, TableType):
+    elif query or isinstance(kernel, TableType):
         return RelationalColumnType(name, type_, query)
     else:
         return DatumColumnType(name, type_)

@@ -7,13 +7,11 @@ from typing import List, Optional, Callable
 from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError
 from . import pql_types as types
-from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType, ListType, TableType
+from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType, ListType, TableType, Aggregated
 from .pql_ast import Expr, NamedField
 from .sql import Sql, RawSql
 
 
-class Aggregated(ListType):
-    pass
 
 # Functions
 @dataclass
