@@ -223,9 +223,17 @@ def compile_remote(state: State, arith: ast.Arith):
         return state.get_var(ops[arith.op]).func(state, *args)
 
     # TODO validate all args are compatiable
-    # return Instance(Sql(join([a.code.text for a in args], arith.op)), args[1].type, args)
-    code = sql.Arith(args[0].type, arith.op, [a.code for a in args])
-    return objects.make_instance(code, args[0].type, args)
+    op = arith.op
+    arg_codes = [a.code for a in args]
+    arg_types = [a.type for a in args]
+    if arith.op == '/':
+        arg_codes[0] = sql.Cast(types.Float, 'float', arg_codes[0])
+        arg_types[0] = types.Float
+    elif arith.op == '//':
+        op = '/'
+
+    code = sql.Arith(arg_types[0], op, arg_codes)
+    return objects.make_instance(code, arg_types[0], args)
 
 
 @dy # Could happen because sometimes simplify(...) calls compile_remote
@@ -246,9 +254,6 @@ def compile_remote(state: State, c: ast.Const):
 @dy
 def compile_remote(state: State, n: ast.Name):
     v = simplify(state, n)
-    if v is n:
-        import pdb
-        pdb.set_trace()
     assert v is not n   # Protect against recursions
     return compile_remote(state, v)
 

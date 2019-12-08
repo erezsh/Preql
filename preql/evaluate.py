@@ -118,8 +118,6 @@ def simplify(state: State, c: ast.Const):
 # def simplify(state: State, a: ast.Attr):
 #     # Happens if attr is a method
 #     print("@@@@@", a)
-#     import pdb
-#     pdb.set_trace()
 #     return a
 
 @dy

@@ -24,6 +24,11 @@ class BasicTests(TestCase):
     def _test_basic(self, preql):
         self.assertEqual(preql("3.14"), 3.14)
 
+        assert preql("1") == 1
+        assert preql("1 / 2") == 0.5
+        assert preql("10 // 3") == 3
+
+
         preql.exec("""func query1() = Country[language=="en"]{name}""")
 
         assert is_eq(preql.query1(), [("England",), ("United States",)])
@@ -139,6 +144,9 @@ class BasicTests(TestCase):
             ("Israel", "Erez Shinan|Ephraim Kishon", 2),
             ("United States", "John Steinbeck", 1),
         ])
+
+        res = preql('[1,2,3]{=>sum(value*value)}')
+        assert res == [{'sum': 14}], list(res)
 
     def _test_table_ops(self, preql):
         # TODO should be consistent - always table, or always array

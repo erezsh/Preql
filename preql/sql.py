@@ -99,6 +99,15 @@ class Round(Sql):
         return self._compile(f'round({self.field.compile().text})')
 
 @dataclass
+class Cast(Sql):
+    as_type: str
+    value: Sql
+
+    def compile(self):
+        return self._compile(f'CAST({self.value.compile().text} AS {self.as_type})')
+
+
+@dataclass
 class MakeArray(Sql):
     field: Sql
     type = list  # TODO correct object
@@ -144,7 +153,7 @@ class Compare(Sql):
         return self._compile(compare)
 
 @dataclass
-class Arith(Sql):
+class Arith(Scalar):
     op: str
     exprs: List[Sql]
 
@@ -154,7 +163,7 @@ class Arith(Sql):
 
 
 @dataclass
-class TableArith(Arith, Table):
+class TableArith(Table):
     op: str
     exprs: List[Table]
 

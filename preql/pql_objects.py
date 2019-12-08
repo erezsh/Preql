@@ -107,6 +107,9 @@ class Instance(PqlObject, Expr):
     def get_attr(self, name):
         raise NotImplementedError(f"get_attr() not implemented for instance of type {self.type} -- code=({self.code})")
 
+    # def __created__(self):
+    #     assert self.code.type.concrete_type() == self.type.concrete_type(), (self.code.type, self.type)
+
 
 @dataclass
 class ColumnInstance(Instance):
