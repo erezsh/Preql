@@ -183,12 +183,23 @@ def compile_remote(state: State, expr: ast.DescOrder):
 def compile_remote(state: State, lst: list):
     return [compile_remote(state, e) for e in lst]
 
+# @dy
+# def compile_remote(state: State, c: ast.Contains):
+#     args = compile_remote(state, c.args)
+#     code = sql.Contains(types.Bool, c.op, [a.code for a in args])
+#     return objects.make_instance(code, types.Bool, args)
+
 @dy
 def compile_remote(state: State, cmp: ast.Compare):
+    sql_cls = sql.Compare
+    if cmp.op == 'in' or cmp.op == '^in':
+        sql_cls = sql.Contains
+
     op = {
-        '==': '='
+        '==': '=',
+        '^in': 'not in'
     }.get(cmp.op, cmp.op)
-    code = sql.Compare(types.Bool, op, [e.code for e in compile_remote(state, cmp.args)])
+    code = sql_cls(types.Bool, op, [e.code for e in compile_remote(state, cmp.args)])
     return objects.Instance.make(code, types.Bool, [])
 
 @dy
@@ -197,19 +208,17 @@ def compile_remote(state: State, attr: ast.Attr):
     return inst.get_attr(attr.name)
 
 @dy
-def compile_remote(state: State, c: ast.Contains):
-    args = compile_remote(state, c.args)
-    code = sql.Contains(types.Bool, c.op, [a.code for a in args])
-    return objects.make_instance(code, types.Bool, args)
-
-@dy
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
 
     arg_types = [a.code.type for a in args]
     if not all(at==arg_types[0] for at in arg_types):
-        meta = meta_from_token(arith.op).remake(parent=arith.meta)
-        raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
+        # Auto-convert int+float into float
+        if set(arg_types) == {types.Int, types.Float}:
+            arg_types = {types.Float}
+        else:
+            meta = meta_from_token(arith.op).remake(parent=arith.meta)
+            raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
 
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward

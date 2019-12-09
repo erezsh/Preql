@@ -62,18 +62,22 @@ class T(Transformer):
         # TODO pk
         return ast.Type(meta, name, '?' in (mods or ''))
 
-    compare_op = token_value
-    arith_op = token_value
-    contains_op = as_list
+    # compare_op = token_value
+    # arith_op = token_value
+    # contains_op = as_list
 
     def compare(self, meta, a, op, b):
         return ast.Compare(meta, op, [a,b])
 
-    def arith_expr(self, meta, a, op, b):
+    def _arith_expr(self, meta, a, op, b):
         return ast.Arith(meta, op, [a,b])
 
-    def contains(self, meta, a, op, b):
-        return ast.Contains(meta, " ".join(op), [a,b])
+    add_expr = _arith_expr
+    term = _arith_expr
+    power = _arith_expr
+
+    # def contains(self, meta, a, op, b):
+    #     return ast.Contains(meta, " ".join(op), [a,b])
 
     like = ast.Like
     var = ast.Name

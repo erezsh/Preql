@@ -38,6 +38,11 @@ class BasicTests(TestCase):
         res = preql("Person[id!=me]{name}")
         assert is_eq(res, [("Ephraim Kishon",), ("Eric Blaire",), ("H.G. Wells",), ("John Steinbeck",)])
 
+    def test_arith(self):
+        preql = Preql()
+        assert preql("1 + 2 / 4") == 1.5
+        assert preql("1 + 2 // 4 + 1") == 2
+
     def test_update_basic(self):
         preql = Preql()
         preql("""
@@ -187,6 +192,9 @@ class BasicTests(TestCase):
 
         res = preql("""[1,2,3]{v:value*2}[v in [2,6]]""")
         assert res == [{'v': 2}, {'v': 6}], res
+
+        res = preql("""[1,2,3]{v:value*2}[v ^in [2,6]]""")
+        assert res == [{'v': 4}], res
 
         res = preql("""enum([1,8,4,4])[index==value]{value}""")
         assert res == [{'value': 1}, {'value': 4}]

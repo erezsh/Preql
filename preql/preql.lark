@@ -38,20 +38,29 @@ order: molecule "order" "{" _NL? expr_list2 _NL? "}"
 update: molecule "update" "{" _NL? proj_exprs _NL? "}"
 
 
-?expr: contains | like
+?expr: or_test //contains | like
 
-like: molecule "~" molecule
+// like: molecule "~" molecule
 
-!contains_op: "in" | "not" "in"
-?contains: (contains contains_op)? compare
+!_comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"^in" //|"is"|"is" "not"
 
-?compare: (compare compare_op)? arith_expr
+?or_test: and_test ("or" and_test)*
+?and_test: not_test ("and" not_test)*
+?not_test: "not" not_test -> not
+         | compare
+?compare: (compare _comp_op)? like
+?like: (like "~")? add_expr
+?add_expr: (add_expr _add_op)? term
+?term: (term _mul_op)? power
+?factor: _add_op* molecule
+?power: molecule ("**" factor)?
 
-?arith_expr: (arith_expr arith_op)? molecule
+!_add_op: "+"|"-" | "&" | "|"
+!_mul_op: "*"|"/"|"%"|"//"
+// <> isn't actually a valid comparison operator in Python. It's here for the
+// sake of a __future__ import described in PEP 401 (which really works :-)
 
-!arith_op: "+" | "*" | "-" | "/" | "&" | "|" | "//"
 
-!compare_op: "<" | ">" | "==" | "!=" | "<>" | ">=" | "<="
 ?molecule: atom
      | func_call
      | getattr
