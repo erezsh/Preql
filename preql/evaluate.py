@@ -18,7 +18,7 @@ from typing import List, Optional, Any
 
 from .utils import safezip, dataclass
 from .interp_common import assert_type
-from .exceptions import pql_TypeError, pql_ValueError
+from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -179,6 +179,12 @@ def simplify(state: State, u: ast.Update):
     table = evaluate(state, u.table)
     assert isinstance(table, objects.TableInstance)
     assert all(f.name for f in u.fields)
+
+    try:
+        state.get_var(table.type.name)
+    except pql_NameNotFound:
+        meta = u.table.meta
+        raise pql_TypeError(meta.remake(meta), "Update error: Got non-real table")
 
     update_scope = {n:c.remake(code=sql.Name(c.type.concrete_type(), n)) for n, c in table.columns.items()}
     with state.use_scope(update_scope):

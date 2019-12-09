@@ -2,12 +2,12 @@ from typing import List, Any, Optional
 
 from .utils import dataclass
 from . import pql_types as types
+from .exceptions import Meta
 
-Meta = Optional[dict]
 
 @dataclass
 class Ast(types.PqlObject):
-    meta: Meta
+    meta: Optional[Meta]
 
 class Expr(Ast): pass
 

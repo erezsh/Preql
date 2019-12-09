@@ -1,6 +1,6 @@
 from lark import Lark, Transformer, v_args, UnexpectedInput
 
-from .exceptions import pql_SyntaxError
+from .exceptions import pql_SyntaxError, Meta
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
@@ -13,14 +13,14 @@ def as_list(_, args):
     return args
 
 def meta_d(meta):
-    return {
-        'start_line': meta.line,
-        'start_column': meta.column,
-        'start_pos': meta.start_pos,
-        'end_line': meta.end_line,
-        'end_column': meta.end_column,
-        'end_pos': meta.end_pos,
-    }
+    return Meta(
+        meta.start_pos,
+        meta.line,
+        meta.column,
+        meta.end_pos,
+        meta.end_line,
+        meta.end_column,
+    )
 
 def _args_wrapper(f, data, children, meta):
     return f(meta_d(meta), *children)
@@ -128,12 +128,9 @@ def parse_stmts(s):
     try:
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
-        meta = {
-            'start_line': e.line,
-            'start_column': e.column,
-            'start_pos': e.pos_in_stream,
-        }
-        raise pql_SyntaxError(meta, e.token) from e
+        m = Meta(e.pos_in_stream, e.line, e.column,
+                 e.pos_in_stream, e.line, e.column)
+        raise pql_SyntaxError(m, e.token) from e
 
     # print(tree)
 

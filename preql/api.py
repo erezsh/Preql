@@ -99,9 +99,12 @@ class Interface:
         try:
             res = self.interp.execute_code(pq + "\n", pql_args)
         except PreqlError as e:
-            print(f"Error at line {e.meta['start_line'], e.meta['start_column']}: {e.message}")
-            print()
-            print(e.get_context(pq))
+            if e.meta:
+                print(f"Error at line {e.meta.start_line, e.meta.start_column}: {e.message}")
+                print()
+                print(e.get_context(pq))
+            else:
+                raise
 
             return
 

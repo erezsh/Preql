@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 from .dispatchy import Dispatchy
-from .exceptions import pql_NameNotFound, pql_TypeError
+from .exceptions import pql_NameNotFound, pql_TypeError, Meta
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -31,12 +31,9 @@ class State:
 
         try:
             meta = meta_from_token(name)
-            meta['parent'] = meta
+            meta.parent = meta
         except AttributeError:
-            meta = dict(
-                line = '?',
-                column = '?',
-            )
+            meta = None
 
         raise pql_NameNotFound(meta, str(name))
 
@@ -89,12 +86,12 @@ def assert_type(t, type_, msg):
 
 
 def meta_from_token(tok):
-    return {
-        'start_line': tok.line,
-        'start_column': tok.column,
-        'start_pos': tok.pos_in_stream,
-        'end_line': tok.end_line,
-        'end_column': tok.end_column,
-        'end_pos': tok.end_pos,
-    }
+    return Meta(
+        tok.pos_in_stream,
+        tok.line,
+        tok.column,
+        tok.end_pos,
+        tok.end_line,
+        tok.end_column,
+    )
 
