@@ -80,6 +80,7 @@ class T(Transformer):
     getattr = ast.Attr
     named_expr = ast.NamedField
     order = ast.Order
+    update = ast.Update
     desc = ast.DescOrder
     new = ast.New
     func_call = ast.FuncCall
@@ -127,7 +128,12 @@ def parse_stmts(s):
     try:
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
-        raise pql_SyntaxError(meta_d(e), e.token) from e
+        meta = {
+            'start_line': e.line,
+            'start_column': e.column,
+            'start_pos': e.pos_in_stream,
+        }
+        raise pql_SyntaxError(meta, e.token) from e
 
     # print(tree)
 

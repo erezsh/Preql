@@ -1,4 +1,4 @@
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Dict
 
 from .utils import dataclass, SafeDict, listgen
 from . import pql_types as types
@@ -274,6 +274,23 @@ class Values(Table):
 class AllFields(Sql):
     def compile(self):
         return self._compile('*')
+
+@dataclass
+class Update(Sql):
+    table: TableName
+    fields: Dict[Sql, Sql]
+    conds: List[Sql]
+
+    def compile(self):
+        fields_sql = ['%s = %s' % (k.compile().text, v.compile().text) for k, v in self.fields.items()]
+        fields_sql = ', '.join(fields_sql)
+
+        sql = f'UPDATE {self.table.compile().text} SET {fields_sql}'
+
+        if self.conds:
+            sql += ' WHERE ' + ' AND '.join(c.compile().text for c in self.conds)
+
+        return self._compile(sql)
 
 @dataclass
 class Select(Table):

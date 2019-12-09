@@ -1,4 +1,5 @@
 from .utils import SafeDict
+from .exceptions import PreqlError
 
 from .evaluate import State, execute, evaluate, simplify, localize
 from .parser import parse_stmts, parse_expr
@@ -49,7 +50,7 @@ class Interpreter:
             for stmt in parse_stmts(code):
                 try:
                     last = execute(self.state, stmt)
-                except Exception as e:
+                except PreqlError as e:
                     # print("Error in statement: ", stmt)
                     raise e.remake(code)
 

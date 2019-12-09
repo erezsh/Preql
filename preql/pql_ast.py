@@ -91,6 +91,11 @@ class Order(TableOperation):
     fields: List[Expr]
 
 @dataclass
+class Update(TableOperation):
+    table: Expr
+    fields: List[NamedField]
+
+@dataclass
 class New(Expr):
     type: str
     args: list   # Func args

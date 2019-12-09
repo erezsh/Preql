@@ -157,6 +157,10 @@ def compile_remote(state: State, proj: ast.Projection):
 
 
 @dy
+def compile_remote(state: State, order: ast.Update):
+    return compile_remote(state, simplify(state, order))
+
+@dy
 def compile_remote(state: State, order: ast.Order):
     table = compile_remote(state, order.table)
     assert_type(table.type, types.TableType, "'order' expected an object of type '%s', instead got '%s'")
@@ -202,10 +206,11 @@ def compile_remote(state: State, c: ast.Contains):
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
 
-    if not all(a.code.type==args[0].code.type for a in args):
+    arg_types = [a.code.type for a in args]
+    if not all(at==arg_types[0] for at in arg_types):
         meta = meta_from_token(arith.op)
         meta['parent'] = arith.meta
-        raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type")
+        raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
 
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward

@@ -18,7 +18,7 @@ from typing import List, Optional, Any
 
 from .utils import safezip, dataclass
 from .interp_common import assert_type
-from .exceptions import pql_TypeError
+from .exceptions import pql_TypeError, pql_ValueError
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -175,6 +175,28 @@ def simplify(state: State, o: ast.Order):
     return compile_remote(state, o)
 
 @dy
+def simplify(state: State, u: ast.Update):
+    table = evaluate(state, u.table)
+    assert isinstance(table, objects.TableInstance)
+    assert all(f.name for f in u.fields)
+
+    update_scope = {n:c.remake(code=sql.Name(c.type.concrete_type(), n)) for n, c in table.columns.items()}
+    with state.use_scope(update_scope):
+        proj = {f.name:compile_remote(state, f.value) for f in u.fields}
+    sql_proj = {sql.Name(value.type, name): value.code for name, value in proj.items()}
+    for row in localize(state, table):
+        id_ = row['id']
+        if not set(proj) < set(row):
+            raise pql_ValueError("Update error: Not all keys exist in table")
+        compare = sql.Compare(types.Bool, '=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
+        code = sql.Update(types.null, sql.TableName(table.type, table.type.name), sql_proj, [compare])
+        state.db.query(code, table.subqueries)
+
+    # TODO return by ids to maintain consistency, and skip a possibly long query
+    return table
+
+
+@dy
 def simplify(state: State, n: types.NullType):
     return n
 
@@ -253,6 +275,7 @@ def evaluate(state, obj):
 
 
 def localize(session, inst):
+    assert inst
     if isinstance(inst, objects.Function):
         return inst
 

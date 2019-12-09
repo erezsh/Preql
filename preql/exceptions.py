@@ -47,6 +47,11 @@ class pql_TypeError(PreqlError):
     source_code: Optional[str] = None
 
 @dataclass
+class pql_ValueError(PreqlError):
+    message: str
+    source_code: Optional[str] = None
+
+@dataclass
 class pql_SyntaxError(PreqlError):
     message: str
     source_code: Optional[str] = None

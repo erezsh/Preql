@@ -105,7 +105,8 @@ class Interface:
 
             return
 
-        return self._wrap_result(res)
+        if res:
+            return self._wrap_result(res)
 
     def load(self, fn, rel_to=None):
         """Load content filename as Preql code
