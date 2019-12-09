@@ -82,6 +82,7 @@ class FieldFunc(Sql):
         assert self.type is types.Int
         return self._compile(f'{self.name}({self.field.compile().text})')
 
+
 @dataclass
 class CountTable(Scalar):
     table: Table
@@ -89,6 +90,15 @@ class CountTable(Scalar):
     def compile(self):
         return self._compile(f'select count(*) from ({self.table.compile().text})')
 
+
+@dataclass
+class FuncCall(Sql):
+    name: str
+    fields: List[Sql]
+
+    def compile(self):
+        s = ', '.join(f.compile().text for f in self.fields)
+        return self._compile(f'{self.name}({s})')
 
 @dataclass
 class Round(Sql):

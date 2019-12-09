@@ -3,6 +3,7 @@ from copy import copy
 
 from preql import Preql
 from preql.pql_objects import UserFunction
+from preql.exceptions import PreqlError, pql_TypeError
 
 
 def is_eq(a, b):
@@ -42,6 +43,12 @@ class BasicTests(TestCase):
         preql = Preql()
         assert preql("1 + 2 / 4") == 1.5
         assert preql("1 + 2 // 4 + 1") == 2
+        assert preql('"a" + "b"') == "ab"
+        assert preql('"a" * 3') == "aaa" == preql('3 * "a"')
+        assert preql('"ab" * 3') == "ababab" == preql('3 * "ab"')
+        assert preql('"a" + "b"*2 + "c"') == 'abbc'
+        self.assertRaises(pql_TypeError, preql, '"a" + 3')
+
 
     def test_update_basic(self):
         preql = Preql()

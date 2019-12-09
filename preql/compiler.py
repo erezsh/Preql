@@ -211,15 +211,34 @@ def compile_remote(state: State, attr: ast.Attr):
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
 
-    arg_types = [a.code.type for a in args]
-    if not all(at==arg_types[0] for at in arg_types):
+    arg_codes = [a.code for a in args]
+    arg_types = [a.type.concrete_type() for a in args]
+    arg_types_set = set(arg_types)
+    if len(arg_types_set) > 1:
         # Auto-convert int+float into float
-        if set(arg_types) == {types.Int, types.Float}:
-            arg_types = {types.Float}
+        # TODO use dispatch+operator_overload+SQL() to do this in preql instead of here?
+        if arg_types_set == {types.Int, types.Float}:
+            arg_types_set = {types.Float}
+        elif arg_types_set == {types.Int, types.String}:
+            if arith.op != '*':
+                meta = meta_from_token(arith.op).remake(parent=arith.meta)
+                raise pql_TypeError(meta, f"Operator '{arith.op}' not supported between string and integer.")
+
+            # REPEAT(str, int) -> str
+            if arg_types == [types.String, types.Int]:
+                codes = arg_codes
+            elif arg_types == [types.Int, types.String]:
+                codes = arg_codes[::-1]
+            else:
+                assert False
+            # code = sql.FuncCall(types.String, "REPEAT", codes)
+            # XXX Sqlite3 hack for repeat
+            # TODO move to pql_repeat
+            code = sql.RawSql(types.String, f"replace(hex(zeroblob({codes[1].text})), '00', {codes[0].text})")
+            return objects.make_instance(code, types.String, args)
         else:
             meta = meta_from_token(arith.op).remake(parent=arith.meta)
             raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
-
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
@@ -236,18 +255,24 @@ def compile_remote(state: State, arith: ast.Arith):
         # TODO compile preql funccall?
         return state.get_var(ops[arith.op]).func(state, *args)
 
+
+
     # TODO validate all args are compatiable
+    res_type ,= arg_types_set
     op = arith.op
-    arg_codes = [a.code for a in args]
-    arg_types = [a.type for a in args]
-    if arith.op == '/':
+    if arg_types_set == {types.String}:
+        if arith.op != '+':
+            meta = meta_from_token(arith.op).remake(parent=arith.meta)
+            raise pql_TypeError(meta, f"Operator '{arith.op}' not supported for strings.")
+        op = '||'
+    elif arith.op == '/':
         arg_codes[0] = sql.Cast(types.Float, 'float', arg_codes[0])
-        arg_types[0] = types.Float
+        arg_types = types.Float
     elif arith.op == '//':
         op = '/'
 
-    code = sql.Arith(arg_types[0], op, arg_codes)
-    return objects.make_instance(code, arg_types[0], args)
+    code = sql.Arith(res_type, op, arg_codes)
+    return objects.make_instance(code, res_type, args)
 
 
 @dy # Could happen because sometimes simplify(...) calls compile_remote

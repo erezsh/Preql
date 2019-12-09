@@ -286,9 +286,10 @@ def localize(session, inst):
 
     res = session.db.query(inst.code, inst.subqueries)
 
-    if isinstance(inst.type, types.ListType):
-        assert all(len(e)==1 for e in res)
-        return [e['value'] for e in res]
+    # if isinstance(inst.type, types.ListType):
+    #     # assert False
+    #     assert all(len(e)==1 for e in res)
+    #     return [e['value'] for e in res]
 
     return res
 

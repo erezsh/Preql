@@ -15,7 +15,10 @@ class PqlType(PqlObject):
 
 
 # Primitives
-class NullType(PqlType): pass
+class NullType(PqlType):
+    def import_result(self, res):
+        return None
+
 null = NullType()
 
 @dataclass
@@ -30,10 +33,10 @@ class Primitive(PqlType):
     def __created__(self):
         primitives_by_pytype[self.pytype] = self
 
-    # def import_result(self, res):
-    #     row ,= res
-    #     item ,= row
-    #     return item
+    def import_result(self, res):
+        row ,= res
+        item ,= row
+        return item
 
     def restructure_result(self, i):
         return next(i)
@@ -73,9 +76,9 @@ class ListType(Collection):
     def kernel_type(self):
         return self.elemtype
 
-    # def import_result(self, arr):
-    #     assert all(len(e)==1 for e in arr)
-    #     return [e[0] for e in arr]
+    def import_result(self, arr):
+        assert all(len(e)==1 for e in arr)
+        return [e[0] for e in arr]
 
     def restructure_result(self, res):
         # return next(res)
@@ -143,6 +146,15 @@ class TableType(Collection):
     #         i = iter(row)
     #         s = ({name: col.type.restructure_result(i) for name, col in self.columns.items()})
     #         yield s
+
+    @listgen
+    def import_result(self, arr):
+        expected_length = self.flat_length()
+        for row in arr:
+            assert len(row) == expected_length, (expected_length, row)
+            i = iter(row)
+            s = ({str(name): col.type.restructure_result(i) for name, col in self.columns.items()})
+            yield s
 
 
 @dataclass

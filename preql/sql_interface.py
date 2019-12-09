@@ -36,10 +36,13 @@ class SqliteInterface(SqlInterface):
             print_sql(sql_code)
         c.execute(sql_code, qargs)
         res = c.fetchall()
+
         try:
-            imp = compiled.sql.import_result
+            # imp = compiled.sql.import_result
+            imp = sql.type.import_result
         except AttributeError:
-            return res
+            # return res
+            raise
 
         return imp(res)
 

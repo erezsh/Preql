@@ -23,7 +23,7 @@ def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     else:
         # assert isinstance(obj, objects.ColumnInstance), obj
         if not isinstance(obj.type.concrete_type(), objects.Aggregated):
-            raise pql_TypeError(f"Function '{name}' expected an aggregated list, but got '{obj.type.concrete_type()}' instead. Did you forget to group?")
+            raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type.concrete_type()}' instead. Did you forget to group?")
 
         code = sql.FieldFunc(types.Int, name, obj.code)
 
