@@ -5,11 +5,12 @@ A collection of objects that may come to interaction with the user.
 from typing import List, Optional, Callable
 
 from .utils import dataclass, SafeDict, safezip, split_at_index
-from .exceptions import pql_TypeError
+from .exceptions import pql_TypeError, pql_AttributeError
 from . import pql_types as types
 from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType, ListType, TableType, Aggregated
 from .pql_ast import Expr, NamedField, Ast
 from .sql import Sql, RawSql
+from .interp_common import meta_from_token
 
 
 
@@ -169,7 +170,10 @@ class TableInstance(Instance):
         return type(self)(code, self.type, self.subqueries, self.columns)
 
     def get_attr(self, name):
-        return ColumnInstanceWithTable(self.columns[name], self)
+        try:
+            return ColumnInstanceWithTable(self.columns[name], self)
+        except KeyError:
+            raise pql_AttributeError(meta_from_token(name), name)
 
     def flatten(self):
         return [atom for col in self.columns.values() for atom in col.flatten()]

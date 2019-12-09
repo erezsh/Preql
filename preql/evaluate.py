@@ -128,13 +128,11 @@ def simplify(state: State, funccall: ast.FuncCall):
     func = compile_remote(state, funccall.func)
 
     if not isinstance(func, objects.Function):
-        meta = funccall.meta
-        meta['parent'] = funccall.meta
-        raise pql_TypeError(funccall.meta, f"Error: Object of type '{func.type.concrete_type()}' is not callable")
+        meta = funccall.func.meta
+        meta = meta.remake(parent=meta)
+        raise pql_TypeError(meta, f"Error: Object of type '{func.type.concrete_type()}' is not callable")
 
-    matched = func.match_params(funccall.args)
-    # args = [(p, simplify(state, a)) for p, a in matched]
-    args = matched
+    args = func.match_params(funccall.args)
     if isinstance(func, objects.UserFunction):
         with state.use_scope({p.name:simplify(state, a) for p,a in args}):
             r = simplify(state, func.expr)
@@ -180,11 +178,12 @@ def simplify(state: State, u: ast.Update):
     assert isinstance(table, objects.TableInstance)
     assert all(f.name for f in u.fields)
 
-    try:
-        state.get_var(table.type.name)
-    except pql_NameNotFound:
-        meta = u.table.meta
-        raise pql_TypeError(meta.remake(meta), "Update error: Got non-real table")
+    # TODO verify table is concrete (i.e. lvalue, not a transitory expression)
+    # try:
+    #     state.get_var(table.type.name)
+    # except pql_NameNotFound:
+    #     meta = u.table.meta
+    #     raise pql_TypeError(meta.remake(meta), "Update error: Got non-real table")
 
     update_scope = {n:c.remake(code=sql.Name(c.type.concrete_type(), n)) for n, c in table.columns.items()}
     with state.use_scope(update_scope):

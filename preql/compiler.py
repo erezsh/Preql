@@ -208,8 +208,7 @@ def compile_remote(state: State, arith: ast.Arith):
 
     arg_types = [a.code.type for a in args]
     if not all(at==arg_types[0] for at in arg_types):
-        meta = meta_from_token(arith.op)
-        meta['parent'] = arith.meta
+        meta = meta_from_token(arith.op).remake(parent=arith.meta)
         raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
 
 
@@ -219,12 +218,6 @@ def compile_remote(state: State, arith: ast.Arith):
         assert isinstance(args[1], objects.TableInstance)
         # TODO validate types
 
-        # ops = {
-        #     "+": pql_concat,
-        #     "&": pql_intersect,
-        #     "|": pql_union,
-        #     "-": pql_substract,
-        # }
         ops = {
             "+": 'concat',
             "&": 'intersect',
@@ -297,13 +290,11 @@ def compile_remote(state: State, lst: objects.List_):
     code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
     inst = instanciate_table(state, table_type, code, elems)
     return inst
-    # return add_as_subquery(state, inst)
 
 @dy
 def compile_remote(state: State, t: types.TableType):
     i = instanciate_table(state, t, sql.TableName(t, t.name), [])
     return i
-    # return add_as_subquery(state, i)
 
 
 
@@ -316,10 +307,8 @@ def compile_remote(state: State, sel: ast.Selection):
         conds = compile_remote(state, sel.conds)
 
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], conds=[c.code for c in conds])
-    # inst = instanciate_table(state, table.type, code, [table] + conds)
     inst = objects.TableInstance.make(code, table.type, [table] + conds, table.columns)
     return inst
-    # return add_as_subquery(state, inst)
 
 
 

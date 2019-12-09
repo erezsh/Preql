@@ -38,6 +38,27 @@ class BasicTests(TestCase):
         res = preql("Person[id!=me]{name}")
         assert is_eq(res, [("Ephraim Kishon",), ("Eric Blaire",), ("H.G. Wells",), ("John Steinbeck",)])
 
+    def test_update_basic(self):
+        preql = Preql()
+        preql("""
+        table Point {x: int, y: int}
+
+        new Point(1,3)
+        new Point(2,7)
+        new Point(3,1)
+        new Point(4,2)
+
+        backup = temptable(Point)
+
+        func p() = Point[x==3] update{y: y + 13}
+        """)
+        assert preql.p() == [{'id': 3, 'x': 3, 'y': 14}]
+        assert preql.p() == [{'id': 3, 'x': 3, 'y': 27}]
+        assert preql('backup[x==3]{y}') == [{'y': 1}]
+        res = preql('backup[x==3] update {y: x+y}')
+        assert res == [{'id': 3, 'x': 3, 'y': 4}], res
+        assert preql('backup[x==3]{y}') == [{'y': 4}]
+
     def _test_user_functions(self, preql):
         preql.exec("""
             func q1() = Person
