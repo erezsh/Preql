@@ -1,13 +1,13 @@
 from .utils import safezip
+from .exceptions import pql_TypeError
 
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify, assert_type
+from .interp_common import dy, State, get_alias, simplify, assert_type, meta_from_token
 
 Sql = sql.Sql
-
 
 @dy
 def compile_type_def(table: types.TableType) -> Sql:
@@ -61,7 +61,7 @@ def _process_fields(state: State, fields):
     processed_fields = {}
     for f in fields:
         if f.name in processed_fields:
-            raise pql_TypeError(f"Field '{f.name}' was already used in this projection")
+            raise pql_TypeError(f.meta, f"Field '{f.name}' was already used in this projection")
 
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
@@ -202,7 +202,12 @@ def compile_remote(state: State, c: ast.Contains):
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
 
-    assert all(a.code.type==args[0].code.type for a in args), args
+    if not all(a.code.type==args[0].code.type for a in args):
+        meta = meta_from_token(arith.op)
+        meta['parent'] = arith.meta
+        raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type")
+
+
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
     if isinstance(args[0], objects.TableInstance):

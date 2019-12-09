@@ -49,8 +49,8 @@ class Interpreter:
             for stmt in parse_stmts(code):
                 try:
                     last = execute(self.state, stmt)
-                except:
-                    print("Error in statement: ", stmt)
-                    raise
+                except Exception as e:
+                    # print("Error in statement: ", stmt)
+                    raise e.remake(code)
 
         return last

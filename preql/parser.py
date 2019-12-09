@@ -1,9 +1,9 @@
 from lark import Lark, Transformer, v_args, UnexpectedInput
 
+from .exceptions import pql_SyntaxError
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
-# from .exceptions import pql_SyntaxError
 
 def token_value(_, _2, t):
     return t #.value
@@ -14,8 +14,12 @@ def as_list(_, args):
 
 def meta_d(meta):
     return {
-        'line': meta.line,
-        'column': meta.column,
+        'start_line': meta.line,
+        'start_column': meta.column,
+        'start_pos': meta.start_pos,
+        'end_line': meta.end_line,
+        'end_column': meta.end_column,
+        'end_pos': meta.end_pos,
     }
 
 def _args_wrapper(f, data, children, meta):
@@ -123,8 +127,7 @@ def parse_stmts(s):
     try:
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
-        # raise pql_SyntaxError(e) from e
-        raise
+        raise pql_SyntaxError(meta_d(e), e.token) from e
 
     # print(tree)
 

@@ -128,7 +128,9 @@ def simplify(state: State, funccall: ast.FuncCall):
     func = compile_remote(state, funccall.func)
 
     if not isinstance(func, objects.Function):
-        raise pql_TypeError(f"Error: Object of type '{func.type.concrete_type()}' is not callable")
+        meta = funccall.meta
+        meta['parent'] = funccall.meta
+        raise pql_TypeError(funccall.meta, f"Error: Object of type '{func.type.concrete_type()}' is not callable")
 
     matched = func.match_params(funccall.args)
     # args = [(p, simplify(state, a)) for p, a in matched]

@@ -6,6 +6,7 @@ from . import pql_ast as ast
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize
+from .exceptions import PreqlError
 
 def python_to_pql(value):
     if value is None:
@@ -95,7 +96,15 @@ class Interface:
     def __call__(self, pq, **args):
         pql_args = {name: python_to_pql(value) for name, value in args.items()}
 
-        res = self.interp.execute_code(pq + "\n", pql_args)
+        try:
+            res = self.interp.execute_code(pq + "\n", pql_args)
+        except PreqlError as e:
+            print(f"Error at line {e.meta['start_line'], e.meta['start_column']}: {e.message}")
+            print()
+            print(e.get_context(pq))
+
+            return
+
         return self._wrap_result(res)
 
     def load(self, fn, rel_to=None):

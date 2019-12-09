@@ -30,17 +30,15 @@ class State:
                 return scope[name]
 
         try:
-            meta = dict(
-                line = name.line,
-                column = name.column,
-            )
+            meta = meta_from_token(name)
+            meta['parent'] = meta
         except AttributeError:
             meta = dict(
                 line = '?',
                 column = '?',
             )
 
-        raise pql_NameNotFound(str(name), meta)
+        raise pql_NameNotFound(meta, str(name))
 
     def set_var(self, name, value):
         assert not isinstance(value, ast.Name)
@@ -88,3 +86,15 @@ def assert_type(t, type_, msg):
     concrete = t.concrete_type()
     if not isinstance(concrete, type_):
         raise pql_TypeError(msg % (type_.__name__, concrete))
+
+
+def meta_from_token(tok):
+    return {
+        'start_line': tok.line,
+        'start_column': tok.column,
+        'start_pos': tok.pos_in_stream,
+        'end_line': tok.end_line,
+        'end_column': tok.end_column,
+        'end_pos': tok.end_pos,
+    }
+
