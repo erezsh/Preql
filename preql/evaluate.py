@@ -281,7 +281,7 @@ def evaluate(state, obj):
 
 def localize(session, inst):
     assert inst
-    if isinstance(inst, objects.Function):
+    if isinstance(inst, objects.Function) or isinstance(inst, types.PqlType):
         return inst
 
     res = session.db.query(inst.code, inst.subqueries)

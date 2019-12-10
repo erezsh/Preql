@@ -41,6 +41,9 @@ class Primitive(PqlType):
     def restructure_result(self, i):
         return next(i)
 
+    def repr(self, pql):
+        return repr(self)
+
 primitives_by_pytype = {}
 
 # TODO nullable!!!

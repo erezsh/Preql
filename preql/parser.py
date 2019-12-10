@@ -134,7 +134,7 @@ def parse_stmts(s):
     except UnexpectedInput as e:
         m = Meta(e.pos_in_stream, e.line, e.column,
                  e.pos_in_stream, e.line, e.column)
-        raise pql_SyntaxError(m, str(e)) from e
+        raise pql_SyntaxError(m, str(e) + e.get_context(s)) from e
 
     # print(tree)
 

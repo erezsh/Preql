@@ -50,6 +50,7 @@ class PreqlError(Exception):
 
 
 
+
 @dataclass
 class pql_NameNotFound(PreqlError):
     name: str
@@ -81,6 +82,9 @@ class pql_AttributeError(PreqlError):
 class pql_SyntaxError(PreqlError):
     message: str
     source_code: Optional[str] = None
+
+    def __str__(self):
+        return self.message
 
 @dataclass
 class pql_JoinError(PreqlError):

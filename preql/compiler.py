@@ -109,6 +109,7 @@ def _ensure_col_instance(i):
 def compile_remote(state: State, proj: ast.Projection):
     table = compile_remote(state, proj.table)
     assert_type(table.type, (types.TableType, types.ListType), "Projection expected an object of type '%s', instead got '%s'")
+    assert isinstance(table, objects.TableInstance), table
 
     columns = table.members if isinstance(table, objects.StructColumnInstance) else table.columns
 
@@ -351,6 +352,9 @@ def compile_remote(state: State, obj: objects.StructColumnInstance):
     return obj
 @dy
 def compile_remote(state: State, obj: objects.DatumColumnInstance):
+    return obj
+@dy
+def compile_remote(state: State, obj: types.Primitive):
     return obj
 
 

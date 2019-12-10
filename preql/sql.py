@@ -304,7 +304,7 @@ class Update(Sql):
 
 @dataclass
 class Select(Table):
-    table: Table
+    table: Sql # XXX Table won't work with RawSQL
     fields: List[Sql]
     conds: List[Sql] = ()
     group_by: List[Sql] = ()

@@ -157,6 +157,8 @@ def make_instance(code, type_, from_instances=[]):
         return make_column_instance(code, type_, from_instances)
     # elif isinstance(type_, Aggregated) and isinstance(type_.elemtype, ColumnType):
     #     return make_column_instance(code, type_, from_instances)
+    # elif isinstance(type_, TableType):
+    #     return instanciate_table(state, t, sql.TableName(t, t.name), [])
 
     return Instance.make(code, type_, from_instances)
 

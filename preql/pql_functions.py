@@ -8,9 +8,55 @@ from . import sql
 
 from .compiler import compile_remote, instanciate_table, compile_type_def
 from .interp_common import State, get_alias
+from .evaluate import simplify
 
+def _pql_SQL_callback(state: State, var: str, instances):
+    var = var.group()
+    assert var[0] == '$'
+    var_name = var[1:]
+    obj = state.get_var(var_name)
 
-def pql_limit(state: State, table: objects.TableInstance, length: objects.Instance):
+    if isinstance(obj, types.TableType):
+        # This branch isn't strictly necessary
+        # It exists to create nicer SQL code output
+        inst = objects.TableInstance.make(sql.TableName(obj, obj.name), obj, [], {})
+    else:
+        inst = compile_remote(state, obj)
+
+        if isinstance(inst.type, types.TableType):
+            assert isinstance(inst, objects.TableInstance)
+            # Use sql names that match the column names, so that the user can use them in his SQL query
+            sql_fields = [
+                sql.ColumnAlias.make(c.code, sql.Name(c.type, name))
+                for name, cc in inst.columns.items()
+                for c in cc.flatten()
+            ]
+
+            code = sql.Select(inst.type, inst.code, sql_fields)
+            inst = objects.TableInstance.make(code, inst.type, [inst], inst.columns)
+
+    instances.append(inst)
+    return '(%s)' % inst.code.compile().text
+
+import re
+def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
+    type_ = simplify(state, type_expr)
+    code = simplify(state, code_expr)
+
+    # TODO escaping for security?
+    instances = []
+    assert code.type is types.String, code
+    expanded = re.sub(r"\$\w+", lambda m: _pql_SQL_callback(state, m, instances), code.value)
+
+    code = sql.RawSql(type_, expanded)
+
+    # TODO validation!!
+    if isinstance(type_, types.TableType):
+        return instanciate_table(state, type_, code, [])
+
+    return objects.make_instance(code, type_, instances)
+
+def pql_limit(state: State, table: types.PqlObject, length: types.PqlObject):
     table = compile_remote(state, table)
     length = compile_remote(state, length)
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], limit=length.code)
@@ -163,6 +209,7 @@ internal_funcs = {
     'intersect': pql_intersect,
     'union': pql_union,
     'substract': pql_substract,
+    'SQL': pql_SQL,
 }
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),
