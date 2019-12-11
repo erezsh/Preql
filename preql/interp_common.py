@@ -5,6 +5,8 @@ from .exceptions import pql_NameNotFound, pql_TypeError, Meta
 
 from . import pql_ast as ast
 from . import pql_objects as objects
+from . import pql_types as types
+from . import sql
 
 dy = Dispatchy()
 
@@ -83,6 +85,14 @@ def assert_type(t, type_, msg):
     concrete = t.concrete_type()
     if not isinstance(concrete, type_):
         raise pql_TypeError(msg % (type_.__name__, concrete))
+
+
+def sql_repr(x):
+    if x is None:
+        return sql.null
+
+    t = types.primitives_by_pytype[type(x)]
+    return sql.Primitive(t, repr(x))
 
 
 def meta_from_token(tok):

@@ -144,3 +144,29 @@ class FuncDef(Statement):
 @dataclass
 class Print(Statement):
     value: Expr
+
+@dataclass
+class Return(Statement):
+    value: Expr
+
+@dataclass
+class Throw(Statement):
+    value: Expr
+
+@dataclass
+class CodeBlock(Statement):
+    statements: List[Ast]
+
+@dataclass
+class Try(Statement):
+    try_: CodeBlock
+    catch_expr: Expr
+    catch_block: CodeBlock
+
+@dataclass
+class If(Statement):
+    cond: Expr
+    then: CodeBlock
+    else_: Optional[CodeBlock] = None
+
+

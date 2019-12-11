@@ -1,11 +1,11 @@
 from .utils import safezip
-from .exceptions import pql_TypeError
+from .exceptions import pql_TypeError, PreqlError, pql_AttributeError
 
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify, assert_type, meta_from_token
+from .interp_common import dy, State, get_alias, simplify, assert_type, meta_from_token, sql_repr
 
 Sql = sql.Sql
 
@@ -206,6 +206,13 @@ def compile_remote(state: State, cmp: ast.Compare):
 @dy
 def compile_remote(state: State, attr: ast.Attr):
     inst = compile_remote(state, attr.expr)
+
+    if isinstance(inst, types.PqlType): # XXX ugly
+        if attr.name == 'name':
+            return compile_remote(state, ast.Const(None, types.String, inst.name))
+        raise pql_AttributeError("'%s' has no attribute '%s'" % (self, name))
+
+
     return inst.get_attr(attr.name)
 
 @dy
@@ -284,7 +291,8 @@ def compile_remote(state: State, i: objects.TableInstance):
     return i
 @dy
 def compile_remote(state: State, f: ast.FuncCall):
-    return compile_remote(state, simplify(state, f))
+    res = simplify(state, f)
+    return compile_remote(state, res)
 @dy
 def compile_remote(state: State, f: objects.UserFunction):
     "Functions don't need compilation"
@@ -356,14 +364,6 @@ def compile_remote(state: State, obj: objects.DatumColumnInstance):
 @dy
 def compile_remote(state: State, obj: types.Primitive):
     return obj
-
-
-def sql_repr(x):
-    if x is None:
-        return sql.null
-
-    t = types.primitives_by_pytype[type(x)]
-    return sql.Primitive(t, repr(x))
 
 
 def guess_field_name(f):

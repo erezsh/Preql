@@ -23,6 +23,9 @@ class Meta:
             parent
         )
 
+    def __repr__(self):
+        return '<Meta>'
+
 @dataclass
 class PreqlError(Exception):
     meta: Optional[Meta]
@@ -47,6 +50,9 @@ class PreqlError(Exception):
         return ''.join([text_before, text_after, '\n',
                ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
         ])
+
+    def __str__(self):
+        return self.message
 
 
 
@@ -83,10 +89,14 @@ class pql_SyntaxError(PreqlError):
     message: str
     source_code: Optional[str] = None
 
-    def __str__(self):
-        return self.message
-
 @dataclass
 class pql_JoinError(PreqlError):
     message: str
     source_code: Optional[str] = None
+
+
+
+@dataclass
+class ReturnSignal(Exception):
+    value: object
+

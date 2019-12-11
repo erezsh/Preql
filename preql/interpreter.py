@@ -1,5 +1,5 @@
 from .utils import SafeDict
-from .exceptions import PreqlError
+from .exceptions import PreqlError, pql_TypeError
 
 from .evaluate import State, execute, evaluate, simplify, localize
 from .parser import parse_stmts, parse_expr
@@ -9,7 +9,6 @@ from . import pql_types as types
 
 from .pql_functions import internal_funcs, joins
 
-
 def initial_namespace():
     ns = SafeDict({p.name: p for p in types.primitives_by_pytype.values()})
     ns.update({
@@ -18,6 +17,8 @@ def initial_namespace():
         ], f) for name, f in internal_funcs.items()
     })
     ns.update(joins)
+    ns['list'] = types.ListType
+    ns['TypeError'] = pql_TypeError
     return [ns]
 
 class Interpreter:

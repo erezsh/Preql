@@ -1,5 +1,5 @@
 stmts: _NL? stmt+
-?stmt: (table_def | struct_def | func_def | var_decl | print | expr _NL) //| add_row
+?stmt: (table_def | struct_def | func_def | var_decl | print | if_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
 
 table_def: "table" name "{" _sep? col_defs? "}" _NL
 col_defs: (col_def _sep)* col_def _sep?
@@ -16,7 +16,13 @@ member_def: name ":" type
 
 typemod: PK | NULLABLE
 
-func_def: "func" name func_params "=" expr _NL
+func_def: "func" name func_params ("=" expr _NL | final_codeblock)
+final_codeblock: _NL stmt* "end" _NL -> codeblock
+inner_codeblock: _NL stmt*           -> codeblock
+if_stmt: "if" expr inner_codeblock ("end" _NL | "else" final_codeblock)
+return_stmt: "return" expr _NL
+throw: "throw" expr _NL
+try_catch: "try" inner_codeblock "catch" expr final_codeblock
 var_decl: name "=" expr _NL
 print: "print" expr _NL
 func_params: "(" (param ("," param)*)? ")"

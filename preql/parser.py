@@ -110,6 +110,14 @@ class T(Transformer):
     col_def = ast.ColumnDef
     member_def = as_list
     print = ast.Print
+    return_stmt = ast.Return
+    throw = ast.Throw
+    if_stmt = ast.If
+    try_catch = ast.Try
+
+    @v_args(inline=False, meta=True)
+    def codeblock(self, stmts, meta):
+        return ast.CodeBlock(meta_d(meta), stmts)
 
     # @v_args(meta=True)
     # def table_def(self, args, meta):

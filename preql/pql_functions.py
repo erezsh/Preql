@@ -7,8 +7,8 @@ from . import pql_ast as ast
 from . import sql
 
 from .compiler import compile_remote, instanciate_table, compile_type_def
-from .interp_common import State, get_alias
-from .evaluate import simplify
+from .interp_common import State, get_alias, sql_repr
+from .evaluate import simplify, evaluate, localize
 
 def _pql_SQL_callback(state: State, var: str, instances):
     var = var.group()
@@ -41,12 +41,12 @@ def _pql_SQL_callback(state: State, var: str, instances):
 import re
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
     type_ = simplify(state, type_expr)
-    code = simplify(state, code_expr)
+    sql_code = localize(state, evaluate(state, code_expr))
+    assert isinstance(sql_code, str)
 
     # TODO escaping for security?
     instances = []
-    assert code.type is types.String, code
-    expanded = re.sub(r"\$\w+", lambda m: _pql_SQL_callback(state, m, instances), code.value)
+    expanded = re.sub(r"\$\w+", lambda m: _pql_SQL_callback(state, m, instances), sql_code)
 
     code = sql.RawSql(type_, expanded)
 
@@ -55,6 +55,12 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
         return instanciate_table(state, type_, code, [])
 
     return objects.make_instance(code, type_, instances)
+
+def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
+    inst = compile_remote(state, expr)
+    type_ = simplify(state, type_expr)
+    res = isinstance(inst.type.concrete_type(), type_)
+    return objects.make_instance(sql_repr(res), types.Bool, [inst])
 
 def pql_limit(state: State, table: types.PqlObject, length: types.PqlObject):
     table = compile_remote(state, table)
@@ -198,6 +204,9 @@ def _find_table_reference(t1, t2):
                 # TODO depends on the query
                 yield (objects.ColumnInstanceWithTable(t2.get_attr('id'), t2), objects.ColumnInstanceWithTable(c, t1))
 
+def pql_type(state: State, obj: ast.Expr):
+    inst = compile_remote(state, obj)
+    return inst.type.concrete_type()
 
 internal_funcs = {
     'limit': pql_limit,
@@ -210,6 +219,8 @@ internal_funcs = {
     'union': pql_union,
     'substract': pql_substract,
     'SQL': pql_SQL,
+    'isa': pql_isa,
+    'type': pql_type,
 }
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),

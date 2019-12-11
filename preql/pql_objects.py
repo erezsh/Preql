@@ -8,7 +8,7 @@ from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import pql_types as types
 from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType, ListType, TableType, Aggregated
-from .pql_ast import Expr, NamedField, Ast
+from .pql_ast import Expr, NamedField, Ast, CodeBlock
 from .sql import Sql, RawSql
 from .interp_common import meta_from_token
 
@@ -42,7 +42,8 @@ class Function(PqlObject):
             named_params = []
 
         if len(pos_params) != len(pos_args):
-            raise pql_TypeError(f"Function '{self.name}' takes {len(pos_params)} parameters but recieved {len(pos_args)} arguments.")
+            # TODO meta
+            raise pql_TypeError(None, f"Function '{self.name}' takes {len(pos_params)} parameters but recieved {len(pos_args)} arguments.")
 
         matched = [(p, arg.value) for (p,arg) in safezip(pos_params, pos_args)]
 
@@ -69,7 +70,7 @@ class Function(PqlObject):
 class UserFunction(Function):
     name: str
     params: List[Param]
-    expr: Expr
+    expr: (Expr, CodeBlock)
     param_collector: Optional[Param] = None
 
 @dataclass

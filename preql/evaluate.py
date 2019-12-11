@@ -18,7 +18,7 @@ from typing import List, Optional, Any
 
 from .utils import safezip, dataclass
 from .interp_common import assert_type
-from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound
+from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -92,6 +92,38 @@ def _execute(state: State, p: ast.Print):
     res = localize(state, inst)
     print(res)
 
+@dy
+def _execute(state: State, cb: ast.CodeBlock):
+    for stmt in cb.statements:
+        execute(state, stmt)
+
+@dy
+def _execute(state: State, i: ast.If):
+    cond = localize(state, evaluate(state, i.cond))
+    if cond:
+        execute(state, i.then)
+    elif i.else_:
+        execute(state, i.else_)
+
+@dy
+def _execute(state: State, t: ast.Try):
+    try:
+        execute(state, t.try_)
+    except PreqlError as e:
+        exc_type = localize(state, evaluate(state, t.catch_expr))
+        if isinstance(e, exc_type):
+            execute(state, t.catch_block)
+        else:
+            raise
+
+@dy
+def _execute(state: State, r: ast.Return):
+    value = evaluate(state, r.value)
+    raise ReturnSignal(value)
+
+@dy
+def _execute(state: State, t: ast.Throw):
+    raise evaluate(state, t.value)
 
 def execute(state, stmt):
     if isinstance(stmt, ast.Statement):
@@ -118,9 +150,12 @@ def simplify(state: State, c: ast.Const):
 
 # @dy
 # def simplify(state: State, a: ast.Attr):
-#     # Happens if attr is a method
-#     print("@@@@@", a)
-#     return a
+#     obj = simplify(state, a.expr)
+#     assert isinstance(obj, types.PqlType)   # Only tested on types so far
+#     if a.name == 'name':
+#         return ast.Const(a.meta, types.String, obj.name)
+#     raise pql_AttributeError(a.meta, "Type '%s' has no attribute '%s'" % (obj, a.name))
+
 
 @dy
 def simplify(state: State, funccall: ast.FuncCall):
@@ -135,6 +170,13 @@ def simplify(state: State, funccall: ast.FuncCall):
     args = func.match_params(funccall.args)
     if isinstance(func, objects.UserFunction):
         with state.use_scope({p.name:simplify(state, a) for p,a in args}):
+            if isinstance(func.expr, ast.CodeBlock):
+                # from .evaluate import execute   # XXX TODO fix this
+                try:
+                    return execute(state, func.expr)
+                except ReturnSignal as r:
+                    return r.value
+
             r = simplify(state, func.expr)
             return r
     else:
@@ -146,6 +188,18 @@ def simplify(state: State, funccall: ast.FuncCall):
 @dy
 def simplify(state: State, c: ast.Arith):
     return ast.Arith(c.meta, c.op, simplify_list(state, c.args))
+
+@dy
+def simplify(state: State, c: ast.CodeBlock):
+    return ast.CodeBlock(c.meta, simplify_list(state, c.statements))
+
+@dy
+def simplify(state: State, x: ast.If):
+    # TODO if cond can be simplified to a constant, just cull either then or else
+    return x
+@dy
+def simplify(state: State, x: ast.Throw):
+    return x
 
 @dy
 def simplify(state: State, c: objects.List_):
@@ -227,12 +281,23 @@ class TableConstructor(objects.Function):
     param_collector: Optional[objects.Param] = None
     name = 'new'
 
+
 @dy
 def simplify(state: State, new: ast.New):
     # XXX This function has side-effects.
     # Perhaps it belongs in resolve, rather than simplify?
-    table = state.get_var(new.type)
-    assert_type(table, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+    obj = state.get_var(new.type)
+
+    if isinstance(obj, type) and issubclass(obj, PreqlError):
+        def create_exception(state, msg):
+            msg = localize(state, compile_remote(state, msg))
+            return obj(None, msg)
+        f = objects.InternalFunction(obj.__name__, [objects.Param(None, 'message')], create_exception)
+        res = simplify(state, ast.FuncCall(new.meta, f, new.args))
+        return res
+
+    assert_type(obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+    table = obj
 
     cons = TableConstructor(list(table.params()))
     matched = cons.match_params(new.args)
@@ -270,7 +335,7 @@ def add_as_subquery(state: State, inst: objects.Instance):
 
 def evaluate(state, obj):
     obj = simplify(state, obj)
-    if isinstance(obj, objects.Function):   # TODO base class on uncompilable?
+    if isinstance(obj, (objects.Function, PreqlError, type)):   # TODO base class on uncompilable?
         return obj
 
     inst = compile_remote(state, obj)
@@ -281,7 +346,7 @@ def evaluate(state, obj):
 
 def localize(session, inst):
     assert inst
-    if isinstance(inst, objects.Function) or isinstance(inst, types.PqlType):
+    if isinstance(inst, objects.Function) or isinstance(inst, (types.PqlType, type)):
         return inst
 
     res = session.db.query(inst.code, inst.subqueries)
