@@ -141,15 +141,6 @@ class TableType(Collection):
     def __hash__(self):
         return hash((self.name, tuple(self.columns.items())))
 
-    # @listgen
-    # def import_result(self, arr):
-    #     expected_length = self.flat_length()
-    #     for row in arr:
-    #         assert len(row) == expected_length
-    #         i = iter(row)
-    #         s = ({name: col.type.restructure_result(i) for name, col in self.columns.items()})
-    #         yield s
-
     @listgen
     def import_result(self, arr):
         expected_length = self.flat_length()
@@ -208,7 +199,7 @@ def make_column(name, type_, query=None):
             n: make_column(name+"_"+n, m) for (n,m) in kernel.members.items()
         })
     elif query or isinstance(kernel, TableType):
-        return RelationalColumnType(name, type_, query)
+        return RelationalColumnType(name, type_.concrete_type(), query)
     else:
         return DatumColumnType(name, type_)
     assert False, type_

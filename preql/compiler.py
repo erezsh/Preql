@@ -208,10 +208,9 @@ def compile_remote(state: State, attr: ast.Attr):
     inst = compile_remote(state, attr.expr)
 
     if isinstance(inst, types.PqlType): # XXX ugly
-        if attr.name == 'name':
-            return compile_remote(state, ast.Const(None, types.String, inst.name))
-        raise pql_AttributeError("'%s' has no attribute '%s'" % (self, name))
-
+        if attr.name == '__name__':
+            return compile_remote(state, ast.Const(None, types.String, str(inst.name)))
+        raise pql_AttributeError(attr.meta, "'%s' has no attribute '%s'" % (inst, attr.name))
 
     return inst.get_attr(attr.name)
 
@@ -336,9 +335,12 @@ def compile_remote(state: State, lst: objects.List_):
 
 @dy
 def compile_remote(state: State, t: types.TableType):
-    # return t
-    i = instanciate_table(state, t, sql.TableName(t, t.name), [])
-    return i
+    return t
+
+@dy
+def compile_remote(state: State, t: objects.InstancePlaceholder):
+    t = t.type
+    return instanciate_table(state, t, sql.TableName(t, t.name), [])
 
 
 

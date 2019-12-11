@@ -39,7 +39,7 @@ class PreqlError(Exception):
         end = pos + span
         text_before = text[start:pos].rsplit('\n', 1)[-1]
         text_after = text[pos:end].split('\n', 1)[0]
-        parent = self.meta.parent
+        parent = self.meta.parent or self.meta
         mark_before = mark_after = 0
         if parent:
             mark_before = min(len(text_before), pos - parent.start_pos)
@@ -51,9 +51,8 @@ class PreqlError(Exception):
         ])
 
     def __str__(self):
-        return self.message
-
-    def __str__(self):
+        if not self.meta:
+            return self.message
         s = "Error in line %d column %d: %s" % (self.meta.start_line, self.meta.start_column, self.message)
         s += "\n\n" + self._get_context(self.meta.text)
         return s

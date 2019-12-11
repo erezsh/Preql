@@ -220,3 +220,15 @@ def aggregated(inst):
     assert not isinstance(inst.type, TableType), inst.type
     return make_instance(inst.code, Aggregated(inst.type), [inst])
 
+
+@dataclass
+class InstancePlaceholder:
+    "Half instance, half type"
+
+    type: TableType
+
+    def concrete_type(self):
+        return self.type.concrete_type()
+
+    def kernel_type(self):
+        return self.type.kernel_type()

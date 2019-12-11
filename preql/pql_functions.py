@@ -40,7 +40,7 @@ def _pql_SQL_callback(state: State, var: str, instances):
 
 import re
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
-    type_ = simplify(state, type_expr)
+    type_ = simplify(state, type_expr).concrete_type()
     sql_code = localize(state, evaluate(state, code_expr))
     assert isinstance(sql_code, str)
 
@@ -111,7 +111,7 @@ def pql_temptable(state: State, expr: ast.Expr):
     table = types.TableType(name, expr.type.columns, temporary=True)
     state.db.query(compile_type_def(table))
     state.db.query(sql.Insert(types.null, name, expr.code))
-    return table
+    return objects.InstancePlaceholder(table)
 
 
 
@@ -206,12 +206,15 @@ def _find_table_reference(t1, t2):
 
 def pql_type(state: State, obj: ast.Expr):
     inst = compile_remote(state, obj)
-    return inst.type.concrete_type()
+    t = inst.type.concrete_type()
+    # if isinstance(t, types.TableType):
+    #     return types.TableType
+    return t
 
 internal_funcs = {
     'limit': pql_limit,
     'count': pql_count,
-    'sum': pql_sum,
+    # 'sum': pql_sum,
     'enum': pql_enum,
     'temptable': pql_temptable,
     'concat': pql_concat,

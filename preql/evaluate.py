@@ -41,7 +41,7 @@ def resolve(state: State, struct_def: ast.StructDef):
 @dy
 def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     t = types.TableType(table_def.name, {}, False)
-    state.set_var(t.name, t)
+    state.set_var(t.name, objects.InstancePlaceholder(t))
 
     t.add_column(types.DatumColumnType("id", types.Int, primary_key=True, readonly=True))
     for c in table_def.columns:
@@ -299,6 +299,7 @@ def simplify(state: State, new: ast.New):
         res = simplify(state, ast.FuncCall(new.meta, f, new.args))
         return res
 
+    obj = obj.concrete_type()
     assert_type(obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
     table = obj
 

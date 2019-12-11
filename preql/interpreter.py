@@ -25,14 +25,14 @@ class Interpreter:
     def __init__(self, sqlengine):
         self.sqlengine = sqlengine
         self.state = State(sqlengine, 'text', initial_namespace())
-        # self.execute_code("""
-        #     func sum(field)
-        #         if isa(field, list)
-        #             return SQL(int, "SUM" + "($field)")
-        #         end
-        #         throw new TypeError("SUM() doesn't support field of type '" + (type(field).name) + "'")
-        #     end
-        # """)
+        self.execute_code("""
+            func sum(field)
+                if isa(field, list)
+                    return SQL(int, "SUM" + "($field)")
+                end
+                throw new TypeError("SUM() doesn't support field of type '" + (type(field).__name__) + "'")
+            end
+        """)
 
     def call_func(self, fname, args):
         obj = simplify(self.state, ast.Name(None, fname))
