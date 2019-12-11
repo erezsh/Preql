@@ -211,6 +211,21 @@ def pql_type(state: State, obj: ast.Expr):
     #     return types.TableType
     return t
 
+def pql_cast_int(state: State, expr: ast.Expr):
+    # TODO make this function less ugly and better for the user
+    inst = compile_remote(state, expr)
+    if isinstance(inst.type, types.TableType):
+        assert len(inst.columns) == 1
+        res = localize(state, inst)
+        # res = types.Int.import_result(res)
+        assert len(res) == 1
+        res = list(res[0].values())[0]
+        return objects.make_instance(sql.Primitive(types.Int, str(res)), types.Int, [])
+
+    assert False
+
+
+
 internal_funcs = {
     'limit': pql_limit,
     'count': pql_count,
@@ -224,6 +239,7 @@ internal_funcs = {
     'SQL': pql_SQL,
     'isa': pql_isa,
     'type': pql_type,
+    '_cast_int': pql_cast_int,
 }
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),

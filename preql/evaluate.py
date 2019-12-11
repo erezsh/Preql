@@ -159,11 +159,15 @@ def simplify(state: State, c: ast.Const):
 #         return ast.Const(a.meta, types.String, obj.name)
 #     raise pql_AttributeError(a.meta, "Type '%s' has no attribute '%s'" % (obj, a.name))
 
-
 @dy
 def simplify(state: State, funccall: ast.FuncCall):
     # func = simplify(state, funccall.func)
     func = compile_remote(state, funccall.func)
+
+    if isinstance(func, types.Primitive):
+        # Cast to primitive
+        assert func is types.Int
+        func = state.get_var('_cast_int')
 
     if not isinstance(func, objects.Function):
         meta = funccall.func.meta

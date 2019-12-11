@@ -28,7 +28,6 @@ class RawSql(Sql):
     def compile(self):
         return self._compile(self.text)
 
-
 @dataclass
 class Null(Sql):
     def compile(self):

@@ -18,6 +18,7 @@ def initial_namespace():
     })
     ns.update(joins)
     ns['list'] = types.ListType
+    ns['aggregate'] = objects.Aggregated
     ns['TypeError'] = pql_TypeError
     return [ns]
 
@@ -26,12 +27,19 @@ class Interpreter:
         self.sqlengine = sqlengine
         self.state = State(sqlengine, 'text', initial_namespace())
         self.execute_code("""
-            func sum(field)
-                if isa(field, list)
-                    return SQL(int, "SUM" + "($field)")
+            func _sql_agg_func(name, field)
+                if isa(field, aggregate)
+                    return SQL(int, name + "($field)")
+                else
+                    if isa(field, list)
+                        return int( field{ => value: _sql_agg_func(name, value) } )  # Recursive
+                    end
                 end
-                throw new TypeError("SUM() doesn't support field of type '" + (type(field).__name__) + "'")
+                throw new TypeError(name + "() doesn't support field of type '" + (type(field).__name__) + "'")
             end
+            func sum(field) = _sql_agg_func("SUM", field)
+            func min(field) = _sql_agg_func("MIN", field)
+            func max(field) = _sql_agg_func("MAX", field)
         """)
 
     def call_func(self, fname, args):
