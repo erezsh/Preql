@@ -10,7 +10,7 @@ from . import pql_types as types
 from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType, ListType, TableType, Aggregated
 from .pql_ast import Expr, NamedField, Ast, CodeBlock
 from .sql import Sql, RawSql
-from .interp_common import meta_from_token
+# from .interp_common import meta_from_token
 
 
 
@@ -176,7 +176,7 @@ class TableInstance(Instance):
         try:
             return ColumnInstanceWithTable(self.columns[name], self)
         except KeyError:
-            raise pql_AttributeError(meta_from_token(name), name)
+            raise pql_AttributeError(name.meta, name)
 
     def flatten(self):
         return [atom for col in self.columns.values() for atom in col.flatten()]
@@ -219,3 +219,4 @@ def aggregated(inst):
 
     assert not isinstance(inst.type, TableType), inst.type
     return make_instance(inst.code, Aggregated(inst.type), [inst])
+

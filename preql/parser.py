@@ -5,15 +5,35 @@ from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
 
-def token_value(_, _2, t):
-    return t #.value
+# class Name(str):
+class Name(str):
+    def __new__(cls, value, meta):
+        obj = str.__new__(cls, value)
+        obj.meta = meta
+        return obj
+
+def token_value(self, meta, t):
+    # return Name(str(t), meta_from_token(t))
+    return Name(str(t), meta)
 
 @v_args(inline=False)
 def as_list(_, args):
     return args
 
-def meta_d(meta):
+def meta_from_token(text, tok):
     return Meta(
+        text,
+        tok.pos_in_stream,
+        tok.line,
+        tok.column,
+        tok.end_pos,
+        tok.end_line,
+        tok.end_column,
+    )
+
+def meta_d(text, meta):
+    return Meta(
+        text,
         meta.start_pos,
         meta.line,
         meta.column,
@@ -23,10 +43,13 @@ def meta_d(meta):
     )
 
 def _args_wrapper(f, data, children, meta):
-    return f(meta_d(meta), *children)
+    return f(meta_d(f.__self__.code, meta), *children)
 
 @v_args(wrapper=_args_wrapper)
 class T(Transformer):
+    def __init__(self, code):
+        self.code = code
+
     name = token_value
 
     def string(self, meta, s):
@@ -43,7 +66,7 @@ class T(Transformer):
 
     @v_args(inline=False, meta=True)
     def list(self, items, meta):
-        return objects.List_(meta_d(meta), items)
+        return objects.List_(meta_d(self.code, meta), items)
 
     expr_list = as_list
     proj_exprs = as_list
@@ -64,6 +87,9 @@ class T(Transformer):
 
     # compare_op = token_value
     # arith_op = token_value
+    add_op = token_value
+    mul_op = token_value
+    comp_op = token_value
     # contains_op = as_list
 
     def compare(self, meta, a, op, b):
@@ -117,7 +143,7 @@ class T(Transformer):
 
     @v_args(inline=False, meta=True)
     def codeblock(self, stmts, meta):
-        return ast.CodeBlock(meta_d(meta), stmts)
+        return ast.CodeBlock(meta_d(self.code, meta), stmts)
 
     # @v_args(meta=True)
     # def table_def(self, args, meta):
@@ -146,7 +172,7 @@ def parse_stmts(s):
 
     # print(tree)
 
-    return T().transform(tree)
+    return T(code=s).transform(tree)
 
 def parse_expr(s):
     tree = parser.parse(s, start="expr")

@@ -5,7 +5,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify, assert_type, meta_from_token, sql_repr
+from .interp_common import dy, State, get_alias, simplify, assert_type, sql_repr
 
 Sql = sql.Sql
 
@@ -229,7 +229,7 @@ def compile_remote(state: State, arith: ast.Arith):
             arg_types_set = {types.Float}
         elif arg_types_set == {types.Int, types.String}:
             if arith.op != '*':
-                meta = meta_from_token(arith.op).remake(parent=arith.meta)
+                meta = arith.op.meta.remake(parent=arith.meta)
                 raise pql_TypeError(meta, f"Operator '{arith.op}' not supported between string and integer.")
 
             # REPEAT(str, int) -> str
@@ -336,6 +336,7 @@ def compile_remote(state: State, lst: objects.List_):
 
 @dy
 def compile_remote(state: State, t: types.TableType):
+    # return t
     i = instanciate_table(state, t, sql.TableName(t, t.name), [])
     return i
 

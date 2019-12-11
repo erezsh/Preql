@@ -27,7 +27,7 @@ RawSql = sql.RawSql
 Sql = sql.Sql
 
 from .interp_common import State, dy, get_alias
-from .compiler import compile_remote, compile_type_def, sql_repr
+from .compiler import compile_remote, compile_type_def, sql_repr, instanciate_table
 
 
 
@@ -142,7 +142,10 @@ def execute(state, stmt):
 def simplify(state: State, n: ast.Name):
     # Don't recurse simplify, to allow granular dereferences
     # The assumption is that the stored variable is already simplified
-    return state.get_var(n.name)
+    obj = state.get_var(n.name)
+    # if isinstance(obj, types.TableType):
+    #     return instanciate_table(state, obj, sql.TableName(obj, obj.name), [])
+    return obj
 
 @dy
 def simplify(state: State, c: ast.Const):

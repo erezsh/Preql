@@ -48,21 +48,21 @@ update: molecule "update" "{" _NL? proj_exprs _NL? "}"
 
 // like: molecule "~" molecule
 
-!_comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"^in" //|"is"|"is" "not"
+!comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"^in" //|"is"|"is" "not"
 
 ?or_test: and_test ("or" and_test)*
 ?and_test: not_test ("and" not_test)*
 ?not_test: "not" not_test -> not
          | compare
-?compare: (compare _comp_op)? like
+?compare: (compare comp_op)? like
 ?like: (like "~")? add_expr
-?add_expr: (add_expr _add_op)? term
-?term: (term _mul_op)? power
-?factor: _add_op* molecule
+?add_expr: (add_expr add_op)? term
+?term: (term mul_op)? power
+?factor: ("+" | "-")* molecule
 ?power: molecule ("**" factor)?
 
-!_add_op: "+"|"-" | "&" | "|"
-!_mul_op: "*"|"/"|"%"|"//"
+!add_op: "+"|"-" | "&" | "|"
+!mul_op: "*"|"/"|"%"|"//"
 // <> isn't actually a valid comparison operator in Python. It's here for the
 // sake of a __future__ import described in PEP 401 (which really works :-)
 

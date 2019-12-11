@@ -31,13 +31,13 @@ class State:
             if name in scope:
                 return scope[name]
 
-        try:
-            meta = meta_from_token(name)
-            meta.parent = meta
-        except AttributeError:
-            meta = None
+        # try:
+        #     meta = meta_from_token(name)
+        #     meta.parent = meta
+        # except AttributeError:
+        #     meta = None
 
-        raise pql_NameNotFound(meta, str(name))
+        raise pql_NameNotFound(name.meta, str(name))
 
     def set_var(self, name, value):
         assert not isinstance(value, ast.Name)
@@ -95,13 +95,14 @@ def sql_repr(x):
     return sql.Primitive(t, repr(x))
 
 
-def meta_from_token(tok):
-    return Meta(
-        tok.pos_in_stream,
-        tok.line,
-        tok.column,
-        tok.end_pos,
-        tok.end_line,
-        tok.end_column,
-    )
+# def meta_from_token(tok):
+#     return Meta(
+#         '', # TODO better exceptions
+#         tok.pos_in_stream,
+#         tok.line,
+#         tok.column,
+#         tok.end_pos,
+#         tok.end_line,
+#         tok.end_column,
+#     )
 

@@ -4,6 +4,7 @@ from .utils import dataclass
 
 @dataclass
 class Meta:
+    text: str
     start_pos: int
     start_line: int
     start_column: int
@@ -14,6 +15,7 @@ class Meta:
 
     def remake(self, parent):
         return Meta(
+            self.text,
             self.start_pos,
             self.start_line,
             self.start_column,
@@ -30,10 +32,7 @@ class Meta:
 class PreqlError(Exception):
     meta: Optional[Meta]
 
-    def remake(self, source_code):
-        return type(self)(self.meta, self.message, source_code)
-
-    def get_context(self, text, span=40):
+    def _get_context(self, text, span=80):
         MARK_CHAR = '-'
         pos = self.meta.start_pos
         start = max(pos - span, 0)
@@ -54,16 +53,17 @@ class PreqlError(Exception):
     def __str__(self):
         return self.message
 
+    def __str__(self):
+        s = "Error in line %d column %d: %s" % (self.meta.start_line, self.meta.start_column, self.message)
+        s += "\n\n" + self._get_context(self.meta.text)
+        return s
+
 
 
 
 @dataclass
 class pql_NameNotFound(PreqlError):
     name: str
-    source_code: Optional[str] = None
-
-    def remake(self, source_code):
-        return type(self)(self.meta, self.name, source_code)
 
     @property
     def message(self):
@@ -72,27 +72,23 @@ class pql_NameNotFound(PreqlError):
 @dataclass
 class pql_TypeError(PreqlError):
     message: str
-    source_code: Optional[str] = None
 
 @dataclass
 class pql_ValueError(PreqlError):
     message: str
-    source_code: Optional[str] = None
 
 @dataclass
 class pql_AttributeError(PreqlError):
     message: str
-    source_code: Optional[str] = None
+
 
 @dataclass
 class pql_SyntaxError(PreqlError):
     message: str
-    source_code: Optional[str] = None
 
 @dataclass
 class pql_JoinError(PreqlError):
     message: str
-    source_code: Optional[str] = None
 
 
 
