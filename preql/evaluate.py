@@ -317,8 +317,8 @@ def simplify(state: State, new: ast.New):
             for k2, v2 in safezip(k.flatten(), v):
                 destructured_pairs.append((k2, v2))
         else:
-            v = simplify(state, v)
-            destructured_pairs.append((k, v.value))
+            v = localize(state, evaluate(state, v))
+            destructured_pairs.append((k, v))
 
     keys = [k.name for (k,_) in destructured_pairs]
     values = [sql_repr(v) for (_,v) in destructured_pairs]

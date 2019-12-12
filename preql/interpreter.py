@@ -18,7 +18,7 @@ def initial_namespace():
     })
     ns.update(joins)
     ns['list'] = types.ListType
-    ns['aggregate'] = objects.Aggregated
+    ns['aggregate'] = types.Aggregated
     ns['TypeError'] = pql_TypeError
     return [ns]
 
@@ -41,6 +41,7 @@ class Interpreter:
             func min(field) = _sql_agg_func("MIN", field)
             func max(field) = _sql_agg_func("MAX", field)
             func limit(table, lim) = SQL(type(table), "SELECT * FROM $table LIMIT $lim")
+            func now() = SQL(date, "datetime('now')")
         """)
 
     def call_func(self, fname, args):
@@ -60,16 +61,8 @@ class Interpreter:
         return obj
 
     def execute_code(self, code, args=None):
+        assert not args, "Not implemented yet: %s" % args
         last = None
-
-        # with self.state.use_scope(args or {}):
-        if True:
-            for stmt in parse_stmts(code):
-                try:
-                    last = execute(self.state, stmt)
-                except PreqlError as e:
-                    # print("Error in statement: ", stmt)
-                    # raise e.remake(source_code=code)
-                    raise
-
+        for stmt in parse_stmts(code):
+            last = execute(self.state, stmt)
         return last

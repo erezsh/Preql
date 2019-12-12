@@ -71,12 +71,10 @@ def start_repl(p):
             try:
                 res = p(code)
             except PreqlError as e:
-                if e.meta:
-                    print(f"Error at line {e.meta.start_line, e.meta.start_column}: {e.message}")
-                    print()
-                    print(e.get_context(code))
-                else:
-                    print(e)
+                # if e.meta:
+                #     print(f"Error at line {e.meta.start_line, e.meta.start_column}: {e}")
+                # else:
+                print(e)
                 continue
             except Exception as e:
                 print("Error:")

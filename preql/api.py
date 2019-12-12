@@ -6,7 +6,7 @@ from . import pql_ast as ast
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize
-from .exceptions import PreqlError
+# from .exceptions import PreqlError
 
 def python_to_pql(value):
     if value is None:
@@ -86,29 +86,13 @@ class Interface:
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
-        # if isinstance(res, pql.Table):
-        #     return TableWrapper(res, self.interp)
-        # elif isinstance(res, pql.RowRef):
-        #     return RowWrapper(res)
         return promise(self.interp.state, res)  # TODO session, not state
 
 
     def __call__(self, pq, **args):
         pql_args = {name: python_to_pql(value) for name, value in args.items()}
 
-        try:
-            res = self.interp.execute_code(pq + "\n", pql_args)
-        except PreqlError as e:
-            raise
-            # if e.meta:
-            #     print(f"Error at line {e.meta.start_line, e.meta.start_column}: {e.message}")
-            #     print()
-            #     print(e.get_context(pq))
-            # else:
-            #     raise
-
-            # return
-
+        res = self.interp.execute_code(pq + "\n", pql_args)
         if res:
             return self._wrap_result(res)
 

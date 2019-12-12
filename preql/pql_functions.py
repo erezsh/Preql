@@ -60,22 +60,14 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     inst = compile_remote(state, expr)
     type_ = simplify(state, type_expr)
     res = isinstance(inst.type.concrete_type(), type_)
-    # return objects.make_instance(sql_repr(res), types.Bool, [inst])
     return objects.make_value_instance(res, types.Bool)
-
-# def pql_limit(state: State, table: types.PqlObject, length: types.PqlObject):
-#     table = compile_remote(state, table)
-#     length = compile_remote(state, length)
-#     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], limit=length.code)
-#     return table.remake(code=code)
 
 def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     obj = compile_remote(state, obj)
     if isinstance(obj, objects.TableInstance):
         code = table_func(obj.type, obj.code)
     else:
-        # assert isinstance(obj, objects.ColumnInstance), obj
-        if not isinstance(obj.type.concrete_type(), objects.Aggregated):
+        if not isinstance(obj.type.concrete_type(), types.Aggregated):
             raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type.concrete_type()}' instead. Did you forget to group?")
 
         code = sql.FieldFunc(types.Int, name, obj.code)
@@ -228,9 +220,7 @@ def pql_cast_int(state: State, expr: ast.Expr):
 
 
 internal_funcs = {
-    # 'limit': pql_limit,
     'count': pql_count,
-    # 'sum': pql_sum,
     'enum': pql_enum,
     'temptable': pql_temptable,
     'concat': pql_concat,

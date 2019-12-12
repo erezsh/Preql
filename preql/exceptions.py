@@ -42,8 +42,8 @@ class PreqlError(Exception):
         parent = self.meta.parent or self.meta
         mark_before = mark_after = 0
         if parent:
-            mark_before = min(len(text_before), pos - parent.start_pos)
-            mark_after = min(len(text_after), parent.end_pos - pos - 1)
+            mark_before = max(0, min(len(text_before), pos - parent.start_pos))
+            mark_after = max(0, min(len(text_after), parent.end_pos - pos - 1))
             assert mark_before >= 0 and mark_after >= 0
 
         return ''.join([text_before, text_after, '\n',

@@ -47,19 +47,20 @@ class Primitive(PqlType):
 primitives_by_pytype = {}
 
 # TODO nullable!!!
+class Text(str):
+    pass
 
-# class Int(Primitive): pass
-# class Float(Primitive): pass
-# class String(Primitive): pass
 # class Date(Primitive): pass
-# class Bool(Primitive): pass
 # class Text(Primitive): pass
 # class Json(Primitive): pass
+from datetime import datetime
+
 Int = Primitive('int', int, False)
 Float = Primitive('float', float, False)
 String = Primitive('string', str, False)
+Text = Primitive('text', Text, False)
 Bool = Primitive('bool', bool, False)
-# Date = Primitive('date', str, False)   # XXX datetime?
+Date = Primitive('date', datetime, False)   # XXX datetime?
 
 # Collections
 

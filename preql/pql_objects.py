@@ -7,28 +7,24 @@ from typing import List, Optional, Callable
 from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import pql_types as types
-from .pql_types import PqlType, PqlObject, ColumnType, StructColumnType, DatumColumnType, ListType, TableType, Aggregated
-from .pql_ast import Expr, NamedField, Ast, CodeBlock
+from . import pql_ast as ast
 from .sql import Sql, RawSql
-# from .interp_common import meta_from_token
-
 
 
 # Functions
 @dataclass
-class Param(Ast):
+class Param(ast.Ast):
     name: str
-    # type: PqlType = None
+    # _type: PqlType = None
 
-class Function(PqlObject):
+class Function(types.PqlObject):
     param_collector = None
 
     def match_params(self, args):
         # TODO Default values (maybe just initialize match_params with them?)
-        # total_params = length(params)
 
         # Canonize args for the rest of the function
-        args = [a if isinstance(a, NamedField) else NamedField(None, None, a) for a in args]
+        args = [a if isinstance(a, ast.NamedField) else ast.NamedField(None, None, a) for a in args]
 
         for i, arg in enumerate(args):
             if arg.name:  # First keyword argument
@@ -70,8 +66,12 @@ class Function(PqlObject):
 class UserFunction(Function):
     name: str
     params: List[Param]
-    expr: (Expr, CodeBlock)
+    expr: (ast.Expr, ast.CodeBlock)
     param_collector: Optional[Param] = None
+
+    def repr(self, state):
+        params = ", ".join(p.name for p in self.params)
+        return f'<func {self.name}({params}) ...>'
 
 @dataclass
 class InternalFunction(Function):
@@ -80,11 +80,15 @@ class InternalFunction(Function):
     func: Callable
     param_collector: Optional[Param] = None
 
+    def repr(self, state):
+        params = ", ".join(p.name for p in self.params)
+        return f'<func {self.name}({params}) ...>'
+
 
 # Collections
 
 @dataclass
-class List_(Expr):
+class List_(ast.Expr):
     elems: list
 
 
@@ -96,9 +100,9 @@ class List_(Expr):
 # Other
 
 @dataclass
-class Instance(PqlObject):
+class Instance(types.PqlObject):
     code: Sql
-    type: PqlType
+    type: types.PqlType
 
     subqueries: SafeDict
 
@@ -115,12 +119,7 @@ class Instance(PqlObject):
 
 @dataclass
 class ColumnInstance(Instance):
-    type: ColumnType
-    # def flatten(self):
-    #     # if isinstance(self.type, types.StructColumnType):
-    #     #     return [x for m in self.]
-    #     assert False
-
+    type: types.ColumnType
 
 
 class DatumColumnInstance(ColumnInstance):
@@ -144,7 +143,7 @@ class StructColumnInstance(ColumnInstance):
 def make_column_instance(code, type_, from_instances=[]):
     kernel = type_.kernel_type()
 
-    if isinstance(kernel, StructColumnType):
+    if isinstance(kernel, types.StructColumnType):
         struct_sql_name = code.compile().text
         members = {name: make_column_instance(RawSql(member.type, struct_sql_name+'_'+name), member)
                    for name, member in kernel.members.items()}
@@ -154,7 +153,7 @@ def make_column_instance(code, type_, from_instances=[]):
     assert False, type_
 
 def make_instance(code, type_, from_instances=[]):
-    if isinstance(type_, ColumnType):
+    if isinstance(type_, types.ColumnType):
         return make_column_instance(code, type_, from_instances)
     # elif isinstance(type_, Aggregated) and isinstance(type_.elemtype, ColumnType):
     #     return make_column_instance(code, type_, from_instances)
@@ -221,20 +220,20 @@ def merge_subqueries(instances):
 def aggregated(inst):
     if isinstance(inst, TableInstance):
         new_cols = {name:aggregated(c) for name, c in inst.columns.items()}
-        return TableInstance.make(inst.code, Aggregated(inst.type), [inst], new_cols)
+        return TableInstance.make(inst.code, types.Aggregated(inst.type), [inst], new_cols)
 
     elif isinstance(inst, ColumnInstance):
-        return make_column_instance(inst.code, types.make_column(inst.type.name, Aggregated(inst.type.type)), [inst])
+        return make_column_instance(inst.code, types.make_column(inst.type.name, types.Aggregated(inst.type.type)), [inst])
 
-    assert not isinstance(inst.type, TableType), inst.type
-    return make_instance(inst.code, Aggregated(inst.type), [inst])
+    assert not isinstance(inst.type, types.TableType), inst.type
+    return make_instance(inst.code, types.Aggregated(inst.type), [inst])
 
 
 @dataclass
 class InstancePlaceholder:
     "Half instance, half type"
 
-    type: TableType
+    type: types.TableType
 
     def concrete_type(self):
         return self.type.concrete_type()

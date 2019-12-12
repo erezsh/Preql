@@ -1,4 +1,4 @@
-from lark import Lark, Transformer, v_args, UnexpectedInput
+from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken
 
 from .exceptions import pql_SyntaxError, Meta
 from . import pql_ast as ast
@@ -166,9 +166,16 @@ def parse_stmts(s):
     try:
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
-        m = Meta(e.pos_in_stream, e.line, e.column,
+        m = Meta(s,
+                 e.pos_in_stream, e.line, e.column,
                  e.pos_in_stream, e.line, e.column)
-        raise pql_SyntaxError(m, str(e) + e.get_context(s)) from e
+        # m = m.remake(parent=m)
+        # raise pql_SyntaxError(m, str(e) + e.get_context(s)) from e
+        if isinstance(e, UnexpectedToken):
+            msg = "Unexpected token: '%s'" % e.token
+        else:
+            msg = "Unexpected character: '%s'" % s[e.pos_in_stream]
+        raise pql_SyntaxError(m, "Syntax error: " + msg)
 
     # print(tree)
 
