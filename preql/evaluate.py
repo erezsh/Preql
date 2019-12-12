@@ -357,6 +357,9 @@ def localize(session, inst):
     if isinstance(inst, objects.Function) or isinstance(inst, (types.PqlType, type)):
         return inst
 
+    elif isinstance(inst, objects.ValueInstance):
+        return inst.local_value
+
     res = session.db.query(inst.code, inst.subqueries)
 
     # if isinstance(inst.type, types.ListType):

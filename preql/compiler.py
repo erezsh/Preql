@@ -217,10 +217,17 @@ def compile_remote(state: State, attr: ast.Attr):
 @dy
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
-
-    arg_codes = [a.code for a in args]
     arg_types = [a.type.concrete_type() for a in args]
     arg_types_set = set(arg_types)
+
+    if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
+        # XXX this isn't strictly necessary, this is only for better performance
+        # TODO tests with and without it
+        v1, v2 = [a.local_value for a in args]
+        if arith.op == '+' and len(arg_types_set) == 1:
+            return objects.make_value_instance(v1 + v2, args[0].type)
+
+    arg_codes = [a.code for a in args]
     if len(arg_types_set) > 1:
         # Auto-convert int+float into float
         # TODO use dispatch+operator_overload+SQL() to do this in preql instead of here?
@@ -244,7 +251,7 @@ def compile_remote(state: State, arith: ast.Arith):
             code = sql.RawSql(types.String, f"replace(hex(zeroblob({codes[1].text})), '00', {codes[0].text})")
             return objects.make_instance(code, types.String, args)
         else:
-            meta = meta_from_token(arith.op).remake(parent=arith.meta)
+            meta = arith.op.meta.remake(parent=arith.meta)
             raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
@@ -269,7 +276,7 @@ def compile_remote(state: State, arith: ast.Arith):
     op = arith.op
     if arg_types_set == {types.String}:
         if arith.op != '+':
-            meta = meta_from_token(arith.op).remake(parent=arith.meta)
+            meta = arith.op.meta.remake(parent=arith.meta)
             raise pql_TypeError(meta, f"Operator '{arith.op}' not supported for strings.")
         op = '||'
     elif arith.op == '/':
@@ -304,7 +311,8 @@ def compile_remote(state: State, f: objects.InternalFunction):
 
 @dy
 def compile_remote(state: State, c: ast.Const):
-    return objects.Instance.make(sql_repr(c.value), c.type, [])
+    # return objects.Instance.make(sql_repr(c.value), c.type, [])
+    return objects.make_value_instance(c.value, c.type)
 
 @dy
 def compile_remote(state: State, n: ast.Name):
@@ -366,6 +374,9 @@ def compile_remote(state: State, obj: objects.DatumColumnInstance):
     return obj
 @dy
 def compile_remote(state: State, obj: types.Primitive):
+    return obj
+@dy
+def compile_remote(state: State, obj: objects.ValueInstance):
     return obj
 
 

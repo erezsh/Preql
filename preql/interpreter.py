@@ -40,6 +40,7 @@ class Interpreter:
             func sum(field) = _sql_agg_func("SUM", field)
             func min(field) = _sql_agg_func("MIN", field)
             func max(field) = _sql_agg_func("MAX", field)
+            func limit(table, lim) = SQL(type(table), "SELECT * FROM $table LIMIT $lim")
         """)
 
     def call_func(self, fname, args):

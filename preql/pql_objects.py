@@ -163,6 +163,15 @@ def make_instance(code, type_, from_instances=[]):
 
     return Instance.make(code, type_, from_instances)
 
+def make_value_instance(value, type_):
+    from .interp_common import sql_repr # XXX
+    assert isinstance(type_, types.Primitive)
+    return ValueInstance.make(sql_repr(value), type_, [], value)
+
+
+@dataclass
+class ValueInstance(Instance):
+    local_value: object
 
 
 @dataclass
