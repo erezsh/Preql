@@ -5,7 +5,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify, assert_type, sql_repr
+from .interp_common import dy, State, get_alias, simplify, assert_type, sql_repr, GlobalSettings
 
 Sql = sql.Sql
 
@@ -220,12 +220,13 @@ def compile_remote(state: State, arith: ast.Arith):
     arg_types = [a.type.concrete_type() for a in args]
     arg_types_set = set(arg_types)
 
-    if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
-        # XXX this isn't strictly necessary, this is only for better performance
-        # TODO tests with and without it
-        v1, v2 = [a.local_value for a in args]
-        if arith.op == '+' and len(arg_types_set) == 1:
-            return objects.make_value_instance(v1 + v2, args[0].type)
+    if GlobalSettings.Optimize:
+        if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
+            # XXX this isn't strictly necessary, this is only for better performance
+            # TODO tests with and without it
+            v1, v2 = [a.local_value for a in args]
+            if arith.op == '+' and len(arg_types_set) == 1:
+                return objects.make_value_instance(v1 + v2, args[0].type)
 
     arg_codes = [a.code for a in args]
     if len(arg_types_set) > 1:

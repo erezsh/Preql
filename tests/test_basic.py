@@ -1,18 +1,29 @@
-from unittest import TestCase
+from unittest import TestCase, skip
 from copy import copy
+
+from parameterized import parameterized_class
 
 from preql import Preql
 from preql.pql_objects import UserFunction
 from preql.exceptions import PreqlError, pql_TypeError
+from preql.interp_common import GlobalSettings, pql_TypeError
 
 
 def is_eq(a, b):
     a = [tuple(row.values()) for row in a]
     return a == b
 
+@parameterized_class(("name", "optimized"), [
+    ("Normal", True),
+    ("Unoptimized", False)
+])
 class BasicTests(TestCase):
+    def Preql(self):
+        GlobalSettings.Optimize = self.optimized
+        return Preql()
+
     def test_basic1(self):
-        preql = Preql()
+        preql = self.Preql()
         preql.load('country_person.pql', rel_to=__file__)
 
         self._test_basic(preql)
@@ -40,7 +51,7 @@ class BasicTests(TestCase):
         assert is_eq(res, [("Ephraim Kishon",), ("Eric Blaire",), ("H.G. Wells",), ("John Steinbeck",)])
 
     def test_arith(self):
-        preql = Preql()
+        preql = self.Preql()
         assert preql("1 + 2 / 4") == 1.5
         assert preql("1 + 2 // 4 + 1") == 2
         assert preql('"a" + "b"') == "ab"
@@ -51,7 +62,7 @@ class BasicTests(TestCase):
 
 
     def test_update_basic(self):
-        preql = Preql()
+        preql = self.Preql()
         preql("""
         table Point {x: int, y: int}
 
@@ -237,7 +248,7 @@ class BasicTests(TestCase):
 
 
     def test_structs(self):
-        preql = Preql()
+        preql = self.Preql()
         preql.load('box_circle.pql', rel_to=__file__)
 
         res1 = preql.circles_contained1()
@@ -251,7 +262,7 @@ class BasicTests(TestCase):
 
     def test_simple1(self):
         # TODO uncomment these tests
-        preql = Preql()
+        preql = self.Preql()
         preql.load('simple1.pql', rel_to=__file__)
 
         assert preql.english() == [{'id': 2, 'name': 'Eric Blaire'}, {'id': 3, 'name': 'H.G. Wells'}]
@@ -269,10 +280,11 @@ class BasicTests(TestCase):
         # assert expected == res, (res, expected)
 
 
+    @skip("Not ready yet")
     def test_simple2(self):
         assert False, "Not ready yet"
         # Implicit joins
-        preql = Preql()
+        preql = self.Preql()
         preql.load('simple2.pql', rel_to=__file__)
 
         res = [
@@ -323,9 +335,10 @@ class BasicTests(TestCase):
         assert preql('Country {name => c: count(citizens)} [name="Australia"]').json() == [{'name': 'Australia', 'c': 0}]
         assert preql('Country {name => names: citizens.name} [name="Australia"]').json() == [{'name': 'Australia', 'names': []}]
 
+    @skip("Not ready yet")
     def test_m2m(self):
         assert False, "Not ready yet"
-        preql = Preql()
+        preql = self.Preql()
         preql.exec('''
             table A:
                 value: integer
@@ -365,14 +378,15 @@ class BasicTests(TestCase):
         assert (preql('A_B [a.value=2] {v:b.value}').json()) == [{'v': 4}]
 
         res = [{'a.value': 0, 'b.value': 0}, {'a.value': 1, 'b.value': 2},
-               {'a.value': 2, 'b.value': 4}, {'a.value': 3, 'b.value': 6},
-               {'a.value': 4, 'b.value': 8}]
+            {'a.value': 2, 'b.value': 4}, {'a.value': 3, 'b.value': 6},
+            {'a.value': 4, 'b.value': 8}]
         assert (preql('A_B {a.value, b.value}').json() ) == res
         assert (preql('A_B {a, b} {a.value, b.value}').json() ) == res
 
+    @skip("Not ready yet")
     def test_self_reference(self):
         assert False, "Not ready yet"
-        preql = Preql()
+        preql = self.Preql()
         preql.exec('''
             table Person {
                 name: string
@@ -392,17 +406,18 @@ class BasicTests(TestCase):
         assert ( preql('Person {name => c: count(children)} [c>0]').json()) == res
 
         res = [{'name': 'Abraham', 'children.name': ['Isaac']},
-               {'name': 'Esau', 'children.name': []},
-               {'name': 'Isaac', 'children.name': ['Esau', 'Jacob']},
-               {'name': 'Jacob', 'children.name': []}]
+            {'name': 'Esau', 'children.name': []},
+            {'name': 'Isaac', 'children.name': ['Esau', 'Jacob']},
+            {'name': 'Jacob', 'children.name': []}]
 
         assert ( preql('Person {name => children.name}').json()) == res
 
         # assert ( preql('Person {name => children.name}').json()) == res
 
+    @skip("Not ready yet")
     def test_m2m_with_self_reference(self):
         assert False, "Not ready yet"
-        preql = Preql()
+        preql = self.Preql()
         preql.exec('''
             table A:
                 name: string
@@ -446,7 +461,7 @@ class BasicTests(TestCase):
         # print( preql('A[ab.b.name="b1"] {children.name}').json() ) # TODO get it to work
 
     # def test_m2m_syntax(self):
-    #     preql = Preql()
+    #     preql = _Preql()
     #     preql.exec('''
     #         table A:
     #             name: string

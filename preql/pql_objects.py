@@ -163,9 +163,12 @@ def make_instance(code, type_, from_instances=[]):
     return Instance.make(code, type_, from_instances)
 
 def make_value_instance(value, type_):
-    from .interp_common import sql_repr # XXX
+    from .interp_common import sql_repr, GlobalSettings # XXX
     assert isinstance(type_, types.Primitive)
-    return ValueInstance.make(sql_repr(value), type_, [], value)
+    if GlobalSettings.Optimize:
+        return ValueInstance.make(sql_repr(value), type_, [], value)
+    else:
+        return Instance.make(sql_repr(value), type_, [])
 
 
 @dataclass

@@ -15,6 +15,8 @@ dy = Dispatchy()
 def simplify():
     raise NotImplementedError()
 
+class GlobalSettings:
+    Optimize = True
 
 
 class State:
