@@ -47,17 +47,22 @@ class TablePromise:
 
     def __repr__(self):
         count = len(self)
-        header = f"<pre>table {self._inst.type.name}, count={count}</pre>"
-        rows = self[:TABLE_PREVIEW_SIZE]    # TODO const
-        if rows:
-            cols = list(rows[0])
-            ths = '<tr>%s</tr>' % ' '.join([f"<th>{col}</th>" for col in cols])
-            trs = [
-                '<tr>%s</tr>' % ' '.join([f"<td>{v}</td>" for v in row.values()])
-                for row in rows
-            ]
+        if self._state.fmt == 'html':
+            header = f"<pre>table {self._inst.type.name}, count={count}</pre>"
+            rows = self[:TABLE_PREVIEW_SIZE]    # TODO const
+            if rows:
+                cols = list(rows[0])
+                ths = '<tr>%s</tr>' % ' '.join([f"<th>{col}</th>" for col in cols])
+                trs = [
+                    '<tr>%s</tr>' % ' '.join([f"<td>{v}</td>" for v in row.values()])
+                    for row in rows
+                ]
 
-        return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
+            return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
+        else:
+            header = f"table {self._inst.type.name}, count={count}\n"
+            rows = self[:TABLE_PREVIEW_SIZE]    # TODO const
+            return header + '\n'.join(f'* {r}' for r in rows)
 
 
 def promise(state, inst):
@@ -105,6 +110,10 @@ class Interface:
             fn = Path(rel_to).parent / fn
         with open(fn, encoding='utf8') as f:
             self.exec(f.read())
+
+    def start_repl(self):
+        from .repl import start_repl
+        start_repl(self)
 
 #     def _functions(self):
 #         return {name:f for name,f in self.interp.state.namespace.items()

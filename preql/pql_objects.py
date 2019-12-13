@@ -140,7 +140,7 @@ class StructColumnInstance(ColumnInstance):
         return self.members[name]
 
 
-def make_column_instance(code, type_, from_instances=[]):
+def make_column_instance(code, type_, from_instances=()):
     kernel = type_.kernel_type()
 
     if isinstance(kernel, types.StructColumnType):

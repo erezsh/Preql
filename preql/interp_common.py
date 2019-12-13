@@ -31,13 +31,7 @@ class State:
             if name in scope:
                 return scope[name]
 
-        # try:
-        #     meta = meta_from_token(name)
-        #     meta.parent = meta
-        # except AttributeError:
-        #     meta = None
-
-        raise pql_NameNotFound(name.meta, str(name))
+        raise pql_NameNotFound(getattr(name, 'meta', None), str(name))
 
     def set_var(self, name, value):
         assert not isinstance(value, ast.Name)

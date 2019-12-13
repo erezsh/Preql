@@ -123,7 +123,7 @@ class ColumnDef(Ast, Definition):
 @dataclass
 class TableDef(Statement, Definition):
     name: str
-    columns: List[ColumnDef]
+    columns: List[ColumnDef] = ()
     # meta: object
 
 @dataclass
