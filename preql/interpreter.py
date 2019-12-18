@@ -41,7 +41,19 @@ class Interpreter:
             func min(field) = _sql_agg_func("MIN", field)
             func max(field) = _sql_agg_func("MAX", field)
             func limit(table, lim) = SQL(type(table), "SELECT * FROM $table LIMIT $lim")
-            func now() = SQL(date, "datetime('now')")
+            # func now() = SQL(date, "datetime('now')") # Sqlite
+            func now() = SQL(date, "NOW()") # Postgres
+
+            if get_db_type() == "postgres"
+                func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
+            else
+                if get_db_type() == "sqlite"
+                    func repeat(s, num) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
+                else
+                    throw new TypeError("Unexpected")
+                end
+            end
+
         """)
 
     def call_func(self, fname, args):

@@ -1,21 +1,8 @@
-from .sql import Sql, CompiledSQL, Select
+from .sql import Sql, CompiledSQL, Select, QueryBuilder, sqlite, postgres
 
-from .pql_types import Primitive    # XXX Code smell?
+from .pql_types import Primitive, null    # XXX Code smell?
 
 class SqlInterface:
-    pass
-
-def print_sql(sql):
-    for i, s in enumerate(sql.split('\n')):
-        print('#-  ' if i else '#?  ', s)
-
-
-class SqliteInterface(SqlInterface):
-    def __init__(self, filename=None, debug=True):
-        import sqlite3
-        self._conn = sqlite3.connect(filename or ':memory:')
-        self._debug = debug
-
     def query(self, sql, qargs=(), quiet=False):
         assert isinstance(sql, Sql), sql
 
@@ -29,22 +16,19 @@ class SqliteInterface(SqlInterface):
         else:
             sql_code = ''
 
-        compiled = sql.compile()
+        qb = QueryBuilder(self.target)
+        compiled = sql.compile(qb)
         sql_code += compiled.text
         c = self._conn.cursor()
         if self._debug and not quiet:
             print_sql(sql_code)
+
         c.execute(sql_code, qargs)
-        res = c.fetchall()
 
-        try:
-            # imp = compiled.sql.import_result
+        if sql.type is not null:
+            res = c.fetchall()
             imp = sql.type.import_result
-        except AttributeError:
-            # return res
-            raise
-
-        return imp(res)
+            return imp(res)
 
     def commit(self):
         self._conn.commit()
@@ -70,3 +54,25 @@ class SqliteInterface(SqlInterface):
         assert inserted == len(values)
         return ids
 
+
+def print_sql(sql):
+    for i, s in enumerate(sql.split('\n')):
+        print('#-  ' if i else '#?  ', s)
+
+
+class PostgresInterface(SqlInterface):
+    target = postgres
+
+    def __init__(self, host, database, user, password, debug=True):
+        import psycopg2
+        self._conn = psycopg2.connect(host=host,database=database, user=user, password=password)
+        self._debug = debug
+
+
+class SqliteInterface(SqlInterface):
+    target = sqlite
+
+    def __init__(self, filename=None, debug=True):
+        import sqlite3
+        self._conn = sqlite3.connect(filename or ':memory:')
+        self._debug = debug

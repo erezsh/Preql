@@ -43,7 +43,7 @@ def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     t = types.TableType(table_def.name, {}, False)
     state.set_var(t.name, objects.InstancePlaceholder(t))
 
-    t.add_column(types.DatumColumnType("id", types.Int, primary_key=True, readonly=True))
+    t.add_column(types.DatumColumnType("id", types.IdType(t), primary_key=True, readonly=True))
     for c in table_def.columns:
         c = resolve(state, c)
         t.add_column(c)
@@ -71,7 +71,7 @@ def _execute(state: State, struct_def: ast.StructDef):
 def _execute(state: State, table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
-    sql = compile_type_def(t)
+    sql = compile_type_def(state, t)
     state.db.query(sql)
 
 @dy
@@ -288,6 +288,12 @@ class TableConstructor(objects.Function):
     param_collector: Optional[objects.Param] = None
     name = 'new'
 
+@dy
+def simplify(state: State, inst: objects.Instance):
+    return inst
+@dy
+def simplify(state: State, inst: objects.ValueInstance):
+    return inst
 
 @dy
 def simplify(state: State, new: ast.New):

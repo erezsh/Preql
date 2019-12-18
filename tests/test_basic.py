@@ -7,20 +7,26 @@ from preql import Preql
 from preql.pql_objects import UserFunction
 from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError
 from preql.interp_common import GlobalSettings, pql_TypeError
+from preql import sql
+
+SQLITE_URI = 'sqlite://:memory:'
+POSTGRES_URI = 'postgres://postgres:qweqwe123@localhost/postgres'
 
 
 def is_eq(a, b):
     a = [tuple(row.values()) for row in a]
     return a == b
 
-@parameterized_class(("name", "optimized"), [
-    ("Normal", True),
-    ("Unoptimized", False)
+@parameterized_class(("name", "uri", "optimized"), [
+    ("Normal_Lt", SQLITE_URI, True),
+    ("Normal_Pg", POSTGRES_URI, True),
+    ("Unoptimized_Lt", SQLITE_URI, False),
+    ("Unoptimized_Pg", POSTGRES_URI, False),
 ])
 class BasicTests(TestCase):
     def Preql(self):
         GlobalSettings.Optimize = self.optimized
-        return Preql()
+        return Preql(self.uri)
 
     def test_basic1(self):
         preql = self.Preql()
@@ -35,7 +41,7 @@ class BasicTests(TestCase):
         self._test_temptable(preql)
 
     def _test_basic(self, preql):
-        self.assertEqual(preql("3.14"), 3.14)
+        self.assertEqual(float(preql("3.14")), 3.14)    # cast to float, because postgres may return Decimal
 
         assert preql("1") == 1
         assert preql("1 / 2") == 0.5
@@ -195,19 +201,34 @@ class BasicTests(TestCase):
 
         res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name}")
         # TODO Array, not string
-        assert is_eq(res, [
-            ("England", "Eric Blaire|H.G. Wells"),
-            ("Israel", "Erez Shinan|Ephraim Kishon"),
-            ("United States", "John Steinbeck"),
-        ]), list(res)
+
+        if preql.engine.target == sql.sqlite:
+            assert is_eq(res, [
+                ("England", "Eric Blaire|H.G. Wells"),
+                ("Israel", "Erez Shinan|Ephraim Kishon"),
+                ("United States", "John Steinbeck"),
+            ]), list(res)
+        else:
+            assert is_eq(res, [
+                ("England", ["Eric Blaire", "H.G. Wells"]),
+                ("Israel", ["Erez Shinan", "Ephraim Kishon"]),
+                ("United States", ["John Steinbeck"]),
+            ]), list(res)
 
         res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name, count(p.id)}")
         # TODO Array, not string
-        assert is_eq(res, [
-            ("England", "Eric Blaire|H.G. Wells", 2),
-            ("Israel", "Erez Shinan|Ephraim Kishon", 2),
-            ("United States", "John Steinbeck", 1),
-        ])
+        if preql.engine.target == sql.sqlite:
+            assert is_eq(res, [
+                ("England", "Eric Blaire|H.G. Wells", 2),
+                ("Israel", "Erez Shinan|Ephraim Kishon", 2),
+                ("United States", "John Steinbeck", 1),
+            ])
+        else:
+            assert is_eq(res, [
+                ("England", ["Eric Blaire", "H.G. Wells"], 2),
+                ("Israel", ["Erez Shinan", "Ephraim Kishon"], 2),
+                ("United States", ["John Steinbeck"], 1),
+            ])
 
         res = preql('[1,2,3]{=>sum(value*value)}')
         assert res == [{'sum': 14}], list(res)
@@ -220,7 +241,7 @@ class BasicTests(TestCase):
         assert res == [1,2,3,5,6]
 
         res = preql("""[1,2,3] | [3,4]""")
-        assert res == [1,2,3,4]
+        self.assertEqual(set(res), {1,2,3,4})
 
         res = preql("""[1,2,3] - [3,4]""")
         assert res == [1,2]
@@ -285,7 +306,7 @@ class BasicTests(TestCase):
         preql = self.Preql()
         preql.load('simple1.pql', rel_to=__file__)
 
-        assert preql.english() == [{'id': 2, 'name': 'Eric Blaire'}, {'id': 3, 'name': 'H.G. Wells'}]
+        self.assertEqual(preql.english(), [{'id': 2, 'name': 'Eric Blaire'}, {'id': 3, 'name': 'H.G. Wells'}])
         assert preql.by_country('Israel') == [{'id': 1, 'name': 'Erez Shinan', 'country': 'Israel'}]
 
         assert preql.english2() == [{'name': 'H.G. Wells'}, {'name': 'Eric Blaire'}]

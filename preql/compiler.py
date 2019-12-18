@@ -10,19 +10,21 @@ from .interp_common import dy, State, get_alias, simplify, assert_type, sql_repr
 Sql = sql.Sql
 
 @dy
-def compile_type_def(table: types.TableType) -> Sql:
+def compile_type_def(state: State, table: types.TableType) -> Sql:
     posts = []
     pks = []
     columns = []
 
     for c in table.flatten():
         if c.is_concrete:
-            type_ = compile_type(c.type)
+            type_ = compile_type(state, c.type)
             columns.append( f"{c.name} {type_}" )
             if isinstance(c, types.RelationalColumnType):
                 # TODO any column, using projection / get_attr
-                s = f"FOREIGN KEY({c.name}) REFERENCES {c.type.name}(id)"
-                posts.append(s)
+                if not table.temporary:
+                    # In postgres, constraints on temporary tables may reference only temporary tables
+                    s = f"FOREIGN KEY({c.name}) REFERENCES {c.type.name}(id)"
+                    posts.append(s)
             if c.primary_key:
                 pks.append(c.name)
 
@@ -37,11 +39,12 @@ def compile_type_def(table: types.TableType) -> Sql:
         return sql.RawSql(types.null, f"CREATE TABLE if not exists {table.name} (" + ", ".join(columns + posts) + ")")
 
 @dy
-def compile_type(type_: types.TableType):
-    return type_.name
+def compile_type(state: State, type_: types.TableType):
+    # return type_.name
+    return 'INTEGER'    # Foreign-key is integer
 
 @dy
-def compile_type(type: types.Primitive):
+def compile_type(state: State, type: types.Primitive):
     s = {
         'int': "INTEGER",
         'string': "VARCHAR(4000)",
@@ -53,7 +56,12 @@ def compile_type(type: types.Primitive):
         s += " NOT NULL"
     return s
 
-
+@dy
+def compile_type(state: State, idtype: types.IdType):
+    if state.db.target == sql.postgres:
+        return "SERIAL" # Postgres
+    else:
+        return "INTEGER"
 
 
 def _process_fields(state: State, fields):
@@ -267,16 +275,13 @@ def compile_remote(state: State, arith: ast.Arith):
 
             # REPEAT(str, int) -> str
             if arg_types == [types.String, types.Int]:
-                codes = arg_codes
+                ordered_args = args
             elif arg_types == [types.Int, types.String]:
-                codes = arg_codes[::-1]
+                ordered_args = args[::-1]
             else:
                 assert False
-            # code = sql.FuncCall(types.String, "REPEAT", codes)
-            # XXX Sqlite3 hack for repeat
-            # TODO move to pql_repeat
-            code = sql.RawSql(types.String, f"replace(hex(zeroblob({codes[1].text})), '00', {codes[0].text})")
-            return objects.make_instance(code, types.String, args)
+            expr = ast.FuncCall(None, ast.Name(None, "repeat"), ordered_args)
+            return compile_remote(state, expr)
         else:
             meta = arith.op.meta.remake(parent=arith.meta)
             raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")

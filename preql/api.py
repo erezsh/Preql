@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from .sql_interface import SqliteInterface
+import dsnparse
+
+from .sql_interface import SqliteInterface, PostgresInterface
 from . import pql_types as types
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -76,7 +78,17 @@ def promise(state, inst):
 class Interface:
     def __init__(self, db_uri=None, debug=True):
         # TODO actually parse uri
-        self.engine = SqliteInterface(db_uri, debug=debug)
+        if db_uri is None:
+            db_uri = 'sqlite://:memory:'
+        dsn = dsnparse.parse(db_uri)
+        path ,= dsn.paths
+        if dsn.scheme == 'sqlite':
+            self.engine = SqliteInterface(path, debug=debug)
+        elif dsn.scheme == 'postgres':
+            self.engine = PostgresInterface(dsn.host, path, dsn.user, dsn.password, debug=debug)
+        else:
+            raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
+
         self.interp = Interpreter(self.engine)
 
     def exec(self, q, *args, **kw):

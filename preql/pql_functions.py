@@ -36,7 +36,9 @@ def _pql_SQL_callback(state: State, var: str, instances):
             inst = objects.TableInstance.make(code, inst.type, [inst], inst.columns)
 
     instances.append(inst)
-    return '(%s)' % inst.code.compile().text
+
+    qb = sql.QueryBuilder(state.db.target, True)
+    return '(%s)' % inst.code.compile(qb).text
 
 import re
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
@@ -102,10 +104,13 @@ def pql_temptable(state: State, expr: ast.Expr):
     assert isinstance(expr, objects.TableInstance)
     name = get_alias(state, "temp_" + expr.type.name)
     table = types.TableType(name, expr.type.columns, temporary=True)
-    state.db.query(compile_type_def(table))
+    state.db.query(compile_type_def(state, table))
     state.db.query(sql.Insert(types.null, name, expr.code))
     return objects.InstancePlaceholder(table)
 
+def pql_get_db_type(state: State):
+    s = state.db.target
+    return objects.make_instance(sql_repr(s), types.String, [])
 
 
 
@@ -155,7 +160,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
                 for name, table in safezip(exprs, tables)}
     table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), col_types, False)
 
-    conds = [] if joinall else [sql.Compare(types.Bool, '==', [cols[0].code, cols[1].code])]
+    conds = [] if joinall else [sql.Compare(types.Bool, '=', [cols[0].code, cols[1].code])]
     code = sql.Join(table_type, join, [t.code for t in tables], conds)
 
     columns = dict(safezip(exprs, tables))
@@ -230,6 +235,7 @@ internal_funcs = {
     'SQL': pql_SQL,
     'isa': pql_isa,
     'type': pql_type,
+    'get_db_type': pql_get_db_type,
     '_cast_int': pql_cast_int,
 }
 joins = {

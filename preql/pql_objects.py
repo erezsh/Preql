@@ -144,7 +144,7 @@ def make_column_instance(code, type_, from_instances=()):
     kernel = type_.kernel_type()
 
     if isinstance(kernel, types.StructColumnType):
-        struct_sql_name = code.compile().text
+        struct_sql_name = code.compile(None).text
         members = {name: make_column_instance(RawSql(member.type, struct_sql_name+'_'+name), member)
                    for name, member in kernel.members.items()}
         return StructColumnInstance.make(code, type_, from_instances, members)

@@ -50,6 +50,8 @@ primitives_by_pytype = {}
 class Text(str):
     pass
 
+
+
 # class Date(Primitive): pass
 # class Text(Primitive): pass
 # class Json(Primitive): pass
@@ -211,3 +213,11 @@ def make_column(name, type_, query=None):
     else:
         return DatumColumnType(name, type_)
     assert False, type_
+
+
+@dataclass
+class IdType(PqlType):
+    table: TableType
+
+    def restructure_result(self, i):
+        return next(i)

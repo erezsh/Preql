@@ -3,6 +3,23 @@ from typing import List, Any, Optional, Dict
 from .utils import dataclass, SafeDict, listgen
 from . import pql_types as types
 
+
+sqlite = 'sqlite'
+postgres = 'postgres'
+
+class QueryBuilder:
+    def __init__(self, target, is_root=True):
+        self.target = target
+        self.is_root = is_root
+
+        self.counter = 0
+
+    def get_alias(self):
+        self.counter += 1
+        return 't%d' % self.counter
+
+
+
 @dataclass
 class Sql:
     type: types.PqlType
@@ -25,12 +42,12 @@ class CompiledSQL:
 class RawSql(Sql):
     text: str
 
-    def compile(self):
+    def compile(self, qb):
         return self._compile(self.text)
 
 @dataclass
 class Null(Sql):
-    def compile(self):
+    def compile(self, qb):
         return self._compile('null')    # TODO null type
 
 null = Null(types.null)
@@ -50,7 +67,7 @@ class Atom(Scalar):
 class Primitive(Atom):
     text: str
 
-    def compile(self):
+    def compile(self, qb):
         return self._compile(self.text)
 
 
@@ -69,7 +86,7 @@ class Table(Sql):
 class TableName(Table):
     name: str
 
-    def compile(self):
+    def compile(self, qb):
         return self._compile(self.name)
 
 @dataclass
@@ -77,17 +94,17 @@ class FieldFunc(Sql):
     name: str
     field: Sql
 
-    def compile(self):
+    def compile(self, qb):
         assert self.type is types.Int
-        return self._compile(f'{self.name}({self.field.compile().text})')
+        return self._compile(f'{self.name}({self.field.compile(qb).text})')
 
 
 @dataclass
 class CountTable(Scalar):
     table: Table
 
-    def compile(self):
-        return self._compile(f'select count(*) from ({self.table.compile().text})')
+    def compile(self, qb):
+        return self._compile(f'select count(*) from ({self.table.compile(qb).text})')
 
 
 @dataclass
@@ -95,8 +112,8 @@ class FuncCall(Sql):
     name: str
     fields: List[Sql]
 
-    def compile(self):
-        s = ', '.join(f.compile().text for f in self.fields)
+    def compile(self, qb):
+        s = ', '.join(f.compile(qb).text for f in self.fields)
         return self._compile(f'{self.name}({s})')
 
 @dataclass
@@ -104,16 +121,16 @@ class Round(Sql):
     field: Sql
     type = float  # TODO correct object
 
-    def compile(self):
-        return self._compile(f'round({self.field.compile().text})')
+    def compile(self, qb):
+        return self._compile(f'round({self.field.compile(qb).text})')
 
 @dataclass
 class Cast(Sql):
     as_type: str
     value: Sql
 
-    def compile(self):
-        return self._compile(f'CAST({self.value.compile().text} AS {self.as_type})')
+    def compile(self, qb):
+        return self._compile(f'CAST({self.value.compile(qb).text} AS {self.as_type})')
 
 
 @dataclass
@@ -123,10 +140,13 @@ class MakeArray(Sql):
 
     _sp = "|"
 
-    def compile(self):
-        # Sqlite Specific
-        # t = self.type
-        return self._compile(f'group_concat({self.field.compile().text}, "{self._sp}")')
+    def compile(self, qb):
+        if qb.target == sqlite:
+            return self._compile(f'group_concat({self.field.compile(qb).text}, "{self._sp}")')
+        elif qb.target == postgres:
+            return self._compile(f'array_agg({self.field.compile(qb).text})')
+        else:
+            assert False
 
     def import_result(self, value):
         assert False
@@ -140,10 +160,11 @@ class Contains(Sql):
     op: str
     exprs: List[Sql]
 
-    def compile(self):
+    def compile(self, qb):
         assert self.op
-        elems = ['(%s)' % e.compile().text for e in self.exprs]
-        contains = (' %s ' % self.op).join(elems)
+        qb.is_root = True
+        a, b = ['%s' % e.compile(qb).text for e in self.exprs]
+        contains = f'{a} {self.op} ({b})'
         return self._compile(contains)
 
 
@@ -152,12 +173,11 @@ class Compare(Sql):
     op: str
     exprs: List[Sql]
 
-    def __post_init__(self):
-        for f in self.exprs or ():
-            assert isinstance(f, Sql), f
+    def __created__(self):
+        assert self.op in ('=', '<=', '>=', '<', '>', '<>', '!='), self.op
 
-    def compile(self):
-        elems = [e.compile().text for e in self.exprs]
+    def compile(self, qb):
+        elems = [e.compile(qb).text for e in self.exprs]
         compare = (' %s ' % self.op).join(elems)
         return self._compile(compare)
 
@@ -166,8 +186,8 @@ class Arith(Scalar):
     op: str
     exprs: List[Sql]
 
-    def compile(self):
-        x = (' %s ' % self.op).join(e.compile().text for e in self.exprs)
+    def compile(self, qb):
+        x = (' %s ' % self.op).join(e.compile(qb).text for e in self.exprs)
         return self._compile('(%s)'%x)
 
 
@@ -176,27 +196,39 @@ class TableArith(Table):
     op: str
     exprs: List[Table]
 
-    def compile(self):
+    def compile(self, qb):
+        is_root = qb.is_root
+        qb.is_root = False
+
         # XXX Limit -1 is due to a strange bug in SQLite (fixed in newer versions), where the limit is reset otherwise.
-        tables = [t.compile() for t in self.exprs]
-        selects = [f"SELECT * FROM ({t.text})" for t in tables]
-        code = f" {self.op} ".join(selects) + " LIMIT -1"
+        tables = [t.compile(qb) for t in self.exprs]
+        selects = [f"SELECT * FROM {t.text}" for t in tables]
+
+        if qb.target == sqlite:
+            code = f" {self.op} ".join(selects) + " LIMIT -1"
+        else:
+            code = f" {self.op} ".join(selects)
+
+        # return self._compile('(%s)' % code)
+        if not is_root:
+            code = '(%s) %s' % (code, qb.get_alias())
         return self._compile(code)
+
 
 @dataclass
 class Neg(Sql):
     expr: Sql
 
-    def compile(self):
-        s = self.expr.compile()
+    def compile(self, qb):
+        s = self.expr.compile(qb)
         return self._compile("-" + s.text)
 
 @dataclass
 class Desc(Sql):
     expr: Sql
 
-    def compile(self):
-        s = self.expr.compile()
+    def compile(self, qb):
+        s = self.expr.compile(qb)
         return self._compile(s.text + " DESC")
 
 
@@ -204,7 +236,7 @@ class Desc(Sql):
 class Name(Sql):
     name: str
 
-    def compile(self):
+    def compile(self, qb):
         return self._compile(self.name)
 
 @dataclass
@@ -216,9 +248,9 @@ class ColumnAlias(Sql):
     def make(cls, value, alias):
         return cls(value.type, value, alias)
 
-    def compile(self):
-        alias = self.alias.compile().text
-        value = self.value.compile().text
+    def compile(self, qb):
+        alias = self.alias.compile(qb).text
+        value = self.value.compile(qb).text
         if value == alias:
             s = alias  # This is just for beauty, it's not necessary for function
         else:
@@ -231,8 +263,8 @@ class Insert(Sql):
     table_name: str
     query: Sql
 
-    def compile(self):
-        q = f'INSERT INTO {self.table_name} ' + self.query.compile().text
+    def compile(self, qb):
+        q = f'INSERT INTO {self.table_name} ' + self.query.compile(qb).text
         return self._compile(q)
 
 
@@ -242,46 +274,53 @@ class InsertConsts(Sql):
     cols: List[str]
     values: List[Sql]
 
-    def compile(self):
+    def compile(self, qb):
 
         q = ['INSERT INTO', self.table.name,
              "(", ', '.join(self.cols), ")",
              "VALUES",
-             "(", ', '.join(v.compile().text for v in self.values), ")",
+             "(", ', '.join(v.compile(qb).text for v in self.values), ")",
         ]
         insert = ' '.join(q) + ';'
         return self._compile(insert)
 
-    # def import_result(self, value):
-    #     assert not value
-    #     return None
 
 @dataclass
 class LastRowId(Atom):
     type: types.PqlType = types.Int
 
-    def compile(self):
-        return self._compile('last_insert_rowid()')
+    def compile(self, qb):
+        if qb.target == sqlite:
+            return self._compile('last_insert_rowid()')   # Sqlite
+        else:
+            return self._compile('lastval()')   # Postgres
 
 @dataclass
 class SelectValue(Atom, Table):
     value: Sql
 
-    def compile(self):
-        value = self.value.compile()
-        return self._compile(f'SELECT {value.text} as value')
+    def compile(self, qb):
+        is_root = qb.is_root
+        qb.is_root = False
+
+        value = self.value.compile(qb)
+        code = f'SELECT {value.text} AS value'
+
+        if not is_root:
+            code = '(%s) %s' % (code, qb.get_alias())
+        return self._compile(code)
 
 @dataclass
 class Values(Table):
     values: List[Sql]
 
-    def compile(self):
-        values = [v.compile() for v in self.values]
+    def compile(self, qb):
+        values = [v.compile(qb) for v in self.values]
         code = 'VALUES' + ','.join(f'({v.text})' for v in values)
         return self._compile(code)
 
 class AllFields(Sql):
-    def compile(self):
+    def compile(self, qb):
         return self._compile('*')
 
 @dataclass
@@ -290,14 +329,14 @@ class Update(Sql):
     fields: Dict[Sql, Sql]
     conds: List[Sql]
 
-    def compile(self):
-        fields_sql = ['%s = %s' % (k.compile().text, v.compile().text) for k, v in self.fields.items()]
+    def compile(self, qb):
+        fields_sql = ['%s = %s' % (k.compile(qb).text, v.compile(qb).text) for k, v in self.fields.items()]
         fields_sql = ', '.join(fields_sql)
 
-        sql = f'UPDATE {self.table.compile().text} SET {fields_sql}'
+        sql = f'UPDATE {self.table.compile(qb).text} SET {fields_sql}'
 
         if self.conds:
-            sql += ' WHERE ' + ' AND '.join(c.compile().text for c in self.conds)
+            sql += ' WHERE ' + ' AND '.join(c.compile(qb).text for c in self.conds)
 
         return self._compile(sql)
 
@@ -314,30 +353,34 @@ class Select(Table):
     def __created__(self):
         assert self.fields, self
 
-    def compile(self):
+    def compile(self, qb):
+        is_root = qb.is_root
+        qb.is_root = False
 
-        fields_sql = [f.compile() for f in self.fields]
+        fields_sql = [f.compile(qb) for f in self.fields]
         select_sql = ', '.join(f.text for f in fields_sql)
 
-        sql = f'SELECT {select_sql} FROM ({self.table.compile().text})'
+        sql = f'SELECT {select_sql} FROM {self.table.compile(qb).text}'
 
         if self.conds:
-            sql += ' WHERE ' + ' AND '.join(c.compile().text for c in self.conds)
+            sql += ' WHERE ' + ' AND '.join(c.compile(qb).text for c in self.conds)
 
         if self.group_by:
-            sql += ' GROUP BY ' + ', '.join(e.compile().text for e in self.group_by)
+            sql += ' GROUP BY ' + ', '.join(e.compile(qb).text for e in self.group_by)
 
         if self.limit:
-            sql += ' LIMIT ' + self.limit.compile().text
+            sql += ' LIMIT ' + self.limit.compile(qb).text
         elif self.offset:
             sql += ' LIMIT -1'  # XXX Sqlite only
 
         if self.offset:
-            sql += ' OFFSET ' + self.offset.compile().text
+            sql += ' OFFSET ' + self.offset.compile(qb).text
 
         if self.order:
-            sql += ' ORDER BY ' + ', '.join(o.compile().text for o in self.order)
+            sql += ' ORDER BY ' + ', '.join(o.compile(qb).text for o in self.order)
 
+        if not is_root:
+            sql = '(%s) %s' % (sql, qb.get_alias())
         return self._compile(sql)
 
     # def import_result(self, value):
@@ -350,13 +393,22 @@ class Join(Table):
     tables: List[Table]
     conds: List[Sql]
 
-    def compile(self):
-        tables_sql = ['(%s)' % (t.compile().text) for t in self.tables]
+    def compile(self, qb):
+        is_root = qb.is_root
+        qb.is_root = False
+
+        tables_sql = ['%s' % (t.compile(qb).text) for t in self.tables]
         join_op = ' %s ' % self.join_op.upper()
         join_sql = join_op.join(e for e in tables_sql)
 
         if self.conds:
-            join_sql += ' ON ' + ' AND '.join(c.compile().text for c in self.conds)
+            join_sql += ' ON ' + ' AND '.join(c.compile(qb).text for c in self.conds)
+        else:
+            join_sql += ' ON 1=1'   # Postgres requires ON clause
 
         join_sql = 'SELECT * FROM ' + join_sql
+        # return self._compile('(%s) %s' % (join_sql, qb.get_alias() ))
+
+        if not is_root:
+            join_sql = '(%s) %s' % (join_sql, qb.get_alias())
         return self._compile(join_sql)
