@@ -142,6 +142,10 @@ class TableType(Collection):
     def __hash__(self):
         return hash((self.name, tuple(self.columns.items())))
 
+    def restructure_result(self, i):
+        "Called from import_result, to read the table's id (not actual structure)"
+        return next(i)
+
     @listgen
     def import_result(self, arr):
         expected_length = self.flat_length()
@@ -191,6 +195,9 @@ class RelationalColumnType(ColumnType):
     name: str
     type: PqlType
     query: Optional[Any] = None # XXX what now?
+
+    def remake(self, name):
+        return type(self)(name, self.type, self.query)
 
 def make_column(name, type_, query=None):
     kernel = type_.kernel_type()

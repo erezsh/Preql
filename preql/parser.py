@@ -141,6 +141,9 @@ class T(Transformer):
     if_stmt = ast.If
     try_catch = ast.Try
 
+    def ellipsis(self, meta, _):
+        return ast.Ellipsis(meta)
+
     @v_args(inline=False, meta=True)
     def codeblock(self, stmts, meta):
         return ast.CodeBlock(meta_d(self.code, meta), stmts)

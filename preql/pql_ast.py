@@ -36,6 +36,10 @@ class Const(Expr):
     value: Any
 
 @dataclass
+class Ellipsis(Expr):
+    pass
+
+@dataclass
 class Compare(Expr):
     op: str
     args: List[types.PqlObject]
@@ -62,7 +66,7 @@ class Like(Expr):
 @dataclass
 class NamedField(Expr):
     name: Optional[str]
-    value: (Expr, types.PqlType)
+    value: types.PqlObject #(Expr, types.PqlType)
 
 
 class TableOperation(Expr): pass
@@ -74,7 +78,7 @@ class Selection(TableOperation):
 
 @dataclass
 class Projection(TableOperation):
-    table: (Expr, types.PqlType)    # XXX etc.
+    table: types.PqlObject # (Expr, types.PqlType)    # XXX etc.
     fields: List[NamedField]
     groupby: bool = False
     agg_fields: List[NamedField] = ()

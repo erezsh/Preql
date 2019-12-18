@@ -1,5 +1,5 @@
-from .utils import safezip
-from .exceptions import pql_TypeError, PreqlError, pql_AttributeError
+from .utils import safezip, listgen
+from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError
 
 from . import pql_types as types
 from . import pql_objects as objects
@@ -104,6 +104,30 @@ def _ensure_col_instance(i):
 
 
 
+@listgen
+def _expand_ellipsis(table, fields):
+    direct_names = [f.value.name for f in fields if isinstance(f.value, ast.Name)]
+
+    for f in fields:
+        assert isinstance(f, ast.NamedField)
+
+        if not isinstance(f.value, ast.Ellipsis):
+            yield f
+            continue
+
+        if f.name:
+            # XXX This should be used for $, not ...
+            # members = {name: col.type for name, col in table.columns.items()}
+            # struct_type = types.StructType("temp", members)
+            # struct_col_type = types.make_column("<this is meaningless?>", struct_type)
+            # x = objects.StructColumnInstance.make(sql.RawSql(types.String, "<meaningless>"), struct_col_type, [], table.columns)
+            # new_fields.append(ast.NamedField(None, f.name, x))
+            raise pql_SyntaxError(f.meta, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
+        else:
+            for name in table.columns:
+                if name not in direct_names:
+                    yield ast.NamedField(f.meta, name, ast.Name(None, name))
+
 
 @dy
 def compile_remote(state: State, proj: ast.Projection):
@@ -111,10 +135,12 @@ def compile_remote(state: State, proj: ast.Projection):
     assert_type(table.type, (types.TableType, types.ListType), "Projection expected an object of type '%s', instead got '%s'")
     assert isinstance(table, objects.TableInstance), table
 
+    fields = _expand_ellipsis(table, proj.fields)
+
     columns = table.members if isinstance(table, objects.StructColumnInstance) else table.columns
 
     with state.use_scope(columns):
-        fields = _process_fields(state, proj.fields)
+        fields = _process_fields(state, fields)
 
     agg_fields = []
     if proj.agg_fields:
@@ -308,6 +334,9 @@ def compile_remote(state: State, f: objects.UserFunction):
 def compile_remote(state: State, f: objects.InternalFunction):
     "Functions don't need compilation"
     return f
+@dy
+def compile_remote(state: State, x: ast.Ellipsis):
+    raise pql_SyntaxError(x.meta, "Ellipsis not allowed here")
 
 
 @dy

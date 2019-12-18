@@ -5,7 +5,7 @@ from parameterized import parameterized_class
 
 from preql import Preql
 from preql.pql_objects import UserFunction
-from preql.exceptions import PreqlError, pql_TypeError
+from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError
 from preql.interp_common import GlobalSettings, pql_TypeError
 
 
@@ -27,6 +27,7 @@ class BasicTests(TestCase):
         preql.load('country_person.pql', rel_to=__file__)
 
         self._test_basic(preql)
+        self._test_ellipsis(preql)
         self._test_user_functions(preql)
         self._test_joins(preql)
         self._test_groupby(preql)
@@ -49,6 +50,25 @@ class BasicTests(TestCase):
 
         res = preql("Person[id!=me]{name}")
         assert is_eq(res, [("Ephraim Kishon",), ("Eric Blaire",), ("H.G. Wells",), ("John Steinbeck",)])
+
+    def _test_ellipsis(self, preql):
+        assert preql('Person {name, ...}[name=="Erez Shinan"]') == [{'name': 'Erez Shinan', 'id': 1, 'country': 1}]
+
+        assert list(preql('Person {name, ...}')[0].keys()) == ['name', 'id', 'country']
+        assert list(preql('Person {country, ...}')[0].keys()) == ['country', 'id', 'name']
+        assert list(preql('Person {..., id}')[0].keys()) == ['name', 'country', 'id']
+        assert list(preql('Person {country, ..., id}')[0].keys()) == ['country', 'name', 'id']
+
+        self.assertEqual( list(preql('Person {name2: name, ...}')[0].keys()), ['name2', 'id', 'country'])
+        assert list(preql('Person {name2: name, ..., name3: name}')[0].keys()) == ['name2', 'id', 'country', 'name3']
+        assert list(preql('Person {name: name, ...}')[0].keys()) == ['name', 'id', 'country']
+
+        self.assertEqual( list(preql('Person {name2: name+"!", ...}')[0].keys()), ['name2', 'id', 'name', 'country'])
+        self.assertEqual( list(preql('Person {name2: name+"!", ..., name3: name+"!"}')[0].keys()), ['name2', 'id', 'name', 'country', 'name3'])
+        self.assertEqual( list(preql('Person {name2: name+"!", ..., name3: name}')[0].keys()), ['name2', 'id', 'country', 'name3'])
+
+        self.assertRaises( pql_SyntaxError, preql, 'Person {x: ...}')
+        self.assertRaises( pql_SyntaxError, preql, 'Person {...+"a", 2}')
 
     def test_arith(self):
         preql = self.Preql()

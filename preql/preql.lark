@@ -94,10 +94,14 @@ named_expr: [name ":"] expr
       | SIGNED_FLOAT -> float
       | STRING -> string
       | "null" -> null
+      | ellipsis
       | range
 
 range: SIGNED_INT? ".." SIGNED_INT
      | SIGNED_INT ".." SIGNED_INT?
+
+!ellipsis: "..."
+
 
 
 getattr: molecule "." name
