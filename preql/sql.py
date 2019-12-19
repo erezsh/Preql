@@ -19,6 +19,8 @@ class QueryBuilder:
         return 't%d' % self.counter
 
     def remake(self, is_root):
+        if is_root == self.is_root:
+            return self # Optimize
         return QueryBuilder(self.target, is_root, self.counter)
 
 
@@ -27,8 +29,11 @@ class Sql:
     type: types.PqlType
 
     def compile(self, qb):
-        sql_code = self._compile(qb)
+        sql_code = self._compile(qb.remake(is_root=False))
         assert isinstance(sql_code, str)
+
+        if qb.is_root and isinstance(self.type, types.Primitive):
+            sql_code = f'SELECT {sql_code}'
         return CompiledSQL(sql_code, self)
 
 
@@ -116,7 +121,7 @@ class CountTable(Scalar):
     table: Table
 
     def _compile(self, qb):
-        return f'select count(*) from ({self.table.compile(qb).text})'
+        return f'(select count(*) from ({self.table.compile(qb).text}))'
 
 
 @dataclass
@@ -175,9 +180,10 @@ class Contains(Sql):
 
     def _compile(self, qb):
         assert self.op
-        in_qb = qb.remake(is_root=True)
-        a, b = [e.compile(in_qb).text for e in self.exprs]
-        return f'{a} {self.op} ({b})'
+        item, container = self.exprs
+        c_item = item.compile(qb).text
+        c_cont = container.compile(qb.remake(is_root=True)).text
+        return f'{c_item} {self.op} ({c_cont})'
 
 
 @dataclass
@@ -268,7 +274,7 @@ class Insert(Sql):
     query: Sql
 
     def _compile(self, qb):
-        return f'INSERT INTO {self.table_name} ' + self.query.compile(qb).text
+        return f'INSERT INTO {self.table_name} ' + self.query.compile(qb.remake(is_root=True)).text
 
 
 @dataclass

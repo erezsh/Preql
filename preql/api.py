@@ -1,13 +1,11 @@
 from pathlib import Path
 
-import dsnparse
-
-from .sql_interface import SqliteInterface, PostgresInterface
 from . import pql_types as types
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize
+from .interp_common import create_engine
 # from .exceptions import PreqlError
 
 def python_to_pql(value):
@@ -80,15 +78,8 @@ class Interface:
         # TODO actually parse uri
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
-        dsn = dsnparse.parse(db_uri)
-        path ,= dsn.paths
-        if dsn.scheme == 'sqlite':
-            self.engine = SqliteInterface(path, debug=debug)
-        elif dsn.scheme == 'postgres':
-            self.engine = PostgresInterface(dsn.host, path, dsn.user, dsn.password, debug=debug)
-        else:
-            raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
 
+        self.engine = create_engine(db_uri, debug=debug)
         self.interp = Interpreter(self.engine)
 
     def exec(self, q, *args, **kw):

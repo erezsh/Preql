@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 
+import dsnparse
+
 from .dispatchy import Dispatchy
 from .exceptions import pql_NameNotFound, pql_TypeError, Meta
 
@@ -7,6 +9,7 @@ from . import pql_ast as ast
 from . import pql_objects as objects
 from . import pql_types as types
 from . import sql
+from .sql_interface import SqliteInterface, PostgresInterface
 
 dy = Dispatchy()
 
@@ -67,6 +70,24 @@ class State:
         finally:
             self.ns.pop()
             assert x == len(self.ns)
+
+    def connect(self, uri):
+        print(f"[Preql] Connecting to {uri}")
+        self.db = create_engine(uri, False)
+
+
+def create_engine(db_uri, debug):
+    dsn = dsnparse.parse(db_uri)
+    if len(dsn.paths) != 1:
+        raise ValueError("Bad value for uri: %s" % db_uri)
+    path ,= dsn.paths
+    if dsn.scheme == 'sqlite':
+        return SqliteInterface(path, debug=debug)
+    elif dsn.scheme == 'postgres':
+        return PostgresInterface(dsn.host, path, dsn.user, dsn.password, debug=debug)
+
+    raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
+
 
 
 def get_alias(state: State, obj):

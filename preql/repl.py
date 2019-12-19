@@ -92,8 +92,11 @@ def start_repl(p):
         print('Exiting Preql interaction')
 
 
-def main(db=None):
-    p = Preql(db)
+def main(script=None):
+    # p = Preql(db)
+    p = Preql()
+    if script:
+        p.load(script)
     start_repl(p)
 
 if __name__ == '__main__':

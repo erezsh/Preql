@@ -8,7 +8,7 @@ from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import pql_types as types
 from . import pql_ast as ast
-from .sql import Sql, RawSql
+from . import sql
 
 
 # Functions
@@ -101,7 +101,7 @@ class List_(ast.Expr):
 
 @dataclass
 class Instance(types.PqlObject):
-    code: Sql
+    code: sql.Sql
     type: types.PqlType
 
     subqueries: SafeDict
@@ -144,8 +144,8 @@ def make_column_instance(code, type_, from_instances=()):
     kernel = type_.kernel_type()
 
     if isinstance(kernel, types.StructColumnType):
-        struct_sql_name = code.compile(None).text
-        members = {name: make_column_instance(RawSql(member.type, struct_sql_name+'_'+name), member)
+        struct_sql_name = code.compile(sql.QueryBuilder(None)).text
+        members = {name: make_column_instance(sql.RawSql(member.type, struct_sql_name+'_'+name), member)
                    for name, member in kernel.members.items()}
         return StructColumnInstance.make(code, type_, from_instances, members)
     else:
@@ -243,3 +243,5 @@ class InstancePlaceholder:
 
     def kernel_type(self):
         return self.type.kernel_type()
+
+null = ValueInstance.make(sql.null, types.null, [], None)

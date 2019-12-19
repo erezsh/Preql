@@ -11,14 +11,13 @@ class SqlInterface:
         #     subqs = [f"{name} AS ({q.compile().text})" for (name, q) in subqueries.items()]
         #     sql_code = 'WITH ' + ',\n     '.join(subqs) + '\nSELECT * FROM '
         # else:
-        if isinstance(sql.type, Primitive) and not isinstance(sql, Select): # Hacky
-            sql_code = 'SELECT '    # Only for root level
-        else:
-            sql_code = ''
+        # if isinstance(sql.type, Primitive) and not isinstance(sql, Select): # Hacky
+        #     sql_code = 'SELECT '    # Only for root level
+        # else:
 
         qb = QueryBuilder(self.target)
         compiled = sql.compile(qb)
-        sql_code += compiled.text
+        sql_code = compiled.text
         c = self._conn.cursor()
         if self._debug and not quiet:
             print_sql(sql_code)

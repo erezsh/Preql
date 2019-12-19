@@ -67,7 +67,7 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
 def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     obj = compile_remote(state, obj)
     if isinstance(obj, objects.TableInstance):
-        code = table_func(obj.type, obj.code)
+        code = table_func(types.Int, obj.code)
     else:
         if not isinstance(obj.type.concrete_type(), types.Aggregated):
             raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type.concrete_type()}' instead. Did you forget to group?")
@@ -79,8 +79,8 @@ def _apply_sql_func(state, obj: ast.Expr, table_func, name):
 def pql_count(state: State, obj: ast.Expr):
     return _apply_sql_func(state, obj, sql.CountTable, 'count')
 
-def pql_sum(state: State, obj: ast.Expr):
-    return _apply_sql_func(state, obj, None, 'sum')
+# def pql_sum(state: State, obj: ast.Expr):
+#     return _apply_sql_func(state, obj, None, 'sum')
 
 
 def pql_enum(state: State, table: ast.Expr):
@@ -222,9 +222,14 @@ def pql_cast_int(state: State, expr: ast.Expr):
 
     assert False
 
+def pql_connect(state: State, uri_expr: ast.Expr):
+    uri = localize(state, evaluate(state, uri_expr))
+    state.connect(uri)
+    return objects.null
 
 
 internal_funcs = {
+    'connect': pql_connect,
     'count': pql_count,
     'enum': pql_enum,
     'temptable': pql_temptable,
