@@ -233,7 +233,7 @@ def aggregated(inst):
 
 
 @dataclass
-class InstancePlaceholder:
+class InstancePlaceholder(types.PqlObject):
     "Half instance, half type"
 
     type: types.TableType

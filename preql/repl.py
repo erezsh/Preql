@@ -97,7 +97,9 @@ def start_repl(p):
                 res = res.repr(p.interp)
 
             # Print
-            print(res)
+            if res is not None:
+                print(res)
+
     except (KeyboardInterrupt, EOFError):
         print('Exiting Preql interaction')
 

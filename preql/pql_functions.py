@@ -124,6 +124,7 @@ def sql_bin_op(state, op, table1, table2, name):
         raise pql_TypeError(f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
     code = sql.TableArith(t1.type, op, [t1.code, t2.code])
+    # TODO new type, so it won't look like the physical table
     return objects.TableInstance.make(code, t1.type, [t1, t2], t1.columns)
 
 def pql_intersect(state, t1, t2):
@@ -226,6 +227,9 @@ def pql_connect(state: State, uri_expr: ast.Expr):
     uri = localize(state, evaluate(state, uri_expr))
     state.connect(uri)
     return objects.null
+
+def pql_help(state: State):
+    pass
 
 
 internal_funcs = {

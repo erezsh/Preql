@@ -141,8 +141,16 @@ class TableType(Collection):
         # return f'TableType({self.name}, [{", ".join(list(self.columns))}])'
         return f'TableType({self.name})'
 
+    def _data_columns(self):
+        return [c.type if not isinstance(c.type, IdType) else "id" for c in self.columns.values()]
+
     def __hash__(self):
-        return hash((self.name, tuple(self.columns.items())))
+        # raise NotImplementedError()
+        # return hash((self.name, tuple(self.columns.items())))
+        return hash(tuple(self._data_columns()))
+
+    def __eq__(self, other):
+        return self._data_columns() == other._data_columns()
 
     def restructure_result(self, i):
         "Called from import_result, to read the table's id (not actual structure)"

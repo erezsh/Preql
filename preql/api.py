@@ -1,3 +1,5 @@
+import tabulate
+
 from pathlib import Path
 
 from . import pql_types as types
@@ -24,7 +26,7 @@ def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)
     return localize(state, evaluate(state, count))
 
-TABLE_PREVIEW_SIZE = 20
+TABLE_PREVIEW_SIZE = 10
 
 class TablePromise:
     def __init__(self, state, inst):
@@ -66,7 +68,8 @@ class TablePromise:
             return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
         else:
             header = f"table {self._inst.type.name}, count={count}\n"
-            return header + '\n'.join(f'* {r}' for r in rows)
+            # return header + '\n'.join(f'* {r}' for r in rows)
+            return header + tabulate.tabulate(rows, headers="keys", numalign="right")
 
 
 def promise(state, inst):

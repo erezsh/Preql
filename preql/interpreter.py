@@ -20,7 +20,7 @@ def initial_namespace():
     ns['list'] = types.ListType
     ns['aggregate'] = types.Aggregated
     ns['TypeError'] = pql_TypeError
-    return [ns]
+    return [dict(ns)]
 
 class Interpreter:
     def __init__(self, sqlengine):
@@ -53,6 +53,25 @@ class Interpreter:
                     throw new TypeError("Unexpected")
                 end
             end
+
+            func sample_ratio(tbl, ratio) = SQL(tbl, "(SELECT * FROM flights where abs(CAST(random() AS REAL))/9223372036854775808 < $ratio)")
+
+            func sample_fast(tbl, size)
+                c = count(tbl)
+                if size >= c
+                    throw new ValueError("Asking for a sample size larger than the table")
+                end
+                if c == 0
+                    return tbl
+                end
+
+                results = temptable(limit(sample_ratio(tbl, 1.05 * size / c), size))
+                if count(results) == size
+                    return results
+                end
+                return results + limit(tbl, size - count(results))
+            end
+
 
         """)
 
