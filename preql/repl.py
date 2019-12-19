@@ -2,10 +2,20 @@ import sys
 import logging
 from pathlib import Path
 
+### XXX Fix for Python 3.8 bug (https://github.com/prompt-toolkit/python-prompt-toolkit/issues/1023)
+import asyncio
+import selectors
+selector = selectors.SelectSelector()
+loop = asyncio.SelectorEventLoop(selector)
+asyncio.set_event_loop(loop)
+### XXX End of fix
+
 from . import Preql
 from . import pql_types as types
 from . import pql_ast as ast
 from .exceptions import PreqlError
+
+
 
 
 class RowWrapper:

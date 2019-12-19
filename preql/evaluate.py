@@ -294,6 +294,9 @@ def simplify(state: State, inst: objects.Instance):
 @dy
 def simplify(state: State, inst: objects.ValueInstance):
     return inst
+@dy
+def simplify(state: State, inst: objects.TableInstance):
+    return inst
 
 @dy
 def simplify(state: State, new: ast.New):

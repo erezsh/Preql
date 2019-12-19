@@ -2,10 +2,12 @@ from pathlib import Path
 
 from . import pql_types as types
 from . import pql_ast as ast
+from . import pql_types as types
 from . import pql_objects as objects
 from .interpreter import Interpreter
-from .evaluate import localize
+from .evaluate import localize, evaluate
 from .interp_common import create_engine
+from .compiler import call_pql_func
 # from .exceptions import PreqlError
 
 def python_to_pql(value):
@@ -18,6 +20,9 @@ def python_to_pql(value):
     assert False, value
 
 
+def _call_pql_func(state, name, args):
+    count = call_pql_func(state, name, args)
+    return localize(state, evaluate(state, count))
 
 TABLE_PREVIEW_SIZE = 20
 
@@ -37,7 +42,7 @@ class TablePromise:
         return self.to_json() == other
 
     def __len__(self):
-        return len(self.to_json())  # TODO use pql_count
+        return _call_pql_func(self._state, 'count', [self._inst])
 
     def __iter__(self):
         return iter(self.to_json())
@@ -47,9 +52,9 @@ class TablePromise:
 
     def __repr__(self):
         count = len(self)
+        rows = list(_call_pql_func(self._state, 'limit', [self._inst, ast.Const(None, types.Int, TABLE_PREVIEW_SIZE)]))
         if self._state.fmt == 'html':
             header = f"<pre>table {self._inst.type.name}, count={count}</pre>"
-            rows = self[:TABLE_PREVIEW_SIZE]    # TODO const
             if rows:
                 cols = list(rows[0])
                 ths = '<tr>%s</tr>' % ' '.join([f"<th>{col}</th>" for col in cols])
@@ -61,7 +66,6 @@ class TablePromise:
             return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
         else:
             header = f"table {self._inst.type.name}, count={count}\n"
-            rows = self[:TABLE_PREVIEW_SIZE]    # TODO const
             return header + '\n'.join(f'* {r}' for r in rows)
 
 

@@ -248,6 +248,11 @@ def compile_remote(state: State, attr: ast.Attr):
 
     return inst.get_attr(attr.name)
 
+
+def call_pql_func(state, name, args):
+    expr = ast.FuncCall(None, ast.Name(None, name), args)
+    return compile_remote(state, expr)
+
 @dy
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
@@ -280,8 +285,10 @@ def compile_remote(state: State, arith: ast.Arith):
                 ordered_args = args[::-1]
             else:
                 assert False
-            expr = ast.FuncCall(None, ast.Name(None, "repeat"), ordered_args)
-            return compile_remote(state, expr)
+
+            # expr = ast.FuncCall(None, ast.Name(None, "repeat"), ordered_args)
+            # return compile_remote(state, expr)
+            return call_pql_func(state, "repeat", ordered_args)
         else:
             meta = arith.op.meta.remake(parent=arith.meta)
             raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
