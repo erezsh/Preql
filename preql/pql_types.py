@@ -116,6 +116,8 @@ class ColumnType(PqlType):
     primary_key = False
     readonly = False
 
+    default = None  # TODO
+
 
 @dataclass
 class TableType(Collection):

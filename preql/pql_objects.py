@@ -2,7 +2,7 @@
 A collection of objects that may come to interaction with the user.
 """
 
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Any
 
 from .utils import dataclass, SafeDict, safezip, split_at_index
 from .exceptions import pql_TypeError, pql_AttributeError
@@ -15,16 +15,66 @@ from . import sql
 @dataclass
 class Param(ast.Ast):
     name: str
-    # _type: PqlType = None
+    type: Optional[Any] = None
+    default: Optional[types.PqlObject] = None
 
 class Function(types.PqlObject):
     param_collector = None
 
     def match_params(self, args):
-        # TODO Default values (maybe just initialize match_params with them?)
-
         # Canonize args for the rest of the function
         args = [a if isinstance(a, ast.NamedField) else ast.NamedField(None, None, a) for a in args]
+
+        named = [arg.name is not None for arg in args]
+        try:
+            first_named = named.index(True)
+        except ValueError:
+            first_named = len(args)
+        else:
+            if not all(n for n in named[first_named:]):
+                # TODO meta
+                raise pql_TypeError(None, f"Function {self.name} recieved a non-named argument after a named one!")
+
+        if first_named > len(self.params):
+            # TODO meta
+            raise pql_TypeError(None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
+
+        values = {p.name: p.default for p in self.params}
+
+        for pos_arg, name in zip(args[:first_named], values):
+            assert pos_arg.name is None
+            values[name] = pos_arg.value
+
+        collected = {}
+        if first_named is not None:
+            for named_arg in args[first_named:]:
+                arg_name = named_arg.name
+                if arg_name in values:
+                    values[arg_name] = named_arg.value
+                elif self.param_collector:
+                    assert arg_name not in collected
+                    collected[arg_name] = named_arg.value
+                else:
+                    # TODO meta
+                    raise pql_TypeError(None, f"Function '{self.name}' has no parameter named '{arg_name}'")
+
+
+        for name, value in values.items():
+            if value is None:
+                # TODO meta
+                raise pql_TypeError(None, f"Error calling function '{self.name}': parameter '{name}' has no value")
+
+        matched = [(p, values.pop(p.name)) for p in self.params]
+        assert not values, values
+        if collected:
+            matched.append((self.param_collector, collected))
+        return matched
+
+
+
+    def _match_params(self, args):
+        # TODO Default values (maybe just initialize match_params with them?)
+
 
         for i, arg in enumerate(args):
             if arg.name:  # First keyword argument

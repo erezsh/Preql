@@ -9,12 +9,21 @@ from . import pql_types as types
 
 from .pql_functions import internal_funcs, joins
 
+import inspect
+def _canonize_default(d):
+    return None if d is inspect._empty else d
+
+def _create_internal_func(fname, f):
+    sig = inspect.signature(f)
+    return objects.InternalFunction(fname, [
+            objects.Param(None, pname, type_, _canonize_default(sig.parameters[pname].default))
+            for pname, type_ in list(f.__annotations__.items())[1:]
+    ], f)
+
 def initial_namespace():
     ns = SafeDict({p.name: p for p in types.primitives_by_pytype.values()})
     ns.update({
-        name: objects.InternalFunction(name, [
-            objects.Param(None, name) for name, type_ in list(f.__annotations__.items())[1:]
-        ], f) for name, f in internal_funcs.items()
+        fname: _create_internal_func(fname, f) for fname, f in internal_funcs.items()
     })
     ns.update(joins)
     ns['list'] = types.ListType

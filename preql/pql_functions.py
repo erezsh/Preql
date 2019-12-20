@@ -1,3 +1,5 @@
+from typing import Optional
+
 from .utils import safezip, listgen, SafeDict
 from .exceptions import pql_TypeError, pql_JoinError
 
@@ -109,6 +111,13 @@ def pql_temptable(state: State, expr: ast.Expr):
     return objects.InstancePlaceholder(table)
 
 def pql_get_db_type(state: State):
+    """
+    Returns a string representing the db type that's currently connected.
+
+    Possible values are:
+        - "sqlite"
+        - "postgres"
+    """
     s = state.db.target
     return objects.make_instance(sql_repr(s), types.String, [])
 
@@ -204,6 +213,9 @@ def _find_table_reference(t1, t2):
                 yield (objects.ColumnInstanceWithTable(t2.get_attr('id'), t2), objects.ColumnInstanceWithTable(c, t1))
 
 def pql_type(state: State, obj: ast.Expr):
+    """
+    Returns the type of the given object
+    """
     inst = compile_remote(state, obj)
     t = inst.type.concrete_type()
     # if isinstance(t, types.TableType):
@@ -211,6 +223,7 @@ def pql_type(state: State, obj: ast.Expr):
     return t
 
 def pql_cast_int(state: State, expr: ast.Expr):
+    "Temporary function, for internal use"
     # TODO make this function less ugly and better for the user
     inst = compile_remote(state, expr)
     if isinstance(inst.type, types.TableType):
@@ -223,16 +236,75 @@ def pql_cast_int(state: State, expr: ast.Expr):
 
     assert False
 
-def pql_connect(state: State, uri_expr: ast.Expr):
-    uri = localize(state, evaluate(state, uri_expr))
+def pql_connect(state: State, uri: ast.Expr):
+    """
+    Connect to a new database, specified by the uri
+    """
+    uri = localize(state, evaluate(state, uri))
     state.connect(uri)
     return objects.null
 
-def pql_help(state: State):
-    pass
+def pql_help(state: State, obj: types.PqlObject = objects.null):
+    """
+    Provides a brief summary for a given object
+    """
+    if obj is objects.null:
+        text = (
+            "Welcome to Preql!\n\n"
+            "To see the list of functions and objects available in the namespace, type 'ls()'\n\n"
+            "To get help for a specific function, type 'help(func_object)'\n\n"
+            "For example:\n"
+            "    >> help(help)\n"
+        )
+        return objects.make_value_instance(text, types.String)
+
+
+    lines = []
+    inst = compile_remote(state, obj)
+    if isinstance(inst, objects.Function):
+        # lines += [
+        #     f"Function {inst.name}, accepts {len(inst.params)} parameters:"
+        # ]
+        # for p in inst.params:
+        #     if p.default is not None:
+        #         lines += [ f"    - {p.name}: {p.type} = {localize(state, evaluate(state, p.default))}" ]
+        #     else:
+        #         lines += [ f"    - {p.name}: {p.type}" ]
+        param_str = ', '.join(p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in inst.params)
+        if inst.param_collector is not None:
+            param_str += ", ...keyword_args"
+        lines = [f"func {inst.name}({param_str})"]
+        if isinstance(inst, objects.InternalFunction) and inst.func.__doc__:
+            lines += [inst.func.__doc__]
+    else:
+        raise pql_TypeError(obj.meta, "help() only accepts functions at the moment")
+
+    text = '\n'.join(lines)
+    return objects.make_value_instance(text, types.String)
+
+def pql_ls(state: State, obj: types.PqlObject = objects.null):
+    """
+    List all names in the namespace of the given object.
+
+    If no object is given, lists the names in the current namespace.
+    """
+    if obj is not objects.null:
+        inst = compile_remote(state, obj)
+        if not isinstance(inst, objects.TableInstance):
+            raise pql_TypeError(obj.meta, "Argument to ls() must be a table")
+        all_vars = list(inst.columns)
+    else:
+        all_vars = list(state.get_all_vars())
+
+    assert all(isinstance(s, str) for s in all_vars)
+    names = [objects.make_value_instance(str(s), types.String) for s in all_vars]
+    return compile_remote(state, objects.List_(None, names))
+
 
 
 internal_funcs = {
+    'help': pql_help,
+    'ls': pql_ls,
     'connect': pql_connect,
     'count': pql_count,
     'enum': pql_enum,
