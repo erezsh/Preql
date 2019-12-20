@@ -97,6 +97,9 @@ class ListType(Collection):
     def flatten(self):
         return [self]
 
+    def __repr__(self):
+        return f'list[{self.elemtype}]'
+
 class Aggregated(ListType):
     pass
 
@@ -231,3 +234,12 @@ class IdType(PqlType):
 
     def restructure_result(self, i):
         return next(i)
+
+
+@dataclass
+class FunctionType(PqlType):
+    param_types: List[Any]
+    param_collector: bool
+
+    def __repr__(self):
+        return 'func'

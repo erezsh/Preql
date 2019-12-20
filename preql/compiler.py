@@ -140,7 +140,7 @@ def _expand_ellipsis(table, fields):
 @dy
 def compile_remote(state: State, proj: ast.Projection):
     table = compile_remote(state, proj.table)
-    assert_type(table.type, (types.TableType, types.ListType), "Projection expected an object of type '%s', instead got '%s'")
+    assert_type(proj.meta, table.type, (types.TableType, types.ListType), "Projection expected an object of type '%s', instead got '%s'")
     assert isinstance(table, objects.TableInstance), table
 
     fields = _expand_ellipsis(table, proj.fields)
@@ -198,7 +198,7 @@ def compile_remote(state: State, order: ast.Update):
 @dy
 def compile_remote(state: State, order: ast.Order):
     table = compile_remote(state, order.table)
-    assert_type(table.type, types.TableType, "'order' expected an object of type '%s', instead got '%s'")
+    assert_type(order.meta, table.type, types.TableType, "'order' expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.columns):
         fields = compile_remote(state, order.fields)
@@ -246,7 +246,12 @@ def compile_remote(state: State, attr: ast.Attr):
             return compile_remote(state, ast.Const(None, types.String, str(inst.name)))
         raise pql_AttributeError(attr.meta, "'%s' has no attribute '%s'" % (inst, attr.name))
 
-    return inst.get_attr(attr.name)
+    try:
+        return inst.get_attr(attr.name)
+    except pql_AttributeError:
+        meta = attr.name.meta.remake(parent=attr.meta)
+        raise pql_AttributeError(meta, f"Objects of type '{inst.type.concrete_type()}' have no attributes (for now)")
+
 
 
 def call_pql_func(state, name, args):
@@ -267,7 +272,6 @@ def compile_remote(state: State, arith: ast.Arith):
             if arith.op == '+' and len(arg_types_set) == 1:
                 return objects.make_value_instance(v1 + v2, args[0].type)
 
-    arg_codes = [a.code for a in args]
     if len(arg_types_set) > 1:
         # Auto-convert int+float into float
         # TODO use dispatch+operator_overload+SQL() to do this in preql instead of here?
@@ -306,11 +310,21 @@ def compile_remote(state: State, arith: ast.Arith):
             "-": 'substract',
         }
         # TODO compile preql funccall?
-        return state.get_var(ops[arith.op]).func(state, *args)
+        try:
+            op = ops[arith.op]
+        except KeyError:
+            meta = arith.op.meta.remake(parent=arith.meta)
+            raise pql_TypeError(meta, f"Operation '{arith.op}' not supported for tables")
 
+        return state.get_var(op).func(state, *args)
+
+    if not all(isinstance(a.type.concrete_type(), (types.Primitive, types.ListType)) for a in args):
+        meta = arith.op.meta.remake(parent=arith.meta)
+        raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type.concrete_type(), args[1].type.concrete_type()}")
 
 
     # TODO validate all args are compatiable
+    arg_codes = [a.code for a in args]
     res_type ,= arg_types_set
     op = arith.op
     if arg_types_set == {types.String}:
@@ -397,7 +411,7 @@ def compile_remote(state: State, t: objects.InstancePlaceholder):
 @dy
 def compile_remote(state: State, sel: ast.Selection):
     table = compile_remote(state, sel.table)
-    assert_type(table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")
+    assert_type(sel.meta, table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.columns):
         conds = compile_remote(state, sel.conds)

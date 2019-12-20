@@ -98,10 +98,10 @@ def get_alias(state: State, obj):
     return obj + str(state.tick)
 
 
-def assert_type(t, type_, msg):
+def assert_type(meta, t, type_, msg):
     concrete = t.concrete_type()
     if not isinstance(concrete, type_):
-        raise pql_TypeError(msg % (type_.__name__, concrete))
+        raise pql_TypeError(meta, msg % (type_.__name__, concrete))
 
 
 def sql_repr(x):

@@ -151,9 +151,11 @@ def simplify(state: State, n: ast.Name):
 def simplify(state: State, c: ast.Const):
     return c
 
-# @dy
-# def simplify(state: State, a: ast.Attr):
-#     obj = simplify(state, a.expr)
+@dy
+def simplify(state: State, a: ast.Attr):
+    obj = simplify(state, a.expr)
+    return ast.Attr(a.meta, obj, a.name)
+
 #     assert isinstance(obj, types.PqlType)   # Only tested on types so far
 #     if a.name == 'name':
 #         return ast.Const(a.meta, types.String, obj.name)
@@ -313,7 +315,7 @@ def simplify(state: State, new: ast.New):
         return res
 
     obj = obj.concrete_type()
-    assert_type(obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
     table = obj
 
     cons = TableConstructor(list(table.params()))

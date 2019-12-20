@@ -226,15 +226,22 @@ def pql_cast_int(state: State, expr: ast.Expr):
     "Temporary function, for internal use"
     # TODO make this function less ugly and better for the user
     inst = compile_remote(state, expr)
-    if isinstance(inst.type, types.TableType):
+    type_ = inst.type.concrete_type()
+    if isinstance(type_, types.TableType):
         assert len(inst.columns) == 1
         res = localize(state, inst)
         # res = types.Int.import_result(res)
         assert len(res) == 1
         res = list(res[0].values())[0]
-        return objects.make_instance(sql.Primitive(types.Int, str(res)), types.Int, [])
+        return objects.make_value_instance(res, types.Int)
 
-    assert False
+    elif type_ == types.Int:
+        return inst
+    elif type_ == types.Float:
+        value = localize(state, inst)
+        return objects.make_value_instance(int(value), types.Int)
+
+    raise pql_TypeError(expr.meta, f"Cannot cast expr of type {inst.type} to int")
 
 def pql_connect(state: State, uri: ast.Expr):
     """

@@ -21,6 +21,10 @@ class Param(ast.Ast):
 class Function(types.PqlObject):
     param_collector = None
 
+    @property
+    def type(self):
+        return types.FunctionType(tuple(p.type for p in self.params), self.param_collector is not None)
+
     def match_params(self, args):
         # Canonize args for the rest of the function
         args = [a if isinstance(a, ast.NamedField) else ast.NamedField(None, None, a) for a in args]
@@ -161,7 +165,9 @@ class Instance(types.PqlObject):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
     def get_attr(self, name):
-        raise NotImplementedError(f"get_attr() not implemented for instance of type {self.type} -- code=({self.code})")
+        # raise NotImplementedError("AAA")
+        # raise pql_AttributeError(None, f"Objects of type '{self.type}' have no attributes (for now)")
+        raise pql_AttributeError(name.meta, name)
 
     # def __created__(self):
     #     assert self.code.type.concrete_type() == self.type.concrete_type(), (self.code.type, self.type)
