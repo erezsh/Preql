@@ -4,7 +4,7 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any
 
-from .utils import dataclass, SafeDict, safezip, split_at_index
+from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import pql_types as types
 from . import pql_ast as ast
@@ -17,6 +17,7 @@ class Param(ast.Ast):
     name: str
     type: Optional[Any] = None
     default: Optional[types.PqlObject] = None
+    orig: Any = None # XXX temporary and lazy, for TableConstructor
 
 class Function(types.PqlObject):
     param_collector = None
@@ -179,6 +180,8 @@ class ColumnInstance(Instance):
 
 
 class DatumColumnInstance(ColumnInstance):
+    def flatten_path(self, path=[]):
+        return [(path, self)]
     def flatten(self):
         return [self]
 
@@ -189,8 +192,10 @@ class DatumColumnInstance(ColumnInstance):
 class StructColumnInstance(ColumnInstance):
     members: dict
 
+    def flatten_path(self, path=[]):
+        return concat_for(m.flatten_path(path + [name]) for name, m in self.members.items())
     def flatten(self):
-        return [atom for m in self.members.values() for atom in m.flatten()]
+        return [x for _,x in self.flatten_path()]
 
     def get_attr(self, name):
         return self.members[name]
@@ -245,8 +250,10 @@ class TableInstance(Instance):
         except KeyError:
             raise pql_AttributeError(name.meta, name)
 
+    def flatten_path(self, path=[]):
+        return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
     def flatten(self):
-        return [atom for col in self.columns.values() for atom in col.flatten()]
+        return [x for _,x in self.flatten_path()]
 
 
 class ColumnInstanceWithTable(ColumnInstance):
@@ -266,8 +273,11 @@ class ColumnInstanceWithTable(ColumnInstance):
     @property
     def subqueries(self):
         return self.column.subqueries
+    def flatten_path(self, path):
+        return self.column.flatten_path(path)
     def flatten(self):
         return self.column.flatten()
+
     def get_attr(self, name):
         return self.column.get_attr(name)
 
@@ -282,7 +292,7 @@ def aggregated(inst):
         return TableInstance.make(inst.code, types.Aggregated(inst.type), [inst], new_cols)
 
     elif isinstance(inst, ColumnInstance):
-        return make_column_instance(inst.code, types.make_column(inst.type.name, types.Aggregated(inst.type.type)), [inst])
+        return make_column_instance(inst.code, types.make_column(types.Aggregated(inst.type.type)), [inst])
 
     assert not isinstance(inst.type, types.TableType), inst.type
     return make_instance(inst.code, types.Aggregated(inst.type), [inst])

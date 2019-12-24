@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional, Any
 
-from .utils import dataclass, listgen
+from .utils import dataclass, listgen, concat_for, SafeDict
 
 class PqlObject:    # XXX should be in a base module
     "Any object that the user might interact with through the language, as so has to behave like an object inside Preql"
@@ -74,7 +74,7 @@ class ListType(Collection):
 
     @property
     def columns(self):
-        return {'value': make_column('value', self.elemtype)}
+        return {'value': make_column(self.elemtype)}
     @property
     def name(self):
         return 'list_%s' % self.elemtype.name
@@ -94,8 +94,8 @@ class ListType(Collection):
     def flat_length(self):
         return 1
 
-    def flatten(self):
-        return [self]
+    def flatten(self, path):
+        return [(path, self)]
 
     def __repr__(self):
         return f'list[{self.elemtype}]'
@@ -109,8 +109,8 @@ class SetType(Collection):
 
 
 class ColumnType(PqlType):
-    def flatten(self):
-        return [self]
+    def flatten(self, path):
+        return [(path, self)]
 
     def concrete_type(self):
         return self.type
@@ -128,15 +128,14 @@ class TableType(Collection):
     columns: Dict[str, ColumnType]
     temporary: bool
 
-    def add_column(self, col: ColumnType):
-        assert col.name not in self.columns
-        self.columns[col.name] = col
+    def __created__(self):
+        assert isinstance(self.columns, SafeDict)
 
-    def flatten(self):
-        return [atom for col in self.columns.values() for atom in col.flatten()]
+    def flatten(self, path=[]):
+        return concat_for(col.flatten(path + [name]) for name, col in self.columns.items())
 
     def params(self):
-        return [c for c in self.columns.values() if c.is_concrete and not c.readonly]
+        return [(name, c) for name, c in self.columns.items() if c.is_concrete and not c.readonly]
 
     def flat_length(self):
         # Maybe memoize
@@ -182,49 +181,37 @@ class StructType(Collection):
 
 @dataclass
 class DatumColumnType(ColumnType):
-    name: str
     type: PqlType
     primary_key: bool = False
     readonly: bool = False
-
-    def remake(self, name):
-        return type(self)(name, self.type, self.primary_key, self.readonly)
 
     def restructure_result(self, i):
         return self.type.restructure_result(i)
 
 @dataclass
 class StructColumnType(ColumnType):
-    name: str
     type: (StructType, Aggregated)
     members: Dict[str, ColumnType]
 
-    def flatten(self):
-        return [atom for col in self.members.values() for atom in col.flatten()]
-
-    def remake(self, name):
-        return type(self)(name, self.type, self.members)
+    def flatten(self, path):
+        return concat_for(col.flatten(path + [name]) for name, col in self.members.items())
 
 @dataclass
 class RelationalColumnType(ColumnType):
-    name: str
     type: PqlType
     query: Optional[Any] = None # XXX what now?
 
-    def remake(self, name):
-        return type(self)(name, self.type, self.query)
-
-def make_column(name, type_, query=None):
+def make_column(type_, query=None):
     kernel = type_.kernel_type()
     if isinstance(kernel, StructType):
         assert not query
-        return StructColumnType(name, type_, {
-            n: make_column(name+"_"+n, m) for (n,m) in kernel.members.items()
+        return StructColumnType(type_, {
+            n: make_column(m) for (n,m) in kernel.members.items()
         })
     elif query or isinstance(kernel, TableType):
-        return RelationalColumnType(name, type_.concrete_type(), query)
+        return RelationalColumnType(type_.concrete_type(), query)
     else:
-        return DatumColumnType(name, type_)
+        return DatumColumnType(type_)
     assert False, type_
 
 

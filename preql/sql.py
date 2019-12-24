@@ -262,6 +262,7 @@ class ColumnAlias(Sql):
     def _compile(self, qb):
         alias = self.alias.compile(qb).text
         value = self.value.compile(qb).text
+        assert alias and value
         if value == alias:  # TODO disable when unoptimized?
             return alias  # This is just for beauty, it's not necessary for function
 

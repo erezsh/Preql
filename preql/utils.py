@@ -57,7 +57,12 @@ class SafeDict(dict):
                 self[k] = v
         return self
 
+def merge_dicts(dicts):
+    return SafeDict().update(*dicts)
+
 def concat(*iters):
+    return [elem for it in iters for elem in it]
+def concat_for(iters):
     return [elem for it in iters for elem in it]
 
 

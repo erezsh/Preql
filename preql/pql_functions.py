@@ -90,10 +90,10 @@ def pql_enum(state: State, table: ast.Expr):
 
     table = compile_remote(state, table)
 
-    new_table_type = types.TableType(get_alias(state, "enum"), {}, True)
-    new_table_type.add_column(types.make_column(index_name, types.Int))
-    for c in table.type.columns.values():
-        new_table_type.add_column(c)
+    cols = SafeDict()
+    cols[index_name] = types.make_column(types.Int)
+    cols.update(table.type.columns)
+    new_table_type = types.TableType(get_alias(state, "enum"), cols, True)
 
     # Added to sqlite3 in 3.25.0: https://www.sqlite.org/windowfunctions.html
     index_code = sql.RawSql(types.Int, "row_number() over ()")
@@ -127,8 +127,8 @@ def sql_bin_op(state, op, table1, table2, name):
     t1 = compile_remote(state, table1)
     t2 = compile_remote(state, table2)
     # TODO make sure both table types are compatiable
-    l1 = len(t1.type.flatten())
-    l2 = len(t2.type.flatten())
+    l1 = len(t1.type.flatten([]))
+    l2 = len(t2.type.flatten([]))
     if l1 != l2:
         raise pql_TypeError(f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
@@ -166,9 +166,9 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
             cols = _auto_join(state, join, a, b)
         tables = [c.table for c in cols]
 
-    col_types = {name: types.make_column(name, types.StructType(name, {n:c.type.type for n, c in table.columns.items()}))
+    col_types = {name: types.make_column(types.StructType(name, {n:c.type.type for n, c in table.columns.items()}))
                 for name, table in safezip(exprs, tables)}
-    table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), col_types, False)
+    table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), SafeDict(col_types), False)
 
     conds = [] if joinall else [sql.Compare(types.Bool, '=', [cols[0].code, cols[1].code])]
     code = sql.Join(table_type, join, [t.code for t in tables], conds)

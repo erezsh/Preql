@@ -1,4 +1,4 @@
-from .utils import safezip, listgen
+from .utils import safezip, listgen, SafeDict
 from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError
 
 from . import pql_types as types
@@ -15,18 +15,19 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
     pks = []
     columns = []
 
-    for c in table.flatten():
+    for path, c in table.flatten():
         if c.is_concrete:
             type_ = compile_type(state, c.type)
-            columns.append( f"{c.name} {type_}" )
+            name = "_".join(path)
+            columns.append( f"{name} {type_}" )
             if isinstance(c, types.RelationalColumnType):
                 # TODO any column, using projection / get_attr
                 if not table.temporary:
                     # In postgres, constraints on temporary tables may reference only temporary tables
-                    s = f"FOREIGN KEY({c.name}) REFERENCES {c.type.name}(id)"
+                    s = f"FOREIGN KEY({name}) REFERENCES {c.type.name}(id)"
                     posts.append(s)
             if c.primary_key:
-                pks.append(c.name)
+                pks.append(name)
 
     if pks:
         names = ", ".join(pks)
@@ -85,14 +86,14 @@ def _process_fields(state: State, fields):
 
         # TODO move to ColInstance?
         if isinstance(v, objects.TableInstance):
-            t = types.make_column(name, types.StructType(v.type.name, {n:c.type.type for n,c in v.columns.items()}))
+            t = types.make_column(types.StructType(v.type.name, {n:c.type.type for n,c in v.columns.items()}))
             v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
 
         # SQL uses `first` by default on aggregate columns. This will force SQL to create an array by default.
         # TODO first() method to take advantage of this ability (although it's possible with window functions too)
         concrete_type = v.type.concrete_type()
         if isinstance(concrete_type, types.Aggregated):
-            col_type = types.make_column(get_alias(state, "list"), concrete_type)
+            col_type = types.make_column(concrete_type)
             v = objects.make_column_instance(sql.MakeArray(concrete_type, v.code), col_type, [v])
 
         v = _ensure_col_instance(v)
@@ -106,7 +107,7 @@ def _ensure_col_instance(i):
         return i
     elif isinstance(i, objects.Instance):
         if isinstance(i.type, types.Primitive):
-            return objects.make_column_instance(i.code, types.make_column('_anonymous_instance', i.type))
+            return objects.make_column_instance(i.code, types.make_column(i.type))
 
     assert False, i
 
@@ -158,16 +159,18 @@ def compile_remote(state: State, proj: ast.Projection):
     if isinstance(table, objects.StructColumnInstance):
         members = {name: inst.type for name, (inst, _a) in fields + agg_fields}
         struct_type = types.StructType(get_alias(state, table.type.name + "_proj"), members)
-        struct_col_type = types.make_column("<this is meaningless?>", struct_type)
+        struct_col_type = types.make_column(struct_type)
         return objects.make_column_instance(table.code, struct_col_type, [table])
 
     # Make new type
     all_aliases = []
-    new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), {}, True)
+    new_columns = {}
+    new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), SafeDict(), True)
     for name, (remote_col, sql_alias) in fields + agg_fields:
-        new_col_type = remote_col.type.remake(name=name)
-        new_table_type.add_column(new_col_type)
+        new_col_type = remote_col.type  #.remake(name=name)
+        new_table_type.columns[name] = new_col_type
         ci = objects.make_column_instance(sql.Name(new_col_type.type, sql_alias), new_col_type, [remote_col])
+        new_columns[name] = ci
         all_aliases.append((remote_col, ci))
 
     # Make code
@@ -184,8 +187,7 @@ def compile_remote(state: State, proj: ast.Projection):
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
     # Make Instance
-    columns = {new.type.name:new for old, new in all_aliases}
-    inst = objects.TableInstance.make(code, new_table_type, [table], columns)
+    inst = objects.TableInstance.make(code, new_table_type, [table], new_columns)
 
     return inst
     # return add_as_subquery(state, inst)
@@ -452,22 +454,21 @@ def guess_field_name(f):
 
 
 
-def instanciate_column(state: State, c: types.ColumnType):
-    return objects.make_column_instance(sql.RawSql(c.type, get_alias(state, c.name)), c)
+def instanciate_column(state: State, name, c: types.ColumnType):
+    return objects.make_column_instance(sql.RawSql(c.type, get_alias(state, name)), c)
 
 def instanciate_table(state: State, t: types.TableType, source: Sql, instances, values=None):
-    columns = {name: instanciate_column(state, c) for name, c in t.columns.items()}
+    columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
 
     atoms = [atom
-                for inst in columns.values()
-                for atom in inst.flatten()
+                for name, inst in columns.items()
+                for atom in inst.flatten_path([name])
             ]
 
-
     if values is None:
-        values = [sql.Name(atom.type, atom.type.name) for atom in atoms]    # The column value
+        values = [sql.Name(atom.type, '_'.join(path)) for path, atom in atoms]    # The column value
 
-    aliases = [ sql.ColumnAlias.make(value, atom.code) for value, atom in safezip(values, atoms) ]
+    aliases = [ sql.ColumnAlias.make(value, atom.code) for value, (_, atom) in safezip(values, atoms) ]
 
     code = sql.Select(t, source, aliases)
 

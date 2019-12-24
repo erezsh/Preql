@@ -16,7 +16,7 @@
 
 from typing import List, Optional, Any
 
-from .utils import safezip, dataclass
+from .utils import safezip, dataclass, SafeDict
 from .interp_common import assert_type
 from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError
 from . import pql_types as types
@@ -40,18 +40,17 @@ def resolve(state: State, struct_def: ast.StructDef):
 
 @dy
 def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
-    t = types.TableType(table_def.name, {}, False)
+    t = types.TableType(table_def.name, SafeDict(), False)
     state.set_var(t.name, objects.InstancePlaceholder(t))
 
-    t.add_column(types.DatumColumnType("id", types.IdType(t), primary_key=True, readonly=True))
+    t.columns["id"] = types.DatumColumnType(types.IdType(t), primary_key=True, readonly=True)
     for c in table_def.columns:
-        c = resolve(state, c)
-        t.add_column(c)
+        t.columns[c.name] = resolve(state, c)
     return t
 
 @dy
 def resolve(state: State, col_def: ast.ColumnDef) -> types.ColumnType:
-    return types.make_column(col_def.name, resolve(state, col_def.type), col_def.query)
+    return types.make_column(resolve(state, col_def.type), col_def.query)
 
 @dy
 def resolve(state: State, type_: ast.Type) -> types.PqlType:
@@ -286,7 +285,7 @@ def simplify_list(state, x):
 
 @dataclass
 class TableConstructor(objects.Function):
-    params: List[Any]
+    params: List[objects.Param]
     param_collector: Optional[objects.Param] = None
     name = 'new'
 
@@ -318,20 +317,20 @@ def simplify(state: State, new: ast.New):
     assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
     table = obj
 
-    cons = TableConstructor(list(table.params()))
+    cons = TableConstructor([objects.Param(name.meta, name, p.type, p.default, orig=p) for name, p in table.params()])
     matched = cons.match_params(new.args)
 
     destructured_pairs = []
     for k, v in matched:
         if isinstance(k.type, types.StructType):
             v = localize(state, evaluate(state, v))
-            for k2, v2 in safezip(k.flatten(), v):
-                destructured_pairs.append((k2, v2))
+            for (path,k2), v2 in safezip(k.orig.flatten([k.name]), v):
+                destructured_pairs.append(('_'.join(path), v2))
         else:
             v = localize(state, evaluate(state, v))
-            destructured_pairs.append((k, v))
+            destructured_pairs.append((k.name, v))
 
-    keys = [k.name for (k,_) in destructured_pairs]
+    keys = [name for (name, _) in destructured_pairs]
     values = [sql_repr(v) for (_,v) in destructured_pairs]
     # sql = RawSql(f"INSERT INTO {table.name} ($keys_str) VALUES ($values_str)")
     q = sql.InsertConsts(types.null, sql.TableName(table, table.name), keys, values)
