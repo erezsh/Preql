@@ -34,3 +34,17 @@ func circles_contained2() = joinall(c:Circle, b:Box) { c.center, r: c.radius, b.
         center.x + r <= end.x,
         center.y + r <= end.y
     ]
+
+
+struct Line {
+    start: Point
+    end: Point
+}
+
+table NamedLine {
+    name: string
+    line: Line
+}
+
+# TODO !!!
+# l1 = new NamedLine("l1", [[1,1], [1,2]])

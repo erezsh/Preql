@@ -400,6 +400,9 @@ def compile_remote(state: State, lst: objects.List_):
 @dy
 def compile_remote(state: State, t: types.TableType):
     return t
+@dy
+def compile_remote(state: State, t: types.FunctionType):
+    return t
 
 @dy
 def compile_remote(state: State, t: objects.InstancePlaceholder):
@@ -459,6 +462,7 @@ def instanciate_table(state: State, t: types.TableType, source: Sql, instances, 
                 for inst in columns.values()
                 for atom in inst.flatten()
             ]
+
 
     if values is None:
         values = [sql.Name(atom.type, atom.type.name) for atom in atoms]    # The column value

@@ -187,6 +187,10 @@ class BasicTests(TestCase):
         res = preql("j() {person: p.name, country: c.name}")
         assert is_eq(res, english_speakers)
 
+        # res = preql("""count(joinall(a: [1,2,3], b: ["a", "b", "c"]))""")
+        # import pdb
+        # pdb.set_trace()
+
 
     def _test_groupby(self, preql):
         res = preql("Country {language => count(id)}")

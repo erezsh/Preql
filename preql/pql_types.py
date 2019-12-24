@@ -241,5 +241,11 @@ class FunctionType(PqlType):
     param_types: List[Any]
     param_collector: bool
 
+    name = "function"
+
     def __repr__(self):
-        return 'func'
+        # types_str = ', '.join(repr(t) for t in self.param_types)
+        return f'function(...)'
+
+    def repr(self, pql):
+        return repr(self)

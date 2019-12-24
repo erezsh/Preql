@@ -305,6 +305,7 @@ class LastRowId(Atom):
 
 @dataclass
 class SelectValue(Atom, TableOperation):
+    # TODO Just use a regular select?
     value: Sql
 
     def _compile(self, qb):

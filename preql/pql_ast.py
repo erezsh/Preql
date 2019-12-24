@@ -27,7 +27,7 @@ class Name(Expr):
 @dataclass
 class Attr(Expr):
     "Reference to an attribute (usually a column)"
-    expr: Expr
+    expr: types.PqlObject #Expr
     name: str
 
 @dataclass
