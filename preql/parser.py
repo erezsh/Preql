@@ -141,8 +141,9 @@ class T(Transformer):
     if_stmt = ast.If
     try_catch = ast.Try
 
-    def ellipsis(self, meta, _):
-        return ast.Ellipsis(meta)
+    # def ellipsis(self, meta):
+    #     return ast.Ellipsis(meta)
+    ellipsis = ast.Ellipsis
 
     @v_args(inline=False, meta=True)
     def codeblock(self, stmts, meta):
@@ -186,4 +187,4 @@ def parse_stmts(s):
 
 def parse_expr(s):
     tree = parser.parse(s, start="expr")
-    return T().transform(tree)
+    return T(code=s).transform(tree)

@@ -28,12 +28,19 @@ class QueryBuilder:
 class Sql:
     type: types.PqlType
 
-    def compile(self, qb):
+    _is_select = False
+
+    def compile(self, qb):  # Move to Expr? Doesn't apply to statements
         sql_code = self._compile(qb.remake(is_root=False))
         assert isinstance(sql_code, str)
 
-        if qb.is_root and isinstance(self.type, types.Primitive):
-            sql_code = f'SELECT {sql_code}'
+        if self._is_select:
+            if not qb.is_root:
+                sql_code = f'({sql_code}) {qb.get_alias()}'
+        else:
+            if qb.is_root and isinstance(self.type, types.Primitive):
+                sql_code = f'SELECT {sql_code}'
+
         return CompiledSQL(sql_code, self)
 
 
@@ -48,6 +55,10 @@ class RawSql(Sql):
 
     def _compile(self, qb):
         return self.text
+
+    @property
+    def _is_select(self):
+        return self.text.lower().startswith('select')   # XXX Hacky! Is there a cleaner solution?
 
 @dataclass
 class Null(Sql):
@@ -95,14 +106,7 @@ class TableName(Table):
         return self.name
 
 class TableOperation(Table):
-    def compile(self, qb):
-        sql_code = self._compile(qb.remake(is_root=False))
-        assert isinstance(sql_code, str)
-
-        if not qb.is_root:
-            sql_code = f'({sql_code}) {qb.get_alias()}'
-        return CompiledSQL(sql_code, self)
-
+    _is_select = True
 
 
 
@@ -121,7 +125,7 @@ class CountTable(Scalar):
     table: Table
 
     def _compile(self, qb):
-        return f'(select count(*) from ({self.table.compile(qb).text}))'
+        return f'(SELECT COUNT(*) FROM {self.table.compile(qb).text})'
 
 
 @dataclass
@@ -382,6 +386,20 @@ class Select(TableOperation):
 
     # def import_result(self, value):
     #     return self.type.from_sql_tuples(value)
+
+@dataclass
+class Subquery(Sql):
+    table_name: str
+    fields: List[str]
+    query: Sql
+
+    def _compile(self, qb):
+        query = self.query.compile(qb).text
+        return f"{self.table_name}({', '.join(self.fields)}) AS ({query})"
+
+    def compile(self, qb):
+        sql_code = self._compile(qb)
+        return CompiledSQL(sql_code, self)
 
 
 @dataclass

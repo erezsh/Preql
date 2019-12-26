@@ -100,7 +100,7 @@ named_expr: [name ":"] expr
 range: SIGNED_INT? ".." SIGNED_INT
      | SIGNED_INT ".." SIGNED_INT?
 
-!ellipsis: "..."
+ellipsis: "..."
 
 
 

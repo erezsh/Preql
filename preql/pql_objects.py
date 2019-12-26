@@ -200,6 +200,9 @@ class StructColumnInstance(ColumnInstance):
     def get_attr(self, name):
         return self.members[name]
 
+    def remake(self, code):
+        return type(self)(code, self.type, self.subqueries, self.members)
+
 
 def make_column_instance(code, type_, from_instances=()):
     kernel = type_.kernel_type()

@@ -167,9 +167,8 @@ def compile_remote(state: State, proj: ast.Projection):
     new_columns = {}
     new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), SafeDict(), True)
     for name, (remote_col, sql_alias) in fields + agg_fields:
-        new_col_type = remote_col.type  #.remake(name=name)
-        new_table_type.columns[name] = new_col_type
-        ci = objects.make_column_instance(sql.Name(new_col_type.type, sql_alias), new_col_type, [remote_col])
+        new_table_type.columns[name] = remote_col.type
+        ci = objects.make_column_instance(sql.Name(remote_col.type, sql_alias), remote_col.type, [remote_col])
         new_columns[name] = ci
         all_aliases.append((remote_col, ci))
 
@@ -457,6 +456,10 @@ def guess_field_name(f):
 def instanciate_column(state: State, name, c: types.ColumnType):
     return objects.make_column_instance(sql.RawSql(c.type, get_alias(state, name)), c)
 
+
+def _make_name(parts):
+    return '_'.join(parts)
+
 def instanciate_table(state: State, t: types.TableType, source: Sql, instances, values=None):
     columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
 
@@ -466,7 +469,7 @@ def instanciate_table(state: State, t: types.TableType, source: Sql, instances, 
             ]
 
     if values is None:
-        values = [sql.Name(atom.type, '_'.join(path)) for path, atom in atoms]    # The column value
+        values = [sql.Name(atom.type, _make_name(path)) for path, atom in atoms]    # The column value
 
     aliases = [ sql.ColumnAlias.make(value, atom.code) for value, (_, atom) in safezip(values, atoms) ]
 

@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
-from .compiler import compile_remote, instanciate_table, compile_type_def
+from .compiler import compile_remote, instanciate_table, compile_type_def, _make_name
 from .interp_common import State, get_alias, sql_repr
 from .evaluate import simplify, evaluate, localize
 
@@ -25,22 +25,35 @@ def _pql_SQL_callback(state: State, var: str, instances):
     else:
         inst = compile_remote(state, obj)
 
-        if isinstance(inst.type, types.TableType):
+        if isinstance(inst, objects.TableInstance):
             assert isinstance(inst, objects.TableInstance)
-            # Use sql names that match the column names, so that the user can use them in his SQL query
+
+            # Make new type
+            all_aliases = []
+            new_columns = {}
+            for name, col in inst.columns.items():
+                # ci = objects.make_column_instance(sql.Name(col.type, name), col.type, [col])
+                code = sql.Name(col.type, name)
+                ci = col.remake(code=code)
+                new_columns[name] = ci
+                all_aliases.append((col, ci))
+
+            # Make code
             sql_fields = [
-                sql.ColumnAlias.make(c.code, sql.Name(c.type, name))
-                for name, cc in inst.columns.items()
-                for c in cc.flatten()
+                sql.ColumnAlias.make(o.code, n.code)
+                for old, new in all_aliases
+                for o, n in safezip(old.flatten(), new.flatten())
             ]
 
             code = sql.Select(inst.type, inst.code, sql_fields)
-            inst = objects.TableInstance.make(code, inst.type, [inst], inst.columns)
+
+            # Make Instance
+            inst = objects.TableInstance.make(code, inst.type, [inst], new_columns)
 
     instances.append(inst)
 
-    qb = sql.QueryBuilder(state.db.target, True)
-    return '(%s)' % inst.code.compile(qb).text
+    qb = sql.QueryBuilder(state.db.target, False)
+    return '%s' % inst.code.compile(qb).text
 
 import re
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
@@ -56,7 +69,15 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
 
     # TODO validation!!
     if isinstance(type_, types.TableType):
-        return instanciate_table(state, type_, code, [])
+        name = get_alias(state, "subq_")
+
+        inst = instanciate_table(state, type_, sql.TableName(type_, name), instances)
+        fields = [_make_name(path) for path, _ in inst.type.flatten()]
+
+        subq = sql.Subquery(type_, name, fields, code)
+        inst.subqueries[name] = subq
+
+        return inst
 
     return objects.make_instance(code, type_, instances)
 
