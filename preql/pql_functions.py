@@ -80,7 +80,7 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
 
         return inst
 
-    return objects.make_instance(code, type_, instances)
+    return objects.Instance.make(code, type_, instances)
 
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     inst = compile_remote(state, expr)
@@ -146,7 +146,7 @@ def pql_get_db_type(state: State):
         - "postgres"
     """
     s = state.db.target
-    return objects.make_instance(sql_repr(s), types.String, [])
+    return objects.Instance.make(sql_repr(s), types.String, [])
 
 
 
@@ -233,7 +233,7 @@ def _auto_join(state, join, ta, tb):
 def _find_table_reference(t1, t2):
     # XXX TODO need to check TableType too (owner)?
     for c in t1.columns.values():
-        if isinstance(c.type, types.RelationalColumnType):
+        if isinstance(c.type, types.RelationalColumn):
             rel = c.type.type
             if rel == t2.type:
                 # TODO depends on the query

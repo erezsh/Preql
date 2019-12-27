@@ -49,11 +49,11 @@ def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     return t
 
 @dy
-def resolve(state: State, col_def: ast.ColumnDef) -> types.ColumnType:
+def resolve(state: State, col_def: ast.ColumnDef):
     type_ = resolve(state, col_def.type)
     query = col_def.query
     if query or isinstance(type_.kernel_type(), types.TableType):
-        return types.RelationalColumnType(type_.concrete_type(), query)
+        return types.RelationalColumn(type_.concrete_type(), query)
 
     assert not query
     return type_

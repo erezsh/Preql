@@ -210,11 +210,6 @@ def make_column_instance(code, type_, from_instances=()):
         return DatumColumnInstance.make(code, type_, from_instances)
     assert False, type_
 
-def make_instance(code, type_, from_instances=[]):
-    if isinstance(type_, types.ColumnType):
-        return make_column_instance(code, type_, from_instances)
-
-    return Instance.make(code, type_, from_instances)
 
 def make_value_instance(value, type_):
     from .interp_common import sql_repr, GlobalSettings # XXX
@@ -293,7 +288,7 @@ def aggregated(inst):
         return inst.remake(type=col_type)
 
     assert not isinstance(inst.type, types.TableType), inst.type
-    return make_instance(inst.code, types.Aggregated(inst.type), [inst])
+    return Instance.make(inst.code, types.Aggregated(inst.type), [inst])
 
 
 @dataclass

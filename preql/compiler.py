@@ -20,7 +20,7 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
             type_ = compile_type(state, c.concrete_type())
             name = "_".join(path)
             columns.append( f"{name} {type_}" )
-            if isinstance(c, types.RelationalColumnType):
+            if isinstance(c, types.RelationalColumn):
                 # TODO any column, using projection / get_attr
                 if not table.temporary:
                     # In postgres, constraints on temporary tables may reference only temporary tables
@@ -40,8 +40,8 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
         return sql.RawSql(types.null, f"CREATE TABLE if not exists {table.name} (" + ", ".join(columns + posts) + ")")
 
 @dy
-def compile_type(state: State, type_: types.TableType):
-    # return type_.name
+def compile_type(state: State, type_: types.RelationalColumn):
+    # TODO might have a different type
     return 'INTEGER'    # Foreign-key is integer
 
 @dy
@@ -218,11 +218,6 @@ def compile_remote(state: State, expr: ast.DescOrder):
 def compile_remote(state: State, lst: list):
     return [compile_remote(state, e) for e in lst]
 
-# @dy
-# def compile_remote(state: State, c: ast.Contains):
-#     args = compile_remote(state, c.args)
-#     code = sql.Contains(types.Bool, c.op, [a.code for a in args])
-#     return objects.make_instance(code, types.Bool, args)
 
 @dy
 def compile_remote(state: State, cmp: ast.Compare):
@@ -339,7 +334,7 @@ def compile_remote(state: State, arith: ast.Arith):
         op = '/'
 
     code = sql.Arith(res_type, op, arg_codes)
-    return objects.make_instance(code, res_type, args)
+    return objects.Instance.make(code, res_type, args)
 
 
 @dy # Could happen because sometimes simplify(...) calls compile_remote
@@ -452,8 +447,8 @@ def guess_field_name(f):
 
 
 
-def instanciate_column(state: State, name, c: types.ColumnType):
-    return objects.make_column_instance(sql.RawSql(c.concrete_type(), get_alias(state, name)), c)
+def instanciate_column(state: State, name, t):
+    return objects.make_column_instance(sql.Name(t.concrete_type(), get_alias(state, name)), t)
 
 
 def _make_name(parts):

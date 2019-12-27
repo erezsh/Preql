@@ -123,12 +123,16 @@ class SetType(Collection):
     elemtype: PqlType
 
 
-class ColumnType(PqlType):
+@dataclass
+class RelationalColumn(PqlType):
+    type: PqlType
+    query: Optional[Any] = None # XXX what now?
+
     def flatten(self, path):
         return [(path, self)]
 
     def concrete_type(self):
-        return self.type
+        return self #.type
 
     def restructure_result(self, i):
         return self.type.restructure_result(i)
@@ -138,11 +142,6 @@ class ColumnType(PqlType):
     readonly = False
 
     default = None  # TODO
-
-@dataclass
-class RelationalColumnType(ColumnType):
-    type: PqlType
-    query: Optional[Any] = None # XXX what now?
 
 
 @dataclass
