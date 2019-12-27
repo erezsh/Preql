@@ -399,12 +399,6 @@ def compile_remote(state: State, t: types.TableType):
 def compile_remote(state: State, t: types.FunctionType):
     return t
 
-@dy
-def compile_remote(state: State, t: objects.InstancePlaceholder):
-    t = t.type
-    return instanciate_table(state, t, sql.TableName(t, t.name), [])
-
-
 
 @dy
 def compile_remote(state: State, sel: ast.Selection):

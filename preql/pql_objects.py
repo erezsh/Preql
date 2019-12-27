@@ -244,6 +244,12 @@ class TableInstance(Instance):
         type_ = self.type.to_struct_type()
         return StructColumnInstance(None, type_, self.subqueries, self.columns)
 
+    # XXX do these really belong here?
+    def concrete_type(self):
+        return self.type.concrete_type()
+    def kernel_type(self):
+        return self.type.kernel_type()
+
 
 class ColumnInstanceWithTable(ColumnInstance):
     column: ColumnInstance
@@ -290,17 +296,5 @@ def aggregated(inst):
     assert not isinstance(inst.type, types.TableType), inst.type
     return Instance.make(inst.code, types.Aggregated(inst.type), [inst])
 
-
-@dataclass
-class InstancePlaceholder(types.PqlObject):
-    "Half instance, half type"
-
-    type: types.TableType
-
-    def concrete_type(self):
-        return self.type.concrete_type()
-
-    def kernel_type(self):
-        return self.type.kernel_type()
 
 null = ValueInstance.make(sql.null, types.null, [], None)

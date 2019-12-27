@@ -135,7 +135,8 @@ def pql_temptable(state: State, expr: ast.Expr):
     table = types.TableType(name, expr.type.columns, temporary=True)
     state.db.query(compile_type_def(state, table))
     state.db.query(sql.Insert(types.null, name, expr.code))
-    return objects.InstancePlaceholder(table)
+
+    return instanciate_table(state, table, sql.TableName(table, table.name), [])
 
 def pql_get_db_type(state: State):
     """

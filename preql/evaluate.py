@@ -41,11 +41,14 @@ def resolve(state: State, struct_def: ast.StructDef):
 @dy
 def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     t = types.TableType(table_def.name, SafeDict(), False)
-    state.set_var(t.name, objects.InstancePlaceholder(t))
+    state.set_var(t.name, t)   # TODO use an internal namespace
 
     t.columns["id"] = types.IdType(t)
     for c in table_def.columns:
         t.columns[c.name] = resolve(state, c)
+
+    inst = instanciate_table(state, t, sql.TableName(t, t.name), [])
+    state.set_var(t.name, inst)
     return t
 
 @dy
@@ -321,6 +324,7 @@ def simplify(state: State, new: ast.New):
 
     obj = obj.concrete_type()
     assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+    # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
     table = obj
 
     cons = TableConstructor([objects.Param(name.meta, name, p.concrete_type(), p.default, orig=p) for name, p in table.params()])
