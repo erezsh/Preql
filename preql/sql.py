@@ -168,7 +168,7 @@ class MakeArray(Sql):
         elif qb.target == postgres:
             return f'array_agg({field})'
 
-        assert False
+        assert False, qb.target
 
     def import_result(self, value):
         assert False

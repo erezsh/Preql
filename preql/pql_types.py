@@ -66,7 +66,10 @@ Date = Primitive('date', datetime, False)   # XXX datetime?
 
 # Collections
 
-class Collection(PqlType): pass
+class Collection(PqlType):
+
+    def to_struct_type(self):
+        return StructType(self.name, {name: col.type for name, col in self.columns.items()})
 
 @dataclass
 class ListType(Collection):
@@ -168,6 +171,7 @@ class TableType(Collection):
             i = iter(row)
             s = ({str(name): col.type.restructure_result(i) for name, col in self.columns.items()})
             yield s
+
 
 
 @dataclass

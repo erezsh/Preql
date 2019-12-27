@@ -38,10 +38,14 @@ def __post_init(self):
     if hasattr(self, '__created__'):
         self.__created__()
 
-
+def __remake(self, **kwargs):
+    attrs = {name: getattr(self, name) for name in self.__dataclass_fields__}
+    attrs.update(kwargs)
+    return type(self)(**attrs)
 
 def dataclass(cls, frozen=True):
     cls.__post_init__ = __post_init
+    cls.remake = __remake
     return _dataclass(cls, frozen=frozen)
 
 

@@ -141,8 +141,8 @@ def _expand_ellipsis(table, fields):
 @dy
 def compile_remote(state: State, proj: ast.Projection):
     table = compile_remote(state, proj.table)
-    assert_type(proj.meta, table.type, (types.TableType, types.ListType), "Projection expected an object of type '%s', instead got '%s'")
-    assert isinstance(table, objects.TableInstance), table
+    assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "Projection expected an object of type '%s', instead got '%s'")
+    assert isinstance(table, (objects.TableInstance, objects.StructColumnInstance)), table
 
     fields = _expand_ellipsis(table, proj.fields)
 
@@ -156,11 +156,14 @@ def compile_remote(state: State, proj: ast.Projection):
         with state.use_scope({n:objects.aggregated(c) for n,c in columns.items()}):
             agg_fields = _process_fields(state, proj.agg_fields)
 
+
     if isinstance(table, objects.StructColumnInstance):
-        members = {name: inst.type for name, (inst, _a) in fields + agg_fields}
-        struct_type = types.StructType(get_alias(state, table.type.name + "_proj"), members)
+        assert not agg_fields
+        members = {name: inst for name, (inst, _a) in fields}
+        struct_type = types.StructType(get_alias(state, "struct_proj"), {name:m.type for name, m in members.items()})
         struct_col_type = types.make_column(struct_type)
-        return objects.make_column_instance(table.code, struct_col_type, [table])
+        return objects.StructColumnInstance.make(table.code, struct_col_type, [], members)
+
 
     # Make new type
     all_aliases = []

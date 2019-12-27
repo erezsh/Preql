@@ -194,7 +194,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
     conds = [] if joinall else [sql.Compare(types.Bool, '=', [cols[0].code, cols[1].code])]
     code = sql.Join(table_type, join, [t.code for t in tables], conds)
 
-    columns = dict(safezip(exprs, tables))
+    columns = dict(safezip(exprs, [t.to_struct_column() for t in tables]))
     return objects.TableInstance.make(code, table_type, [a,b], columns)
 
 def pql_join(state, tables):

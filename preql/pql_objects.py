@@ -185,11 +185,10 @@ class DatumColumnInstance(ColumnInstance):
     def flatten(self):
         return [self]
 
-    def remake(self, code):
-        return type(self)(code, self.type, self.subqueries)
 
 @dataclass
 class StructColumnInstance(ColumnInstance):
+    code: type(None)
     members: dict
 
     def flatten_path(self, path=[]):
@@ -200,18 +199,15 @@ class StructColumnInstance(ColumnInstance):
     def get_attr(self, name):
         return self.members[name]
 
-    def remake(self, code):
-        return type(self)(code, self.type, self.subqueries, self.members)
-
 
 def make_column_instance(code, type_, from_instances=()):
     kernel = type_.kernel_type()
 
     if isinstance(kernel, types.StructColumnType):
         struct_sql_name = code.compile(sql.QueryBuilder(None)).text
-        members = {name: make_column_instance(sql.RawSql(member.type, struct_sql_name+'_'+name), member)
+        members = {name: make_column_instance(sql.Name(member.type, struct_sql_name+'_'+name), member)
                    for name, member in kernel.members.items()}
-        return StructColumnInstance.make(code, type_, from_instances, members)
+        return StructColumnInstance.make(None, type_, from_instances, members)
     else:
         return DatumColumnInstance.make(code, type_, from_instances)
     assert False, type_
@@ -244,9 +240,6 @@ class ValueInstance(Instance):
 class TableInstance(Instance):
     columns: dict
 
-    def remake(self, code):
-        return type(self)(code, self.type, self.subqueries, self.columns)
-
     def get_attr(self, name):
         try:
             return ColumnInstanceWithTable(self.columns[name], self)
@@ -257,6 +250,10 @@ class TableInstance(Instance):
         return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
     def flatten(self):
         return [x for _,x in self.flatten_path()]
+
+    def to_struct_column(self):
+        type_ = types.make_column(self.type.to_struct_type())
+        return StructColumnInstance(None, type_, self.subqueries, self.columns)
 
 
 class ColumnInstanceWithTable(ColumnInstance):
@@ -290,12 +287,17 @@ def merge_subqueries(instances):
 
 
 def aggregated(inst):
-    if isinstance(inst, TableInstance):
-        new_cols = {name:aggregated(c) for name, c in inst.columns.items()}
-        return TableInstance.make(inst.code, types.Aggregated(inst.type), [inst], new_cols)
+    assert not isinstance(inst, TableInstance)  # Should be struct instead
+
+    if isinstance(inst, StructColumnInstance):
+        new_members = {name:aggregated(c) for name, c in inst.members.items()}
+        # return TableInstance.make(inst.code, types.Aggregated(inst.type), [inst], new_members)
+        return inst.remake(type=types.make_column(types.Aggregated(inst.type.concrete_type())), members=new_members)
 
     elif isinstance(inst, ColumnInstance):
-        return make_column_instance(inst.code, types.make_column(types.Aggregated(inst.type.type)), [inst])
+        # return make_column_instance(inst.code, types.make_column(types.Aggregated(inst.type.type)), [inst])
+        col_type = types.make_column(types.Aggregated(inst.type.concrete_type()))
+        return inst.remake(type=col_type)
 
     assert not isinstance(inst.type, types.TableType), inst.type
     return make_instance(inst.code, types.Aggregated(inst.type), [inst])
