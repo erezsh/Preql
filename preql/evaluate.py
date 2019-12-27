@@ -53,13 +53,14 @@ def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
 
 @dy
 def resolve(state: State, col_def: ast.ColumnDef):
-    type_ = resolve(state, col_def.type)
+    col = resolve(state, col_def.type)
+
     query = col_def.query
-    if query or isinstance(type_.kernel_type(), types.TableType):
-        return types.RelationalColumn(type_.concrete_type(), query)
+    if isinstance(col, objects.TableInstance):
+        return types.RelationalColumn(col.type, query)
 
     assert not query
-    return type_
+    return col
 
 @dy
 def resolve(state: State, type_: ast.Type) -> types.PqlType:
@@ -182,7 +183,7 @@ def simplify(state: State, funccall: ast.FuncCall):
     if not isinstance(func, objects.Function):
         meta = funccall.func.meta
         meta = meta.remake(parent=meta)
-        raise pql_TypeError(meta, f"Error: Object of type '{func.type.concrete_type()}' is not callable")
+        raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
 
     args = func.match_params(funccall.args)
     if isinstance(func, objects.UserFunction):
@@ -256,7 +257,7 @@ def simplify(state: State, u: ast.Update):
     #     meta = u.table.meta
     #     raise pql_TypeError(meta.remake(meta), "Update error: Got non-real table")
 
-    update_scope = {n:c.remake(code=sql.Name(c.type.concrete_type(), n)) for n, c in table.columns.items()}
+    update_scope = {n:c.remake(code=sql.Name(c.type, n)) for n, c in table.columns.items()}
     with state.use_scope(update_scope):
         proj = {f.name:compile_remote(state, f.value) for f in u.fields}
     sql_proj = {sql.Name(value.type, name): value.code for name, value in proj.items()}
@@ -322,12 +323,13 @@ def simplify(state: State, new: ast.New):
         res = simplify(state, ast.FuncCall(new.meta, f, new.args))
         return res
 
-    obj = obj.concrete_type()
-    assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+    if isinstance(obj, objects.TableInstance):
+        obj = obj.type
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
+    assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
     table = obj
 
-    cons = TableConstructor([objects.Param(name.meta, name, p.concrete_type(), p.default, orig=p) for name, p in table.params()])
+    cons = TableConstructor([objects.Param(name.meta, name, p, p.default, orig=p) for name, p in table.params()])
     matched = cons.match_params(new.args)
 
     destructured_pairs = []

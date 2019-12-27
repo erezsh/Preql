@@ -17,7 +17,7 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
 
     for path, c in table.flatten():
         if c.is_concrete:
-            type_ = compile_type(state, c.concrete_type())
+            type_ = compile_type(state, c)
             name = "_".join(path)
             columns.append( f"{name} {type_}" )
             if isinstance(c, types.RelationalColumn):
@@ -91,13 +91,12 @@ def _process_fields(state: State, fields):
 
         # SQL uses `first` by default on aggregate columns. This will force SQL to create an array by default.
         # TODO first() method to take advantage of this ability (although it's possible with window functions too)
-        concrete_type = v.type.concrete_type()
-        if isinstance(concrete_type, types.Aggregated):
+        if isinstance(v.type, types.Aggregated):
 
             if isinstance(v, objects.StructColumnInstance):
                 raise NotImplementedError("Cannot make an array of structs at the moment.")
 
-            v = objects.make_column_instance(sql.MakeArray(concrete_type, v.code), v.type, [v])
+            v = objects.make_column_instance(sql.MakeArray(v.type, v.code), v.type, [v])
 
         v = _ensure_col_instance(v)
 
@@ -180,7 +179,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
     groupby = []
     if proj.groupby and fields:
-        groupby = [sql.Name(rc.type.concrete_type(), sql_alias) for _n, (rc, sql_alias) in fields]
+        groupby = [sql.Name(rc.type, sql_alias) for _n, (rc, sql_alias) in fields]
 
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
@@ -245,7 +244,7 @@ def compile_remote(state: State, attr: ast.Attr):
         return inst.get_attr(attr.name)
     except pql_AttributeError:
         meta = attr.name.meta.remake(parent=attr.meta)
-        raise pql_AttributeError(meta, f"Objects of type '{inst.type.concrete_type()}' have no attributes (for now)")
+        raise pql_AttributeError(meta, f"Objects of type '{inst.type}' have no attributes (for now)")
 
 
 
@@ -256,7 +255,7 @@ def call_pql_func(state, name, args):
 @dy
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
-    arg_types = [a.type.concrete_type() for a in args]
+    arg_types = [a.type for a in args]
     arg_types_set = set(arg_types)
 
     if GlobalSettings.Optimize:
@@ -313,9 +312,9 @@ def compile_remote(state: State, arith: ast.Arith):
 
         return state.get_var(op).func(state, *args)
 
-    if not all(isinstance(a.type.concrete_type(), (types.Primitive, types.ListType)) for a in args):
+    if not all(isinstance(a.type, (types.Primitive, types.ListType)) for a in args):
         meta = arith.op.meta.remake(parent=arith.meta)
-        raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type.concrete_type(), args[1].type.concrete_type()}")
+        raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
 
     # TODO validate all args are compatiable
@@ -442,7 +441,7 @@ def guess_field_name(f):
 
 
 def instanciate_column(state: State, name, t):
-    return objects.make_column_instance(sql.Name(t.concrete_type(), get_alias(state, name)), t)
+    return objects.make_column_instance(sql.Name(t, get_alias(state, name)), t)
 
 
 def _make_name(parts):

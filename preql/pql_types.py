@@ -8,8 +8,6 @@ class PqlObject:    # XXX should be in a base module
 class PqlType(PqlObject):
     """PqlType annotates the type of all instances """
 
-    def concrete_type(self):
-        return self
     def kernel_type(self):
         return self
 
@@ -131,9 +129,6 @@ class RelationalColumn(PqlType):
     def flatten(self, path):
         return [(path, self)]
 
-    def concrete_type(self):
-        return self #.type
-
     def restructure_result(self, i):
         return self.type.restructure_result(i)
 
@@ -168,7 +163,7 @@ class TableType(Collection):
         return f'TableType({self.name})'
 
     def _data_columns(self):
-        return [c.concrete_type() if not isinstance(c.concrete_type(), IdType) else "id" for c in self.columns.values()]
+        return [c if not isinstance(c, IdType) else "id" for c in self.columns.values()]
 
     def __hash__(self):
         # raise NotImplementedError()

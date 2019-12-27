@@ -85,7 +85,7 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     inst = compile_remote(state, expr)
     type_ = simplify(state, type_expr)
-    res = isinstance(inst.type.concrete_type(), type_)
+    res = isinstance(inst.type, type_)
     return objects.make_value_instance(res, types.Bool)
 
 def _apply_sql_func(state, obj: ast.Expr, table_func, name):
@@ -93,8 +93,8 @@ def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     if isinstance(obj, objects.TableInstance):
         code = table_func(types.Int, obj.code)
     else:
-        if not isinstance(obj.type.concrete_type(), types.Aggregated):
-            raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type.concrete_type()}' instead. Did you forget to group?")
+        if not isinstance(obj.type, types.Aggregated):
+            raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
 
         if isinstance(obj, objects.StructColumnInstance):
             # XXX Counting a struct means counting its id
@@ -245,7 +245,7 @@ def pql_type(state: State, obj: ast.Expr):
     Returns the type of the given object
     """
     inst = compile_remote(state, obj)
-    t = inst.type.concrete_type()   # XXX concrete?
+    t = inst.type   # XXX concrete?
     # if isinstance(t, types.TableType):
     #     return types.TableType
     return t
@@ -254,7 +254,7 @@ def pql_cast_int(state: State, expr: ast.Expr):
     "Temporary function, for internal use"
     # TODO make this function less ugly and better for the user
     inst = compile_remote(state, expr)
-    type_ = inst.type.concrete_type()
+    type_ = inst.type
     if isinstance(type_, types.TableType):
         assert len(inst.columns) == 1
         res = localize(state, inst)

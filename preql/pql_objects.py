@@ -168,8 +168,6 @@ class Instance(types.PqlObject):
     def get_attr(self, name):
         raise pql_AttributeError(name.meta, name)
 
-    # def __created__(self):
-    #     assert self.code.type.concrete_type() == self.type.concrete_type(), (self.code.type, self.type)
 
 
 @dataclass
@@ -201,9 +199,9 @@ class StructColumnInstance(ColumnInstance):
 def make_column_instance(code, type_, from_instances=()):
     kernel = type_.kernel_type()
 
-    if isinstance(kernel.concrete_type(), types.StructType):
+    if isinstance(kernel, types.StructType):
         struct_sql_name = code.compile(sql.QueryBuilder(None)).text
-        members = {name: make_column_instance(sql.Name(member.concrete_type(), struct_sql_name+'_'+name), member)
+        members = {name: make_column_instance(sql.Name(member, struct_sql_name+'_'+name), member)
                    for name, member in kernel.members.items()}
         return StructColumnInstance.make(None, type_, from_instances, members)
     else:
@@ -245,8 +243,6 @@ class TableInstance(Instance):
         return StructColumnInstance(None, type_, self.subqueries, self.columns)
 
     # XXX do these really belong here?
-    def concrete_type(self):
-        return self.type.concrete_type()
     def kernel_type(self):
         return self.type.kernel_type()
 
