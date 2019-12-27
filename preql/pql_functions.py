@@ -58,7 +58,7 @@ def _pql_SQL_callback(state: State, var: str, instances):
 
 import re
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
-    type_ = simplify(state, type_expr).concrete_type()
+    type_ = simplify(state, type_expr)
     sql_code = localize(state, evaluate(state, code_expr))
     assert isinstance(sql_code, str)
 
@@ -118,7 +118,7 @@ def pql_enum(state: State, table: ast.Expr):
     table = compile_remote(state, table)
 
     cols = SafeDict()
-    cols[index_name] = types.make_column(types.Int)
+    cols[index_name] = types.Int
     cols.update(table.type.columns)
     new_table_type = types.TableType(get_alias(state, "enum"), cols, True)
 
@@ -193,7 +193,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
             cols = _auto_join(state, join, a, b)
         tables = [c.table for c in cols]
 
-    col_types = {name: types.make_column(types.StructType(name, {n:c.type.type for n, c in table.columns.items()}))
+    col_types = {name: types.StructType(name, {n:c.type for n, c in table.columns.items()})
                 for name, table in safezip(exprs, tables)}
     table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), SafeDict(col_types), False)
 
@@ -244,7 +244,7 @@ def pql_type(state: State, obj: ast.Expr):
     Returns the type of the given object
     """
     inst = compile_remote(state, obj)
-    t = inst.type.concrete_type()
+    t = inst.type.concrete_type()   # XXX concrete?
     # if isinstance(t, types.TableType):
     #     return types.TableType
     return t

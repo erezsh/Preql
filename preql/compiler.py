@@ -17,7 +17,7 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
 
     for path, c in table.flatten():
         if c.is_concrete:
-            type_ = compile_type(state, c.type)
+            type_ = compile_type(state, c.concrete_type())
             name = "_".join(path)
             columns.append( f"{name} {type_}" )
             if isinstance(c, types.RelationalColumnType):
@@ -86,19 +86,18 @@ def _process_fields(state: State, fields):
 
         # TODO move to ColInstance?
         if isinstance(v, objects.TableInstance):
-            t = types.make_column(types.StructType(v.type.name, {n:c.type.type for n,c in v.columns.items()}))
+            t = types.StructType(v.type.name, {n:c.type.type for n,c in v.columns.items()})
             v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
 
         # SQL uses `first` by default on aggregate columns. This will force SQL to create an array by default.
         # TODO first() method to take advantage of this ability (although it's possible with window functions too)
         concrete_type = v.type.concrete_type()
         if isinstance(concrete_type, types.Aggregated):
-            col_type = types.make_column(concrete_type)
 
             if isinstance(v, objects.StructColumnInstance):
                 raise NotImplementedError("Cannot make an array of structs at the moment.")
 
-            v = objects.make_column_instance(sql.MakeArray(concrete_type, v.code), col_type, [v])
+            v = objects.make_column_instance(sql.MakeArray(concrete_type, v.code), v.type, [v])
 
         v = _ensure_col_instance(v)
 
@@ -111,7 +110,7 @@ def _ensure_col_instance(i):
         return i
     elif isinstance(i, objects.Instance):
         if isinstance(i.type, types.Primitive):
-            return objects.make_column_instance(i.code, types.make_column(i.type))
+            return objects.make_column_instance(i.code, i.type)
 
     assert False, i
 
@@ -129,12 +128,6 @@ def _expand_ellipsis(table, fields):
             continue
 
         if f.name:
-            # XXX This should be used for $, not ...
-            # members = {name: col.type for name, col in table.columns.items()}
-            # struct_type = types.StructType("temp", members)
-            # struct_col_type = types.make_column("<this is meaningless?>", struct_type)
-            # x = objects.StructColumnInstance.make(sql.RawSql(types.String, "<meaningless>"), struct_col_type, [], table.columns)
-            # new_fields.append(ast.NamedField(None, f.name, x))
             raise pql_SyntaxError(f.meta, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
         else:
             for name in table.columns:
@@ -165,8 +158,7 @@ def compile_remote(state: State, proj: ast.Projection):
         assert not agg_fields
         members = {name: inst for name, (inst, _a) in fields}
         struct_type = types.StructType(get_alias(state, "struct_proj"), {name:m.type for name, m in members.items()})
-        struct_col_type = types.make_column(struct_type)
-        return objects.StructColumnInstance.make(table.code, struct_col_type, [], members)
+        return objects.StructColumnInstance.make(table.code, struct_type, [], members)
 
 
     # Make new type
@@ -188,7 +180,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
     groupby = []
     if proj.groupby and fields:
-        groupby = [sql.Name(rc.type.type, sql_alias) for _n, (rc, sql_alias) in fields]
+        groupby = [sql.Name(rc.type.concrete_type(), sql_alias) for _n, (rc, sql_alias) in fields]
 
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
@@ -461,7 +453,7 @@ def guess_field_name(f):
 
 
 def instanciate_column(state: State, name, c: types.ColumnType):
-    return objects.make_column_instance(sql.RawSql(c.type, get_alias(state, name)), c)
+    return objects.make_column_instance(sql.RawSql(c.concrete_type(), get_alias(state, name)), c)
 
 
 def _make_name(parts):

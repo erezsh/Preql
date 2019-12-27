@@ -21,11 +21,23 @@ class NullType(PqlType):
 
 null = NullType()
 
+
+class AtomicType(PqlType):
+    def flatten(self, path):
+        return [(path, self)]
+
+    # XXX these don't belong here!
+    is_concrete = True
+    primary_key = False
+    readonly = False
+    default = None
+
 @dataclass
-class Primitive(PqlType):
+class Primitive(AtomicType):
     name: str
     pytype: type
     nullable: bool
+
 
     def __repr__(self):
         return self.name
@@ -69,7 +81,7 @@ Date = Primitive('date', datetime, False)   # XXX datetime?
 class Collection(PqlType):
 
     def to_struct_type(self):
-        return StructType(self.name, {name: col.type for name, col in self.columns.items()})
+        return StructType(self.name, {name: col for name, col in self.columns.items()})
 
 @dataclass
 class ListType(Collection):
@@ -77,7 +89,7 @@ class ListType(Collection):
 
     @property
     def columns(self):
-        return {'value': make_column(self.elemtype)}
+        return {'value': self.elemtype}
     @property
     def name(self):
         return 'list_%s' % self.elemtype.name
@@ -118,17 +130,25 @@ class ColumnType(PqlType):
     def concrete_type(self):
         return self.type
 
+    def restructure_result(self, i):
+        return self.type.restructure_result(i)
+
     is_concrete = True  # Concrete = actually contains data
     primary_key = False
     readonly = False
 
     default = None  # TODO
 
+@dataclass
+class RelationalColumnType(ColumnType):
+    type: PqlType
+    query: Optional[Any] = None # XXX what now?
+
 
 @dataclass
 class TableType(Collection):
     name: str
-    columns: Dict[str, ColumnType]
+    columns: Dict[str, PqlType]
     temporary: bool
 
     def __created__(self):
@@ -149,7 +169,7 @@ class TableType(Collection):
         return f'TableType({self.name})'
 
     def _data_columns(self):
-        return [c.type if not isinstance(c.type, IdType) else "id" for c in self.columns.values()]
+        return [c.concrete_type() if not isinstance(c.concrete_type(), IdType) else "id" for c in self.columns.values()]
 
     def __hash__(self):
         # raise NotImplementedError()
@@ -169,7 +189,7 @@ class TableType(Collection):
         for row in arr:
             assert len(row) == expected_length, (expected_length, row)
             i = iter(row)
-            s = ({str(name): col.type.restructure_result(i) for name, col in self.columns.items()})
+            s = ({str(name): col.restructure_result(i) for name, col in self.columns.items()})
             yield s
 
 
@@ -179,60 +199,31 @@ class StructType(Collection):
     name: str
     members: Dict[str, PqlType]
 
+    is_concrete = True
+    readonly = False
+    default = None
+
     def restructure_result(self, i):
         return ({name: col.restructure_result(i) for name, col in self.members.items()})
 
     def __hash__(self):
-        # XXX Do members really don't matter? Isn't there useful info there?
+        # XXX only compare types?
         members = tuple(self.members.items())
         return hash((self.name, members))
 
     def __repr__(self):
         return f'<struct {self.name}{tuple(self.members.values())}>'
 
-
-@dataclass
-class DatumColumnType(ColumnType):
-    type: PqlType
-    primary_key: bool = False
-    readonly: bool = False
-
-    def restructure_result(self, i):
-        return self.type.restructure_result(i)
-
-@dataclass
-class StructColumnType(ColumnType):
-    type: (StructType, Aggregated)
-    members: Dict[str, ColumnType]
-
     def flatten(self, path):
         return concat_for(col.flatten(path + [name]) for name, col in self.members.items())
 
-    def __hash__(self):
-        return hash(self.type)  # XXX Do members really don't matter? Isn't there useful info there?
 
 @dataclass
-class RelationalColumnType(ColumnType):
-    type: PqlType
-    query: Optional[Any] = None # XXX what now?
-
-def make_column(type_, query=None):
-    kernel = type_.kernel_type()
-    if isinstance(kernel, StructType):
-        assert not query
-        return StructColumnType(type_, {
-            n: make_column(m) for (n,m) in kernel.members.items()
-        })
-    elif query or isinstance(kernel, TableType):
-        return RelationalColumnType(type_.concrete_type(), query)
-    else:
-        return DatumColumnType(type_)
-    assert False, type_
-
-
-@dataclass
-class IdType(PqlType):
+class IdType(AtomicType):
     table: TableType
+
+    primary_key = True
+    readonly = True
 
     def restructure_result(self, i):
         return next(i)

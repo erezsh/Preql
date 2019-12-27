@@ -166,8 +166,6 @@ class Instance(types.PqlObject):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
     def get_attr(self, name):
-        # raise NotImplementedError("AAA")
-        # raise pql_AttributeError(None, f"Objects of type '{self.type}' have no attributes (for now)")
         raise pql_AttributeError(name.meta, name)
 
     # def __created__(self):
@@ -176,7 +174,7 @@ class Instance(types.PqlObject):
 
 @dataclass
 class ColumnInstance(Instance):
-    type: types.ColumnType
+    type: types.PqlType
 
 
 class DatumColumnInstance(ColumnInstance):
@@ -203,9 +201,9 @@ class StructColumnInstance(ColumnInstance):
 def make_column_instance(code, type_, from_instances=()):
     kernel = type_.kernel_type()
 
-    if isinstance(kernel, types.StructColumnType):
+    if isinstance(kernel.concrete_type(), types.StructType):
         struct_sql_name = code.compile(sql.QueryBuilder(None)).text
-        members = {name: make_column_instance(sql.Name(member.type, struct_sql_name+'_'+name), member)
+        members = {name: make_column_instance(sql.Name(member.concrete_type(), struct_sql_name+'_'+name), member)
                    for name, member in kernel.members.items()}
         return StructColumnInstance.make(None, type_, from_instances, members)
     else:
@@ -215,10 +213,6 @@ def make_column_instance(code, type_, from_instances=()):
 def make_instance(code, type_, from_instances=[]):
     if isinstance(type_, types.ColumnType):
         return make_column_instance(code, type_, from_instances)
-    # elif isinstance(type_, Aggregated) and isinstance(type_.elemtype, ColumnType):
-    #     return make_column_instance(code, type_, from_instances)
-    # elif isinstance(type_, TableType):
-    #     return instanciate_table(state, t, sql.TableName(t, t.name), [])
 
     return Instance.make(code, type_, from_instances)
 
@@ -252,7 +246,7 @@ class TableInstance(Instance):
         return [x for _,x in self.flatten_path()]
 
     def to_struct_column(self):
-        type_ = types.make_column(self.type.to_struct_type())
+        type_ = self.type.to_struct_type()
         return StructColumnInstance(None, type_, self.subqueries, self.columns)
 
 
@@ -292,11 +286,10 @@ def aggregated(inst):
     if isinstance(inst, StructColumnInstance):
         new_members = {name:aggregated(c) for name, c in inst.members.items()}
         # return TableInstance.make(inst.code, types.Aggregated(inst.type), [inst], new_members)
-        return inst.remake(type=types.make_column(types.Aggregated(inst.type.concrete_type())), members=new_members)
+        return inst.remake(type=types.Aggregated(inst.type), members=new_members)
 
     elif isinstance(inst, ColumnInstance):
-        # return make_column_instance(inst.code, types.make_column(types.Aggregated(inst.type.type)), [inst])
-        col_type = types.make_column(types.Aggregated(inst.type.concrete_type()))
+        col_type = types.Aggregated(inst.type)
         return inst.remake(type=col_type)
 
     assert not isinstance(inst.type, types.TableType), inst.type

@@ -43,14 +43,20 @@ def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     t = types.TableType(table_def.name, SafeDict(), False)
     state.set_var(t.name, objects.InstancePlaceholder(t))
 
-    t.columns["id"] = types.DatumColumnType(types.IdType(t), primary_key=True, readonly=True)
+    t.columns["id"] = types.IdType(t)
     for c in table_def.columns:
         t.columns[c.name] = resolve(state, c)
     return t
 
 @dy
 def resolve(state: State, col_def: ast.ColumnDef) -> types.ColumnType:
-    return types.make_column(resolve(state, col_def.type), col_def.query)
+    type_ = resolve(state, col_def.type)
+    query = col_def.query
+    if query or isinstance(type_.kernel_type(), types.TableType):
+        return types.RelationalColumnType(type_.concrete_type(), query)
+
+    assert not query
+    return type_
 
 @dy
 def resolve(state: State, type_: ast.Type) -> types.PqlType:
@@ -317,7 +323,7 @@ def simplify(state: State, new: ast.New):
     assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
     table = obj
 
-    cons = TableConstructor([objects.Param(name.meta, name, p.type, p.default, orig=p) for name, p in table.params()])
+    cons = TableConstructor([objects.Param(name.meta, name, p.concrete_type(), p.default, orig=p) for name, p in table.params()])
     matched = cons.match_params(new.args)
 
     destructured_pairs = []
