@@ -34,9 +34,10 @@ def _pql_SQL_callback(state: State, var: str, instances):
             for name, col in inst.columns.items():
                 # ci = objects.make_column_instance(sql.Name(col.type, name), col.type, [col])
                 code = sql.Name(col.type, name)
-                ci = col.remake(code=code)
-                new_columns[name] = ci
-                all_aliases.append((col, ci))
+                # new_col = col.remake(code=code)
+                new_col = objects.make_column_instance(code, col.type, [col])
+                new_columns[name] = new_col
+                all_aliases.append((col, new_col))
 
             # Make code
             sql_fields = [
@@ -94,6 +95,11 @@ def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     else:
         if not isinstance(obj.type.concrete_type(), types.Aggregated):
             raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type.concrete_type()}' instead. Did you forget to group?")
+
+        if isinstance(obj, objects.StructColumnInstance):
+            # XXX Counting a struct means counting its id
+            # But what happens if there is no 'id'?
+            obj = obj.get_attr('id')
 
         code = sql.FieldFunc(types.Int, name, obj.code)
 

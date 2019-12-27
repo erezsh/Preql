@@ -94,6 +94,10 @@ def _process_fields(state: State, fields):
         concrete_type = v.type.concrete_type()
         if isinstance(concrete_type, types.Aggregated):
             col_type = types.make_column(concrete_type)
+
+            if isinstance(v, objects.StructColumnInstance):
+                raise NotImplementedError("Cannot make an array of structs at the moment.")
+
             v = objects.make_column_instance(sql.MakeArray(concrete_type, v.code), col_type, [v])
 
         v = _ensure_col_instance(v)

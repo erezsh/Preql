@@ -182,6 +182,14 @@ class StructType(Collection):
     def restructure_result(self, i):
         return ({name: col.restructure_result(i) for name, col in self.members.items()})
 
+    def __hash__(self):
+        # XXX Do members really don't matter? Isn't there useful info there?
+        members = tuple(self.members.items())
+        return hash((self.name, members))
+
+    def __repr__(self):
+        return f'<struct {self.name}{tuple(self.members.values())}>'
+
 
 @dataclass
 class DatumColumnType(ColumnType):
@@ -199,6 +207,9 @@ class StructColumnType(ColumnType):
 
     def flatten(self, path):
         return concat_for(col.flatten(path + [name]) for name, col in self.members.items())
+
+    def __hash__(self):
+        return hash(self.type)  # XXX Do members really don't matter? Isn't there useful info there?
 
 @dataclass
 class RelationalColumnType(ColumnType):
@@ -225,6 +236,9 @@ class IdType(PqlType):
 
     def restructure_result(self, i):
         return next(i)
+
+    def __repr__(self):
+        return f'{self.table.name}.id'
 
 
 @dataclass
