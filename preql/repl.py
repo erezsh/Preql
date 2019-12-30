@@ -1,3 +1,4 @@
+from time import time
 import sys
 import logging
 from pathlib import Path
@@ -78,6 +79,7 @@ def start_repl(p):
                 continue
 
             # Evaluate
+            start_time = time()
             try:
                 res = p(code)
             except PreqlError as e:
@@ -92,13 +94,17 @@ def start_repl(p):
                 raise
                 # continue
 
-
             if isinstance(res, types.PqlObject):
                 res = res.repr(p.interp)
 
             # Print
             if res is not None:
                 print(res)
+
+            duration = time() - start_time
+            if duration > 1:
+                print("(Query took %.2f seconds)" % duration)
+
 
     except (KeyboardInterrupt, EOFError):
         print('Exiting Preql interaction')

@@ -72,7 +72,7 @@ Float = Primitive('float', float, False)
 String = Primitive('string', str, False)
 Text = Primitive('text', Text, False)
 Bool = Primitive('bool', bool, False)
-Date = Primitive('date', datetime, False)   # XXX datetime?
+DateTime = Primitive('datetime', datetime, False)   # XXX datetime?
 
 # Collections
 

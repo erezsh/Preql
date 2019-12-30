@@ -22,11 +22,16 @@ def python_to_pql(value):
     assert False, value
 
 
+def _make_const(value):
+    t = types.primitives_by_pytype[type(value)]
+    return ast.Const(None, t, value)
+
 def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)
     return localize(state, evaluate(state, count))
 
 TABLE_PREVIEW_SIZE = 10
+MAX_AUTO_COUNT = 10000
 
 class TablePromise:
     def __init__(self, state, inst):
@@ -50,13 +55,25 @@ class TablePromise:
         return iter(self.to_json())
 
     def __getitem__(self, index):
-        return self.to_json()[index]
+        if isinstance(index, slice):
+            offset = index.start or 0
+            limit = index.stop - offset
+            return call_pql_func(self._state, 'limit_offset', [self._inst, _make_const(limit), _make_const(offset)])
+
+        res ,= localize(self._state, evaluate(self._state, self[index:1]))
+        return res
 
     def __repr__(self):
-        count = len(self)
+        # count = len(self)
+        count = _call_pql_func(self._state, 'count', [self[:MAX_AUTO_COUNT]])
+        if count == MAX_AUTO_COUNT:
+            count_str = f'count>={count}'
+        else:
+            count_str = f'count={count}'
+
         rows = list(_call_pql_func(self._state, 'limit', [self._inst, ast.Const(None, types.Int, TABLE_PREVIEW_SIZE)]))
         if self._state.fmt == 'html':
-            header = f"<pre>table {self._inst.type.name}, count={count}</pre>"
+            header = f"<pre>table {self._inst.type.name}, {count_str}</pre>"
             if rows:
                 cols = list(rows[0])
                 ths = '<tr>%s</tr>' % ' '.join([f"<th>{col}</th>" for col in cols])
@@ -67,7 +84,7 @@ class TablePromise:
 
             return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
         else:
-            header = f"table {self._inst.type.name}, count={count}\n"
+            header = f"table {self._inst.type.name}, {count_str}\n"
             # return header + '\n'.join(f'* {r}' for r in rows)
             return header + tabulate.tabulate(rows, headers="keys", numalign="right")
 

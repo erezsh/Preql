@@ -27,7 +27,11 @@ class SqlInterface:
         if self._debug and not quiet:
             print_sql(sql_code)
 
-        c.execute(sql_code, qargs)
+        try:
+            c.execute(sql_code, qargs)
+        except:
+            print_sql(sql_code)
+            raise
 
         if sql.type is not null:
             res = c.fetchall()

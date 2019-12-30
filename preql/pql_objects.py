@@ -10,7 +10,6 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
-
 # Functions
 @dataclass
 class Param(ast.Ast):
@@ -193,13 +192,17 @@ class StructColumnInstance(ColumnInstance):
         return [x for _,x in self.flatten_path()]
 
     def get_attr(self, name):
-        return self.members[name]
+        try:
+            return self.members[name]
+        except KeyError:
+            raise pql_AttributeError(name.meta, name)
 
 
 def make_column_instance(code, type_, from_instances=()):
     kernel = type_.kernel_type()
 
     if isinstance(kernel, types.StructType):
+        # XXX this is all wrong!
         struct_sql_name = code.compile(sql.QueryBuilder(None)).text
         members = {name: make_column_instance(sql.Name(member, struct_sql_name+'_'+name), member)
                    for name, member in kernel.members.items()}
@@ -239,12 +242,8 @@ class TableInstance(Instance):
         return [x for _,x in self.flatten_path()]
 
     def to_struct_column(self):
-        type_ = self.type.to_struct_type()
-        return StructColumnInstance(None, type_, self.subqueries, self.columns)
-
-    # XXX do these really belong here?
-    def kernel_type(self):
-        return self.type.kernel_type()
+        # return make_column_instance(None, self.type.to_struct_type(), [self])
+        return StructColumnInstance(None, self.type.to_struct_type(), self.subqueries, self.columns)
 
 
 class ColumnInstanceWithTable(ColumnInstance):

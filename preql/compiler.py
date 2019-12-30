@@ -51,7 +51,7 @@ def compile_type(state: State, type: types.Primitive):
         'string': "VARCHAR(4000)",
         'float': "FLOAT",
         'bool': "BOOLEAN",
-        'date': "TIMESTAMP",
+        'datetime': "TIMESTAMP",
     }[type.name]
     if not type.nullable:
         s += " NOT NULL"
@@ -98,20 +98,21 @@ def _process_fields(state: State, fields):
 
             v = objects.make_column_instance(sql.MakeArray(v.type, v.code), v.type, [v])
 
-        v = _ensure_col_instance(v)
+        v = _ensure_col_instance(state, f.meta, v)
 
         processed_fields[unique_name] = v, get_alias(state, sql_friendly_name)   # TODO Don't create new alias for fields that don't change?
 
     return list(processed_fields.items())
 
-def _ensure_col_instance(i):
+def _ensure_col_instance(state, meta, i):
     if isinstance(i, objects.ColumnInstance):
         return i
     elif isinstance(i, objects.Instance):
         if isinstance(i.type, types.Primitive):
             return objects.make_column_instance(i.code, i.type)
 
-    assert False, i
+    raise pql_TypeError(meta, f"Expected a valid expression. Instead got: {i.repr(state)}")
+    # assert False, i
 
 
 
@@ -201,6 +202,8 @@ def compile_remote(state: State, order: ast.Order):
 
     with state.use_scope(table.columns):
         fields = compile_remote(state, order.fields)
+
+    fields = [_ensure_col_instance(state, of.meta, f) for f, of in safezip(fields, order.fields)]
 
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], order=[c.code for c in fields])
 
@@ -406,6 +409,8 @@ def compile_remote(state: State, sel: ast.Selection):
 
     with state.use_scope(table.columns):
         conds = compile_remote(state, sel.conds)
+
+    conds = [_ensure_col_instance(state, of.meta, f) for f, of in safezip(conds, sel.conds)]
 
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], conds=[c.code for c in conds])
     inst = objects.TableInstance.make(code, table.type, [table] + conds, table.columns)

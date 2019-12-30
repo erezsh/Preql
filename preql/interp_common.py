@@ -108,7 +108,7 @@ def sql_repr(x):
         return sql.null
 
     t = types.primitives_by_pytype[type(x)]
-    if t is types.Date:
+    if t is types.DateTime:
         # TODO Better to pass the object instead of a string?
         return sql.Primitive(t, repr(x.isoformat()))
 
