@@ -129,14 +129,7 @@ class Interface:
             return self._wrap_result(res)
 
     def load(self, fn, rel_to=None):
-        """Load content filename as Preql code
-
-        If rel_to is provided, the function will find the filename in relation to it.
-        """
-        if rel_to:
-            fn = Path(rel_to).parent / fn
-        with open(fn, encoding='utf8') as f:
-            self.exec(f.read())
+        self.interp.include(fn, rel_to)
 
     def start_repl(self):
         from .repl import start_repl
