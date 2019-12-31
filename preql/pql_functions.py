@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
-from .compiler import compile_remote, instanciate_table, compile_type_def, _make_name
+from .compiler import compile_remote, instanciate_table, compile_type_def, _make_name, alias_table
 from .interp_common import State, get_alias, sql_repr
 from .evaluate import simplify, evaluate, localize
 
@@ -177,6 +177,7 @@ def pql_concat(state, t1, t2):
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
 
 
+
 def _join(state: State, join: str, exprs: dict, joinall=False):
     assert len(exprs) == 2
     exprs = {name: compile_remote(state, value) for name,value in exprs.items()}
@@ -185,20 +186,29 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
     (a,b) = exprs.values()
 
     if joinall:
+        a = alias_table(state, a)
+        b = alias_table(state, b)
         tables = (a,b)
     else:
-        if isinstance(a, objects.ColumnInstanceWithTable) and isinstance(b, objects.ColumnInstanceWithTable):
+        if isinstance(a, objects.ColumnReference) and isinstance(b, objects.ColumnReference):
+            a = a.remake(table=alias_table(state, a.table))
+            b = b.remake(table=alias_table(state, b.table))
             cols = a, b
         else:
             assert isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance)    # TODO better error message (TypeError?)
+            a = alias_table(state, a)
+            b = alias_table(state, b)
             cols = _auto_join(state, join, a, b)
         tables = [c.table for c in cols]
+
+    # tables = [alias_table(state, t) for t in tables]
 
     col_types = {name: types.StructType(name, {n:c.type for n, c in table.columns.items()})
                 for name, table in safezip(exprs, tables)}
     table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), SafeDict(col_types), False)
 
     conds = [] if joinall else [sql.Compare(types.Bool, '=', [cols[0].code, cols[1].code])]
+
     code = sql.Join(table_type, join, [t.code for t in tables], conds)
 
     columns = dict(safezip(exprs, [t.to_struct_column() for t in tables]))
@@ -233,12 +243,12 @@ def _auto_join(state, join, ta, tb):
 @listgen
 def _find_table_reference(t1, t2):
     # XXX TODO need to check TableType too (owner)?
-    for c in t1.columns.values():
+    for name, c in t1.columns.items():
         if isinstance(c.type, types.RelationalColumn):
             rel = c.type.type
             if rel == t2.type:
                 # TODO depends on the query
-                yield (objects.ColumnInstanceWithTable(t2.get_attr('id'), t2), objects.ColumnInstanceWithTable(c, t1))
+                yield (objects.ColumnReference(t2, 'id'), objects.ColumnReference(t1, name))
 
 def pql_type(state: State, obj: ast.Expr):
     """

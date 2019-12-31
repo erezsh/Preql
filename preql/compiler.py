@@ -452,16 +452,35 @@ def instanciate_column(state: State, name, t):
 def _make_name(parts):
     return '_'.join(parts)
 
+
+def alias_table(state: State, t):
+    new_columns = {
+        name: objects.make_column_instance(sql.Name(col.type, get_alias(state, name)), col.type, [col])
+        for name, col in t.columns.items()
+    }
+
+    # Make code
+    sql_fields = [
+        sql.ColumnAlias.make(o.code, n.code)
+        for old, new in safezip(t.columns.values(), new_columns.values())
+        for o, n in safezip(old.flatten(), new.flatten())
+    ]
+
+    code = sql.Select(t.type, t.code, sql_fields)
+    return t.remake(code=code, columns=new_columns)
+
+
 def instanciate_table(state: State, t: types.TableType, source: Sql, instances, values=None):
+    if values is None:
+        columns = {name: objects.make_column_instance(sql.Name(c, name), c) for name, c in t.columns.items()}
+        return objects.TableInstance(source, t, objects.merge_subqueries(instances), columns)
+
     columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
 
     atoms = [atom
                 for name, inst in columns.items()
                 for atom in inst.flatten_path([name])
             ]
-
-    if values is None:
-        values = [sql.Name(atom.type, _make_name(path)) for path, atom in atoms]    # The column value
 
     aliases = [ sql.ColumnAlias.make(value, atom.code) for value, (_, atom) in safezip(values, atoms) ]
 

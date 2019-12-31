@@ -54,11 +54,11 @@ class Interpreter:
 
             if get_db_type() == "postgres"
                 func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
-                func now() = SQL(date, "NOW()") # Postgres
+                func now() = SQL(datetime, "NOW()") # Postgres
             else
                 if get_db_type() == "sqlite"
                     func repeat(s, num) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
-                    func now() = SQL(date, "datetime('now')") # Sqlite
+                    func now() = SQL(datetime, "datetime('now')") # Sqlite
                 else
                     throw new TypeError("Unexpected")
                 end

@@ -232,7 +232,7 @@ class TableInstance(Instance):
 
     def get_attr(self, name):
         try:
-            return ColumnInstanceWithTable(self.columns[name], self)
+            return ColumnReference(self, name)
         except KeyError:
             raise pql_AttributeError(name.meta, name)
 
@@ -246,13 +246,21 @@ class TableInstance(Instance):
         return StructColumnInstance(None, self.type.to_struct_type(), self.subqueries, self.columns)
 
 
-class ColumnInstanceWithTable(ColumnInstance):
-    column: ColumnInstance
+# @dataclass
+class ColumnReference(ColumnInstance):
     table: TableInstance
+    name: str
 
-    def __init__(self, column, table):
-        self.column = column
+    def remake(self, table):
+        return type(self)(table, self.name)
+
+    def __init__(self, table, name):
         self.table = table
+        self.name = name
+
+    @property
+    def column(self):
+        return self.table.columns[self.name]
 
     @property
     def code(self):
@@ -263,6 +271,7 @@ class ColumnInstanceWithTable(ColumnInstance):
     @property
     def subqueries(self):
         return self.column.subqueries
+
     def flatten_path(self, path):
         return self.column.flatten_path(path)
     def flatten(self):

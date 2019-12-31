@@ -102,8 +102,16 @@ class Table(Sql):
 class TableName(Table):
     name: str
 
-    def _compile(self, qb):
-        return self.name
+    # def _compile(self, qb):
+    #     return self.name
+
+    def compile(self, qb):
+        if qb.is_root:
+            sql_code = f'SELECT * FROM {self.name}'
+        else:
+            sql_code = self.name
+
+        return CompiledSQL(sql_code, self)
 
 class TableOperation(Table):
     _is_select = True
@@ -279,7 +287,7 @@ class Insert(Sql):
     query: Sql
 
     def _compile(self, qb):
-        return f'INSERT INTO {self.table_name} ' + self.query.compile(qb.remake(is_root=True)).text
+        return f'INSERT INTO {self.table_name} SELECT * FROM ' + self.query.compile(qb).text
 
 
 @dataclass

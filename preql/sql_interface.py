@@ -9,17 +9,10 @@ class SqlInterface:
         qb = QueryBuilder(self.target)
 
         if subqueries:
-        #     assert False
             subqs = [q.compile(qb).text for (name, q) in subqueries.items()]
             sql_code = 'WITH ' + ',\n     '.join(subqs) + '\n'
         else:
             sql_code = ''
-        # if isinstance(sql.type, Primitive) and not isinstance(sql, Select): # Hacky
-        #     sql_code = 'SELECT '    # Only for root level
-        # else:
-
-        # if subq:
-        #     print("@@@@", subq)
 
         compiled = sql.compile(qb)
         sql_code += compiled.text
