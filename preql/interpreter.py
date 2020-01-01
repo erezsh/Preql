@@ -18,8 +18,8 @@ def _canonize_default(d):
 def _create_internal_func(fname, f):
     sig = inspect.signature(f)
     return objects.InternalFunction(fname, [
-            objects.Param(None, pname, type_, _canonize_default(sig.parameters[pname].default))
-            for pname, type_ in list(f.__annotations__.items())[1:]
+        objects.Param(None, pname, type_, _canonize_default(sig.parameters[pname].default))
+        for pname, type_ in list(f.__annotations__.items())[1:]
     ], f)
 
 def initial_namespace():
@@ -37,7 +37,7 @@ class Interpreter:
     def __init__(self, sqlengine):
         self.sqlengine = sqlengine
         self.state = State(sqlengine, 'text', initial_namespace())
-        self.include('core.pql', __file__)
+        self.include('core.pql', __file__) # TODO use an import mechanism instead
 
     def call_func(self, fname, args):
         obj = simplify(self.state, ast.Name(None, fname))
@@ -63,7 +63,6 @@ class Interpreter:
         return last
 
     def include(self, fn, rel_to=None):
-        # TODO use an import mechanism
         if rel_to:
             fn = Path(rel_to).parent / fn
         with open(fn, encoding='utf8') as f:
