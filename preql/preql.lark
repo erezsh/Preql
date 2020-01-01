@@ -81,7 +81,7 @@ update: molecule "update" "{" _NL? proj_exprs _NL? "}"
      | "^" molecule -> desc
      | new
 
-list: "[" _NL? expr (_sep expr)* _NL? "]"
+list: "[" _NL? (expr (_sep expr)* _NL?)? "]"
 
 new: "new" name _func_args
 func_call: molecule _func_args

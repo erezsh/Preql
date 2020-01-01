@@ -383,14 +383,19 @@ def compile_remote(state: State, lst: objects.List_):
 
     elems = [compile_remote(state, e) for e in lst.elems]
 
-    elem_type = elems[0].type if elems else types.PqlType
+    type_set = list({e.type for e in elems})
+    elem_type = type_set[0] if len(type_set) == 1 else types.UnionType(type_set) #types.PqlType
     table_type = types.ListType(elem_type)
     # table_type = types.TableType("array_%s" % elem_type.name, {}, temporary=True)   # Not temporary: ephemeral
     # table_type.add_column(types.DatumColumnType("value", elem_type))
 
-    # TODO use values + subqueries instead of union all (better performance)
+    # TODO use values + subqueries instead of union all (better performance, shorter code)
     # e.g. with list(value) as (values(1),(2),(3)) select value from list;
-    code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
+    if elems:
+        code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
+    else:
+        code = sql.EmptyList(table_type)
+
     inst = instanciate_table(state, table_type, code, elems)
     return inst
 
@@ -426,6 +431,9 @@ def compile_remote(state: State, obj: objects.DatumColumnInstance):
     return obj
 @dy
 def compile_remote(state: State, obj: types.Primitive):
+    return obj
+@dy
+def compile_remote(state: State, obj: types.ListType):
     return obj
 @dy
 def compile_remote(state: State, obj: objects.ValueInstance):

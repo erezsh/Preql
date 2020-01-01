@@ -11,6 +11,8 @@ class PqlType(PqlObject):
     def kernel_type(self):
         return self
 
+    def repr(self, pql):
+        return repr(self)
 
 # Primitives
 class NullType(PqlType):
@@ -29,6 +31,7 @@ class AtomicType(PqlType):
     primary_key = False
     readonly = False
     default = None
+
 
 @dataclass
 class Primitive(AtomicType):
@@ -59,7 +62,6 @@ primitives_by_pytype = {}
 # TODO nullable!!!
 class Text(str):
     pass
-
 
 
 # class Date(Primitive): pass
@@ -113,6 +115,17 @@ class ListType(Collection):
     def __repr__(self):
         return f'list[{self.elemtype}]'
 
+
+@dataclass
+class UnionType(PqlType):
+    types: List[PqlType]
+
+    def __repr__(self):
+        return f'union{self.types}'
+
+    def __hash__(self):
+        return hash(tuple(self.types))
+
 class Aggregated(ListType):
     pass
 
@@ -161,6 +174,9 @@ class TableType(Collection):
     def __repr__(self):
         # return f'TableType({self.name}, [{", ".join(list(self.columns))}])'
         return f'TableType({self.name})'
+
+    def repr(self, pql):
+        return repr(self)
 
     def _data_columns(self):
         return [c if not isinstance(c, IdType) else "id" for c in self.columns.values()]

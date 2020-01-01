@@ -97,6 +97,13 @@ class Table(Sql):
             s = ({str(name): col.type.restructure_result(i) for name, col in self.type.columns.items()})
             yield s
 
+@dataclass
+class EmptyList(Table):
+    _is_select = True
+
+    def _compile(self, qb):
+        return 'SELECT NULL LIMIT 0'
+
 
 @dataclass
 class TableName(Table):
