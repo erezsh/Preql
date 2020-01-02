@@ -114,9 +114,11 @@ class T(Transformer):
     desc = ast.DescOrder
     new = ast.New
     func_call = ast.FuncCall
+    range = ast.Range
 
     selection = ast.Selection
     projection = ast.Projection
+    slice = ast.Slice
 
     def projection_grouped(self, meta, table, keys, values):
         return ast.Projection(meta, table, keys, True, values)

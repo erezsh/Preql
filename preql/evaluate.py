@@ -204,8 +204,8 @@ def simplify(state: State, funccall: ast.FuncCall):
 
 
 @dy
-def simplify(state: State, c: ast.Arith):
-    return ast.Arith(c.meta, c.op, simplify_list(state, c.args))
+def simplify(state: State, obj: ast.Arith):
+    return obj.remake(args=simplify_list(state, obj.args))
 
 @dy
 def simplify(state: State, c: ast.CodeBlock):
@@ -224,8 +224,9 @@ def simplify(state: State, c: objects.List_):
     return objects.List_(c.meta, simplify_list(state, c.elems))
 
 @dy
-def simplify(state: State, c: ast.Compare):
-    return ast.Compare(c.meta, c.op, simplify_list(state, c.args))
+def simplify(state: State, obj: ast.Compare):
+    return obj.remake(args=simplify_list(state, obj.args))
+    # return ast.Compare(c.meta, c.op, simplify_list(state, c.args))
 
 @dy
 def simplify(state: State, c: ast.Selection):
@@ -243,6 +244,9 @@ def simplify(state: State, p: ast.Projection):
 @dy
 def simplify(state: State, o: ast.Order):
     return compile_remote(state, o)
+@dy
+def simplify(state: State, s: ast.Slice):
+    return compile_remote(state, s)
 
 @dy
 def simplify(state: State, u: ast.Update):

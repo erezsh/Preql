@@ -73,7 +73,7 @@ class State:
 
     def connect(self, uri):
         print(f"[Preql] Connecting to {uri}")
-        self.db = create_engine(uri, False)
+        self.db = create_engine(uri, self.db._debug)
 
 
 def create_engine(db_uri, debug):

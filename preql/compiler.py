@@ -408,6 +408,26 @@ def compile_remote(state: State, t: types.FunctionType):
 
 
 @dy
+def compile_remote(state: State, s: ast.Slice):
+    table = compile_remote(state, s.table)
+    instances = [table]
+    if s.range.start:
+        start = compile_remote(state, s.range.start)
+        instances += [start]
+    else:
+        start = objects.make_value_instance(0, types.Int)
+    if s.range.stop:
+        stop = compile_remote(state, s.range.stop)
+        instances += [stop]
+        limit = sql.Arith(types.Int, '-', [stop.code, start.code])
+    else:
+        limit = None
+
+    code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], offset=start.code, limit=limit)
+    # return table.remake(code=code)
+    return objects.TableInstance.make(code, table.type, [table] + instances, table.columns)
+
+@dy
 def compile_remote(state: State, sel: ast.Selection):
     table = compile_remote(state, sel.table)
     assert_type(sel.meta, table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")

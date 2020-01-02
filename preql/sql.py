@@ -389,7 +389,8 @@ class Select(TableOperation):
         if self.limit:
             sql += ' LIMIT ' + self.limit.compile(qb).text
         elif self.offset:
-            sql += ' LIMIT -1'  # XXX Sqlite only
+            if qb.target == sqlite:
+                sql += ' LIMIT -1'  # XXX Sqlite only
 
         if self.offset:
             sql += ' OFFSET ' + self.offset.compile(qb).text

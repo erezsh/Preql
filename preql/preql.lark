@@ -31,6 +31,7 @@ param: name    // TODO type? default value?
 _sep: "," | "," _NL | _NL
 expr_list: "[" _NL? (expr _sep)* expr _NL? "]"
 selection: molecule expr_list
+slice: molecule "[" range "]"
 
 projection: molecule "{" _NL? proj_exprs _NL? "}"
           | molecule "{" _NL? proj_exprs _NL? "=>" _NL? proj_exprs _NL? "}" -> projection_grouped
@@ -73,6 +74,7 @@ update: molecule "update" "{" _NL? proj_exprs _NL? "}"
      | list
      | selection
      | projection
+     | slice
      | order
      | update
      | var
@@ -95,10 +97,10 @@ named_expr: [name ":"] expr
       | STRING -> string
       | "null" -> null
       | ellipsis
-      | range
+     //  | range
 
-range: SIGNED_INT? ".." SIGNED_INT
-     | SIGNED_INT ".." SIGNED_INT?
+range: [molecule] ".." molecule
+     | molecule ".." [molecule]
 
 ellipsis: "..."
 

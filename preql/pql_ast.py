@@ -110,6 +110,16 @@ class FuncCall(Expr):
     args: list   # Func args
 
 @dataclass
+class Range(Expr):
+    start: Optional[Expr]
+    stop: Optional[Expr]
+
+@dataclass
+class Slice(TableOperation):
+    table: Expr
+    range: Range
+
+@dataclass
 class Type(Ast):
     name: str
     nullable: bool = False

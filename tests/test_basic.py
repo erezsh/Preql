@@ -262,6 +262,18 @@ class BasicTests(TestCase):
         res = preql("""enum([1,8,4,4])[index==value]{value}""")
         assert res == [{'value': 1}, {'value': 4}]
 
+        res = preql("""[1,2,3][..2]""")
+        assert res == [1,2]
+
+        res = preql("""[1,2,3][1..]""")
+        assert res == [2,3]
+
+        res = preql("""[1,2,3][1..2]""")
+        assert res == [2]
+
+        res = preql("""[1,2,3][1..1]""")
+        assert res == []
+
     def _test_temptable(self, preql):
         english_speakers = [
             ("Eric Blaire", "England"),
