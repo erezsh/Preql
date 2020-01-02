@@ -1,4 +1,5 @@
 from .sql import Sql, CompiledSQL, Select, QueryBuilder, sqlite, postgres
+from . import exceptions
 
 from .pql_types import Primitive, null    # XXX Code smell?
 
@@ -23,9 +24,10 @@ class SqlInterface:
         try:
             c.execute(sql_code)
             # c.execute(sql_code, qargs)    # XXX messes up when sql_code contains '%', like for LIKE
-        except:
-            print_sql(sql_code)
-            raise
+        except Exception as e:
+            # print_sql(sql_code)
+            msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
+            raise exceptions.pql_DatabaseQueryError(None, msg%(sql_code, e))
 
         if sql.type is not null:
             res = c.fetchall()

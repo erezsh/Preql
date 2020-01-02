@@ -95,3 +95,7 @@ class pql_JoinError(PreqlError):
 class ReturnSignal(Exception):
     value: object
 
+
+@dataclass
+class pql_DatabaseQueryError(PreqlError):
+    message: str

@@ -11,24 +11,32 @@ end
 func sum(field) = _sql_agg_func("SUM", field)
 func min(field) = _sql_agg_func("MIN", field)
 func max(field) = _sql_agg_func("MAX", field)
-func limit(table, lim) = SQL(type(table), "SELECT * FROM $table LIMIT $lim")
+# func limit(table, lim) = SQL(type(table), "SELECT * FROM $table LIMIT $lim")
 func limit_offset(table, lim, offset) = SQL(type(table), "SELECT * FROM $table LIMIT $lim OFFSET $offset")
 
 if get_db_type() == "postgres"
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
     func now() = SQL(datetime, "NOW()") # Postgres
+    func random() = SQL(datetime, "RANDOM()") # Postgres
 else
     if get_db_type() == "sqlite"
         func repeat(s, num) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')") # Sqlite
+        func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
+
     else
         throw new TypeError("Unexpected")
     end
 end
 
-func sample_ratio(tbl, ratio) = SQL(tbl, "(SELECT * FROM flights where abs(CAST(random() AS REAL))/9223372036854775808 < $ratio)")
+# func sample_ratio(tbl, ratio) = SQL(type(tbl), "SELECT * FROM $tbl where abs(CAST(random() AS REAL))/9223372036854775808 < $ratio")
+func sample_ratio(tbl, ratio)
+    r = random()    # Will be re-evaluated for every row
+    return SQL(type(tbl), "SELECT * FROM $tbl where $r < $ratio")
+end
 
 func sample_fast(tbl, size)
+    # TODO Not working right now
     c = count(tbl)
     if size >= c
         throw new ValueError("Asking for a sample size larger than the table")
