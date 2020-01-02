@@ -193,7 +193,7 @@ class MakeArray(Sql):
 
 
 @dataclass
-class Contains(Sql):
+class Contains(Scalar):
     op: str
     exprs: List[Sql]
 
@@ -206,7 +206,7 @@ class Contains(Sql):
 
 
 @dataclass
-class Compare(Sql):
+class Compare(Scalar):
     op: str
     exprs: List[Sql]
 
@@ -216,6 +216,16 @@ class Compare(Sql):
     def _compile(self, qb):
         elems = [e.compile(qb).text for e in self.exprs]
         return (f' {self.op} ').join(elems)
+
+@dataclass
+class Like(Scalar):
+    string: Scalar
+    pattern: Scalar
+
+    def _compile(self, qb):
+        s = self.string.compile(qb)
+        p = self.pattern.compile(qb)
+        return f'{s.text} like {p.text}'
 
 @dataclass
 class Arith(Scalar):

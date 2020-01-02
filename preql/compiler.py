@@ -222,10 +222,23 @@ def compile_remote(state: State, lst: list):
 
 
 @dy
+def compile_remote(state: State, like: ast.Like):
+    s = compile_remote(state, like.str)
+    p = compile_remote(state, like.pattern)
+    if s.type != types.String:
+        raise pql_TypeError(like.str.meta.remake(parent=like.meta), f"Like (~) operator expects two strings")
+    if p.type != types.String:
+        raise pql_TypeError(like.pattern.meta.remake(parent=like.meta), f"Like (~) operator expects two strings")
+
+    code = sql.Like(types.Bool, s.code, p.code)
+    return objects.Instance.make(code, types.Bool, [s, p])
+
+@dy
 def compile_remote(state: State, cmp: ast.Compare):
-    sql_cls = sql.Compare
     if cmp.op == 'in' or cmp.op == '^in':
         sql_cls = sql.Contains
+    else:
+        sql_cls = sql.Compare
 
     op = {
         '==': '=',
@@ -410,6 +423,10 @@ def compile_remote(state: State, t: types.FunctionType):
 @dy
 def compile_remote(state: State, s: ast.Slice):
     table = compile_remote(state, s.table)
+    # if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
+
+    assert_type(s.meta, table.type, types.Collection, "Slice expected an object of type '%s', instead got '%s'")
+
     instances = [table]
     if s.range.start:
         start = compile_remote(state, s.range.start)

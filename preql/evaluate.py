@@ -227,6 +227,11 @@ def simplify(state: State, c: objects.List_):
 def simplify(state: State, obj: ast.Compare):
     return obj.remake(args=simplify_list(state, obj.args))
     # return ast.Compare(c.meta, c.op, simplify_list(state, c.args))
+@dy
+def simplify(state: State, obj: ast.Like):
+    s = simplify(state, obj.str)
+    p = simplify(state, obj.pattern)
+    return obj.remake(str=s, pattern=p)
 
 @dy
 def simplify(state: State, c: ast.Selection):

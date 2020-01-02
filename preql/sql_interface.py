@@ -21,7 +21,8 @@ class SqlInterface:
             print_sql(sql_code)
 
         try:
-            c.execute(sql_code, qargs)
+            c.execute(sql_code)
+            # c.execute(sql_code, qargs)    # XXX messes up when sql_code contains '%', like for LIKE
         except:
             print_sql(sql_code)
             raise
