@@ -11,18 +11,21 @@ end
 func sum(field) = _sql_agg_func("SUM", field)
 func min(field) = _sql_agg_func("MIN", field)
 func max(field) = _sql_agg_func("MAX", field)
-# func limit(table, lim) = SQL(type(table), "SELECT * FROM $table LIMIT $lim")
+func limit(tbl, lim) = tbl[..lim] # XXX remove #SQL(type(table), "SELECT * FROM $table LIMIT $lim")
 func limit_offset(table, lim, offset) = SQL(type(table), "SELECT * FROM $table LIMIT $lim OFFSET $offset")
+func enum(tbl) = tbl{index: SQL(int, "row_number() over ()"), ...}
 
 if get_db_type() == "postgres"
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
     func now() = SQL(datetime, "NOW()") # Postgres
     func random() = SQL(datetime, "RANDOM()") # Postgres
+    func pi() = SQL(float, "PI()")
 else
     if get_db_type() == "sqlite"
         func repeat(s, num) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')") # Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
+        func pi() = SQL(float, "3.141592653589793")
 
     else
         throw new TypeError("Unexpected")
@@ -51,4 +54,3 @@ func sample_fast(tbl, size)
     end
     return results + limit(tbl, size - count(results))
 end
-

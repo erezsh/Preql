@@ -271,12 +271,15 @@ class Desc(Sql):
         s = self.expr.compile(qb)
         return s.text + " DESC"
 
+_reserved = {'index', 'create', 'unique', 'table', 'select', 'where', 'group', 'by', 'over'}
 
 @dataclass
 class Name(Sql):
     name: str
 
     def _compile(self, qb):
+        if self.name.lower() in _reserved:
+            return self.name + "_"
         return self.name
 
 @dataclass
@@ -416,12 +419,13 @@ class Select(TableOperation):
 @dataclass
 class Subquery(Sql):
     table_name: str
-    fields: List[str]
+    fields: List[Name]
     query: Sql
 
     def _compile(self, qb):
         query = self.query.compile(qb).text
-        return f"{self.table_name}({', '.join(self.fields)}) AS ({query})"
+        fields = [f.compile(qb.remake(is_root=False)).text for f in self.fields]
+        return f"{self.table_name}({', '.join(fields)}) AS ({query})"
 
     def compile(self, qb):
         sql_code = self._compile(qb)

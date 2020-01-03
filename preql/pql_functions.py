@@ -26,23 +26,17 @@ def _pql_SQL_callback(state: State, var: str, instances):
         inst = compile_remote(state, obj)
 
         if isinstance(inst, objects.TableInstance):
-            assert isinstance(inst, objects.TableInstance)
 
             # Make new type
-            all_aliases = []
-            new_columns = {}
-            for name, col in inst.columns.items():
-                # ci = objects.make_column_instance(sql.Name(col.type, name), col.type, [col])
-                code = sql.Name(col.type, name)
-                # new_col = col.remake(code=code)
-                new_col = objects.make_column_instance(code, col.type, [col])
-                new_columns[name] = new_col
-                all_aliases.append((col, new_col))
+            new_columns = {
+                name: objects.make_column_instance(sql.Name(col.type, name), col.type, [col])
+                for name, col in inst.columns.items()
+            }
 
             # Make code
             sql_fields = [
                 sql.ColumnAlias.make(o.code, n.code)
-                for old, new in all_aliases
+                for old, new in safezip(inst.columns.values(), new_columns.values())
                 for o, n in safezip(old.flatten(), new.flatten())
             ]
 
@@ -73,7 +67,7 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
         name = get_alias(state, "subq_")
 
         inst = instanciate_table(state, type_, sql.TableName(type_, name), instances)
-        fields = [_make_name(path) for path, _ in inst.type.flatten()]
+        fields = [sql.Name(c, _make_name(path)) for path, c in inst.type.flatten()]
 
         subq = sql.Subquery(type_, name, fields, code)
         inst.subqueries[name] = subq
@@ -108,25 +102,6 @@ def _apply_sql_func(state, obj: ast.Expr, table_func, name):
 def pql_count(state: State, obj: ast.Expr):
     return _apply_sql_func(state, obj, sql.CountTable, 'count')
 
-# def pql_sum(state: State, obj: ast.Expr):
-#     return _apply_sql_func(state, obj, None, 'sum')
-
-
-def pql_enum(state: State, table: ast.Expr):
-    index_name = "index"
-
-    table = compile_remote(state, table)
-
-    cols = SafeDict()
-    cols[index_name] = types.Int
-    cols.update(table.type.columns)
-    new_table_type = types.TableType(get_alias(state, "enum"), cols, True)
-
-    # Added to sqlite3 in 3.25.0: https://www.sqlite.org/windowfunctions.html
-    index_code = sql.RawSql(types.Int, "row_number() over ()")
-    values = [index_code] + [c.code for c in table.flatten()]
-
-    return instanciate_table(state, new_table_type, table.code, [table], values=values)
 
 def pql_temptable(state: State, expr: ast.Expr):
     expr = compile_remote(state, expr)
@@ -352,7 +327,6 @@ internal_funcs = {
     'ls': pql_ls,
     'connect': pql_connect,
     'count': pql_count,
-    'enum': pql_enum,
     'temptable': pql_temptable,
     'concat': pql_concat,
     'intersect': pql_intersect,
