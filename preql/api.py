@@ -95,12 +95,13 @@ def promise(state, inst):
 
 
 class Interface:
-    def __init__(self, db_uri=None, debug=True):
+    def __init__(self, db_uri=None, debug=True, save_last=None):
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
 
         self.engine = create_engine(db_uri, debug=debug)
         self.interp = Interpreter(self.engine)
+        self.save_last = save_last
 
     def exec(self, q, *args, **kw):
         "Deprecated"
@@ -122,6 +123,9 @@ class Interface:
 
         res = self.interp.execute_code(pq + "\n", pql_args)
         if res:
+            if self.save_last:
+                self.interp.set_var(self.save_last, res)
+
             return self._wrap_result(res)
 
     def load(self, fn, rel_to=None):

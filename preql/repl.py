@@ -68,6 +68,7 @@ from pygments.lexers.python import Python3Lexer
 from prompt_toolkit.lexers import PygmentsLexer
 
 def start_repl(p):
+    p.save_last = '_'   # XXX A little hacky
 
     try:
         session = PromptSession()
@@ -94,11 +95,11 @@ def start_repl(p):
                 raise
                 # continue
 
-            if isinstance(res, types.PqlObject):
-                res = res.repr(p.interp)
-
             # Print
             if res is not None:
+                if isinstance(res, types.PqlObject):
+                    res = res.repr(p.interp)
+
                 print(res)
 
             duration = time() - start_time

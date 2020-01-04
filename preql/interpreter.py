@@ -67,3 +67,12 @@ class Interpreter:
             fn = Path(rel_to).parent / fn
         with open(fn, encoding='utf8') as f:
             self.execute_code(f.read())
+
+    def set_var(self, name, value):
+        if not isinstance(value, types.PqlObject):
+            try:
+                value = value._to_pql()
+            except AttributeError:
+                value = objects.make_value_instance(value)
+
+        self.state.set_var(name, value)
