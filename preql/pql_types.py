@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional, Any
+from datetime import datetime
 
 from .utils import dataclass, listgen, concat_for, SafeDict
 
@@ -16,8 +17,13 @@ class PqlType(PqlObject):
 
 # Primitives
 class NullType(PqlType):
+    name = 'null'
     def import_result(self, res):
         return None
+
+    def __repr__(self):
+        return self.name
+
 
 null = NullType()
 
@@ -25,6 +31,9 @@ null = NullType()
 class AtomicType(PqlType):
     def flatten(self, path):
         return [(path, self)]
+
+    def restructure_result(self, res):
+        return next(res)
 
     # XXX these don't belong here!
     is_concrete = True
@@ -59,15 +68,8 @@ class Primitive(AtomicType):
 
 primitives_by_pytype = {}
 
-# TODO nullable!!!
 class Text(str):
     pass
-
-
-# class Date(Primitive): pass
-# class Text(Primitive): pass
-# class Json(Primitive): pass
-from datetime import datetime
 
 Int = Primitive('int', int, False)
 Float = Primitive('float', float, False)
@@ -102,9 +104,7 @@ class ListType(Collection):
         return [e[0] for e in arr]
 
     def restructure_result(self, res):
-        # return next(res)
-        x = next(res)
-        return x
+        return next(res)
 
     def flat_length(self):
         return 1
@@ -116,15 +116,21 @@ class ListType(Collection):
         return f'list[{self.elemtype}]'
 
 
-@dataclass
-class UnionType(PqlType):
-    types: List[PqlType]
+# Not supported by Postgres. Will require a trick (either alternating columns, or json type, etc)
+# @dataclass
+# class UnionType(AtomicType):
+#     types: List[AtomicType]
 
-    def __repr__(self):
-        return f'union{self.types}'
+#     @property
+#     def name(self):
+#         return 'union_%s' % '_'.join(t.name for t in self.types)
 
-    def __hash__(self):
-        return hash(tuple(self.types))
+#     def __repr__(self):
+#         return f'union{self.types}'
+
+#     def __hash__(self):
+#         return hash(tuple(self.types))
+
 
 class Aggregated(ListType):
     pass
@@ -135,22 +141,12 @@ class SetType(Collection):
 
 
 @dataclass
-class RelationalColumn(PqlType):
+class RelationalColumn(AtomicType):
     type: PqlType
     query: Optional[Any] = None # XXX what now?
 
-    def flatten(self, path):
-        return [(path, self)]
-
     def restructure_result(self, i):
         return self.type.restructure_result(i)
-
-    is_concrete = True  # Concrete = actually contains data
-    primary_key = False
-    readonly = False
-
-    default = None  # TODO
-
 
 @dataclass
 class TableType(Collection):
@@ -172,18 +168,16 @@ class TableType(Collection):
         return len(self.flatten())
 
     def __repr__(self):
-        # return f'TableType({self.name}, [{", ".join(list(self.columns))}])'
         return f'TableType({self.name})'
 
     def repr(self, pql):
-        return repr(self)
+        # return repr(self)
+        return f'{self.name}{{{", ".join(t.repr(pql) for t in self.columns.values())}}}'
 
     def _data_columns(self):
         return [c if not isinstance(c, IdType) else "id" for c in self.columns.values()]
 
     def __hash__(self):
-        # raise NotImplementedError()
-        # return hash((self.name, tuple(self.columns.items())))
         return hash(tuple(self._data_columns()))
 
     def __eq__(self, other):

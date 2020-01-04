@@ -37,7 +37,6 @@ class BasicTests(TestCase):
         self._test_user_functions(preql)
         self._test_joins(preql)
         self._test_groupby(preql)
-        self._test_table_ops(preql)
         self._test_temptable(preql)
 
     def _test_basic(self, preql):
@@ -243,8 +242,9 @@ class BasicTests(TestCase):
         res = preql('[1,2,3]{=>sum(value*value)}')
         assert res == [{'sum': 14}], list(res)
 
-    def _test_table_ops(self, preql):
+    def test_list_ops(self):
         # TODO should be consistent - always table, or always array
+        preql = self.Preql()
         res = preql("""[1,2,3]""")
         assert res == [1,2,3], res
         res = preql("""[1,2,3] + [5,6]""")
@@ -277,8 +277,9 @@ class BasicTests(TestCase):
         res = preql("""[1,2,3][1..2]""")
         assert res == [2]
 
-        res = preql("""[1,2,3][1..1]""")
-        assert res == []
+        self.assertEqual( preql("""[1,2,3][1..1]"""), [])
+        self.assertEqual( preql("[] {x:0}"), [])
+        self.assertRaises( pql_TypeError, preql, """["a", 1]""")
 
     def _test_temptable(self, preql):
         english_speakers = [

@@ -63,7 +63,7 @@ class RawSql(Sql):
 @dataclass
 class Null(Sql):
     def _compile(self, qb):
-        return 'null'    # TODO null type
+        return 'null'
 
 null = Null(types.null)
 
@@ -151,14 +151,6 @@ class FuncCall(Sql):
     def _compile(self, qb):
         s = ', '.join(f.compile(qb).text for f in self.fields)
         return f'{self.name}({s})'
-
-@dataclass
-class Round(Sql):
-    field: Sql
-    type = float  # TODO correct object
-
-    def _compile(self, qb):
-        return f'round({self.field.compile(qb).text})'
 
 @dataclass
 class Cast(Sql):
@@ -249,7 +241,7 @@ class TableArith(TableOperation):
         code = f" {self.op} ".join(selects)
 
         if qb.target == sqlite:
-            # XXX Limit -1 is due to a strange bug in SQLite (fixed in newer versions), where the limit is reset otherwise.
+            # Limit -1 is due to a strange bug in SQLite (fixed in newer versions), where the limit is reset otherwise.
             code += " LIMIT -1"
 
         return code
@@ -338,7 +330,7 @@ class LastRowId(Atom):
 
 @dataclass
 class SelectValue(Atom, TableOperation):
-    # TODO Just use a regular select?
+    # XXX Just use a regular select?
     value: Sql
 
     def _compile(self, qb):
@@ -403,7 +395,7 @@ class Select(TableOperation):
             sql += ' LIMIT ' + self.limit.compile(qb).text
         elif self.offset:
             if qb.target == sqlite:
-                sql += ' LIMIT -1'  # XXX Sqlite only
+                sql += ' LIMIT -1'  # Sqlite only
 
         if self.offset:
             sql += ' OFFSET ' + self.offset.compile(qb).text
@@ -412,9 +404,6 @@ class Select(TableOperation):
             sql += ' ORDER BY ' + ', '.join(o.compile(qb).text for o in self.order)
 
         return sql
-
-    # def import_result(self, value):
-    #     return self.type.from_sql_tuples(value)
 
 @dataclass
 class Subquery(Sql):

@@ -251,10 +251,10 @@ def compile_remote(state: State, cmp: ast.Compare):
 def compile_remote(state: State, attr: ast.Attr):
     inst = compile_remote(state, attr.expr)
 
-    if isinstance(inst, types.PqlType): # XXX ugly
-        if attr.name == '__name__':
-            return compile_remote(state, ast.Const(None, types.String, str(inst.name)))
-        raise pql_AttributeError(attr.meta, "'%s' has no attribute '%s'" % (inst, attr.name))
+    # if isinstance(inst, types.PqlType): # ugly
+    #     if attr.name == '__name__':
+    #         return compile_remote(state, ast.Const(None, types.String, str(inst.name)))
+    #     raise pql_AttributeError(attr.meta, "'%s' has no attribute '%s'" % (inst, attr.name))
 
     try:
         return inst.get_attr(attr.name)
@@ -276,8 +276,7 @@ def compile_remote(state: State, arith: ast.Arith):
 
     if GlobalSettings.Optimize:
         if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
-            # XXX this isn't strictly necessary, this is only for better performance
-            # TODO tests with and without it
+            # Local folding for better performance (optional, for better performance)
             v1, v2 = [a.local_value for a in args]
             if arith.op == '+' and len(arg_types_set) == 1:
                 return objects.make_value_instance(v1 + v2, args[0].type)
@@ -332,8 +331,6 @@ def compile_remote(state: State, arith: ast.Arith):
         meta = arith.op.meta.remake(parent=arith.meta)
         raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
-
-    # TODO validate all args are compatiable
     arg_codes = [a.code for a in args]
     res_type ,= arg_types_set
     op = arith.op
@@ -377,7 +374,6 @@ def compile_remote(state: State, x: ast.Ellipsis):
 
 @dy
 def compile_remote(state: State, c: ast.Const):
-    # return objects.Instance.make(sql_repr(c.value), c.type, [])
     return objects.make_value_instance(c.value, c.type)
 
 @dy
@@ -397,10 +393,14 @@ def compile_remote(state: State, lst: objects.List_):
     elems = [compile_remote(state, e) for e in lst.elems]
 
     type_set = list({e.type for e in elems})
-    elem_type = type_set[0] if len(type_set) == 1 else types.UnionType(type_set) #types.PqlType
+    if len(type_set) > 1:
+        raise pql_TypeError(lst.meta, "Cannot create a list of mixed types: (%s)" % ', '.join(repr(t) for t in type_set))
+    elif not type_set:
+        elem_type = types.null
+    else:
+        elem_type ,= type_set
+
     table_type = types.ListType(elem_type)
-    # table_type = types.TableType("array_%s" % elem_type.name, {}, temporary=True)   # Not temporary: ephemeral
-    # table_type.add_column(types.DatumColumnType("value", elem_type))
 
     # TODO use values + subqueries instead of union all (better performance, shorter code)
     # e.g. with list(value) as (values(1),(2),(3)) select value from list;
@@ -423,7 +423,7 @@ def compile_remote(state: State, t: types.FunctionType):
 @dy
 def compile_remote(state: State, s: ast.Slice):
     table = compile_remote(state, s.table)
-    # if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
+    # TODO if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
 
     assert_type(s.meta, table.type, types.Collection, "Slice expected an object of type '%s', instead got '%s'")
 

@@ -10,7 +10,6 @@ from .interpreter import Interpreter
 from .evaluate import localize, evaluate
 from .interp_common import create_engine
 from .compiler import call_pql_func
-# from .exceptions import PreqlError
 
 def python_to_pql(value):
     if value is None:
@@ -64,7 +63,6 @@ class TablePromise:
         return res
 
     def __repr__(self):
-        # count = len(self)
         count = _call_pql_func(self._state, 'count', [self[:MAX_AUTO_COUNT]])
         if count == MAX_AUTO_COUNT:
             count_str = f'count>={count}'
@@ -85,7 +83,6 @@ class TablePromise:
             return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
         else:
             header = f"table {self._inst.type.name}, {count_str}\n"
-            # return header + '\n'.join(f'* {r}' for r in rows)
             return header + tabulate.tabulate(rows, headers="keys", numalign="right")
 
 
@@ -99,7 +96,6 @@ def promise(state, inst):
 
 class Interface:
     def __init__(self, db_uri=None, debug=True):
-        # TODO actually parse uri
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
 

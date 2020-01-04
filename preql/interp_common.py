@@ -27,7 +27,6 @@ class State:
         self.db = db
         self.fmt = fmt
 
-        # self.ns = [_initial_namespace()]
         self.ns = ns or [{}]
         self.tick = 0
 
@@ -113,16 +112,3 @@ def sql_repr(x):
         return sql.Primitive(t, repr(x.isoformat()))
 
     return sql.Primitive(t, repr(x))
-
-
-# def meta_from_token(tok):
-#     return Meta(
-#         '', # TODO better exceptions
-#         tok.pos_in_stream,
-#         tok.line,
-#         tok.column,
-#         tok.end_pos,
-#         tok.end_line,
-#         tok.end_column,
-#     )
-

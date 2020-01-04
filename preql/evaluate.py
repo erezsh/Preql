@@ -189,7 +189,6 @@ def simplify(state: State, funccall: ast.FuncCall):
     if isinstance(func, objects.UserFunction):
         with state.use_scope({p.name:simplify(state, a) for p,a in args}):
             if isinstance(func.expr, ast.CodeBlock):
-                # from .evaluate import execute   # XXX TODO fix this
                 try:
                     return execute(state, func.expr)
                 except ReturnSignal as r:
@@ -353,7 +352,6 @@ def simplify(state: State, new: ast.New):
 
     keys = [name for (name, _) in destructured_pairs]
     values = [sql_repr(v) for (_,v) in destructured_pairs]
-    # sql = RawSql(f"INSERT INTO {table.name} ($keys_str) VALUES ($values_str)")
     q = sql.InsertConsts(types.null, sql.TableName(table, table.name), keys, values)
 
     state.db.query(q)
@@ -377,11 +375,7 @@ def evaluate(state, obj):
     if isinstance(obj, (objects.Function, PreqlError, type)):   # TODO base class on uncompilable?
         return obj
 
-    inst = compile_remote(state, obj)
-    # res = localize(state, inst)
-    # return promise(state, inst)
-    return inst
-
+    return compile_remote(state, obj)
 
 def localize(session, inst):
     assert inst
@@ -391,12 +385,5 @@ def localize(session, inst):
     elif isinstance(inst, objects.ValueInstance):
         return inst.local_value
 
-    res = session.db.query(inst.code, inst.subqueries)
-
-    # if isinstance(inst.type, types.ListType):
-    #     # assert False
-    #     assert all(len(e)==1 for e in res)
-    #     return [e['value'] for e in res]
-
-    return res
+    return session.db.query(inst.code, inst.subqueries)
 
