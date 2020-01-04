@@ -70,6 +70,8 @@ class TablePromise:
             count_str = f'count={count}'
 
         rows = list(_call_pql_func(self._state, 'limit', [self._inst, ast.Const(None, types.Int, TABLE_PREVIEW_SIZE)]))
+        post = '\n\t...' if len(rows) < count else ''
+
         if self._state.fmt == 'html':
             header = f"<pre>table {self._inst.type.name}, {count_str}</pre>"
             if rows:
@@ -80,10 +82,10 @@ class TablePromise:
                     for row in rows
                 ]
 
-            return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
+            return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs)) + post
         else:
             header = f"table {self._inst.type.name}, {count_str}\n"
-            return header + tabulate.tabulate(rows, headers="keys", numalign="right")
+            return header + tabulate.tabulate(rows, headers="keys", numalign="right") + post
 
 
 def promise(state, inst):

@@ -67,30 +67,15 @@ def compile_type(state: State, idtype: types.IdType):
 
 def _process_fields(state: State, fields):
     "Returns {var_name: (col_instance, sql_alias)}"
-    processed_fields = {}
+    processed_fields = []
     for f in fields:
-        if f.name in processed_fields:
-            raise pql_TypeError(f.meta, f"Field '{f.name}' was already used in this projection")
 
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
         sql_friendly_name = name.replace(".", "_")
-        unique_name = name
-        i = 1
-        while unique_name in processed_fields:
-            i += 1
-            unique_name = name + str(i)
 
         v = compile_remote(state, f.value)
 
-
-        # TODO move to ColInstance?
-        if isinstance(v, objects.TableInstance):
-            t = types.StructType(v.type.name, {n:c.type.type for n,c in v.columns.items()})
-            v = objects.StructColumnInstance(v.code, t, v.subqueries, v.columns)
-
-        # SQL uses `first` by default on aggregate columns. This will force SQL to create an array by default.
-        # TODO first() method to take advantage of this ability (although it's possible with window functions too)
         if isinstance(v.type, types.Aggregated):
 
             if isinstance(v, objects.StructColumnInstance):
@@ -100,15 +85,15 @@ def _process_fields(state: State, fields):
 
         v = _ensure_col_instance(state, f.meta, v)
 
-        processed_fields[unique_name] = v, get_alias(state, sql_friendly_name)   # TODO Don't create new alias for fields that don't change?
+        processed_fields.append( [name, (v, get_alias(state, sql_friendly_name)) ] )   # TODO Don't create new alias for fields that don't change?
 
-    return list(processed_fields.items())
+    return processed_fields
 
 def _ensure_col_instance(state, meta, i):
     if isinstance(i, objects.ColumnInstance):
         return i
     elif isinstance(i, objects.Instance):
-        if isinstance(i.type, types.Primitive):
+        if isinstance(i.type, (types.Primitive, types.NullType)):
             return objects.make_column_instance(i.code, i.type)
 
     raise pql_TypeError(meta, f"Expected a valid expression. Instead got: {i.repr(state)}")
@@ -143,6 +128,13 @@ def compile_remote(state: State, proj: ast.Projection):
 
     fields = _expand_ellipsis(table, proj.fields)
 
+    used = set()
+    for f in list(proj.fields) + list(proj.agg_fields):
+        if f.name:  # Otherwise, an automatic name is used, and collision is impossible (should be impossible)
+            if f.name in used:
+                raise pql_TypeError(f.meta, f"Field '{f.name}' was already used in this projection")
+            used.add(f.name)
+
     columns = table.members if isinstance(table, objects.StructColumnInstance) else table.columns
 
     with state.use_scope(columns):
@@ -165,7 +157,13 @@ def compile_remote(state: State, proj: ast.Projection):
     all_aliases = []
     new_columns = {}
     new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), SafeDict(), True)
-    for name, (remote_col, sql_alias) in fields + agg_fields:
+    for name_, (remote_col, sql_alias) in fields + agg_fields:
+        # TODO what happens if automatic name preceeds and collides with user-given name?
+        name = name_
+        i = 1
+        while name in new_columns:
+            name = name_ + str(i)
+            i += 1
         new_table_type.columns[name] = remote_col.type
         ci = objects.make_column_instance(sql.Name(remote_col.type, sql_alias), remote_col.type, [remote_col])
         new_columns[name] = ci
@@ -235,16 +233,34 @@ def compile_remote(state: State, like: ast.Like):
 
 @dy
 def compile_remote(state: State, cmp: ast.Compare):
+    insts = compile_remote(state, cmp.args)
+
     if cmp.op == 'in' or cmp.op == '^in':
         sql_cls = sql.Contains
+        assert_type(cmp.meta, insts[0].type, types.AtomicType, "Expecting type %s, got %s")
+        assert_type(cmp.meta, insts[1].type, types.Collection, "Expecting type %s, got %s")
+        cols = insts[1].columns
+        if len(cols) > 1:
+            raise pql_TypeError(cmp.meta, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
+        if list(cols.values())[0].type != insts[0].type:
+            raise pql_TypeError(cmp.meta, "Contains operator expects all types to match")
+
     else:
         sql_cls = sql.Compare
+        for i in insts:
+            assert_type(cmp.meta, i.type, types.AtomicType, "Expecting type %s, got %s")
+        # TODO should be able to coalesce, int->float, id->int, etc.
+        #      also different types should still be comparable to some degree?
+        # type_set = {i.type for i in insts}
+        # if len(type_set) > 1:
+        #     raise pql_TypeError(cmp.meta, "Cannot compare two different types: %s" % type_set)
 
     op = {
         '==': '=',
         '^in': 'not in'
     }.get(cmp.op, cmp.op)
-    code = sql_cls(types.Bool, op, [e.code for e in compile_remote(state, cmp.args)])
+
+    code = sql_cls(types.Bool, op, [e.code for e in insts])
     return objects.Instance.make(code, types.Bool, [])
 
 @dy

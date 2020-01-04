@@ -11,6 +11,7 @@ end
 func sum(field) = _sql_agg_func("SUM", field)
 func min(field) = _sql_agg_func("MIN", field)
 func max(field) = _sql_agg_func("MAX", field)
+func first(field) = _sql_agg_func("", field)
 func limit(tbl, lim) = tbl[..lim] # XXX remove #SQL(type(table), "SELECT * FROM $table LIMIT $lim")
 func limit_offset(table, lim, offset) = SQL(type(table), "SELECT * FROM $table LIMIT $lim OFFSET $offset")
 func enum(tbl) = tbl{index: SQL(int, "row_number() over ()"), ...}

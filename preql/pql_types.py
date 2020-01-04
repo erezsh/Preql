@@ -24,6 +24,12 @@ class NullType(PqlType):
     def __repr__(self):
         return self.name
 
+    def flatten(self, path):
+        return [(path, self)]
+
+    def restructure_result(self, res):
+        return next(res)
+
 
 null = NullType()
 

@@ -242,6 +242,35 @@ class BasicTests(TestCase):
         res = preql('[1,2,3]{=>sum(value*value)}')
         assert res == [{'sum': 14}], list(res)
 
+    def test_compare(self):
+        preql = self.Preql()
+
+        self.assertEqual( preql("""1 == 1"""), True )
+        self.assertEqual( preql("""1 != 1"""), False )
+        self.assertEqual( preql("""1 == 2"""), False )
+        self.assertEqual( preql("""1 != 2"""), True )
+        self.assertEqual( preql("""1 > 2"""), False )
+        self.assertEqual( preql("""1 >= 2"""), False )
+        self.assertEqual( preql("""2 >= 1"""), True )
+        self.assertEqual( preql("""2 > 1"""), True )
+        self.assertEqual( preql(""" "a" == "a" """), True )
+        self.assertEqual( preql(""" "a" == "b" """), False )
+        self.assertEqual( preql(""" "a" != "b" """), True )
+
+        self.assertEqual( preql("""1 in [1,2,3]"""), True )
+        self.assertEqual( preql("""1 ^in [1,2,3]"""), False )
+        self.assertEqual( preql("""4 in [1,2,3]"""), False )
+
+        # self.assertRaises( pql_TypeError, preql, """2 > "a" """)
+        # self.assertRaises( pql_TypeError, preql, """2 == "a" """)
+        # self.assertRaises( pql_TypeError, preql, """ 1 == [2] """)
+        self.assertRaises( pql_TypeError, preql, """ [1] in [2] """)
+        self.assertRaises( pql_TypeError, preql, """ "a" in [2] """)
+        self.assertRaises( pql_TypeError, preql, """ 4 in ["a", "B"] """)
+
+
+
+
     def test_list_ops(self):
         # TODO should be consistent - always table, or always array
         preql = self.Preql()
@@ -280,6 +309,11 @@ class BasicTests(TestCase):
         self.assertEqual( preql("""[1,2,3][1..1]"""), [])
         self.assertEqual( preql("[] {x:0}"), [])
         self.assertRaises( pql_TypeError, preql, """["a", 1]""")
+        self.assertRaises( pql_TypeError, preql, """[1] {a: 1, a: 2} """)
+        self.assertRaises( pql_TypeError, preql, """[1] {a: 1 => a: 2} """)
+
+        res ,= preql("""[1] {null, null => null, null}""")
+        self.assertEqual(list(res.values()) , [None, None, None, None])
 
     def _test_temptable(self, preql):
         english_speakers = [
