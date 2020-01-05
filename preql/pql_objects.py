@@ -215,17 +215,6 @@ def make_column_instance(code, type_, from_instances=()):
     assert False, type_
 
 
-def make_value_instance(value, type_=None):
-    from .interp_common import sql_repr, GlobalSettings # XXX
-    r = sql_repr(value)
-    if type_:
-        assert isinstance(type_, (types.Primitive, types.NullType)), type_
-        assert r.type == type_
-    if GlobalSettings.Optimize:
-        return ValueInstance.make(r, r.type, [], value)
-    else:
-        return Instance.make(r, r.type, [])
-
 
 @dataclass
 class ValueInstance(Instance):

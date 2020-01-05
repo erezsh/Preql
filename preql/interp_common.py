@@ -112,3 +112,13 @@ def sql_repr(x):
         return sql.Primitive(t, repr(x.isoformat()))
 
     return sql.Primitive(t, repr(x))
+
+def make_value_instance(value, type_=None):
+    r = sql_repr(value)
+    if type_:
+        assert isinstance(type_, (types.Primitive, types.NullType)), type_
+        assert r.type == type_
+    if GlobalSettings.Optimize:
+        return objects.ValueInstance.make(r, r.type, [], value)
+    else:
+        return objects.Instance.make(r, r.type, [])

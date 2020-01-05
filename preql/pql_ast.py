@@ -13,13 +13,11 @@ class Expr(Ast): pass
 
 class Statement(Ast): pass
 
-from lark import Token
-
 
 @dataclass
 class Name(Expr):
     "Reference to an object (table, tabledef, column (in `where`), instance, etc.)"
-    name: (Token, str)
+    name: str
 
     def __repr__(self):
         return f'Name({self.name})'

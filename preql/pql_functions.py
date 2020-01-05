@@ -9,7 +9,7 @@ from . import pql_ast as ast
 from . import sql
 
 from .compiler import compile_remote, instanciate_table, compile_type_def, _make_name, alias_table
-from .interp_common import State, get_alias, sql_repr
+from .interp_common import State, get_alias, make_value_instance
 from .evaluate import simplify, evaluate, localize
 
 def _pql_SQL_callback(state: State, var: str, instances):
@@ -80,7 +80,7 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     inst = compile_remote(state, expr)
     type_ = simplify(state, type_expr)
     res = isinstance(inst.type, type_)
-    return objects.make_value_instance(res, types.Bool)
+    return make_value_instance(res, types.Bool)
 
 def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     obj = compile_remote(state, obj)
@@ -121,8 +121,7 @@ def pql_get_db_type(state: State):
         - "sqlite"
         - "postgres"
     """
-    s = state.db.target
-    return objects.Instance.make(sql_repr(s), types.String, [])
+    return make_value_instance(state.db.target, types.String)
 
 
 
@@ -246,13 +245,13 @@ def pql_cast_int(state: State, expr: ast.Expr):
         # res = types.Int.import_result(res)
         assert len(res) == 1
         res = list(res[0].values())[0]
-        return objects.make_value_instance(res, types.Int)
+        return make_value_instance(res, types.Int)
 
     elif type_ == types.Int:
         return inst
     elif type_ == types.Float:
         value = localize(state, inst)
-        return objects.make_value_instance(int(value), types.Int)
+        return make_value_instance(int(value), types.Int)
 
     raise pql_TypeError(expr.meta, f"Cannot cast expr of type {inst.type} to int")
 
@@ -276,7 +275,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
             "For example:\n"
             "    >> help(help)\n"
         )
-        return objects.make_value_instance(text, types.String)
+        return make_value_instance(text, types.String)
 
 
     lines = []
@@ -300,7 +299,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
         raise pql_TypeError(obj.meta, "help() only accepts functions at the moment")
 
     text = '\n'.join(lines)
-    return objects.make_value_instance(text, types.String)
+    return make_value_instance(text, types.String)
 
 def pql_ls(state: State, obj: types.PqlObject = objects.null):
     """
@@ -317,7 +316,7 @@ def pql_ls(state: State, obj: types.PqlObject = objects.null):
         all_vars = list(state.get_all_vars())
 
     assert all(isinstance(s, str) for s in all_vars)
-    names = [objects.make_value_instance(str(s), types.String) for s in all_vars]
+    names = [make_value_instance(str(s), types.String) for s in all_vars]
     return compile_remote(state, objects.List_(None, names))
 
 

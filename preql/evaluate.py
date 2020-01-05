@@ -26,8 +26,8 @@ from . import sql
 RawSql = sql.RawSql
 Sql = sql.Sql
 
-from .interp_common import State, dy, get_alias
-from .compiler import compile_remote, compile_type_def, sql_repr, instanciate_table
+from .interp_common import State, dy, get_alias, sql_repr
+from .compiler import compile_remote, compile_type_def, instanciate_table
 
 
 

@@ -5,7 +5,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify, assert_type, sql_repr, GlobalSettings
+from .interp_common import dy, State, get_alias, simplify, assert_type, GlobalSettings, make_value_instance
 
 Sql = sql.Sql
 
@@ -94,7 +94,7 @@ def _ensure_col_instance(state, meta, i):
         return i
     elif isinstance(i, objects.Instance):
         if isinstance(i.type, (types.Primitive, types.NullType)):
-            return objects.make_column_instance(i.code, i.type)
+            return objects.make_column_instance(i.code, i.type, [i])
 
     raise pql_TypeError(meta, f"Expected a valid expression. Instead got: {i.repr(state)}")
     # assert False, i
@@ -261,7 +261,8 @@ def compile_remote(state: State, cmp: ast.Compare):
     }.get(cmp.op, cmp.op)
 
     code = sql_cls(types.Bool, op, [e.code for e in insts])
-    return objects.Instance.make(code, types.Bool, [])
+    inst = objects.Instance.make(code, types.Bool, insts)
+    return inst
 
 @dy
 def compile_remote(state: State, attr: ast.Attr):
@@ -295,7 +296,7 @@ def compile_remote(state: State, arith: ast.Arith):
             # Local folding for better performance (optional, for better performance)
             v1, v2 = [a.local_value for a in args]
             if arith.op == '+' and len(arg_types_set) == 1:
-                return objects.make_value_instance(v1 + v2, args[0].type)
+                return make_value_instance(v1 + v2, args[0].type)
 
     if len(arg_types_set) > 1:
         # Auto-convert int+float into float
@@ -390,7 +391,7 @@ def compile_remote(state: State, x: ast.Ellipsis):
 
 @dy
 def compile_remote(state: State, c: ast.Const):
-    return objects.make_value_instance(c.value, c.type)
+    return make_value_instance(c.value, c.type)
 
 @dy
 def compile_remote(state: State, n: ast.Name):
@@ -406,27 +407,29 @@ def compile_remote(state: State, lst: objects.List_):
     # return Instance(Sql(sql), ArrayType(type, false))
     # Or just evaluate?
 
-    elems = [compile_remote(state, e) for e in lst.elems]
+    if not lst.elems:
+        list_type = types.ListType(types.null)      # XXX Any type?
+        code = sql.EmptyList(list_type)
+        return instanciate_table(state, list_type, code, [])
+
+    elems = compile_remote(state, lst.elems)
 
     type_set = list({e.type for e in elems})
     if len(type_set) > 1:
         raise pql_TypeError(lst.meta, "Cannot create a list of mixed types: (%s)" % ', '.join(repr(t) for t in type_set))
-    elif not type_set:
-        elem_type = types.null
     else:
         elem_type ,= type_set
 
-    table_type = types.ListType(elem_type)
+    list_type = types.ListType(elem_type)
 
-    # TODO use values + subqueries instead of union all (better performance, shorter code)
-    # e.g. with list(value) as (values(1),(2),(3)) select value from list;
-    if elems:
-        code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
-    else:
-        code = sql.EmptyList(table_type)
-
-    inst = instanciate_table(state, table_type, code, elems)
+    # code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
+    name = get_alias(state, "list_")
+    inst = instanciate_table(state, list_type, sql.TableName(list_type, name), elems)
+    fields = [sql.Name(elem_type, 'value')]
+    subq = sql.Subquery(list_type, name, fields, sql.Values(list_type, [e.code for e in elems]))
+    inst.subqueries[name] = subq
     return inst
+
 
 @dy
 def compile_remote(state: State, t: types.TableType):
@@ -448,7 +451,7 @@ def compile_remote(state: State, s: ast.Slice):
         start = compile_remote(state, s.range.start)
         instances += [start]
     else:
-        start = objects.make_value_instance(0, types.Int)
+        start = make_value_instance(0)
     if s.range.stop:
         stop = compile_remote(state, s.range.stop)
         instances += [stop]
@@ -458,7 +461,7 @@ def compile_remote(state: State, s: ast.Slice):
 
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], offset=start.code, limit=limit)
     # return table.remake(code=code)
-    return objects.TableInstance.make(code, table.type, [table] + instances, table.columns)
+    return objects.TableInstance.make(code, table.type, instances, table.columns)
 
 @dy
 def compile_remote(state: State, sel: ast.Selection):
