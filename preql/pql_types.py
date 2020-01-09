@@ -80,12 +80,21 @@ primitives_by_pytype = {}
 class text(str):
     pass
 
+class DateTimeType(Primitive):
+    def import_result(self, res):
+        s = super().import_result(res)
+        return datetime.fromisoformat(s)
+
+    def restructure_result(self, i):
+        s = super().restructure_result(i)
+        return datetime.fromisoformat(s)
+
 Int = Primitive('int', int, False)
 Float = Primitive('float', float, False)
 String = Primitive('string', str, False)
 Text = Primitive('text', text, False)
 Bool = Primitive('bool', bool, False)
-DateTime = Primitive('datetime', datetime, False)   # XXX datetime?
+DateTime = DateTimeType('datetime', datetime, False)
 
 # Collections
 

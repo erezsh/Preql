@@ -48,8 +48,7 @@ def compile_type(state: State, type_: types.RelationalColumn):
 def compile_type(state: State, type_: types.DatumColumn):
     return compile_type(state, type_.type)
 
-@dy
-def compile_type(state: State, type: types.Primitive):
+def _compile_type_primitive(type):
     s = {
         'int': "INTEGER",
         'string': "VARCHAR(4000)",
@@ -61,6 +60,12 @@ def compile_type(state: State, type: types.Primitive):
     if not type.nullable:
         s += " NOT NULL"
     return s
+@dy
+def compile_type(state: State, type: types.Primitive):
+    return _compile_type_primitive(type)
+@dy
+def compile_type(state: State, type: types.DateTimeType):
+    return _compile_type_primitive(type)
 
 @dy
 def compile_type(state: State, idtype: types.IdType):

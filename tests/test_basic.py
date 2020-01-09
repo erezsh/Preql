@@ -387,13 +387,15 @@ class BasicTests(TestCase):
 
     def test_text(self):
         preql = self.Preql()
-        preql('''
+        preql(r'''
             table A { x: text }
 
             new A("hello")
+            new A("hello\nworld")
         ''')
 
-        self.assertEqual( preql("one A{x}"), {'x': "hello"} )
+        self.assertEqual( preql("one A[id==1]{x}"), {'x': "hello"} )
+        self.assertEqual( preql("one A[id==2]{x}"), {'x': "hello\nworld"} )
 
 
     def test_column_default(self):
