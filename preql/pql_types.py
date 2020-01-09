@@ -77,13 +77,13 @@ class Primitive(AtomicType):
 
 primitives_by_pytype = {}
 
-class Text(str):
+class text(str):
     pass
 
 Int = Primitive('int', int, False)
 Float = Primitive('float', float, False)
 String = Primitive('string', str, False)
-Text = Primitive('text', Text, False)
+Text = Primitive('text', text, False)
 Bool = Primitive('bool', bool, False)
 DateTime = Primitive('datetime', datetime, False)   # XXX datetime?
 

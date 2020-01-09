@@ -275,7 +275,7 @@ def simplify(state: State, d: ast.Delete):
 
     for row in localize(state, table):
         if 'id' not in row:
-            raise pql_ValueError("Update error: Table does not contain id")
+            raise pql_ValueError(d.meta, "Delete error: Table does not contain id")
         id_ = row['id']
 
         compare = sql.Compare(types.Bool, '=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
@@ -304,10 +304,10 @@ def simplify(state: State, u: ast.Update):
     sql_proj = {sql.Name(value.type, name): value.code for name, value in proj.items()}
     for row in localize(state, table):
         if 'id' not in row:
-            raise pql_ValueError("Update error: Table does not contain id")
+            raise pql_ValueError(u.meta, "Update error: Table does not contain id")
         id_ = row['id']
         if not set(proj) < set(row):
-            raise pql_ValueError("Update error: Not all keys exist in table")
+            raise pql_ValueError(u.meta, "Update error: Not all keys exist in table")
         compare = sql.Compare(types.Bool, '=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
         code = sql.Update(types.null, sql.TableName(table.type, table.type.name), sql_proj, [compare])
         state.db.query(code, table.subqueries)

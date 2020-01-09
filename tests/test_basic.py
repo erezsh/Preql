@@ -385,6 +385,17 @@ class BasicTests(TestCase):
         assert len(res) == 0
         assert preql('count(A)') == 0
 
+    def test_text(self):
+        preql = self.Preql()
+        preql('''
+            table A { x: text }
+
+            new A("hello")
+        ''')
+
+        self.assertEqual( preql("one A{x}"), {'x': "hello"} )
+
+
     def test_column_default(self):
         preql = self.Preql()
         preql('''

@@ -1,6 +1,7 @@
-import tabulate
-
 from pathlib import Path
+from contextlib import contextmanager
+
+import tabulate
 
 from . import pql_types as types
 from . import pql_ast as ast
@@ -10,6 +11,7 @@ from .interpreter import Interpreter
 from .evaluate import localize, evaluate
 from .interp_common import create_engine
 from .compiler import call_pql_func
+
 
 def python_to_pql(value):
     if value is None:
@@ -136,9 +138,20 @@ class Interface:
     def load(self, fn, rel_to=None):
         self.interp.include(fn, rel_to)
 
+    @contextmanager
+    def transaction(self):
+        # TODO rollback
+        try:
+            yield self  # TODO new instance?
+        finally:
+            self.commit()
+
     def start_repl(self):
         from .repl import start_repl
         start_repl(self)
+
+    def commit(self):
+        return self.engine.commit()
 
 #     def _functions(self):
 #         return {name:f for name,f in self.interp.state.namespace.items()
@@ -153,8 +166,6 @@ class Interface:
 #     def add(self, table, values):
 #         return self.add_many(table, [values])
 
-#     def commit(self):
-#         return self.engine.commit()
 
 #     def start_repl(self):
 #         from prompt_toolkit import prompt

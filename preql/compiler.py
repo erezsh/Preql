@@ -55,6 +55,7 @@ def compile_type(state: State, type: types.Primitive):
         'string': "VARCHAR(4000)",
         'float': "FLOAT",
         'bool': "BOOLEAN",
+        'text': "TEXT",
         'datetime': "TIMESTAMP",
     }[type.name]
     if not type.nullable:
