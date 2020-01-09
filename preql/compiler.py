@@ -377,6 +377,9 @@ def compile_remote(state: State, i: objects.Instance):
 def compile_remote(state: State, i: objects.TableInstance):
     return i
 @dy
+def compile_remote(state: State, i: objects.RowInstance):
+    return i
+@dy
 def compile_remote(state: State, f: ast.FuncCall):
     res = simplify(state, f)
     return compile_remote(state, res)
@@ -395,6 +398,9 @@ def compile_remote(state: State, x: ast.Ellipsis):
 
 @dy
 def compile_remote(state: State, c: ast.Const):
+    if c.type == types.null:
+        assert c.value is None
+        return objects.null
     return make_value_instance(c.value, c.type)
 
 @dy

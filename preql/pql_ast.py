@@ -113,6 +113,11 @@ class Range(Expr):
     stop: Optional[Expr]
 
 @dataclass
+class One(Expr):
+    expr: Expr
+    nullable: bool
+
+@dataclass
 class Slice(TableOperation):
     table: Expr
     range: Range

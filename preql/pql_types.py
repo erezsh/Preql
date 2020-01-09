@@ -226,6 +226,13 @@ class TableType(Collection):
             s = ({str(name): col.restructure_result(i) for name, col in self.columns.items()})
             yield s
 
+@dataclass
+class RowType(PqlType):
+    table: Collection
+
+    def import_result(self, arr):
+        r ,= self.table.import_result(arr)
+        return r
 
 
 @dataclass

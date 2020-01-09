@@ -142,6 +142,7 @@ class T(Transformer):
     throw = ast.Throw
     if_stmt = ast.If
     try_catch = ast.Try
+    one = lambda self, meta, nullable, expr: ast.One(meta, expr, nullable is not None)
 
     # def ellipsis(self, meta):
     #     return ast.Ellipsis(meta)

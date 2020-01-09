@@ -5,7 +5,7 @@ from parameterized import parameterized_class
 
 from preql import Preql
 from preql.pql_objects import UserFunction
-from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError
+from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError
 from preql.interp_common import GlobalSettings, pql_TypeError
 from preql import sql
 
@@ -342,6 +342,27 @@ class BasicTests(TestCase):
 
         res = preql(""" temptable(temptable(Person)[name=="Erez Shinan"]){name} """) # 2 temp tables
         assert is_eq(res, [("Erez Shinan",)])
+
+
+    def test_one(self):
+        preql = self.Preql()
+        preql('''
+            table A { x: int }
+            table B { x: int }
+
+            new A(2)
+        ''')
+
+        self.assertEqual( preql('one A{x}'), {'x': 2} )
+        self.assertEqual( preql('one? A{x}'), {'x': 2} )
+        self.assertEqual( preql('one? B'), None )
+        self.assertRaises(pql_ValueError, preql, 'one B')
+
+        self.assertEqual( preql('one [2]'), 2 )
+        self.assertEqual( preql('one? []'), None )
+        self.assertRaises(pql_ValueError, preql, 'one [1,2]')
+        self.assertRaises(pql_ValueError, preql, 'one? [1,2]')
+        self.assertRaises(pql_ValueError, preql, 'one []')
 
 
     def test_column_default(self):

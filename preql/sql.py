@@ -37,7 +37,7 @@ class Sql:
         if self._is_select:
             if not qb.is_root:
                 if qb.target == 'postgres':
-                    sql_code = f'({sql_code}) {qb.get_alias()}' # postgres demands an alias
+                    sql_code = f'({sql_code}) {qb.get_alias()}' # postgres requires an alias
                 else:
                     sql_code = f'({sql_code})'
         else:

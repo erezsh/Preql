@@ -244,6 +244,11 @@ class TableInstance(Instance):
         # return make_column_instance(None, self.type.to_struct_type(), [self])
         return StructColumnInstance(None, self.type.to_struct_type(), self.subqueries, self.columns)
 
+@dataclass
+class RowInstance(Instance):
+    type: types.RowType
+    table: TableInstance
+
 
 # @dataclass
 class ColumnReference(ColumnInstance):

@@ -249,6 +249,19 @@ def simplify(state: State, p: ast.Projection):
 def simplify(state: State, o: ast.Order):
     return compile_remote(state, o)
 @dy
+def simplify(state: State, o: ast.One):
+    # TODO move these to the core/base module
+    fname = '_only_one_or_none' if o.nullable else '_only_one'
+    f = state.get_var(fname)
+    res = simplify(state, ast.FuncCall(o.meta, f, [o.expr]))
+    if isinstance(res.type, types.NullType):
+        return res
+    assert isinstance(res, objects.TableInstance), res
+    # row ,= localize(state, res)
+    # return objects.RowInstance.make(row, res, [])
+    return objects.RowInstance.make(res.code.remake(type=types.RowType(res.type)), types.RowType(res.type), [res], res)
+
+@dy
 def simplify(state: State, s: ast.Slice):
     return compile_remote(state, s)
 

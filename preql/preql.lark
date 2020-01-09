@@ -82,6 +82,9 @@ update: molecule "update" "{" _NL? proj_exprs _NL? "}"
      | "-" molecule -> neg
      | "^" molecule -> desc
      | new
+     | one
+
+one: "one" [NULLABLE] molecule
 
 list: "[" _NL? (expr (_sep expr)* _NL?)? "]"
 

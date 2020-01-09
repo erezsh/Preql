@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from .utils import SafeDict
-from .exceptions import PreqlError, pql_TypeError
+from .exceptions import PreqlError, pql_TypeError, pql_ValueError
 
 from .evaluate import State, execute, evaluate, simplify, localize
 from .parser import parse_stmts, parse_expr
@@ -32,6 +32,7 @@ def initial_namespace():
     ns['list'] = types.ListType
     ns['aggregate'] = types.Aggregated
     ns['TypeError'] = pql_TypeError
+    ns['ValueError'] = pql_ValueError
     return [dict(ns)]
 
 class Interpreter:
