@@ -370,6 +370,15 @@ class Update(Sql):
         return sql
 
 @dataclass
+class Delete(Sql):
+    table: TableName
+    conds: List[Sql]
+
+    def _compile(self, qb):
+        conds = ' AND '.join(c.compile(qb).text for c in self.conds)
+        return f'DELETE FROM {self.table.compile(qb).text} WHERE {conds}'
+
+@dataclass
 class Select(TableOperation):
     table: Sql # XXX Table won't work with RawSQL
     fields: List[Sql]

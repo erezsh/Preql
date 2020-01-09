@@ -194,8 +194,8 @@ def compile_remote(state: State, proj: ast.Projection):
 
 
 @dy
-def compile_remote(state: State, order: ast.Update):
-    return compile_remote(state, simplify(state, order))
+def compile_remote(state: State, update: ast.Update):
+    return compile_remote(state, simplify(state, update))
 
 @dy
 def compile_remote(state: State, order: ast.Order):

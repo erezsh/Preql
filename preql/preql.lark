@@ -43,6 +43,7 @@ proj_exprs: named_expr (_sep named_expr)* _sep?
 expr_list2: (expr _sep)* expr -> expr_list
 order: molecule "order" "{" _NL? expr_list2 _NL? "}"
 update: molecule "update" "{" _NL? proj_exprs _NL? "}"
+delete: molecule "delete" expr_list
 
 
 ?expr: or_test //contains | like
@@ -77,6 +78,7 @@ update: molecule "update" "{" _NL? proj_exprs _NL? "}"
      | slice
      | order
      | update
+     | delete
      | var
      | "(" _NL? expr _NL? ")"
      | "-" molecule -> neg

@@ -266,7 +266,27 @@ def simplify(state: State, s: ast.Slice):
     return compile_remote(state, s)
 
 @dy
+def simplify(state: State, d: ast.Delete):
+    # TODO Optimize: Delete on condition, not id, when possible
+
+    cond_table = ast.Selection(d.meta, d.table, d.conds)
+    table = evaluate(state, cond_table)
+    assert isinstance(table, objects.TableInstance)
+
+    for row in localize(state, table):
+        if 'id' not in row:
+            raise pql_ValueError("Update error: Table does not contain id")
+        id_ = row['id']
+
+        compare = sql.Compare(types.Bool, '=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
+        code = sql.Delete(types.null, sql.TableName(table.type, table.type.name), [compare])
+        state.db.query(code, table.subqueries)
+
+    return evaluate(state, d.table)
+
+@dy
 def simplify(state: State, u: ast.Update):
+    # TODO Optimize: Update on condition, not id, when possible
     table = evaluate(state, u.table)
     assert isinstance(table, objects.TableInstance)
     assert all(f.name for f in u.fields)
@@ -283,6 +303,8 @@ def simplify(state: State, u: ast.Update):
         proj = {f.name:compile_remote(state, f.value) for f in u.fields}
     sql_proj = {sql.Name(value.type, name): value.code for name, value in proj.items()}
     for row in localize(state, table):
+        if 'id' not in row:
+            raise pql_ValueError("Update error: Table does not contain id")
         id_ = row['id']
         if not set(proj) < set(row):
             raise pql_ValueError("Update error: Not all keys exist in table")

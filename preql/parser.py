@@ -111,6 +111,7 @@ class T(Transformer):
     named_expr = ast.NamedField
     order = ast.Order
     update = ast.Update
+    delete = ast.Delete
     desc = ast.DescOrder
     new = ast.New
     func_call = ast.FuncCall

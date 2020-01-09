@@ -98,6 +98,11 @@ class Update(TableOperation):
     fields: List[NamedField]
 
 @dataclass
+class Delete(TableOperation):
+    table: Expr
+    conds: List[Expr]
+
+@dataclass
 class New(Expr):
     type: str
     args: list   # Func args

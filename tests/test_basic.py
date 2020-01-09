@@ -364,6 +364,26 @@ class BasicTests(TestCase):
         self.assertRaises(pql_ValueError, preql, 'one? [1,2]')
         self.assertRaises(pql_ValueError, preql, 'one []')
 
+    def test_delete(self):
+        preql = self.Preql()
+        preql('''
+            table A {
+                x: int
+            }
+            new A(1)
+            new A(2)
+        ''')
+
+        assert preql('count(A)') == 2
+        res = preql('A delete [x==1]')
+        assert len(res) == 1, res
+        assert preql('count(A)') == 1
+        res = preql('A delete [x==1]')
+        assert len(res) == 1
+        assert preql('count(A)') == 1
+        res = preql('A delete [x==2]')
+        assert len(res) == 0
+        assert preql('count(A)') == 0
 
     def test_column_default(self):
         preql = self.Preql()
