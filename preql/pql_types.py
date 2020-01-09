@@ -12,6 +12,9 @@ class PqlType(PqlObject):
     def kernel_type(self):
         return self
 
+    def actual_type(self):
+        return self
+
     def repr(self, pql):
         return repr(self)
 
@@ -145,6 +148,27 @@ class Aggregated(ListType):
 class SetType(Collection):
     elemtype: PqlType
 
+
+@dataclass
+class DatumColumn(PqlType):
+    type: PqlType
+    default: Optional[PqlObject] = None
+
+    def actual_type(self):
+        return self.type
+
+    def restructure_result(self, i):
+        return self.type.restructure_result(i)
+
+    def flatten(self, path):
+        return self.type.flatten(path)
+
+    @property
+    def is_concrete(self):
+        return self.type.is_concrete
+    @property
+    def readonly(self):
+        return self.type.readonly
 
 @dataclass
 class RelationalColumn(AtomicType):

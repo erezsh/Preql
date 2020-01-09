@@ -109,6 +109,9 @@ class Interface:
         "Deprecated"
         return self.interp.execute_code(q, *args, **kw)
 
+    def close(self):
+        self.engine.close()
+
     def __getattr__(self, fname):
         def delegate(*args, **kw):
             assert not kw

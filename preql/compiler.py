@@ -45,6 +45,10 @@ def compile_type(state: State, type_: types.RelationalColumn):
     return 'INTEGER'    # Foreign-key is integer
 
 @dy
+def compile_type(state: State, type_: types.DatumColumn):
+    return compile_type(state, type_.type)
+
+@dy
 def compile_type(state: State, type: types.Primitive):
     s = {
         'int': "INTEGER",

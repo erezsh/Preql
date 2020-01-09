@@ -130,6 +130,7 @@ class ColumnDef(Ast, Definition):
     name: str
     type: Type
     query: Optional[Expr] = None
+    default: Optional[Expr] = None
 
 
 @dataclass

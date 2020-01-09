@@ -170,6 +170,9 @@ class Instance(types.PqlObject):
     def repr(self, state):
         return f'<instance of {self.type.repr(state)}>'
 
+    def __created__(self):
+        assert not isinstance(self.type, types.DatumColumn)
+
 
 
 @dataclass
@@ -202,6 +205,7 @@ class StructColumnInstance(ColumnInstance):
 
 
 def make_column_instance(code, type_, from_instances=()):
+    type_ = type_.actual_type()
     kernel = type_.kernel_type()
 
     if isinstance(kernel, types.StructType):

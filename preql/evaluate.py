@@ -60,7 +60,7 @@ def resolve(state: State, col_def: ast.ColumnDef):
         return types.RelationalColumn(col.type, query)
 
     assert not query
-    return col
+    return types.DatumColumn(col, col_def.default)
 
 @dy
 def resolve(state: State, type_: ast.Type) -> types.PqlType:
@@ -342,7 +342,7 @@ def simplify(state: State, new: ast.New):
 
     destructured_pairs = []
     for k, v in matched:
-        if isinstance(k.type, types.StructType):
+        if isinstance(k.type.actual_type(), types.StructType):
             v = localize(state, evaluate(state, v))
             for (path,k2), v2 in safezip(k.orig.flatten([k.name]), v):
                 destructured_pairs.append(('_'.join(path), v2))

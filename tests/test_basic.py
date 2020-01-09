@@ -344,6 +344,25 @@ class BasicTests(TestCase):
         assert is_eq(res, [("Erez Shinan",)])
 
 
+    def test_column_default(self):
+        preql = self.Preql()
+        preql('''
+            count = 0
+            func counter()
+                count = count + 1
+                return count
+            end
+
+            table A {
+                x: int
+                y: int = 2
+            }
+
+            a1 = new A(1)
+            a2 = new A(2, 1)
+        ''')
+
+        assert preql('A{y}') == [{'y': 2}, {'y': 1}]
 
     def test_structs(self):
         preql = self.Preql()

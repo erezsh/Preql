@@ -37,6 +37,9 @@ class SqlInterface:
     def commit(self):
         self._conn.commit()
 
+    def close(self):
+        self._conn.close()
+
     def _old_addmany(self, table, cols, values):
         assert all(len(v)==len(cols) for v in values), (cols, values[0])
 

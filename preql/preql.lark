@@ -3,7 +3,7 @@ stmts: _NL? stmt+
 
 table_def: "table" name "{" _sep? col_defs? "}" _NL
 col_defs: (col_def _sep)* col_def _sep?
-col_def: name ":" coltype ["->" expr]
+col_def: name ":" coltype ["->" expr] ["=" expr]
 ?coltype: type
         | m2m
 type: name [typemod]
