@@ -112,7 +112,7 @@ def sql_repr(x):
         return sql.Primitive(t, repr(str(x)))
 
     if t is types.String or t is types.Text:
-        return sql.Primitive(t, "'%s'" % str(x))
+        return sql.Primitive(t, "'%s'" % str(x).replace("'", "''"))
 
     return sql.Primitive(t, repr(x))
 
