@@ -1,52 +1,7 @@
 from typing import _GenericAlias as TypeBase, Any, Union, Callable
-from dataclasses import dataclass as _dataclass
 from functools import wraps
 
-def _isinstance(a, b):
-    try:
-        return isinstance(a, b)
-    except TypeError as e:
-        raise TypeError(f"Bad arguments to isinstance: {a}, {b}") from e
-
-def isa(obj, t):
-    if t is Any or t == (Any,):
-        return True
-    elif isinstance(t, tuple):
-        return any(isa(obj, opt) for opt in t)
-    elif _isinstance(t, TypeBase):
-        if t.__origin__ is list:
-            return all(isa(item, t.__args__) for item in obj)
-        elif t.__origin__ is dict:
-            kt, vt = t.__args__
-            return all(isa(k, kt) and isa(v, vt) for k, v in obj.items())
-        elif t.__origin__ is Union:
-            return isa(obj, t.__args__)
-        elif issubclass(t, Callable):
-            return callable(obj)
-        assert False, t.__origin__
-    return _isinstance(obj, t)
-
-
-def __post_init(self):
-    if not hasattr(self, '__dataclass_fields__'):
-        return
-    for name, field in self.__dataclass_fields__.items():
-        value = getattr(self, name)
-        if not isa(value, field.type):
-            raise TypeError(f"[{type(self).__name__}] Attribute '{name}' expected value of type {field.type}, instead got {value!r}")
-
-    if hasattr(self, '__created__'):
-        self.__created__()
-
-def __remake(self, **kwargs):
-    attrs = {name: getattr(self, name) for name in self.__dataclass_fields__}
-    attrs.update(kwargs)
-    return type(self)(**attrs)
-
-def dataclass(cls, frozen=True):
-    cls.__post_init__ = __post_init
-    cls.remake = __remake
-    return _dataclass(cls, frozen=frozen)
+from runtype import dataclass
 
 
 class SafeDict(dict):

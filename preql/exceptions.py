@@ -13,7 +13,7 @@ class Meta:
     end_column: int
     parent: Optional[object] = None
 
-    def remake(self, parent):
+    def replace(self, parent):
         return Meta(
             self.text,
             self.start_pos,

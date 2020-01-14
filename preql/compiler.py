@@ -220,7 +220,7 @@ def compile_remote(state: State, order: ast.Order):
 @dy
 def compile_remote(state: State, expr: ast.DescOrder):
     obj = compile_remote(state, expr.value)
-    return obj.remake(code=sql.Desc(obj.type, obj.code))
+    return obj.replace(code=sql.Desc(obj.type, obj.code))
 
 
 
@@ -234,9 +234,9 @@ def compile_remote(state: State, like: ast.Like):
     s = compile_remote(state, like.str)
     p = compile_remote(state, like.pattern)
     if s.type != types.String:
-        raise pql_TypeError(like.str.meta.remake(parent=like.meta), f"Like (~) operator expects two strings")
+        raise pql_TypeError(like.str.meta.replace(parent=like.meta), f"Like (~) operator expects two strings")
     if p.type != types.String:
-        raise pql_TypeError(like.pattern.meta.remake(parent=like.meta), f"Like (~) operator expects two strings")
+        raise pql_TypeError(like.pattern.meta.replace(parent=like.meta), f"Like (~) operator expects two strings")
 
     code = sql.Like(types.Bool, s.code, p.code)
     return objects.Instance.make(code, types.Bool, [s, p])
@@ -286,7 +286,7 @@ def compile_remote(state: State, attr: ast.Attr):
     try:
         return inst.get_attr(attr.name)
     except pql_AttributeError:
-        meta = attr.name.meta.remake(parent=attr.meta)
+        meta = attr.name.meta.replace(parent=attr.meta)
         raise pql_AttributeError(meta, f"Objects of type '{inst.type}' have no attributes (for now)")
 
 
@@ -315,7 +315,7 @@ def compile_remote(state: State, arith: ast.Arith):
             arg_types_set = {types.Float}
         elif arg_types_set == {types.Int, types.String}:
             if arith.op != '*':
-                meta = arith.op.meta.remake(parent=arith.meta)
+                meta = arith.op.meta.replace(parent=arith.meta)
                 raise pql_TypeError(meta, f"Operator '{arith.op}' not supported between string and integer.")
 
             # REPEAT(str, int) -> str
@@ -330,7 +330,7 @@ def compile_remote(state: State, arith: ast.Arith):
             # return compile_remote(state, expr)
             return call_pql_func(state, "repeat", ordered_args)
         else:
-            meta = arith.op.meta.remake(parent=arith.meta)
+            meta = arith.op.meta.replace(parent=arith.meta)
             raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
@@ -349,13 +349,13 @@ def compile_remote(state: State, arith: ast.Arith):
         try:
             op = ops[arith.op]
         except KeyError:
-            meta = arith.op.meta.remake(parent=arith.meta)
+            meta = arith.op.meta.replace(parent=arith.meta)
             raise pql_TypeError(meta, f"Operation '{arith.op}' not supported for tables")
 
         return state.get_var(op).func(state, *args)
 
     if not all(isinstance(a.type, (types.Primitive, types.ListType)) for a in args):
-        meta = arith.op.meta.remake(parent=arith.meta)
+        meta = arith.op.meta.replace(parent=arith.meta)
         raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
     arg_codes = [a.code for a in args]
@@ -363,7 +363,7 @@ def compile_remote(state: State, arith: ast.Arith):
     op = arith.op
     if arg_types_set == {types.String}:
         if arith.op != '+':
-            meta = arith.op.meta.remake(parent=arith.meta)
+            meta = arith.op.meta.replace(parent=arith.meta)
             raise pql_TypeError(meta, f"Operator '{arith.op}' not supported for strings.")
         op = '||'
     elif arith.op == '/':
@@ -379,24 +379,24 @@ def compile_remote(state: State, arith: ast.Arith):
 @dy # Could happen because sometimes simplify(...) calls compile_remote
 def compile_remote(state: State, i: objects.Instance):
     return i
-@dy
-def compile_remote(state: State, i: objects.TableInstance):
+# @dy
+# def compile_remote(state: State, i: objects.TableInstance):
     return i
-@dy
-def compile_remote(state: State, i: objects.RowInstance):
+# @dy
+# def compile_remote(state: State, i: objects.RowInstance):
     return i
 @dy
 def compile_remote(state: State, f: ast.FuncCall):
     res = simplify(state, f)
     return compile_remote(state, res)
 @dy
-def compile_remote(state: State, f: objects.UserFunction):
+def compile_remote(state: State, f: objects.Function):
     "Functions don't need compilation"
     return f
-@dy
-def compile_remote(state: State, f: objects.InternalFunction):
-    "Functions don't need compilation"
-    return f
+# @dy
+# def compile_remote(state: State, f: objects.InternalFunction):
+#     "Functions don't need compilation"
+#     return f
 @dy
 def compile_remote(state: State, x: ast.Ellipsis):
     raise pql_SyntaxError(x.meta, "Ellipsis not allowed here")
@@ -447,12 +447,12 @@ def compile_remote(state: State, lst: objects.List_):
     return inst
 
 
-@dy
-def compile_remote(state: State, t: types.TableType):
-    return t
-@dy
-def compile_remote(state: State, t: types.FunctionType):
-    return t
+# @dy
+# def compile_remote(state: State, t: types.TableType):
+#     return t
+# @dy
+# def compile_remote(state: State, t: types.FunctionType):
+#     return t
 
 
 @dy
@@ -495,21 +495,12 @@ def compile_remote(state: State, sel: ast.Selection):
 
 
 
-@dy
-def compile_remote(state: State, obj: objects.StructColumnInstance):
-    return obj
-@dy
-def compile_remote(state: State, obj: objects.DatumColumnInstance):
-    return obj
-@dy
-def compile_remote(state: State, obj: types.Primitive):
-    return obj
-@dy
-def compile_remote(state: State, obj: types.ListType):
-    return obj
-@dy
-def compile_remote(state: State, obj: objects.ValueInstance):
-    return obj
+# @dy
+# def compile_remote(state: State, obj: types.Primitive):
+#     return obj
+# @dy
+# def compile_remote(state: State, obj: types.ListType):
+#     return obj
 
 
 def guess_field_name(f):
@@ -547,7 +538,7 @@ def alias_table(state: State, t):
     ]
 
     code = sql.Select(t.type, t.code, sql_fields)
-    return t.remake(code=code, columns=new_columns)
+    return t.replace(code=code, columns=new_columns)
 
 
 def instanciate_table(state: State, t: types.TableType, source: Sql, instances, values=None):

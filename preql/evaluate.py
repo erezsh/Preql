@@ -182,7 +182,7 @@ def simplify(state: State, funccall: ast.FuncCall):
 
     if not isinstance(func, objects.Function):
         meta = funccall.func.meta
-        meta = meta.remake(parent=meta)
+        meta = meta.replace(parent=meta)
         raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
 
     args = func.match_params(funccall.args)
@@ -204,7 +204,7 @@ def simplify(state: State, funccall: ast.FuncCall):
 
 @dy
 def simplify(state: State, obj: ast.Arith):
-    return obj.remake(args=simplify_list(state, obj.args))
+    return obj.replace(args=simplify_list(state, obj.args))
 
 @dy
 def simplify(state: State, c: ast.CodeBlock):
@@ -224,13 +224,13 @@ def simplify(state: State, c: objects.List_):
 
 @dy
 def simplify(state: State, obj: ast.Compare):
-    return obj.remake(args=simplify_list(state, obj.args))
+    return obj.replace(args=simplify_list(state, obj.args))
     # return ast.Compare(c.meta, c.op, simplify_list(state, c.args))
 @dy
 def simplify(state: State, obj: ast.Like):
     s = simplify(state, obj.str)
     p = simplify(state, obj.pattern)
-    return obj.remake(str=s, pattern=p)
+    return obj.replace(str=s, pattern=p)
 
 @dy
 def simplify(state: State, c: ast.Selection):
@@ -259,7 +259,7 @@ def simplify(state: State, o: ast.One):
     assert isinstance(res, objects.TableInstance), res
     # row ,= localize(state, res)
     # return objects.RowInstance.make(row, res, [])
-    return objects.RowInstance.make(res.code.remake(type=types.RowType(res.type)), types.RowType(res.type), [res], res)
+    return objects.RowInstance.make(res.code.replace(type=types.RowType(res.type)), types.RowType(res.type), [res], res)
 
 @dy
 def simplify(state: State, s: ast.Slice):
@@ -296,9 +296,9 @@ def simplify(state: State, u: ast.Update):
     #     state.get_var(table.type.name)
     # except pql_NameNotFound:
     #     meta = u.table.meta
-    #     raise pql_TypeError(meta.remake(meta), "Update error: Got non-real table")
+    #     raise pql_TypeError(meta.replace(meta), "Update error: Got non-real table")
 
-    update_scope = {n:c.remake(code=sql.Name(c.type, n)) for n, c in table.columns.items()}
+    update_scope = {n:c.replace(code=sql.Name(c.type, n)) for n, c in table.columns.items()}
     with state.use_scope(update_scope):
         proj = {f.name:compile_remote(state, f.value) for f in u.fields}
     sql_proj = {sql.Name(value.type, name): value.code for name, value in proj.items()}

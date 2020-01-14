@@ -61,7 +61,7 @@ class Primitive(AtomicType):
     def __repr__(self):
         return self.name
 
-    def __created__(self):
+    def __post_init__(self):
         primitives_by_pytype[self.pytype] = self
 
     def import_result(self, res):
@@ -193,7 +193,7 @@ class TableType(Collection):
     columns: Dict[str, PqlType]
     temporary: bool
 
-    def __created__(self):
+    def __post_init__(self):
         assert isinstance(self.columns, SafeDict)
 
     def flatten(self, path=[]):

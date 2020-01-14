@@ -170,7 +170,7 @@ class Instance(types.PqlObject):
     def repr(self, state):
         return f'<instance of {self.type.repr(state)}>'
 
-    def __created__(self):
+    def __post_init__(self):
         assert not isinstance(self.type, types.DatumColumn)
 
 
@@ -255,7 +255,7 @@ class ColumnReference(ColumnInstance):
     table: TableInstance
     name: str
 
-    def remake(self, table):
+    def replace(self, table):
         return type(self)(table, self.name)
 
     def __init__(self, table, name):
@@ -295,11 +295,11 @@ def aggregated(inst):
     if isinstance(inst, StructColumnInstance):
         new_members = {name:aggregated(c) for name, c in inst.members.items()}
         # return TableInstance.make(inst.code, types.Aggregated(inst.type), [inst], new_members)
-        return inst.remake(type=types.Aggregated(inst.type), members=new_members)
+        return inst.replace(type=types.Aggregated(inst.type), members=new_members)
 
     elif isinstance(inst, ColumnInstance):
         col_type = types.Aggregated(inst.type)
-        return inst.remake(type=col_type)
+        return inst.replace(type=col_type)
 
     assert not isinstance(inst.type, types.TableType), inst.type
     return Instance.make(inst.code, types.Aggregated(inst.type), [inst])

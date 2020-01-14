@@ -165,8 +165,8 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
         tables = (a,b)
     else:
         if isinstance(a, objects.ColumnReference) and isinstance(b, objects.ColumnReference):
-            a = a.remake(table=alias_table(state, a.table))
-            b = b.remake(table=alias_table(state, b.table))
+            a = a.replace(table=alias_table(state, a.table))
+            b = b.replace(table=alias_table(state, b.table))
             cols = a, b
         else:
             assert isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance)    # TODO better error message (TypeError?)

@@ -81,7 +81,7 @@ class Projection(TableOperation):
     groupby: bool = False
     agg_fields: List[NamedField] = ()
 
-    def __created__(self):
+    def __post_init__(self):
         if self.groupby:
             assert self.fields or self.agg_fields
         else:

@@ -18,7 +18,7 @@ class QueryBuilder:
         self.counter += 1
         return 't%d' % self.counter
 
-    def remake(self, is_root):
+    def replace(self, is_root):
         if is_root == self.is_root:
             return self # Optimize
         return QueryBuilder(self.target, is_root, self.counter)
@@ -31,7 +31,7 @@ class Sql:
     _is_select = False
 
     def compile(self, qb):  # Move to Expr? Doesn't apply to statements
-        sql_code = self._compile(qb.remake(is_root=False))
+        sql_code = self._compile(qb.replace(is_root=False))
         assert isinstance(sql_code, str)
 
         if self._is_select:
@@ -196,7 +196,7 @@ class Contains(Scalar):
         assert self.op
         item, container = self.exprs
         c_item = item.compile(qb).text
-        c_cont = container.compile(qb.remake(is_root=True)).text
+        c_cont = container.compile(qb.replace(is_root=True)).text
         return f'{c_item} {self.op} ({c_cont})'
 
 
@@ -205,7 +205,7 @@ class Compare(Scalar):
     op: str
     exprs: List[Sql]
 
-    def __created__(self):
+    def __post_init__(self):
         assert self.op in ('=', '<=', '>=', '<', '>', '<>', '!='), self.op
 
     def _compile(self, qb):
@@ -388,7 +388,7 @@ class Select(TableOperation):
     offset: Optional[Sql] = None
     limit: Optional[Sql] = None
 
-    def __created__(self):
+    def __post_init__(self):
         assert self.fields, self
 
     def _compile(self, qb):
@@ -425,7 +425,7 @@ class Subquery(Sql):
 
     def _compile(self, qb):
         query = self.query.compile(qb).text
-        fields = [f.compile(qb.remake(is_root=False)).text for f in self.fields]
+        fields = [f.compile(qb.replace(is_root=False)).text for f in self.fields]
         return f"{self.table_name}({', '.join(fields)}) AS ({query})"
 
     def compile(self, qb):

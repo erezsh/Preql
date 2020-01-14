@@ -2,7 +2,8 @@ from contextlib import contextmanager
 
 import dsnparse
 
-from .dispatchy import Dispatchy
+from runtype import Dispatch
+
 from .exceptions import pql_NameNotFound, pql_TypeError, Meta
 
 from . import pql_ast as ast
@@ -11,7 +12,7 @@ from . import pql_types as types
 from . import sql
 from .sql_interface import SqliteInterface, PostgresInterface
 
-dy = Dispatchy()
+dy = Dispatch()
 
 # Define common dispatch functions
 @dy
