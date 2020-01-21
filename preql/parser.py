@@ -195,6 +195,7 @@ parser = Lark.open(
     parser='lalr',
     start=['stmts', 'expr'],
     maybe_placeholders=True,
+    propagate_positions=True,
     # transformer=T()
 )
 

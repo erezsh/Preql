@@ -278,11 +278,6 @@ def compile_remote(state: State, cmp: ast.Compare):
 def compile_remote(state: State, attr: ast.Attr):
     inst = compile_remote(state, attr.expr)
 
-    # if isinstance(inst, types.PqlType): # ugly
-    #     if attr.name == '__name__':
-    #         return compile_remote(state, ast.Const(None, types.String, str(inst.name)))
-    #     raise pql_AttributeError(attr.meta, "'%s' has no attribute '%s'" % (inst, attr.name))
-
     try:
         return inst.get_attr(attr.name)
     except pql_AttributeError:
@@ -543,7 +538,7 @@ def alias_table(state: State, t):
 
 def instanciate_table(state: State, t: types.TableType, source: Sql, instances, values=None):
     if values is None:
-        columns = {name: objects.make_column_instance(sql.Name(c, name), c) for name, c in t.columns.items()}
+        columns = {name: objects.make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in t.columns.items()}
         return objects.TableInstance(source, t, objects.merge_subqueries(instances), columns)
 
     columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
