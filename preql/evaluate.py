@@ -84,9 +84,13 @@ def _execute(state: State, table_def: ast.TableDef):
     state.db.query(sql)
 
 @dy
-def _execute(state: State, var_def: ast.VarDef):
+def _set_value(state: State, name: ast.Name, value):
+    state.set_var(name.name, value)
+
+@dy
+def _execute(state: State, var_def: ast.SetValue):
     res = simplify(state, var_def.value)
-    state.set_var(var_def.name, res)
+    _set_value(state, var_def.name, res)
 
 @dy
 def _execute(state: State, func_def: ast.FuncDef):

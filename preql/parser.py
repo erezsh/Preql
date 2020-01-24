@@ -161,7 +161,7 @@ class T(Transformer):
     # Statements / Declarations
     param = objects.Param
     func_def = lambda self, meta, *args: ast.FuncDef(meta, objects.UserFunction(*args))
-    var_decl = ast.VarDef
+    set_value = ast.SetValue
     struct_def = ast.StructDef
     table_def = ast.TableDef
     col_def = ast.ColumnDef
@@ -189,10 +189,30 @@ class T(Transformer):
         raise Exception("Unknown rule:", data)
 
 
+class Postlexer:
+    def process(self, stream):
+        paren_level = 0
+        for token in stream:
+            if not (paren_level and token.type == '_NL'):
+                yield token
+
+            if token.type == 'LPAR':
+                paren_level += 1
+            elif token.type == 'RPAR':
+                paren_level -= 1
+                assert paren_level >= 0
+
+    # XXX Hack for ContextualLexer. Maybe there's a more elegant solution?
+    @property
+    def always_accept(self):
+        return ('_NL',)
+
+
 parser = Lark.open(
     'preql.lark',
     rel_to=__file__,
     parser='lalr',
+    # postlex=Postlexer(),
     start=['stmts', 'expr'],
     maybe_placeholders=True,
     propagate_positions=True,

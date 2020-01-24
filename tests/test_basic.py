@@ -401,12 +401,6 @@ class BasicTests(TestCase):
     def test_column_default(self):
         preql = self.Preql()
         preql('''
-            count = 0
-            func counter()
-                count = count + 1
-                return count
-            end
-
             table A {
                 x: int
                 y: int = 2

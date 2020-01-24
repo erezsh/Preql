@@ -155,8 +155,8 @@ class StructDef(Statement, Definition):
     members: list
 
 @dataclass
-class VarDef(Statement):
-    name: str
+class SetValue(Statement):
+    name: (Name, Attr)
     value: Expr
 
 @dataclass

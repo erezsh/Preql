@@ -1,13 +1,13 @@
-func _sql_agg_func(name, field)
-    if isa(field, aggregate)
+func _sql_agg_func(name, field) {
+    if (isa(field, aggregate)) {
         return SQL(int, name + "($field)")
-    else
-        if isa(field, list)
+    } else {
+        if (isa(field, list)) {
             return int( field{ => value: _sql_agg_func(name, value) } )  # Recursive
-        end
-    end
+        }
+    }
     throw new TypeError(name + "() doesn't support field of type '" + (type(field).__name__) + "'")
-end
+}
 func sum(field) = _sql_agg_func("SUM", field)
 func min(field) = _sql_agg_func("MIN", field)
 func max(field) = _sql_agg_func("MAX", field)
@@ -16,63 +16,63 @@ func limit(tbl, lim) = tbl[..lim] # XXX remove #SQL(type(table), "SELECT * FROM 
 func limit_offset(table, lim, offset) = SQL(type(table), "SELECT * FROM $table LIMIT $lim OFFSET $offset")
 func enum(tbl) = tbl{index: SQL(int, "row_number() over ()"), ...}
 
-if get_db_type() == "postgres"
+if (get_db_type() == "postgres") {
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
     func now() = SQL(datetime, "NOW()") # Postgres
     func random() = SQL(datetime, "RANDOM()") # Postgres
     func pi() = SQL(float, "PI()")
-else
-    if get_db_type() == "sqlite"
+} else {
+    if (get_db_type() == "sqlite") {
         func repeat(s, num) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')") # Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
         func pi() = SQL(float, "3.141592653589793")
 
-    else
+    } else {
         throw new TypeError("Unexpected")
-    end
-end
+    }
+}
 
 # func sample_ratio(tbl, ratio) = SQL(type(tbl), "SELECT * FROM $tbl where abs(CAST(random() AS REAL))/9223372036854775808 < $ratio")
-func sample_ratio(tbl, ratio)
+func sample_ratio(tbl, ratio) {
     r = random()    # Will be re-evaluated for every row
     return SQL(type(tbl), "SELECT * FROM $tbl where $r < $ratio")
-end
+}
 
-func sample_fast(tbl, size)
+func sample_fast(tbl, size) {
     # TODO Not working right now
     c = count(tbl)
-    if size >= c
+    if (size >= c) {
         throw new ValueError("Asking for a sample size larger than the table")
-    end
-    if c == 0
+    }
+    if (c == 0) {
         return tbl
-    end
+    }
 
     results = temptable(limit(sample_ratio(tbl, 1.05 * size / c), size))
-    if count(results) == size
+    if (count(results) == size) {
         return results
-    end
+    }
     return results + limit(tbl, size - count(results))
-end
+}
 
-func _only_one(table)
+func _only_one(table) {
     cnt = count(table)
-    if cnt == 0
+    if (cnt == 0) {
         throw new ValueError("Table is empty")
-    end
-    if cnt > 1
+    }
+    if (cnt > 1) {
         throw new ValueError("More than one rows in table")
-    end
+    }
     return table
-end
-func _only_one_or_none(table)
+}
+func _only_one_or_none(table) {
     cnt = count(table)
-    if cnt == 0
+    if (cnt == 0) {
         return null
-    end
-    if cnt > 1
+    }
+    if (cnt > 1) {
         throw new ValueError("More than one rows in table")
-    end
+    }
     return table
-end
+}

@@ -1,7 +1,7 @@
 stmts: _NL? stmt+
-?stmt: (table_def | struct_def | func_def | var_decl | print | if_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
+?stmt: (table_def | struct_def | func_def | set_value | insert | print | if_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
 
-table_def: "table" name "{" _sep? col_defs? "}" _NL
+table_def: "table" name ("{" _sep? col_defs? "}" | "=" expr)_NL
 col_defs: (col_def _sep)* col_def _sep?
 col_def: name ":" coltype ["->" expr] ["=" expr]
 ?coltype: type
@@ -16,17 +16,17 @@ member_def: name ":" type
 
 typemod: PK | NULLABLE
 
-func_def: "func" name func_params ("=" expr _NL | final_codeblock)
-final_codeblock: _NL stmt* "end" _NL -> codeblock
-inner_codeblock: _NL stmt*           -> codeblock
-if_stmt: "if" expr inner_codeblock ("end" _NL | "else" final_codeblock)
+func_def: "func" name func_params ("=" expr _NL | codeblock _NL)
+try_catch: "try" codeblock _NL? "catch" "(" expr ")" codeblock _NL
+if_stmt: "if" "(" expr ")" codeblock (_NL | _NL? "else" codeblock _NL)
+codeblock: "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
 throw: "throw" expr _NL
-try_catch: "try" inner_codeblock "catch" expr final_codeblock
-var_decl: name "=" expr _NL
+set_value: atom "=" expr _NL
 print: "print" expr _NL
 func_params: "(" (param ("," param)*)? ")"
-param: name    // TODO type? default value?
+param: name [":" type] ["=" expr]   // TODO type? default value?
+insert: name "+=" expr _NL
 
 _sep: "," | "," _NL | _NL
 expr_list: "[" _NL? (expr _sep)* expr _NL? "]"
@@ -65,13 +65,9 @@ delete: molecule "delete" expr_list
 
 !add_op: "+"|"-" | "&" | "|"
 !mul_op: "*"|"/"|"%"|"//"
-// <> isn't actually a valid comparison operator in Python. It's here for the
-// sake of a __future__ import described in PEP 401 (which really works :-)
-
 
 ?molecule: atom
      | func_call
-     | getattr
      | list
      | selection
      | projection
@@ -79,25 +75,32 @@ delete: molecule "delete" expr_list
      | order
      | update
      | delete
-     | var
      | "(" _NL? expr _NL? ")"
      | "-" molecule -> neg
      | "^" molecule -> desc
      | new
      | one
+     | const
+
+?atom: var
+     | getattr
 
 one: "one" [NULLABLE] molecule
 
 list: "[" _NL? (expr (_sep expr)* _NL?)? "]"
 
 new: "new" name _func_args
+   | _GET_OR_NEW name _func_args -> get_or_new
+
+_GET_OR_NEW.10: "new?"
+
 func_call: molecule _func_args
 _func_args: "(" func_args ")"
 func_args: (named_expr ("," named_expr)*)?
 
 named_expr: [name ":"] expr
 
-?atom: SIGNED_INT -> int
+?const: SIGNED_INT -> int
       | SIGNED_FLOAT -> float
       | STRING -> string
       | "null" -> null
@@ -111,7 +114,7 @@ ellipsis: "..."
 
 
 
-getattr: molecule "." name
+getattr: [molecule] "." name
 name: NAME
 var: name
 
