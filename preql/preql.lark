@@ -1,7 +1,8 @@
 stmts: _NL? stmt+
-?stmt: (table_def | struct_def | func_def | set_value | insert | print | if_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
+?stmt: (table_def | struct_def | func_def | set_value | insert_rows | print | if_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
 
-table_def: "table" name ("{" _sep? col_defs? "}" | "=" expr)_NL
+table_def: "table" name "{" _sep? col_defs? "}" _NL
+         | "table" name "=" expr _NL -> table_def_by_expr
 col_defs: (col_def _sep)* col_def _sep?
 col_def: name ":" coltype ["->" expr] ["=" expr]
 ?coltype: type
@@ -26,7 +27,7 @@ set_value: atom "=" expr _NL
 print: "print" expr _NL
 func_params: "(" (param ("," param)*)? ")"
 param: name [":" type] ["=" expr]   // TODO type? default value?
-insert: name "+=" expr _NL
+insert_rows: atom "+=" expr _NL
 
 _sep: "," | "," _NL | _NL
 expr_list: "[" _NL? (expr _sep)* expr _NL? "]"
@@ -90,9 +91,11 @@ one: "one" [NULLABLE] molecule
 list: "[" _NL? (expr (_sep expr)* _NL?)? "]"
 
 new: "new" name _func_args
-   | _GET_OR_NEW name _func_args -> get_or_new
+     | _NEW_ARRAY name _func_args -> new_rows
+//    | _GET_OR_NEW name _func_args -> get_or_new
 
 _GET_OR_NEW.10: "new?"
+_NEW_ARRAY.10: "new[]"
 
 func_call: molecule _func_args
 _func_args: "(" func_args ")"
@@ -104,6 +107,8 @@ named_expr: [name ":"] expr
       | SIGNED_FLOAT -> float
       | STRING -> string
       | "null" -> null
+      | "false" -> false
+      | "true" -> true
       | ellipsis
      //  | range
 

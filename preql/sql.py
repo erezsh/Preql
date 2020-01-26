@@ -206,11 +206,23 @@ class Compare(Scalar):
     exprs: List[Sql]
 
     def __post_init__(self):
-        assert self.op in ('=', '<=', '>=', '<', '>', '<>', '!='), self.op
+        assert self.op in ('=', '<=', '>=', '<', '>', '!='), self.op
 
     def _compile(self, qb):
+        op = self.op
+        if qb.target == sqlite:
+            op = {
+                '=': 'is',
+                '!=': 'is not'
+            }.get(op, op)
+        else:
+            op = {
+                '=': 'is not distinct from',
+                '!=': 'is distinct from'
+            }.get(op, op)
+
         elems = [e.compile(qb).text for e in self.exprs]
-        return (f' {self.op} ').join(elems)
+        return (f' {op} ').join(elems)
 
 @dataclass
 class Like(Scalar):

@@ -25,7 +25,7 @@ class Name(Expr):
 @dataclass
 class Attr(Expr):
     "Reference to an attribute (usually a column)"
-    expr: types.PqlObject #Expr
+    expr: Optional[types.PqlObject] #Expr
     name: str
 
 @dataclass
@@ -45,6 +45,10 @@ class Compare(Expr):
 @dataclass
 class Arith(Expr):
     op: str
+    args: List[types.PqlObject]
+
+@dataclass
+class Or(Expr):
     args: List[types.PqlObject]
 
 @dataclass
@@ -108,6 +112,11 @@ class New(Expr):
     args: list   # Func args
 
 @dataclass
+class NewRows(Expr):
+    type: str
+    args: list   # Func args
+
+@dataclass
 class FuncCall(Expr):
     func: Any   # objects.Function ?
     args: list   # Func args
@@ -156,6 +165,11 @@ class StructDef(Statement, Definition):
 
 @dataclass
 class SetValue(Statement):
+    name: (Name, Attr)
+    value: Expr
+
+@dataclass
+class InsertRows(Statement):
     name: (Name, Attr)
     value: Expr
 

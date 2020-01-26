@@ -96,6 +96,7 @@ Text = Primitive('text', text, False)
 Bool = Primitive('bool', bool, False)
 DateTime = DateTimeType('datetime', datetime, False)
 
+
 # Collections
 
 class Collection(PqlType):
@@ -133,6 +134,25 @@ class ListType(Collection):
     def __repr__(self):
         return f'list[{self.elemtype}]'
 
+@dataclass
+class OptionalType(PqlType):
+    type: PqlType
+
+    def flatten(self, path):
+        return [(p, OptionalType(t)) for p, t in self.type.flatten(path)]
+
+    @property
+    def is_concrete(self):
+        return self.type.is_concrete
+    @property
+    def primary_key(self):
+        return self.type.primary_key
+
+    def restructure_result(self, i):
+        return self.type.restructure_result(i)
+
+    def kernel_type(self):
+        return self.type.kernel_type()
 
 # Not supported by Postgres. Will require a trick (either alternating columns, or json type, etc)
 # @dataclass

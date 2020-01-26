@@ -196,6 +196,21 @@ class BasicTests(TestCase):
         # import pdb
         # pdb.set_trace()
 
+    def test_join_to_temptable(self):
+        preql = self.Preql()
+        preql("""
+            l1 = [1, 2, 3]
+            l2 = [1, 2, 4]
+            t = temptable(leftjoin(a: l1.value, b: l2.value))
+
+            q1 = t[a.value == 1] {a.value}
+            q2 = t[b.value==null] {a.value}
+            q3 = t[b==null] {a}
+        """)
+
+        assert list(preql.q1) == [{'value': 1}]
+        assert list(preql.q2) == [{'value': 3}]
+        assert list(preql.q3) == [{'a': {'value': 3}}]
 
     def _test_groupby(self, preql):
         res = preql("Country {language => count(id)}")
@@ -430,15 +445,15 @@ class BasicTests(TestCase):
         preql = self.Preql()
         preql.load('simple1.pql', rel_to=__file__)
 
-        self.assertEqual(preql.english(), [{'id': 2, 'name': 'Eric Blaire'}, {'id': 3, 'name': 'H.G. Wells'}])
+        self.assertEqual(preql.english, [{'id': 2, 'name': 'Eric Blaire'}, {'id': 3, 'name': 'H.G. Wells'}])
         assert preql.by_country('Israel') == [{'id': 1, 'name': 'Erez Shinan', 'country': 'Israel'}]
 
-        assert preql.english2() == [{'name': 'H.G. Wells'}, {'name': 'Eric Blaire'}]
+        assert preql.english2 == [{'name': 'H.G. Wells'}, {'name': 'Eric Blaire'}]
         # assert preql.english3().json() == [{'n': 'H.G. Wells'}, {'n': 'Eric Blaire'}] # TODO
 
         # assert preql.person1() == [{'id': 1, 'name': 'Erez Shinan', 'country': 'Israel'}]
         # assert preql.person1b() == [{'id': 2, 'name': 'Eric Blaire', 'country': 'England'}]
-        assert preql.demography() == [{'country': 'England', 'population': 2}, {'country': 'Israel', 'population': 1}]
+        assert preql.demography == [{'country': 'England', 'population': 2}, {'country': 'Israel', 'population': 1}]
 
         # expected = [{'country': 'England', 'population': ['Eric Blaire', 'H.G. Wells']}, {'country': 'Israel', 'population': ['Erez Shinan']}]
         # res = preql('Person {country => population: name}')

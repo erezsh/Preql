@@ -108,8 +108,9 @@ def pql_temptable(state: State, expr: ast.Expr):
     assert isinstance(expr, objects.TableInstance)
     name = get_alias(state, "temp_" + expr.type.name)
     table = types.TableType(name, expr.type.columns, temporary=True)
+
     state.db.query(compile_type_def(state, table))
-    state.db.query(sql.Insert(types.null, name, expr.code))
+    state.db.query(sql.Insert(types.null, name, expr.code), expr.subqueries)
 
     return instanciate_table(state, table, sql.TableName(table, table.name), [])
 
@@ -152,7 +153,7 @@ def pql_concat(state, t1, t2):
 
 
 
-def _join(state: State, join: str, exprs: dict, joinall=False):
+def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
     assert len(exprs) == 2
     exprs = {name: compile_remote(state, value) for name,value in exprs.items()}
     assert all(isinstance(x, objects.Instance) for x in exprs.values())
@@ -179,6 +180,11 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
 
     col_types = {name: types.StructType(name, {n:c.type for n, c in table.columns.items()})
                 for name, table in safezip(exprs, tables)}
+
+    # Update nullable for left/right/outer joins
+    col_types = {name: types.OptionalType(t) if n else t
+                for (name, t), n in safezip(col_types.items(), nullable or [False]*len(col_types))}
+
     table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), SafeDict(col_types), False)
 
     conds = [] if joinall else [sql.Compare(types.Bool, '=', [cols[0].code, cols[1].code])]
@@ -191,7 +197,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False):
 def pql_join(state, tables):
     return _join(state, "JOIN", tables)
 def pql_leftjoin(state, tables):
-    return _join(state, "LEFT JOIN", tables)
+    return _join(state, "LEFT JOIN", tables, nullable=[False, True])
 def pql_joinall(state: State, tables):
     return _join(state, "JOIN", tables, True)
 

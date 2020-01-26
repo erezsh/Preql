@@ -92,6 +92,18 @@ def _execute(state: State, var_def: ast.SetValue):
     res = simplify(state, var_def.value)
     _set_value(state, var_def.name, res)
 
+
+@dy
+def _insert_rows(state: State, target: objects.TableInstance, source: objects.TableInstance):
+    import pdb
+    pdb.set_trace()
+
+@dy
+def _execute(state: State, insert_rows: ast.InsertRows):
+    lval = simplify(state, insert_rows.name)
+    rval = simplify(state, insert_rows.value)
+    return _insert_rows(state, lval, rval)
+
 @dy
 def _execute(state: State, func_def: ast.FuncDef):
     # res = simplify(state, func_def.value)
@@ -208,6 +220,10 @@ def simplify(state: State, funccall: ast.FuncCall):
 
 @dy
 def simplify(state: State, obj: ast.Arith):
+    return obj.replace(args=simplify_list(state, obj.args))
+
+@dy
+def simplify(state: State, obj: ast.Or):
     return obj.replace(args=simplify_list(state, obj.args))
 
 @dy
@@ -356,12 +372,57 @@ def simplify(state: State, inst: objects.ValueInstance):
 def simplify(state: State, inst: objects.TableInstance):
     return inst
 
+
+@dy
+def simplify(state: State, new: ast.NewRows):
+    obj = state.get_var(new.type)
+
+    if isinstance(obj, objects.TableInstance):
+        obj = obj.type
+
+    assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+
+    if len(new.args) > 1:
+        raise NotImplementedError("Not yet implemented. Requires column-wise table concat (use join and enum)")
+
+    arg ,= new.args
+
+    # TODO postgres can do it better!
+    field = arg.name
+    table = compile_remote(state, arg.value)
+    import pdb
+    pdb.set_trace()
+    rows = localize(state, table)
+    ids = [_new_row(state, obj, [(field, value) for value in row])
+            for row in rows]
+    return ids
+
+def _new_row(state, table, key_value_list):
+    destructured_pairs = []
+    for k, v in key_value_list:
+        if isinstance(k.type.actual_type(), types.StructType):
+            v = localize(state, evaluate(state, v))
+            for (path,k2), v2 in safezip(k.orig.flatten([k.name]), v):
+                destructured_pairs.append(('_'.join(path), v2))
+        else:
+            v = localize(state, evaluate(state, v))
+            destructured_pairs.append((k.name, v))
+
+    keys = [name for (name, _) in destructured_pairs]
+    values = [sql_repr(v) for (_,v) in destructured_pairs]
+    q = sql.InsertConsts(types.null, sql.TableName(table, table.name), keys, values)
+
+    state.db.query(q)
+    rowid = state.db.query(sql.LastRowId())
+    return ast.Const(None, types.Int, rowid)   # Todo Row reference / query
+
 @dy
 def simplify(state: State, new: ast.New):
     # XXX This function has side-effects.
     # Perhaps it belongs in resolve, rather than simplify?
     obj = state.get_var(new.type)
 
+    # XXX Assimilate this special case
     if isinstance(obj, type) and issubclass(obj, PreqlError):
         def create_exception(state, msg):
             msg = localize(state, compile_remote(state, msg))
@@ -379,23 +440,7 @@ def simplify(state: State, new: ast.New):
     cons = TableConstructor([objects.Param(name.meta, name, p, p.default, orig=p) for name, p in table.params()])
     matched = cons.match_params(new.args)
 
-    destructured_pairs = []
-    for k, v in matched:
-        if isinstance(k.type.actual_type(), types.StructType):
-            v = localize(state, evaluate(state, v))
-            for (path,k2), v2 in safezip(k.orig.flatten([k.name]), v):
-                destructured_pairs.append(('_'.join(path), v2))
-        else:
-            v = localize(state, evaluate(state, v))
-            destructured_pairs.append((k.name, v))
-
-    keys = [name for (name, _) in destructured_pairs]
-    values = [sql_repr(v) for (_,v) in destructured_pairs]
-    q = sql.InsertConsts(types.null, sql.TableName(table, table.name), keys, values)
-
-    state.db.query(q)
-    rowid = state.db.query(sql.LastRowId())
-    return ast.Const(None, types.Int, rowid)   # Todo Row reference / query
+    return _new_row(state, table, matched)
 
 
 

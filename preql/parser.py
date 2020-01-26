@@ -7,16 +7,14 @@ from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
 
-# class Name(str):
-class Name(str):
+class Str(str):
     def __new__(cls, value, meta):
         obj = str.__new__(cls, value)
         obj.meta = meta
         return obj
 
 def token_value(self, meta, t):
-    # return Name(str(t), meta_from_token(t))
-    return Name(str(t), meta)
+    return Str(str(t), meta)
 
 @v_args(inline=False)
 def as_list(_, args):
@@ -45,6 +43,7 @@ def meta_d(text, meta):
     )
 
 def _args_wrapper(f, data, children, meta):
+    "Create meta with 'code' from transformer"
     return f(meta_d(f.__self__.code, meta), *children)
 
 # Taken from Lark (#TODO provide it in lark utils?)
@@ -91,6 +90,10 @@ class T(Transformer):
 
     def null(self, meta):
         return ast.Const(meta, types.null, None)
+    def false(self, meta):
+        return ast.Const(meta, types.Bool, False)
+    def true(self, meta):
+        return ast.Const(meta, types.Bool, True)
 
     @v_args(inline=False, meta=True)
     def list(self, items, meta):
@@ -126,6 +129,9 @@ class T(Transformer):
     def _arith_expr(self, meta, a, op, b):
         return ast.Arith(meta, op, [a,b])
 
+    def or_test(self, meta, a, b):
+        return ast.Or(meta, [a, b])
+
     add_expr = _arith_expr
     term = _arith_expr
     power = _arith_expr
@@ -142,6 +148,7 @@ class T(Transformer):
     delete = ast.Delete
     desc = ast.DescOrder
     new = ast.New
+    new_rows = ast.NewRows
     func_call = ast.FuncCall
     range = ast.Range
 
@@ -162,6 +169,7 @@ class T(Transformer):
     param = objects.Param
     func_def = lambda self, meta, *args: ast.FuncDef(meta, objects.UserFunction(*args))
     set_value = ast.SetValue
+    insert_rows = ast.InsertRows
     struct_def = ast.StructDef
     table_def = ast.TableDef
     col_def = ast.ColumnDef
@@ -172,6 +180,9 @@ class T(Transformer):
     if_stmt = ast.If
     try_catch = ast.Try
     one = lambda self, meta, nullable, expr: ast.One(meta, expr, nullable is not None)
+
+    def table_def_by_expr(self, meta, name, table_expr):
+        return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr]))
 
     # def ellipsis(self, meta):
     #     return ast.Ellipsis(meta)
@@ -212,7 +223,7 @@ parser = Lark.open(
     'preql.lark',
     rel_to=__file__,
     parser='lalr',
-    # postlex=Postlexer(),
+    postlex=Postlexer(),
     start=['stmts', 'expr'],
     maybe_placeholders=True,
     propagate_positions=True,

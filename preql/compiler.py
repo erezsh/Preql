@@ -48,7 +48,7 @@ def compile_type(state: State, type_: types.RelationalColumn):
 def compile_type(state: State, type_: types.DatumColumn):
     return compile_type(state, type_.type)
 
-def _compile_type_primitive(type):
+def _compile_type_primitive(type, nullable):
     s = {
         'int': "INTEGER",
         'string': "VARCHAR(4000)",
@@ -57,22 +57,30 @@ def _compile_type_primitive(type):
         'text': "TEXT",
         'datetime': "TIMESTAMP",
     }[type.name]
-    if not type.nullable:
+    assert not type.nullable
+    if not nullable:
         s += " NOT NULL"
     return s
 @dy
-def compile_type(state: State, type: types.Primitive):
-    return _compile_type_primitive(type)
+def compile_type(state: State, type: types.Primitive, nullable=False):
+    return _compile_type_primitive(type, nullable)
 @dy
-def compile_type(state: State, type: types.DateTimeType):
-    return _compile_type_primitive(type)
+def compile_type(state: State, type: types.DateTimeType, nullable=False):
+    return _compile_type_primitive(type, nullable)
 
 @dy
-def compile_type(state: State, idtype: types.IdType):
+def compile_type(state: State, type: types.OptionalType):
+    return compile_type(state, type.type, True)
+
+@dy
+def compile_type(state: State, idtype: types.IdType, nullable=False):
     if state.db.target == sql.postgres:
-        return "SERIAL" # Postgres
+        s = "SERIAL" # Postgres
     else:
-        return "INTEGER"
+        s = "INTEGER"
+    if not nullable:
+        s += " NOT NULL"
+    return s
 
 
 def _process_fields(state: State, fields):
@@ -257,8 +265,8 @@ def compile_remote(state: State, cmp: ast.Compare):
 
     else:
         sql_cls = sql.Compare
-        for i in insts:
-            assert_type(cmp.meta, i.type, types.AtomicType, "Expecting type %s, got %s")
+        # for i in insts:
+        #     assert_type(cmp.meta, i.type, types.AtomicType, "Expecting type %s, got %s")
         # TODO should be able to coalesce, int->float, id->int, etc.
         #      also different types should still be comparable to some degree?
         # type_set = {i.type for i in insts}
@@ -267,12 +275,20 @@ def compile_remote(state: State, cmp: ast.Compare):
 
     op = {
         '==': '=',
-        '^in': 'not in'
+        '^in': 'not in',    # TODO !in
+        '<>': '!=',
     }.get(cmp.op, cmp.op)
 
-    code = sql_cls(types.Bool, op, [e.code for e in insts])
+    insts = [_get_comparable_instance(i) for i in insts]
+
+    code = sql_cls(types.Bool, op, [i.code for i in insts])
     inst = objects.Instance.make(code, types.Bool, insts)
     return inst
+
+def _get_comparable_instance(i):
+    if isinstance(i, objects.StructColumnInstance):
+        return list(i.members.values())[0]  # Take the first column (XXX refactor into method?)
+    return i
 
 @dy
 def compile_remote(state: State, attr: ast.Attr):
@@ -282,7 +298,7 @@ def compile_remote(state: State, attr: ast.Attr):
         return inst.get_attr(attr.name)
     except pql_AttributeError:
         meta = attr.name.meta.replace(parent=attr.meta)
-        raise pql_AttributeError(meta, f"Objects of type '{inst.type}' have no attributes (for now)")
+        raise pql_AttributeError(meta, f"Objects of type '{inst.type}' have no attributes (compiler_type={type(inst)}")
 
 
 

@@ -274,7 +274,7 @@ class ColumnReference(ColumnInstance):
         return self.column.type
     @property
     def subqueries(self):
-        return self.column.subqueries
+        return merge_subqueries([self.column, self.table])
 
     def flatten_path(self, path):
         return self.column.flatten_path(path)

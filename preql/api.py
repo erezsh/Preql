@@ -20,6 +20,9 @@ def python_to_pql(value):
         return ast.Const(None, types.String, value)
     elif isinstance(value, int):
         return ast.Const(None, types.Int, value)
+    elif isinstance(value, list):
+        # return ast.Const(None, types.ListType(types.String), value)
+        return objects.List_(None, list(map(python_to_pql, value)))
     assert False, value
 
 
@@ -99,6 +102,8 @@ def promise(state, inst):
 
 
 class Interface:
+    __name__ = "Preql"
+
     def __init__(self, db_uri=None, debug=True, save_last=None):
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
@@ -115,10 +120,14 @@ class Interface:
         self.engine.close()
 
     def __getattr__(self, fname):
-        def delegate(*args, **kw):
-            assert not kw
-            return self._wrap_result( self.interp.call_func(fname, [python_to_pql(a) for a in args]) )
-        return delegate
+        var = self.interp.state.get_var(fname)
+        if isinstance(var, objects.Function):
+            def delegate(*args, **kw):
+                assert not kw
+                return self._wrap_result( self.interp.call_func(fname, [python_to_pql(a) for a in args]) )
+            return delegate
+        else:
+            return self._wrap_result( var )
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
