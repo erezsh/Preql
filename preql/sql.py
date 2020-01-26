@@ -310,11 +310,14 @@ class ColumnAlias(Sql):
 
 @dataclass
 class Insert(Sql):
-    table_name: str
+    table_type: types.TableType
     query: Sql
 
     def _compile(self, qb):
-        return f'INSERT INTO {self.table_name} SELECT * FROM ' + self.query.compile(qb).text
+        t = self.table_type
+        # params = [n for n,_ in t.flat_params()]
+        # return f'INSERT INTO {t.name}({", ".join(params)}) SELECT * FROM ' + self.query.compile(qb).text
+        return f'INSERT INTO {t.name} SELECT * FROM ' + self.query.compile(qb).text
 
 
 @dataclass

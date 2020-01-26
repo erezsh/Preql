@@ -261,6 +261,7 @@ class ColumnReference(ColumnInstance):
     def __init__(self, table, name):
         self.table = table
         self.name = name
+        assert self.column
 
     @property
     def column(self):

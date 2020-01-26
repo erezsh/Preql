@@ -111,10 +111,10 @@ def _ensure_col_instance(state, meta, i):
     if isinstance(i, objects.ColumnInstance):
         return i
     elif isinstance(i, objects.Instance):
-        if isinstance(i.type, (types.Primitive, types.NullType)):
+        if isinstance(i.type, (types.Primitive, types.NullType, types.IdType)):
             return objects.make_column_instance(i.code, i.type, [i])
 
-    raise pql_TypeError(meta, f"Expected a valid expression. Instead got: {i.repr(state)}")
+    raise pql_TypeError(meta, f"Expected a valid expression. Instead got: {i.repr(state)} (compiler_type={type(i)})")
     # assert False, i
 
 
@@ -154,6 +154,7 @@ def compile_remote(state: State, proj: ast.Projection):
             used.add(f.name)
 
     columns = table.members if isinstance(table, objects.StructColumnInstance) else table.columns
+    columns = SafeDict(columns).update({'this': table.to_struct_column()}) # XXX Is this the right place to introduce `this` ?
 
     with state.use_scope(columns):
         fields = _process_fields(state, fields)
@@ -298,7 +299,7 @@ def compile_remote(state: State, attr: ast.Attr):
         return inst.get_attr(attr.name)
     except pql_AttributeError:
         meta = attr.name.meta.replace(parent=attr.meta)
-        raise pql_AttributeError(meta, f"Objects of type '{inst.type}' have no attributes (compiler_type={type(inst)}")
+        raise pql_AttributeError(meta, f"'{inst.repr(state)}' has no attribute {attr.name} (compiler_type={type(inst)}")
 
 
 
@@ -310,7 +311,7 @@ def call_pql_func(state, name, args):
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
     arg_types = [a.type for a in args]
-    arg_types_set = set(arg_types)
+    arg_types_set = set(arg_types) - {types.ListType(types.any_t)}  # XXX hacky
 
     if GlobalSettings.Optimize:
         if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
@@ -363,7 +364,10 @@ def compile_remote(state: State, arith: ast.Arith):
             meta = arith.op.meta.replace(parent=arith.meta)
             raise pql_TypeError(meta, f"Operation '{arith.op}' not supported for tables")
 
-        return state.get_var(op).func(state, *args)
+        try:
+            return state.get_var(op).func(state, *args)
+        except PreqlError as e:
+            raise e.replace(meta=arith.meta) from e
 
     if not all(isinstance(a.type, (types.Primitive, types.ListType)) for a in args):
         meta = arith.op.meta.replace(parent=arith.meta)
@@ -390,6 +394,11 @@ def compile_remote(state: State, arith: ast.Arith):
 @dy # Could happen because sometimes simplify(...) calls compile_remote
 def compile_remote(state: State, i: objects.Instance):
     return i
+
+@dy
+def compile_remote(state: State, t: types.PqlType):
+    return t
+
 # @dy
 # def compile_remote(state: State, i: objects.TableInstance):
     return i
@@ -435,7 +444,7 @@ def compile_remote(state: State, lst: objects.List_):
     # Or just evaluate?
 
     if not lst.elems:
-        list_type = types.ListType(types.null)      # XXX Any type?
+        list_type = types.ListType(types.any_t)      # XXX Any type?
         code = sql.EmptyList(list_type)
         return instanciate_table(state, list_type, code, [])
 

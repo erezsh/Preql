@@ -18,7 +18,7 @@ from typing import List, Optional, Any
 
 from .utils import safezip, dataclass, SafeDict
 from .interp_common import assert_type
-from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError
+from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -26,8 +26,8 @@ from . import sql
 RawSql = sql.RawSql
 Sql = sql.Sql
 
-from .interp_common import State, dy, get_alias, sql_repr
-from .compiler import compile_remote, compile_type_def, instanciate_table
+from .interp_common import State, dy, get_alias, sql_repr, make_value_instance
+from .compiler import compile_remote, compile_type_def, instanciate_table, call_pql_func
 
 
 
@@ -88,21 +88,39 @@ def _set_value(state: State, name: ast.Name, value):
     state.set_var(name.name, value)
 
 @dy
+def _set_value(state: State, attr: ast.Attr, value):
+    raise NotImplementedError("")
+
+@dy
 def _execute(state: State, var_def: ast.SetValue):
     res = simplify(state, var_def.value)
     _set_value(state, var_def.name, res)
 
 
 @dy
-def _insert_rows(state: State, target: objects.TableInstance, source: objects.TableInstance):
-    import pdb
-    pdb.set_trace()
+def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstance):
+
+    target = simplify(state, target_name)
+
+    params = dict(target.type.params())
+    for p in params:
+        if p not in source.type.columns:
+            raise TypeError(None, f"Missing column {p} in table {source}")
+
+    assert len(params) == len(source.type.columns)
+
+    # XXX something wrong
+    code = sql.Insert(types.null, target.type, source.code)
+    state.db.query(code, source.subqueries)
+    return objects.null
 
 @dy
 def _execute(state: State, insert_rows: ast.InsertRows):
-    lval = simplify(state, insert_rows.name)
+    if not isinstance(insert_rows.name, ast.Name):
+        # TODO support Attr
+        raise pql_SyntaxError(insert_rows.meta, "L-value must be table name")
     rval = simplify(state, insert_rows.value)
-    return _insert_rows(state, lval, rval)
+    return _copy_rows(state, insert_rows.name, rval)
 
 @dy
 def _execute(state: State, func_def: ast.FuncDef):
@@ -152,7 +170,7 @@ def _execute(state: State, t: ast.Throw):
 
 def execute(state, stmt):
     if isinstance(stmt, ast.Statement):
-        return _execute(state, stmt)
+        return _execute(state, stmt) or objects.null
     return evaluate(state, stmt)
 
 
@@ -216,15 +234,29 @@ def simplify(state: State, funccall: ast.FuncCall):
         return func.func(state, *[v for k,v in args])
 
 
-
-
 @dy
 def simplify(state: State, obj: ast.Arith):
     return obj.replace(args=simplify_list(state, obj.args))
 
+
+@dy
+def test_nonzero(state: State, table: objects.TableInstance):
+    count = call_pql_func(state, "count", [table])
+    return localize(state, evaluate(state, count))
+
+@dy
+def test_nonzero(state: State, inst: objects.ValueInstance):
+    return bool(inst.local_value)
+
+
 @dy
 def simplify(state: State, obj: ast.Or):
-    return obj.replace(args=simplify_list(state, obj.args))
+    # return obj.replace(args=simplify_list(state, obj.args))
+    for expr in obj.args:
+        inst = evaluate(state, expr)
+        nz = test_nonzero(state, inst)
+        if nz:
+            return inst
 
 @dy
 def simplify(state: State, c: ast.CodeBlock):
@@ -390,12 +422,10 @@ def simplify(state: State, new: ast.NewRows):
     # TODO postgres can do it better!
     field = arg.name
     table = compile_remote(state, arg.value)
-    import pdb
-    pdb.set_trace()
     rows = localize(state, table)
     ids = [_new_row(state, obj, [(field, value) for value in row])
             for row in rows]
-    return ids
+    return objects.List_(new.meta, [make_value_instance(rowid, table.type.columns['id'], force_type=True) for rowid in ids]) # XXX find a nicer way
 
 def _new_row(state, table, key_value_list):
     destructured_pairs = []
@@ -414,7 +444,7 @@ def _new_row(state, table, key_value_list):
 
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
-    return ast.Const(None, types.Int, rowid)   # Todo Row reference / query
+    return make_value_instance(rowid, table.columns['id'], force_type=True)  # XXX find a nicer way
 
 @dy
 def simplify(state: State, new: ast.New):
@@ -455,11 +485,17 @@ def add_as_subquery(state: State, inst: objects.Instance):
 
 
 def evaluate(state, obj):
-    obj = simplify(state, obj)
-    if isinstance(obj, (objects.Function, PreqlError, type)):   # TODO base class on uncompilable?
-        return obj
+    simp_obj = simplify(state, obj)
+    if not simp_obj:
+        import pdb
+        pdb.set_trace()
+        simp_obj = simplify(state, obj)
 
-    return compile_remote(state, obj)
+    assert simp_obj, obj
+    if isinstance(simp_obj, (objects.Function, PreqlError, type)):   # TODO base class on uncompilable?
+        return simp_obj
+
+    return compile_remote(state, simp_obj)
 
 def localize(session, inst):
     assert inst

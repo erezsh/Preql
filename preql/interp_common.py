@@ -117,12 +117,16 @@ def sql_repr(x):
 
     return sql.Primitive(t, repr(x))
 
-def make_value_instance(value, type_=None):
+def make_value_instance(value, type_=None, force_type=False):
     r = sql_repr(value)
-    if type_:
-        assert isinstance(type_, (types.Primitive, types.NullType)), type_
-        assert r.type == type_
-    if GlobalSettings.Optimize:
-        return objects.ValueInstance.make(r, r.type, [], value)
+    if force_type:
+        assert type_
+    elif type_:
+        assert isinstance(type_, (types.Primitive, types.NullType, types.IdType)), type_
+        assert r.type == type_, (r.type, type_)
     else:
-        return objects.Instance.make(r, r.type, [])
+        type_ = r.type
+    if GlobalSettings.Optimize:
+        return objects.ValueInstance.make(r, type_, [], value)
+    else:
+        return objects.Instance.make(r, type_, [])

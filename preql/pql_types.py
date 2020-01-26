@@ -33,8 +33,15 @@ class NullType(PqlType):
     def restructure_result(self, res):
         return next(res)
 
+class AnyType(PqlType):
+    name = 'any'
+
+    def __repr__(self):
+        return self.name
+
 
 null = NullType()
+any_t = AnyType()
 
 
 class AtomicType(PqlType):
@@ -147,6 +154,9 @@ class OptionalType(PqlType):
     @property
     def primary_key(self):
         return self.type.primary_key
+    @property
+    def readonly(self):
+        return self.type.readonly
 
     def restructure_result(self, i):
         return self.type.restructure_result(i)
@@ -222,12 +232,17 @@ class TableType(Collection):
     def params(self):
         return [(name, c) for name, c in self.columns.items() if c.is_concrete and not c.readonly]
 
+    # def flat_params(self):
+        # XXX gets rid of readonly for nested columns. TODO make this less hacky (nested cols shouldn't be readonly in the first place)
+        # return [('_'.join(name), c) for name, c in self.flatten() if c.is_concrete and (len(name)>1 or not c.readonly)]
+
     def flat_length(self):
         # Maybe memoize
         return len(self.flatten())
 
     def __repr__(self):
-        return f'TableType({self.name})'
+        # return f'TableType({self.name})'
+        return f'TableType({self.name}, {{{", ".join(repr(t) for t in self.columns.values())}}})'
 
     def repr(self, pql):
         # return repr(self)
@@ -289,7 +304,7 @@ class StructType(Collection):
 
 
 @dataclass
-class IdType(AtomicType):
+class IdType(AtomicType):   # TODO subclass of int?
     table: TableType
 
     primary_key = True

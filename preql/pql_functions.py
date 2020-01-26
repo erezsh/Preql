@@ -110,7 +110,11 @@ def pql_temptable(state: State, expr: ast.Expr):
     table = types.TableType(name, expr.type.columns, temporary=True)
 
     state.db.query(compile_type_def(state, table))
-    state.db.query(sql.Insert(types.null, name, expr.code), expr.subqueries)
+
+    # code = sql.Select(table, expr.code, [
+    #         compile_remote(state, p).code
+    #         for p in expr.flatten() if p.type.is_concrete and not p.type.readonly])
+    state.db.query(sql.Insert(types.null, table, expr.code), expr.subqueries)
 
     return instanciate_table(state, table, sql.TableName(table, table.name), [])
 
@@ -133,7 +137,7 @@ def sql_bin_op(state, op, table1, table2, name):
     l1 = len(t1.type.flatten([]))
     l2 = len(t2.type.flatten([]))
     if l1 != l2:
-        raise pql_TypeError(f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
+        raise pql_TypeError(None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
     code = sql.TableArith(t1.type, op, [t1.code, t2.code])
     # TODO new type, so it won't look like the physical table
@@ -170,7 +174,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
             b = b.replace(table=alias_table(state, b.table))
             cols = a, b
         else:
-            assert isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance)    # TODO better error message (TypeError?)
+            assert isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance), (a,b)    # TODO better error message (TypeError?)
             a = alias_table(state, a)
             b = alias_table(state, b)
             cols = _auto_join(state, join, a, b)
