@@ -18,6 +18,9 @@ class PqlType(PqlObject):
     def repr(self, pql):
         return repr(self)
 
+    def flatten_type(self, path_base=[]):
+        return [('_'.join(path), t) for path, t in self.flatten_path(path_base)]
+
 # Primitives
 class NullType(PqlType):
     name = 'null'
@@ -27,7 +30,7 @@ class NullType(PqlType):
     def __repr__(self):
         return self.name
 
-    def flatten(self, path):
+    def flatten_path(self, path):
         return [(path, self)]
 
     def restructure_result(self, res):
@@ -45,7 +48,7 @@ any_t = AnyType()
 
 
 class AtomicType(PqlType):
-    def flatten(self, path):
+    def flatten_path(self, path):
         return [(path, self)]
 
     def restructure_result(self, res):
@@ -135,7 +138,7 @@ class ListType(Collection):
     def flat_length(self):
         return 1
 
-    def flatten(self, path):
+    def flatten_path(self, path):
         return [(path, self)]
 
     def __repr__(self):
@@ -145,8 +148,8 @@ class ListType(Collection):
 class OptionalType(PqlType):
     type: PqlType
 
-    def flatten(self, path):
-        return [(p, OptionalType(t)) for p, t in self.type.flatten(path)]
+    def flatten_path(self, path):
+        return [(p, OptionalType(t)) for p, t in self.type.flatten_path(path)]
 
     @property
     def is_concrete(self):
@@ -199,8 +202,8 @@ class DatumColumn(PqlType):
     def restructure_result(self, i):
         return self.type.restructure_result(i)
 
-    def flatten(self, path):
-        return self.type.flatten(path)
+    def flatten_path(self, path):
+        return self.type.flatten_path(path)
 
     @property
     def is_concrete(self):
@@ -226,8 +229,8 @@ class TableType(Collection):
     def __post_init__(self):
         assert isinstance(self.columns, SafeDict)
 
-    def flatten(self, path=[]):
-        return concat_for(col.flatten(path + [name]) for name, col in self.columns.items())
+    def flatten_path(self, path=[]):
+        return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
 
     def params(self):
         return [(name, c) for name, c in self.columns.items() if c.is_concrete and not c.readonly]
@@ -238,7 +241,7 @@ class TableType(Collection):
 
     def flat_length(self):
         # Maybe memoize
-        return len(self.flatten())
+        return len(self.flatten_path())
 
     def __repr__(self):
         # return f'TableType({self.name})'
@@ -299,8 +302,8 @@ class StructType(Collection):
     def __repr__(self):
         return f'<struct {self.name}{tuple(self.members.values())}>'
 
-    def flatten(self, path):
-        return concat_for(col.flatten(path + [name]) for name, col in self.members.items())
+    def flatten_path(self, path):
+        return concat_for(col.flatten_path(path + [name]) for name, col in self.members.items())
 
 
 @dataclass

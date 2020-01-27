@@ -428,12 +428,13 @@ def simplify(state: State, new: ast.NewRows):
     return objects.List_(new.meta, [make_value_instance(rowid, table.type.columns['id'], force_type=True) for rowid in ids]) # XXX find a nicer way
 
 def _new_row(state, table, key_value_list):
+    # TODO refactor out to match_flattened ?
     destructured_pairs = []
     for k, v in key_value_list:
         if isinstance(k.type.actual_type(), types.StructType):
             v = localize(state, evaluate(state, v))
-            for (path,k2), v2 in safezip(k.orig.flatten([k.name]), v):
-                destructured_pairs.append(('_'.join(path), v2))
+            for (path,k2), v2 in safezip(k.orig.flatten_type([k.name]), v):
+                destructured_pairs.append((path, v2))
         else:
             v = localize(state, evaluate(state, v))
             destructured_pairs.append((k.name, v))

@@ -210,6 +210,7 @@ def make_column_instance(code, type_, from_instances=()):
 
     if isinstance(kernel, types.StructType):
         # XXX this is all wrong!
+        assert isinstance(code, sql.Name)
         struct_sql_name = code.compile(sql.QueryBuilder(None)).text
         members = {name: make_column_instance(sql.Name(member, struct_sql_name+'_'+name), member)
                    for name, member in kernel.members.items()}

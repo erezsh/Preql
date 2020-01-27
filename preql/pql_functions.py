@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
-from .compiler import compile_remote, instanciate_table, compile_type_def, _make_name, alias_table
+from .compiler import compile_remote, instanciate_table, compile_type_def, alias_table
 from .interp_common import State, get_alias, make_value_instance
 from .evaluate import simplify, evaluate, localize
 
@@ -67,7 +67,8 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
         name = get_alias(state, "subq_")
 
         inst = instanciate_table(state, type_, sql.TableName(type_, name), instances)
-        fields = [sql.Name(c, _make_name(path)) for path, c in inst.type.flatten()]
+        # TODO this isn't in the tests!
+        fields = [sql.Name(c, path) for path, c in inst.type.flatten_type()]
 
         subq = sql.Subquery(type_, name, fields, code)
         inst.subqueries[name] = subq
@@ -134,8 +135,8 @@ def sql_bin_op(state, op, table1, table2, name):
     t1 = compile_remote(state, table1)
     t2 = compile_remote(state, table2)
     # TODO make sure both table types are compatiable
-    l1 = len(t1.type.flatten([]))
-    l2 = len(t2.type.flatten([]))
+    l1 = len(t1.type.flatten_type())
+    l2 = len(t2.type.flatten_type())
     if l1 != l2:
         raise pql_TypeError(None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
@@ -186,8 +187,9 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
                 for name, table in safezip(exprs, tables)}
 
     # Update nullable for left/right/outer joins
-    col_types = {name: types.OptionalType(t) if n else t
-                for (name, t), n in safezip(col_types.items(), nullable or [False]*len(col_types))}
+    if nullable:
+        col_types = {name: types.OptionalType(t) if n else t
+                    for (name, t), n in safezip(col_types.items(), nullable)}
 
     table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), SafeDict(col_types), False)
 

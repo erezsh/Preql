@@ -15,10 +15,9 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
     pks = []
     columns = []
 
-    for path, c in table.flatten():
+    for name, c in table.flatten_type():
         if c.is_concrete:
             type_ = compile_type(state, c)
-            name = "_".join(path)
             columns.append( f"{name} {type_}" )
             if isinstance(c, types.RelationalColumn):
                 # TODO any column, using projection / get_attr
@@ -110,9 +109,9 @@ def _process_fields(state: State, fields):
 def _ensure_col_instance(state, meta, i):
     if isinstance(i, objects.ColumnInstance):
         return i
-    elif isinstance(i, objects.Instance):
-        if isinstance(i.type, (types.Primitive, types.NullType, types.IdType)):
-            return objects.make_column_instance(i.code, i.type, [i])
+
+    if isinstance(i, objects.Instance) and isinstance(i.type, (types.Primitive, types.NullType, types.IdType)):
+        return objects.make_column_instance(i.code, i.type, [i])
 
     raise pql_TypeError(meta, f"Expected a valid expression. Instead got: {i.repr(state)} (compiler_type={type(i)})")
     # assert False, i
@@ -141,8 +140,9 @@ def _expand_ellipsis(table, fields):
 @dy
 def compile_remote(state: State, proj: ast.Projection):
     table = compile_remote(state, proj.table)
-    assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "Projection expected an object of type '%s', instead got '%s'")
-    assert isinstance(table, (objects.TableInstance, objects.StructColumnInstance)), table
+    assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "")
+    if not isinstance(table, (objects.TableInstance, objects.StructColumnInstance)):
+        raise pql_TypeError(proj.meta, f"Cannot project objects of type {table.type}")
 
     fields = _expand_ellipsis(table, proj.fields)
 
@@ -166,6 +166,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
 
     if isinstance(table, objects.StructColumnInstance):
+        # Create a new struct, to replace the projected struct.
         assert not agg_fields
         members = {name: inst for name, (inst, _a) in fields}
         struct_type = types.StructType(get_alias(state, "struct_proj"), {name:m.type for name, m in members.items()})
@@ -536,17 +537,13 @@ def guess_field_name(f):
 
 
 
-def instanciate_column(state: State, name, t):
-    return objects.make_column_instance(sql.Name(t, get_alias(state, name)), t)
-
-
-def _make_name(parts):
-    return '_'.join(parts)
+def instanciate_column(state: State, name, t, insts=[]):
+    return objects.make_column_instance(sql.Name(t, get_alias(state, name)), t, insts)
 
 
 def alias_table(state: State, t):
     new_columns = {
-        name: objects.make_column_instance(sql.Name(col.type, get_alias(state, name)), col.type, [col])
+        name: instanciate_column(state, name, col.type, [col])
         for name, col in t.columns.items()
     }
 
@@ -564,17 +561,17 @@ def alias_table(state: State, t):
 def instanciate_table(state: State, t: types.TableType, source: Sql, instances, values=None):
     if values is None:
         columns = {name: objects.make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in t.columns.items()}
-        return objects.TableInstance(source, t, objects.merge_subqueries(instances), columns)
+        code = source
+    else:
+        columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
 
-    columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
+        atoms = [atom
+                    for name, inst in columns.items()
+                    for path, atom in inst.flatten([name])
+                ]
 
-    atoms = [atom
-                for name, inst in columns.items()
-                for atom in inst.flatten_path([name])
-            ]
+        aliases = [ sql.ColumnAlias.make(value, atom.code) for value, atom in safezip(values, atoms) ]
 
-    aliases = [ sql.ColumnAlias.make(value, atom.code) for value, (_, atom) in safezip(values, atoms) ]
-
-    code = sql.Select(t, source, aliases)
+        code = sql.Select(t, source, aliases)
 
     return objects.TableInstance(code, t, objects.merge_subqueries(instances), columns)
