@@ -399,25 +399,18 @@ def compile_remote(state: State, i: objects.Instance):
 @dy
 def compile_remote(state: State, t: types.PqlType):
     return t
-
-# @dy
-# def compile_remote(state: State, i: objects.TableInstance):
-    return i
-# @dy
-# def compile_remote(state: State, i: objects.RowInstance):
-    return i
 @dy
-def compile_remote(state: State, f: ast.FuncCall):
-    res = simplify(state, f)
-    return compile_remote(state, res)
+def compile_remote(state: State, x: Exception):
+    return x
 @dy
 def compile_remote(state: State, f: objects.Function):
     "Functions don't need compilation"
     return f
-# @dy
-# def compile_remote(state: State, f: objects.InternalFunction):
-#     "Functions don't need compilation"
-#     return f
+
+@dy
+def compile_remote(state: State, f: ast.FuncCall):
+    res = simplify(state, f)
+    return compile_remote(state, res)
 @dy
 def compile_remote(state: State, x: ast.Ellipsis):
     raise pql_SyntaxError(x.meta, "Ellipsis not allowed here")
@@ -468,14 +461,6 @@ def compile_remote(state: State, lst: objects.List_):
     return inst
 
 
-# @dy
-# def compile_remote(state: State, t: types.TableType):
-#     return t
-# @dy
-# def compile_remote(state: State, t: types.FunctionType):
-#     return t
-
-
 @dy
 def compile_remote(state: State, s: ast.Slice):
     table = compile_remote(state, s.table)
@@ -515,13 +500,6 @@ def compile_remote(state: State, sel: ast.Selection):
     return inst
 
 
-
-# @dy
-# def compile_remote(state: State, obj: types.Primitive):
-#     return obj
-# @dy
-# def compile_remote(state: State, obj: types.ListType):
-#     return obj
 
 
 def guess_field_name(f):

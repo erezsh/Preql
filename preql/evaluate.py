@@ -16,7 +16,7 @@
 
 from typing import List, Optional, Any
 
-from .utils import safezip, dataclass, SafeDict
+from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type
 from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError
 from . import pql_types as types
@@ -368,42 +368,16 @@ def simplify(state: State, u: ast.Update):
     return table
 
 
-@dy
-def simplify(state: State, n: types.NullType):
-    return n
-
-
-# @dy
-# def simplify(state: State, d: dict):
-#     return {name: simplify(state, v) for name, v in d.items()}
-
-# @dy
-# def simplify(state: State, attr: ast.Attr):
-#     print("##", attr.expr)
-#     expr = simplify(state, attr.expr)
-#     print("##", expr)
-#     return ast.Attr(expr, attr.name)
 
 def simplify_list(state, x):
     return [simplify(state, e) for e in x]
-
-
-@dataclass
-class TableConstructor(objects.Function):
-    params: List[objects.Param]
-    param_collector: Optional[objects.Param] = None
-    name = 'new'
 
 @dy
 def simplify(state: State, inst: objects.Instance):
     return inst
 @dy
-def simplify(state: State, inst: objects.ValueInstance):
-    return inst
-@dy
-def simplify(state: State, inst: objects.TableInstance):
-    return inst
-
+def simplify(state: State, n: types.NullType):
+    return n
 
 @dy
 def simplify(state: State, new: ast.NewRows):
@@ -427,22 +401,26 @@ def simplify(state: State, new: ast.NewRows):
             for row in rows]
     return objects.List_(new.meta, [make_value_instance(rowid, table.type.columns['id'], force_type=True) for rowid in ids]) # XXX find a nicer way
 
-def _new_row(state, table, key_value_list):
-    # TODO refactor out to match_flattened ?
-    destructured_pairs = []
-    for k, v in key_value_list:
-        if isinstance(k.type.actual_type(), types.StructType):
-            v = localize(state, evaluate(state, v))
-            for (path,k2), v2 in safezip(k.orig.flatten_type([k.name]), v):
-                destructured_pairs.append((path, v2))
-        else:
-            v = localize(state, evaluate(state, v))
-            destructured_pairs.append((k.name, v))
 
+@listgen
+def _destructure_param_match(state, meta, param_match):
+    for k, v in param_match:
+        v = localize(state, evaluate(state, v))
+        if isinstance(k.type.actual_type(), types.StructType):
+            names = [name for name, t in k.orig.flatten_type([k.name])]
+            if not isinstance(v, list):
+                raise pql_TypeError(meta, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
+            if len(v) != len(names):
+                raise pql_TypeError(meta, f"Parameter {k.name} received a bad value (size of {len(names)})")
+            yield from safezip(names, v)
+        else:
+            yield k.name, v
+
+def _new_row(state, table, destructured_pairs):
     keys = [name for (name, _) in destructured_pairs]
     values = [sql_repr(v) for (_,v) in destructured_pairs]
+    # TODO use regular insert?
     q = sql.InsertConsts(types.null, sql.TableName(table, table.name), keys, values)
-
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
     return make_value_instance(rowid, table.columns['id'], force_type=True)  # XXX find a nicer way
@@ -468,43 +446,58 @@ def simplify(state: State, new: ast.New):
     assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
     table = obj
 
-    cons = TableConstructor([objects.Param(name.meta, name, p, p.default, orig=p) for name, p in table.params()])
+    cons = TableConstructor.make(table)
     matched = cons.match_params(new.args)
 
-    return _new_row(state, table, matched)
+    destructured_pairs = _destructure_param_match(state, new.meta, matched)
+    return _new_row(state, table, destructured_pairs)
 
+
+@dataclass
+class TableConstructor(objects.Function):
+    "Serves as an ad-hoc constructor function for given table, to allow matching params"
+
+    params: List[objects.Param]
+    param_collector: Optional[objects.Param] = None
+    name = 'new'
+
+    @classmethod
+    def make(cls, table):
+        return cls([objects.Param(name.meta, name, p, p.default, orig=p) for name, p in table.params()])
+
+    # def match_params(self, args):
+    #     return [(p.orig, v) for p, v in super().match_params(args)]
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
+    code_cls = sql.TableName if isinstance(inst, objects.TableInstance) else sql.Name
     name = get_alias(state, inst)
-    if isinstance(inst, objects.TableInstance):
-        new_inst = objects.TableInstance(sql.TableName(inst.code.type, name), inst.type, inst.subqueries.update({name: inst.code}), inst.columns)
-    else:
-        new_inst = objects.Instance(sql.Name(inst.code.type, name), inst.type, inst.subqueries.update({name: inst.code}))
-    return new_inst
-
+    return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
 
 def evaluate(state, obj):
     simp_obj = simplify(state, obj)
-    if not simp_obj:
-        import pdb
-        pdb.set_trace()
-        simp_obj = simplify(state, obj)
-
     assert simp_obj, obj
-    if isinstance(simp_obj, (objects.Function, PreqlError, type)):   # TODO base class on uncompilable?
-        return simp_obj
-
     return compile_remote(state, simp_obj)
 
-def localize(session, inst):
-    assert inst
-    if isinstance(inst, objects.Function) or isinstance(inst, (types.PqlType, type)):
-        return inst
 
-    elif isinstance(inst, objects.ValueInstance):
-        return inst.local_value
-
+#
+#    localize()
+# -------------
+#
+# Return the local value of the expression. Only requires computation if the value is an instance.
+#
+@dy
+def localize(session, inst: objects.Instance):
     return session.db.query(inst.code, inst.subqueries)
+
+@dy
+def localize(state, inst: objects.ValueInstance):
+    return inst.local_value
+
+@dy
+def localize(state, x):
+    return x
+
+
 
