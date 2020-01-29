@@ -16,17 +16,16 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
     columns = []
 
     for name, c in table.flatten_type():
-        if c.is_concrete:
-            type_ = compile_type(state, c)
-            columns.append( f"{name} {type_}" )
-            if isinstance(c, types.RelationalColumn):
-                # TODO any column, using projection / get_attr
-                if not table.temporary:
-                    # In postgres, constraints on temporary tables may reference only temporary tables
-                    s = f"FOREIGN KEY({name}) REFERENCES {c.type.name}(id)"
-                    posts.append(s)
-            if c.primary_key:
-                pks.append(name)
+        type_ = compile_type(state, c)
+        columns.append( f"{name} {type_}" )
+        if isinstance(c, types.RelationalColumn):
+            # TODO any column, using projection / get_attr
+            if not table.temporary:
+                # In postgres, constraints on temporary tables may reference only temporary tables
+                s = f"FOREIGN KEY({name}) REFERENCES {c.type.name}(id)"
+                posts.append(s)
+        if c.primary_key:
+            pks.append(name)
 
     if pks:
         names = ", ".join(pks)
@@ -56,7 +55,6 @@ def _compile_type_primitive(type, nullable):
         'text': "TEXT",
         'datetime': "TIMESTAMP",
     }[type.name]
-    assert not type.nullable
     if not nullable:
         s += " NOT NULL"
     return s

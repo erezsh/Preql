@@ -36,6 +36,7 @@ class State:
             if name in scope:
                 return scope[name]
 
+        breakpoint()
         raise pql_NameNotFound(getattr(name, 'meta', None), str(name))
 
     def set_var(self, name, value):
@@ -107,7 +108,7 @@ def sql_repr(x):
     if x is None:
         return sql.null
 
-    t = types.primitives_by_pytype[type(x)]
+    t = types.Primitive.by_pytype[type(x)]
     if t is types.DateTime:
         # TODO Better to pass the object instead of a string?
         return sql.Primitive(t, repr(str(x)))

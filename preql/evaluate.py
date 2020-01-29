@@ -399,7 +399,8 @@ def simplify(state: State, new: ast.NewRows):
     rows = localize(state, table)
     ids = [_new_row(state, obj, [(field, value) for value in row])
             for row in rows]
-    return objects.List_(new.meta, [make_value_instance(rowid, table.type.columns['id'], force_type=True) for rowid in ids]) # XXX find a nicer way
+    # XXX find a nicer way - requires a better typesystem, where id(t) < int
+    return objects.List_(new.meta, [make_value_instance(rowid, table.type.columns['id'], force_type=True) for rowid in ids])
 
 
 @listgen

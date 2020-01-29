@@ -27,7 +27,7 @@ def python_to_pql(value):
 
 
 def _make_const(value):
-    t = types.primitives_by_pytype[type(value)]
+    t = types.Primitive.by_pytype[type(value)]
     return ast.Const(None, t, value)
 
 def _call_pql_func(state, name, args):

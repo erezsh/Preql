@@ -112,9 +112,6 @@ def pql_temptable(state: State, expr: ast.Expr):
 
     state.db.query(compile_type_def(state, table))
 
-    # code = sql.Select(table, expr.code, [
-    #         compile_remote(state, p).code
-    #         for p in expr.flatten() if p.type.is_concrete and not p.type.readonly])
     state.db.query(sql.Insert(types.null, table, expr.code), expr.subqueries)
 
     return instanciate_table(state, table, sql.TableName(table, table.name), [])

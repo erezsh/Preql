@@ -24,7 +24,7 @@ def _create_internal_func(fname, f):
     ], f)
 
 def initial_namespace():
-    ns = SafeDict({p.name: p for p in types.primitives_by_pytype.values()})
+    ns = SafeDict({p.name: p for p in types.Primitive.by_pytype.values()})
     ns.update({
         fname: _create_internal_func(fname, f) for fname, f in internal_funcs.items()
     })

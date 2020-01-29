@@ -6,6 +6,9 @@ from .utils import dataclass, listgen, concat_for, SafeDict
 class PqlObject:    # XXX should be in a base module
     "Any object that the user might interact with through the language, as so has to behave like an object inside Preql"
 
+    def repr(self, pql):
+        return repr(self)
+
 class PqlType(PqlObject):
     """PqlType annotates the type of all instances """
 
@@ -15,26 +18,13 @@ class PqlType(PqlObject):
     def actual_type(self):
         return self
 
-    def repr(self, pql):
-        return repr(self)
-
     def flatten_type(self, path_base=[]):
         return [('_'.join(path), t) for path, t in self.flatten_path(path_base)]
 
+    hide_from_init = False
+    primary_key = False
+
 # Primitives
-class NullType(PqlType):
-    name = 'null'
-    def import_result(self, res):
-        return None
-
-    def __repr__(self):
-        return self.name
-
-    def flatten_path(self, path):
-        return [(path, self)]
-
-    def restructure_result(self, res):
-        return next(res)
 
 class AnyType(PqlType):
     name = 'any'
@@ -43,54 +33,59 @@ class AnyType(PqlType):
         return self.name
 
 
-null = NullType()
-any_t = AnyType()
 
+class AtomicOrList(PqlType):
+    "For types that are the width of one column. Basically non-table?"
 
-class AtomicType(PqlType):
     def flatten_path(self, path):
         return [(path, self)]
 
     def restructure_result(self, res):
         return next(res)
 
+
+class AtomicType(AtomicOrList):
     # XXX these don't belong here!
-    is_concrete = True
-    primary_key = False
-    readonly = False
     default = None
 
 
-@dataclass
-class Primitive(AtomicType):
-    name: str
-    pytype: type
-    nullable: bool
+class NullType(AtomicType):
+    # def import_result(self, res):
+    #     assert res is None
+    #     return None
 
+    def __repr__(self):
+        return 'null'
+
+
+class Primitive(AtomicType):
+    pytype: type
+
+    by_pytype = {}  # Singleton
+
+    @property
+    def name(self):
+        return type(self).__name__.lstrip('_').lower()
 
     def __repr__(self):
         return self.name
 
-    def __post_init__(self):
-        primitives_by_pytype[self.pytype] = self
+    def __init__(self):
+        assert self.pytype not in self.by_pytype
+        self.by_pytype[self.pytype] = self
 
     def import_result(self, res):
         row ,= res
         item ,= row
         return item
 
-    def restructure_result(self, i):
-        return next(i)
-
-    def repr(self, pql):
-        return repr(self)
-
-primitives_by_pytype = {}
 
 class text(str):
     pass
 
 class DateTimeType(Primitive):
+    pytype = datetime
+
     def import_result(self, res):
         s = super().import_result(res)
         return datetime.fromisoformat(s)
@@ -99,12 +94,30 @@ class DateTimeType(Primitive):
         s = super().restructure_result(i)
         return datetime.fromisoformat(s)
 
-Int = Primitive('int', int, False)
-Float = Primitive('float', float, False)
-String = Primitive('string', str, False)
-Text = Primitive('text', text, False)
-Bool = Primitive('bool', bool, False)
-DateTime = DateTimeType('datetime', datetime, False)
+# Int = Primitive('int', int, False)
+# Float = Primitive('float', float, False)
+# String = Primitive('string', str, False)
+# Text = Primitive('text', text, False)
+# Bool = Primitive('bool', bool, False)
+# DateTime = DateTimeType('datetime', datetime, False)
+
+class Number(Primitive):
+    pass
+
+class _Int(Number):  pytype = int
+class _Float(Number):  pytype = float
+class _String(Primitive):  pytype = str
+class _Text(Primitive):  pytype = text
+class _Bool(Primitive):  pytype = bool
+
+Int = _Int()
+Float = _Float()
+String = _String()
+Text = _Text()
+Bool = _Bool()
+DateTime = DateTimeType()
+null = NullType()
+any_t = AnyType()
 
 
 # Collections
@@ -115,7 +128,7 @@ class Collection(PqlType):
         return StructType(self.name, {name: col for name, col in self.columns.items()})
 
 @dataclass
-class ListType(Collection):
+class ListType(Collection, AtomicOrList):
     elemtype: PqlType
 
     @property
@@ -132,17 +145,23 @@ class ListType(Collection):
         assert all(len(e)==1 for e in arr)
         return [e[0] for e in arr]
 
-    def restructure_result(self, res):
-        return next(res)
-
     def flat_length(self):
         return 1
 
-    def flatten_path(self, path):
-        return [(path, self)]
-
     def __repr__(self):
         return f'list[{self.elemtype}]'
+
+@dataclass
+class FunctionType(PqlType):
+    param_types: List[Any]
+    param_collector: bool
+
+    name = "function"
+
+    def __repr__(self):
+        # types_str = ', '.join(repr(t) for t in self.param_types)
+        return f'function(...)'
+
 
 @dataclass
 class OptionalType(PqlType):
@@ -151,23 +170,13 @@ class OptionalType(PqlType):
     def flatten_path(self, path):
         return [(p, OptionalType(t)) for p, t in self.type.flatten_path(path)]
 
-    @property
-    def is_concrete(self):
-        return self.type.is_concrete
-    @property
-    def primary_key(self):
-        return self.type.primary_key
-    @property
-    def readonly(self):
-        return self.type.readonly
-
     def restructure_result(self, i):
         return self.type.restructure_result(i)
 
     def kernel_type(self):
         return self.type.kernel_type()
 
-# Not supported by Postgres. Will require a trick (either alternating columns, or json type, etc)
+# Not supported by Postgres. Will require a trick (either alternating within a column tuple, or json type, etc)
 # @dataclass
 # class UnionType(AtomicType):
 #     types: List[AtomicType]
@@ -206,11 +215,8 @@ class DatumColumn(PqlType):
         return self.type.flatten_path(path)
 
     @property
-    def is_concrete(self):
-        return self.type.is_concrete
-    @property
-    def readonly(self):
-        return self.type.readonly
+    def hide_from_init(self):
+        return self.type.hide_from_init
 
 @dataclass
 class RelationalColumn(AtomicType):
@@ -233,11 +239,7 @@ class TableType(Collection):
         return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
 
     def params(self):
-        return [(name, c) for name, c in self.columns.items() if c.is_concrete and not c.readonly]
-
-    # def flat_params(self):
-        # XXX gets rid of readonly for nested columns. TODO make this less hacky (nested cols shouldn't be readonly in the first place)
-        # return [('_'.join(name), c) for name, c in self.flatten() if c.is_concrete and (len(name)>1 or not c.readonly)]
+        return [(name, c) for name, c in self.columns.items() if not c.hide_from_init]
 
     def flat_length(self):
         # Maybe memoize
@@ -248,7 +250,6 @@ class TableType(Collection):
         return f'TableType({self.name}, {{{", ".join(repr(t) for t in self.columns.values())}}})'
 
     def repr(self, pql):
-        # return repr(self)
         return f'{self.name}{{{", ".join(t.repr(pql) for t in self.columns.values())}}}'
 
     def _data_columns(self):
@@ -287,8 +288,6 @@ class StructType(Collection):
     name: str
     members: Dict[str, PqlType]
 
-    is_concrete = True
-    readonly = False
     default = None
 
     def restructure_result(self, i):
@@ -307,29 +306,12 @@ class StructType(Collection):
 
 
 @dataclass
-class IdType(AtomicType):   # TODO subclass of int?
+class IdType(_Int):
     table: TableType
 
     primary_key = True
-    readonly = True
-
-    def restructure_result(self, i):
-        return next(i)
+    hide_from_init = True
 
     def __repr__(self):
         return f'{self.table.name}.id'
 
-
-@dataclass
-class FunctionType(PqlType):
-    param_types: List[Any]
-    param_collector: bool
-
-    name = "function"
-
-    def __repr__(self):
-        # types_str = ', '.join(repr(t) for t in self.param_types)
-        return f'function(...)'
-
-    def repr(self, pql):
-        return repr(self)
