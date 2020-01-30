@@ -9,21 +9,8 @@ from . import pql_types as types
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate
-from .interp_common import create_engine
+from .interp_common import create_engine, python_to_pql
 from .compiler import call_pql_func
-
-
-def python_to_pql(value):
-    if value is None:
-        return types.null
-    elif isinstance(value, str):
-        return ast.Const(None, types.String, value)
-    elif isinstance(value, int):
-        return ast.Const(None, types.Int, value)
-    elif isinstance(value, list):
-        # return ast.Const(None, types.ListType(types.String), value)
-        return objects.List_(None, list(map(python_to_pql, value)))
-    assert False, value
 
 
 def _make_const(value):
@@ -111,6 +98,8 @@ class Interface:
         self.engine = create_engine(db_uri, debug=debug)
         self.interp = Interpreter(self.engine)
         self.save_last = save_last
+
+        # self.interp.state._py_api = self # TODO proper api
 
     def exec(self, q, *args, **kw):
         "Deprecated"

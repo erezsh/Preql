@@ -77,6 +77,10 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
 
     return objects.Instance.make(code, type_, instances)
 
+def pql_breakpoint(state: State):
+    # breakpoint()
+    state._py_api.start_repl()
+
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     inst = compile_remote(state, expr)
     type_ = simplify(state, type_expr)
@@ -343,6 +347,7 @@ internal_funcs = {
     'SQL': pql_SQL,
     'isa': pql_isa,
     'type': pql_type,
+    'breakpoint': pql_breakpoint,
     'get_db_type': pql_get_db_type,
     '_cast_int': pql_cast_int,
 }

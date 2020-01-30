@@ -225,6 +225,11 @@ def make_column_instance(code, type_, from_instances=()):
 class ValueInstance(Instance):
     local_value: object
 
+    def get_attr(self, name):
+        if isinstance(self.type, types.RowType):
+            return self.local_value[name]
+        return super().get_attr(name)
+
 
 @dataclass
 class TableInstance(Instance):
@@ -245,10 +250,19 @@ class TableInstance(Instance):
         # return make_column_instance(None, self.type.to_struct_type(), [self])
         return StructColumnInstance(None, self.type.to_struct_type(), self.subqueries, self.columns)
 
+
 @dataclass
 class RowInstance(Instance):
     type: types.RowType
     table: TableInstance
+
+    # @classmethod
+    # def from_table(cls, t):
+    #     rowtype = types.RowType(t.type)
+    #     return cls.make(t.code.replace(type=rowtype), rowtype, [t], t)
+
+    # def get_attr(self, name):
+    #     col = table.get_attr(name)
 
 
 # @dataclass

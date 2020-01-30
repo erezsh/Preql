@@ -17,7 +17,7 @@
 from typing import List, Optional, Any
 
 from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type
+from .interp_common import assert_type, python_to_pql
 from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError
 from . import pql_types as types
 from . import pql_objects as objects
@@ -99,6 +99,7 @@ def _execute(state: State, var_def: ast.SetValue):
 
 @dy
 def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstance):
+    assert False
 
     target = simplify(state, target_name)
 
@@ -119,6 +120,7 @@ def _execute(state: State, insert_rows: ast.InsertRows):
     if not isinstance(insert_rows.name, ast.Name):
         # TODO support Attr
         raise pql_SyntaxError(insert_rows.meta, "L-value must be table name")
+
     rval = simplify(state, insert_rows.value)
     return _copy_rows(state, insert_rows.name, rval)
 
@@ -169,9 +171,14 @@ def _execute(state: State, t: ast.Throw):
     raise evaluate(state, t.value)
 
 def execute(state, stmt):
-    if isinstance(stmt, ast.Statement):
-        return _execute(state, stmt) or objects.null
-    return evaluate(state, stmt)
+    try:
+        if isinstance(stmt, ast.Statement):
+            return _execute(state, stmt) or objects.null
+        return evaluate(state, stmt)
+    except PreqlError as e:
+        if e.meta is None:
+            raise e.replace(meta=stmt.meta)
+        raise #e.replace(meta=e.meta.replace(parent=stmt.meta))
 
 
 
@@ -248,7 +255,6 @@ def test_nonzero(state: State, table: objects.TableInstance):
 def test_nonzero(state: State, inst: objects.ValueInstance):
     return bool(inst.local_value)
 
-
 @dy
 def simplify(state: State, obj: ast.Or):
     # return obj.replace(args=simplify_list(state, obj.args))
@@ -305,13 +311,19 @@ def simplify(state: State, o: ast.One):
     # TODO move these to the core/base module
     fname = '_only_one_or_none' if o.nullable else '_only_one'
     f = state.get_var(fname)
-    res = simplify(state, ast.FuncCall(o.meta, f, [o.expr]))
-    if isinstance(res.type, types.NullType):
-        return res
-    assert isinstance(res, objects.TableInstance), res
-    # row ,= localize(state, res)
-    # return objects.RowInstance.make(row, res, [])
-    return objects.RowInstance.make(res.code.replace(type=types.RowType(res.type)), types.RowType(res.type), [res], res)
+    table = simplify(state, ast.FuncCall(o.meta, f, [o.expr]))
+    if isinstance(table.type, types.NullType):
+        return table
+
+    assert isinstance(table, objects.TableInstance), table
+    row ,= localize(state, table) # Must be 1 row
+    rowtype = types.RowType(table.type)
+    # return objects.RowInstance.make(res.code.replace(type=rowtype), rowtype, [res], res)
+    # XXX ValueInstance is the right object? Why not throw away 'code'? Reusing it is inefficient
+    # return objects.ValueInstance.make(table.code, rowtype, [table], {k:compile_remote(state, python_to_pql(v)) for k,v in row.items()})
+    return objects.ValueInstance.make(table.code, rowtype, [table], row)
+    # return objects.RowInstance.make(res.code.replace(type=rowtype), rowtype, [res], res)
+    # return objects.Row(row)
 
 @dy
 def simplify(state: State, s: ast.Slice):
@@ -397,10 +409,19 @@ def simplify(state: State, new: ast.NewRows):
     field = arg.name
     table = compile_remote(state, arg.value)
     rows = localize(state, table)
-    ids = [_new_row(state, obj, [(field, value) for value in row])
-            for row in rows]
+
+    cons = TableConstructor.make(obj)
+
+    # TODO very inefficient, vectorize this
+    ids = []
+    for row in rows:
+        matched = cons.match_params([python_to_pql(v) for v in row.values()])
+        destructured_pairs = _destructure_param_match(state, new.meta, matched)
+        ids += [_new_row(state, obj, destructured_pairs)]
+
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
-    return objects.List_(new.meta, [make_value_instance(rowid, table.type.columns['id'], force_type=True) for rowid in ids])
+    # return objects.List_(new.meta, [make_value_instance(rowid, obj.columns['id'], force_type=True) for rowid in ids])
+    return objects.List_(new.meta, ids)
 
 
 @listgen

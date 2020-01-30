@@ -36,7 +36,6 @@ class State:
             if name in scope:
                 return scope[name]
 
-        breakpoint()
         raise pql_NameNotFound(getattr(name, 'meta', None), str(name))
 
     def set_var(self, name, value):
@@ -131,3 +130,18 @@ def make_value_instance(value, type_=None, force_type=False):
         return objects.ValueInstance.make(r, type_, [], value)
     else:
         return objects.Instance.make(r, type_, [])
+
+
+def python_to_pql(value):
+    # TODO why not just make value instance?
+    if value is None:
+        return types.null
+    elif isinstance(value, str):
+        return ast.Const(None, types.String, value)
+    elif isinstance(value, int):
+        return ast.Const(None, types.Int, value)
+    elif isinstance(value, list):
+        # return ast.Const(None, types.ListType(types.String), value)
+        return objects.List_(None, list(map(python_to_pql, value)))
+    assert False, value
+

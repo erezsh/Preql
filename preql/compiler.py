@@ -138,7 +138,7 @@ def _expand_ellipsis(table, fields):
 @dy
 def compile_remote(state: State, proj: ast.Projection):
     table = compile_remote(state, proj.table)
-    assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "")
+    # assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "%s")
     if not isinstance(table, (objects.TableInstance, objects.StructColumnInstance)):
         raise pql_TypeError(proj.meta, f"Cannot project objects of type {table.type}")
 

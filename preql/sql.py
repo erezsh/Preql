@@ -315,7 +315,8 @@ class Insert(Sql):
 
     def _compile(self, qb):
         t = self.table_type
-        # params = [n for n,_ in t.flat_params()]
+        # assert t.flat_length() == self.query.type.flat_length()
+        # params = [n for sn,p in t.params() for n,_ in p.flatten_type([sn])]
         # return f'INSERT INTO {t.name}({", ".join(params)}) SELECT * FROM ' + self.query.compile(qb).text
         return f'INSERT INTO {t.name} SELECT * FROM ' + self.query.compile(qb).text
 
