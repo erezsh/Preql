@@ -273,7 +273,7 @@ class BasicTests(TestCase):
         self.assertEqual( preql(""" "a" != "b" """), True )
 
         self.assertEqual( preql("""1 in [1,2,3]"""), True )
-        self.assertEqual( preql("""1 ^in [1,2,3]"""), False )
+        self.assertEqual( preql("""1 !in [1,2,3]"""), False )
         self.assertEqual( preql("""4 in [1,2,3]"""), False )
 
         # self.assertRaises( pql_TypeError, preql, """2 > "a" """)
@@ -306,7 +306,7 @@ class BasicTests(TestCase):
         res = preql("""[1,2,3]{v:value*2}[v in [2,6]]""")
         assert res == [{'v': 2}, {'v': 6}], res
 
-        res = preql("""[1,2,3]{v:value*2}[v ^in [2,6]]""")
+        res = preql("""[1,2,3]{v:value*2}[v !in [2,6]]""")
         assert res == [{'v': 4}], res
 
         res = preql("""enum([1,8,4,4])[index==value]{value}""")

@@ -39,3 +39,12 @@ def listgen(f):
         return list(f(*args, **kwargs))
     return _f
 
+
+def find_duplicate(seq, key=lambda x:x):
+    "Returns the first duplicate item in given sequence, or None if not found"
+    found = set()
+    for i in seq:
+        k = key(i)
+        if k in found:
+            return i
+        found.add(k)

@@ -116,12 +116,9 @@ class T(Transformer):
         # TODO pk
         return ast.Type(meta, name, '?' in (mods or ''))
 
-    # compare_op = token_value
-    # arith_op = token_value
     add_op = token_value
     mul_op = token_value
     comp_op = token_value
-    # contains_op = as_list
 
     def compare(self, meta, a, op, b):
         return ast.Compare(meta, op, [a,b])

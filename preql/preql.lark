@@ -51,7 +51,7 @@ delete: molecule "delete" expr_list
 
 // like: molecule "~" molecule
 
-!comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"^in" //|"is"|"is" "not"
+!comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"!in" //|"is"|"is" "not"
 
 ?or_test: and_test ("or" and_test)*
 ?and_test: not_test ("and" not_test)*

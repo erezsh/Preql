@@ -1,4 +1,4 @@
-from .utils import safezip, listgen, SafeDict
+from .utils import safezip, listgen, SafeDict, find_duplicate
 from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError
 
 from . import pql_types as types
@@ -144,12 +144,10 @@ def compile_remote(state: State, proj: ast.Projection):
 
     fields = _expand_ellipsis(table, proj.fields)
 
-    used = set()
-    for f in list(proj.fields) + list(proj.agg_fields):
-        if f.name:  # Otherwise, an automatic name is used, and collision is impossible (should be impossible)
-            if f.name in used:
-                raise pql_TypeError(f.meta, f"Field '{f.name}' was already used in this projection")
-            used.add(f.name)
+    # Test duplicates in field names. If an automatic name is used, collision should be impossible
+    dup = find_duplicate([f for f in list(proj.fields) + list(proj.agg_fields) if f.name], key=lambda f: f.name)
+    if dup:
+        raise pql_TypeError(dup.meta, f"Field '{dup.name}' was already used in this projection")
 
     columns = table.members if isinstance(table, objects.StructColumnInstance) else table.columns
     columns = SafeDict(columns).update({'this': table.to_struct_column()}) # XXX Is this the right place to introduce `this` ?
@@ -201,10 +199,7 @@ def compile_remote(state: State, proj: ast.Projection):
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
     # Make Instance
-    inst = objects.TableInstance.make(code, new_table_type, [table], new_columns)
-
-    return inst
-    # return add_as_subquery(state, inst)
+    return objects.TableInstance.make(code, new_table_type, [table], new_columns)
 
 
 @dy
@@ -253,7 +248,7 @@ def compile_remote(state: State, like: ast.Like):
 def compile_remote(state: State, cmp: ast.Compare):
     insts = compile_remote(state, cmp.args)
 
-    if cmp.op == 'in' or cmp.op == '^in':
+    if cmp.op == 'in' or cmp.op == '!in':
         sql_cls = sql.Contains
         assert_type(cmp.meta, insts[0].type, types.AtomicType, "Expecting type %s, got %s")
         assert_type(cmp.meta, insts[1].type, types.Collection, "Expecting type %s, got %s")
@@ -275,7 +270,7 @@ def compile_remote(state: State, cmp: ast.Compare):
 
     op = {
         '==': '=',
-        '^in': 'not in',    # TODO !in
+        '!in': 'not in',    # TODO !in
         '<>': '!=',
     }.get(cmp.op, cmp.op)
 
@@ -306,9 +301,39 @@ def call_pql_func(state, name, args):
     expr = ast.FuncCall(None, ast.Name(None, name), args)
     return compile_remote(state, expr)
 
+
+
+
 @dy
 def compile_remote(state: State, arith: ast.Arith):
     args = compile_remote(state, arith.args)
+    return _compile_arith(state, arith, *args)
+
+@dy
+def _compile_arith(state, arith, a: objects.TableInstance, b: objects.TableInstance):
+    # TODO validate types
+    ops = {
+        "+": 'concat',
+        "&": 'intersect',
+        "|": 'union',
+        "-": 'substract',
+    }
+    # TODO compile preql funccall?
+    try:
+        op = ops[arith.op]
+    except KeyError:
+        meta = arith.op.meta.replace(parent=arith.meta)
+        raise pql_TypeError(meta, f"Operation '{arith.op}' not supported for tables")
+
+    try:
+        return state.get_var(op).func(state, a, b)
+    except PreqlError as e:
+        raise e.replace(meta=arith.meta) from e
+
+
+@dy
+def _compile_arith(state, arith, a, b):
+    args = [a, b]
     arg_types = [a.type for a in args]
     arg_types_set = set(arg_types) - {types.ListType(types.any_t)}  # XXX hacky
 
@@ -330,15 +355,11 @@ def compile_remote(state: State, arith: ast.Arith):
                 raise pql_TypeError(meta, f"Operator '{arith.op}' not supported between string and integer.")
 
             # REPEAT(str, int) -> str
-            if arg_types == [types.String, types.Int]:
-                ordered_args = args
-            elif arg_types == [types.Int, types.String]:
-                ordered_args = args[::-1]
-            else:
-                assert False
+            ordered_args = {
+                (types.String, types.Int): args,
+                (types.Int, types.String): args[::-1],
+            }[tuple(arg_types)]
 
-            # expr = ast.FuncCall(None, ast.Name(None, "repeat"), ordered_args)
-            # return compile_remote(state, expr)
             return call_pql_func(state, "repeat", ordered_args)
         else:
             meta = arith.op.meta.replace(parent=arith.meta)
@@ -346,31 +367,11 @@ def compile_remote(state: State, arith: ast.Arith):
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
-    if isinstance(args[0], objects.TableInstance):
-        assert isinstance(args[1], objects.TableInstance)
-        # TODO validate types
-
-        ops = {
-            "+": 'concat',
-            "&": 'intersect',
-            "|": 'union',
-            "-": 'substract',
-        }
-        # TODO compile preql funccall?
-        try:
-            op = ops[arith.op]
-        except KeyError:
-            meta = arith.op.meta.replace(parent=arith.meta)
-            raise pql_TypeError(meta, f"Operation '{arith.op}' not supported for tables")
-
-        try:
-            return state.get_var(op).func(state, *args)
-        except PreqlError as e:
-            raise e.replace(meta=arith.meta) from e
 
     if not all(isinstance(a.type, (types.Primitive, types.ListType)) for a in args):
         meta = arith.op.meta.replace(parent=arith.meta)
         raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
+
 
     arg_codes = [a.code for a in args]
     res_type ,= arg_types_set
@@ -382,7 +383,6 @@ def compile_remote(state: State, arith: ast.Arith):
         op = '||'
     elif arith.op == '/':
         arg_codes[0] = sql.Cast(types.Float, 'float', arg_codes[0])
-        arg_types = types.Float
     elif arith.op == '//':
         op = '/'
 
@@ -500,16 +500,21 @@ def compile_remote(state: State, sel: ast.Selection):
 
 
 
+@dy
 def guess_field_name(f):
-    if isinstance(f, ast.Attr):
-        return guess_field_name(f.expr) + "." + f.name
-    elif isinstance(f, ast.Name):
-        return str(f.name)
-    elif isinstance(f, ast.Projection): # a restructre within a projection
-        return guess_field_name(f.table)
-    elif isinstance(f, ast.FuncCall):
-        return guess_field_name(f.func)
     return '_'
+@dy
+def guess_field_name(f: ast.Attr):
+    return guess_field_name(f.expr) + "." + f.name
+@dy
+def guess_field_name(f: ast.Name):
+    return str(f.name)
+@dy
+def guess_field_name(f: ast.Projection):
+    return guess_field_name(f.table)
+@dy
+def guess_field_name(f: ast.FuncCall):
+    return guess_field_name(f.func)
 
 
 
