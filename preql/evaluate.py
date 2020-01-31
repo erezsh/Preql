@@ -17,7 +17,7 @@
 from typing import List, Optional, Any
 
 from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type, python_to_pql
+from .interp_common import assert_type
 from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError
 from . import pql_types as types
 from . import pql_objects as objects
@@ -320,7 +320,7 @@ def simplify(state: State, o: ast.One):
     rowtype = types.RowType(table.type)
     # return objects.RowInstance.make(res.code.replace(type=rowtype), rowtype, [res], res)
     # XXX ValueInstance is the right object? Why not throw away 'code'? Reusing it is inefficient
-    # return objects.ValueInstance.make(table.code, rowtype, [table], {k:compile_remote(state, python_to_pql(v)) for k,v in row.items()})
+    # return objects.ValueInstance.make(table.code, rowtype, [table], {k:compile_remote(state, from_python(v)) for k,v in row.items()})
     return objects.ValueInstance.make(table.code, rowtype, [table], row)
     # return objects.RowInstance.make(res.code.replace(type=rowtype), rowtype, [res], res)
     # return objects.Row(row)
@@ -415,7 +415,7 @@ def simplify(state: State, new: ast.NewRows):
     # TODO very inefficient, vectorize this
     ids = []
     for row in rows:
-        matched = cons.match_params([python_to_pql(v) for v in row.values()])
+        matched = cons.match_params([objects.from_python(v) for v in row.values()])
         destructured_pairs = _destructure_param_match(state, new.meta, matched)
         ids += [_new_row(state, obj, destructured_pairs)]
 
@@ -520,6 +520,5 @@ def localize(state, inst: objects.ValueInstance):
 @dy
 def localize(state, x):
     return x
-
 
 

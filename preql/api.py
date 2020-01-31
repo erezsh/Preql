@@ -9,7 +9,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate
-from .interp_common import create_engine, python_to_pql
+from .interp_common import create_engine
 from .compiler import call_pql_func
 
 
@@ -113,7 +113,7 @@ class Interface:
         if isinstance(var, objects.Function):
             def delegate(*args, **kw):
                 assert not kw
-                return self._wrap_result( self.interp.call_func(fname, [python_to_pql(a) for a in args]) )
+                return self._wrap_result( self.interp.call_func(fname, [objects.from_python(a) for a in args]) )
             return delegate
         else:
             return self._wrap_result( var )
@@ -124,7 +124,7 @@ class Interface:
 
 
     def __call__(self, pq, **args):
-        pql_args = {name: python_to_pql(value) for name, value in args.items()}
+        pql_args = {name: objects.from_python(value) for name, value in args.items()}
 
         res = self.interp.execute_code(pq + "\n", pql_args)
         if res:

@@ -6,8 +6,8 @@ from parameterized import parameterized_class
 from preql import Preql
 from preql.pql_objects import UserFunction
 from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError
-from preql.interp_common import GlobalSettings, pql_TypeError
-from preql import sql
+from preql.interp_common import pql_TypeError
+from preql import sql, settings
 
 SQLITE_URI = 'sqlite://:memory:'
 POSTGRES_URI = 'postgres://postgres:qweqwe123@localhost/postgres'
@@ -25,7 +25,7 @@ def is_eq(a, b):
 ])
 class BasicTests(TestCase):
     def Preql(self):
-        GlobalSettings.Optimize = self.optimized
+        settings.optimize = self.optimized
         return Preql(self.uri)
 
     def test_basic1(self):

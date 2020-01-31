@@ -19,8 +19,6 @@ dy = Dispatch()
 def simplify():
     raise NotImplementedError()
 
-class GlobalSettings:
-    Optimize = True
 
 
 class State:
@@ -103,45 +101,5 @@ def assert_type(meta, t, type_, msg):
         raise pql_TypeError(meta, msg % (type_, t))
 
 
-def sql_repr(x):
-    if x is None:
-        return sql.null
-
-    t = types.Primitive.by_pytype[type(x)]
-    if t is types.DateTime:
-        # TODO Better to pass the object instead of a string?
-        return sql.Primitive(t, repr(str(x)))
-
-    if t is types.String or t is types.Text:
-        return sql.Primitive(t, "'%s'" % str(x).replace("'", "''"))
-
-    return sql.Primitive(t, repr(x))
-
-def make_value_instance(value, type_=None, force_type=False):
-    r = sql_repr(value)
-    if force_type:
-        assert type_
-    elif type_:
-        assert isinstance(type_, (types.Primitive, types.NullType, types.IdType)), type_
-        assert r.type == type_, (r.type, type_)
-    else:
-        type_ = r.type
-    if GlobalSettings.Optimize:
-        return objects.ValueInstance.make(r, type_, [], value)
-    else:
-        return objects.Instance.make(r, type_, [])
-
-
-def python_to_pql(value):
-    # TODO why not just make value instance?
-    if value is None:
-        return types.null
-    elif isinstance(value, str):
-        return ast.Const(None, types.String, value)
-    elif isinstance(value, int):
-        return ast.Const(None, types.Int, value)
-    elif isinstance(value, list):
-        # return ast.Const(None, types.ListType(types.String), value)
-        return objects.List_(None, list(map(python_to_pql, value)))
-    assert False, value
-
+sql_repr = objects.sql_repr
+make_value_instance = objects.make_value_instance

@@ -6,6 +6,7 @@ from typing import List, Optional, Callable, Any
 
 from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for
 from .exceptions import pql_TypeError, pql_AttributeError
+from . import settings
 from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
@@ -199,7 +200,9 @@ class StructColumnInstance(ColumnInstance):
 
     def get_attr(self, name):
         try:
-            return self.members[name]
+            obj = self.members[name]
+            assert isinstance(obj, Instance)
+            return obj
         except KeyError:
             raise pql_AttributeError(name.meta, name)
 
@@ -221,14 +224,58 @@ def make_column_instance(code, type_, from_instances=()):
 
 
 
+def from_python(value):
+    if value is None:
+        return objects.null
+    elif isinstance(value, str):
+        return ast.Const(None, types.String, value)
+    elif isinstance(value, int):
+        return ast.Const(None, types.Int, value)
+    elif isinstance(value, list):
+        # return ast.Const(None, types.ListType(types.String), value)
+        return List_(None, list(map(from_python, value)))
+    assert False, value
+
+
+def sql_repr(x):
+    if x is None:
+        return sql.null
+
+    t = types.Primitive.by_pytype[type(x)]
+    if t is types.DateTime:
+        # TODO Better to pass the object instead of a string?
+        return sql.Primitive(t, repr(str(x)))
+
+    if t is types.String or t is types.Text:
+        return sql.Primitive(t, "'%s'" % str(x).replace("'", "''"))
+
+    return sql.Primitive(t, repr(x))
+
+def make_value_instance(value, type_=None, force_type=False):
+    r = sql_repr(value)
+    if force_type:
+        assert type_
+    elif type_:
+        assert isinstance(type_, (types.Primitive, types.NullType, types.IdType)), type_
+        assert r.type == type_, (r.type, type_)
+    else:
+        type_ = r.type
+    if settings.optimize:
+        return ValueInstance.make(r, type_, [], value)
+    else:
+        return Instance.make(r, type_, [])
+
+
 @dataclass
 class ValueInstance(Instance):
     local_value: object
 
     def get_attr(self, name):
         if isinstance(self.type, types.RowType):
-            return self.local_value[name]
+            obj = self.local_value[name]
+            return from_python(obj)   # XXX Maybe use 'code' to be more efficient?
         return super().get_attr(name)
+
 
 
 @dataclass

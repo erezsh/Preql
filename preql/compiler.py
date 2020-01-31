@@ -1,11 +1,13 @@
 from .utils import safezip, listgen, SafeDict, find_duplicate
 from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError
 
+from . import settings
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify, assert_type, GlobalSettings, make_value_instance
+from .interp_common import dy, State, get_alias, simplify, assert_type, make_value_instance
+
 
 Sql = sql.Sql
 
@@ -90,6 +92,7 @@ def _process_fields(state: State, fields):
         sql_friendly_name = name.replace(".", "_")
 
         v = compile_remote(state, f.value)
+        assert isinstance(v, objects.Instance), (v, f.value)
 
         if isinstance(v.type, types.Aggregated):
 
@@ -290,7 +293,7 @@ def compile_remote(state: State, attr: ast.Attr):
     inst = compile_remote(state, attr.expr)
 
     try:
-        return inst.get_attr(attr.name)
+        return compile_remote(state, inst.get_attr(attr.name))
     except pql_AttributeError:
         meta = attr.name.meta.replace(parent=attr.meta)
         raise pql_AttributeError(meta, f"'{inst.repr(state)}' has no attribute {attr.name} (compiler_type={type(inst)}")
@@ -337,7 +340,7 @@ def _compile_arith(state, arith, a, b):
     arg_types = [a.type for a in args]
     arg_types_set = set(arg_types) - {types.ListType(types.any_t)}  # XXX hacky
 
-    if GlobalSettings.Optimize:
+    if settings.optimize:
         if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
             # Local folding for better performance (optional, for better performance)
             v1, v2 = [a.local_value for a in args]
