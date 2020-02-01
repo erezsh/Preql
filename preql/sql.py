@@ -311,15 +311,11 @@ class ColumnAlias(Sql):
 @dataclass
 class Insert(Sql):
     table_type: types.TableType
+    columns: List[str]
     query: Sql
 
     def _compile(self, qb):
-        t = self.table_type
-        # assert t.flat_length() == self.query.type.flat_length()
-        # params = [n for sn,p in t.params() for n,_ in p.flatten_type([sn])]
-        # return f'INSERT INTO {t.name}({", ".join(params)}) SELECT * FROM ' + self.query.compile(qb).text
-        return f'INSERT INTO {t.name} SELECT * FROM ' + self.query.compile(qb).text
-
+        return f'INSERT INTO {self.table_type.name}({", ".join(self.columns)}) SELECT * FROM ' + self.query.compile(qb).text
 
 @dataclass
 class InsertConsts(Sql):

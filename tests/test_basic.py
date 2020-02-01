@@ -369,6 +369,39 @@ class BasicTests(TestCase):
         res = preql(""" temptable(temptable(Person)[name=="Erez Shinan"]){name} """) # 2 temp tables
         assert is_eq(res, [("Erez Shinan",)])
 
+    def test_copy_rows(self):
+        preql = self.Preql()
+        preql('''
+            table A { x: int }
+            table B { x: int }
+
+            new A(2)
+            B += A
+        ''')
+        assert len(preql.B) == 1, preql.B
+
+        preql(''' B += A ''')
+        assert len(preql.B) == 2
+
+        preql(''' B += A ''')
+        assert len(preql.B) == 3
+
+        preql(''' B += [2, 3] {x: value} ''')
+        assert len(preql.B) == 5
+
+        preql(''' A += B ''')
+        assert len(preql.A) == 6
+
+        # TODO Test, what if fields mismatch?
+
+        preql.load('country_person.pql', rel_to=__file__)
+
+        preql('''
+            table p = Person
+            p += Person {name, country}
+        ''')
+        assert len(preql.p) == 2 * len(preql.Person)
+
 
     def test_one(self):
         preql = self.Preql()

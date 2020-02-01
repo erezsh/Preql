@@ -63,9 +63,9 @@ def _compile_type_primitive(type, nullable):
 @dy
 def compile_type(state: State, type: types.Primitive, nullable=False):
     return _compile_type_primitive(type, nullable)
-@dy
-def compile_type(state: State, type: types.DateTimeType, nullable=False):
-    return _compile_type_primitive(type, nullable)
+# @dy
+# def compile_type(state: State, type: types._DateTime, nullable=False):
+#     return _compile_type_primitive(type, nullable)
 
 @dy
 def compile_type(state: State, type: types.OptionalType):
@@ -175,7 +175,7 @@ def compile_remote(state: State, proj: ast.Projection):
     # Make new type
     all_aliases = []
     new_columns = {}
-    new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), SafeDict(), True)
+    new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), SafeDict(), True, [['id']]) # Maybe wrong
     for name_, (remote_col, sql_alias) in fields + agg_fields:
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
@@ -568,6 +568,6 @@ def instanciate_table(state: State, t: types.TableType, source: Sql, instances, 
     return objects.TableInstance(code, t, objects.merge_subqueries(instances), columns)
 
 
-def exclude_id(state, table):
-    proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=['id'] ))])
+def exclude_fields(state, table, fields):
+    proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])
     return compile_remote(state, proj)

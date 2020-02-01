@@ -27,7 +27,7 @@ RawSql = sql.RawSql
 Sql = sql.Sql
 
 from .interp_common import State, dy, get_alias, sql_repr, make_value_instance
-from .compiler import compile_remote, compile_type_def, instanciate_table, call_pql_func, exclude_id
+from .compiler import compile_remote, compile_type_def, instanciate_table, call_pql_func, exclude_fields
 
 
 
@@ -40,10 +40,10 @@ def resolve(state: State, struct_def: ast.StructDef):
 
 @dy
 def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
-    t = types.TableType(table_def.name, SafeDict(), False)
+    t = types.TableType(table_def.name, SafeDict(), False, [['id']])
     state.set_var(t.name, t)   # TODO use an internal namespace
 
-    t.columns["id"] = types.IdType(t)
+    t.columns['id'] = types.IdType(t)
     for c in table_def.columns:
         t.columns[c.name] = resolve(state, c)
 
@@ -97,9 +97,9 @@ def _execute(state: State, var_def: ast.SetValue):
     _set_value(state, var_def.name, res)
 
 
+
 @dy
 def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstance):
-    # source = exclude_id(state, source)
 
     target = simplify(state, target_name)
 
@@ -109,8 +109,11 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
             raise TypeError(None, f"Missing column {p} in table {source}")
 
     # assert len(params) == len(source.type.columns), (params, source)
+    primary_keys, columns = target.type.flat_for_insert()
 
-    code = sql.Insert(types.null, target.type, source.code)
+    source = exclude_fields(state, source, primary_keys)
+
+    code = sql.Insert(types.null, target.type, columns, source.code)
     state.db.query(code, source.subqueries)
     return objects.null
 
@@ -120,7 +123,7 @@ def _execute(state: State, insert_rows: ast.InsertRows):
         # TODO support Attr
         raise pql_SyntaxError(insert_rows.meta, "L-value must be table name")
 
-    rval = simplify(state, insert_rows.value)
+    rval = compile_remote(state, simplify(state, insert_rows.value))
     return _copy_rows(state, insert_rows.name, rval)
 
 @dy

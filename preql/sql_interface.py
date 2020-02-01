@@ -64,7 +64,7 @@ class SqlInterface:
 
 def print_sql(sql):
     for i, s in enumerate(sql.split('\n')):
-        print('#-  ' if i else '#?  ', s)
+        print('/**/    ' if i else '/**/;;  ', s)
 
 
 class PostgresInterface(SqlInterface):

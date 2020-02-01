@@ -83,7 +83,7 @@ class Primitive(AtomicType):
 class text(str):
     pass
 
-class DateTimeType(Primitive):
+class _DateTime(Primitive):
     pytype = datetime
 
     def import_result(self, res):
@@ -94,12 +94,6 @@ class DateTimeType(Primitive):
         s = super().restructure_result(i)
         return datetime.fromisoformat(s)
 
-# Int = Primitive('int', int, False)
-# Float = Primitive('float', float, False)
-# String = Primitive('string', str, False)
-# Text = Primitive('text', text, False)
-# Bool = Primitive('bool', bool, False)
-# DateTime = DateTimeType('datetime', datetime, False)
 
 class Number(Primitive):
     pass
@@ -115,7 +109,7 @@ Float = _Float()
 String = _String()
 Text = _Text()
 Bool = _Bool()
-DateTime = DateTimeType()
+DateTime = _DateTime()
 null = NullType()
 any_t = AnyType()
 
@@ -130,6 +124,8 @@ class Collection(PqlType):
 @dataclass
 class ListType(Collection, AtomicOrList):
     elemtype: PqlType
+
+    primary_keys = []
 
     @property
     def columns(self):
@@ -231,12 +227,19 @@ class TableType(Collection):
     name: str
     columns: Dict[str, PqlType]
     temporary: bool
+    primary_keys: List[List[str]]
 
     def __post_init__(self):
         assert isinstance(self.columns, SafeDict)
 
     def flatten_path(self, path=[]):
         return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
+
+    def flat_for_insert(self):
+        columns = [name for name, _t in self.flatten_type()]
+        primary_keys = {'_'.join(pk) for pk in self.primary_keys}   # XXX
+        columns = [c for c in columns if c not in primary_keys]
+        return list(primary_keys), columns
 
     def params(self):
         return [(name, c) for name, c in self.columns.items() if not c.hide_from_init]
