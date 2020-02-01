@@ -34,6 +34,7 @@ class BasicTests(TestCase):
 
         self._test_basic(preql)
         self._test_ellipsis(preql)
+        self._test_ellipsis_exclude(preql)
         self._test_user_functions(preql)
         self._test_joins(preql)
         self._test_groupby(preql)
@@ -74,6 +75,16 @@ class BasicTests(TestCase):
 
         self.assertRaises( pql_SyntaxError, preql, 'Person {x: ...}')
         self.assertRaises( pql_SyntaxError, preql, 'Person {...+"a", 2}')
+
+    def _test_ellipsis_exclude(self, preql):
+        self.assertEqual( preql('Person {name, ... !id}[name=="Erez Shinan"]'), [{'name': 'Erez Shinan', 'country': 1}] )
+
+        assert list(preql('Person {name, ... !id !country}')[0].keys()) == ['name']
+        assert list(preql('Person {country, ... !name}')[0].keys()) == ['country', 'id']
+        assert list(preql('Person {... !name, id}')[0].keys()) == ['country', 'id']
+        assert list(preql('Person {country, ... !name, id}')[0].keys()) == ['country', 'id']
+
+        # TODO exception when name doesn't exist
 
     def test_arith(self):
         preql = self.Preql()

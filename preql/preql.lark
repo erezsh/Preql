@@ -115,9 +115,10 @@ named_expr: [name ":"] expr
 range: [molecule] ".." molecule
      | molecule ".." [molecule]
 
-ellipsis: "..."
-
-
+ellipsis: "..." exclude?
+exclude: exclude_name+
+exclude_name: EXCLUDE_NAME
+EXCLUDE_NAME: "!" NAME
 
 getattr: [molecule] "." name
 name: NAME

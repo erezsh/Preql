@@ -121,21 +121,21 @@ def _ensure_col_instance(state, meta, i):
 
 @listgen
 def _expand_ellipsis(table, fields):
-    direct_names = [f.value.name for f in fields if isinstance(f.value, ast.Name)]
+    direct_names = {f.value.name for f in fields if isinstance(f.value, ast.Name)}
 
     for f in fields:
         assert isinstance(f, ast.NamedField)
 
-        if not isinstance(f.value, ast.Ellipsis):
-            yield f
-            continue
-
-        if f.name:
-            raise pql_SyntaxError(f.meta, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
+        if isinstance(f.value, ast.Ellipsis):
+            if f.name:
+                raise pql_SyntaxError(f.meta, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
+            else:
+                exclude = direct_names | set(f.value.exclude)
+                for name in table.columns:
+                    if name not in exclude:
+                        yield ast.NamedField(f.meta, name, ast.Name(None, name))
         else:
-            for name in table.columns:
-                if name not in direct_names:
-                    yield ast.NamedField(f.meta, name, ast.Name(None, name))
+            yield f
 
 
 @dy

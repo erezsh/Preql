@@ -99,7 +99,6 @@ def _execute(state: State, var_def: ast.SetValue):
 
 @dy
 def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstance):
-    assert False
 
     target = simplify(state, target_name)
 

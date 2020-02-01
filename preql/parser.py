@@ -1,6 +1,6 @@
 from ast import literal_eval
 
-from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken
+from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken, Token
 
 from .exceptions import pql_SyntaxError, Meta
 from . import pql_ast as ast
@@ -20,17 +20,6 @@ def token_value(self, meta, t):
 def as_list(_, args):
     return args
 
-def meta_from_token(text, tok):
-    return Meta(
-        text,
-        tok.pos_in_stream,
-        tok.line,
-        tok.column,
-        tok.end_pos,
-        tok.end_line,
-        tok.end_column,
-    )
-
 def meta_d(text, meta):
     return Meta(
         text,
@@ -45,6 +34,7 @@ def meta_d(text, meta):
 def _args_wrapper(f, data, children, meta):
     "Create meta with 'code' from transformer"
     return f(meta_d(f.__self__.code, meta), *children)
+
 
 # Taken from Lark (#TODO provide it in lark utils?)
 def _fix_escaping(s):
@@ -181,9 +171,14 @@ class T(Transformer):
     def table_def_by_expr(self, meta, name, table_expr):
         return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr]))
 
-    # def ellipsis(self, meta):
-    #     return ast.Ellipsis(meta)
-    ellipsis = ast.Ellipsis
+    @v_args(inline=False)
+    def exclude(self, names):
+        return [Str(n.lstrip('!'), n.meta) for n in names]
+
+    exclude_name = token_value
+
+    def ellipsis(self, meta, exclude=None):
+        return ast.Ellipsis(meta, exclude or [])
 
     @v_args(inline=False, meta=True)
     def codeblock(self, stmts, meta):

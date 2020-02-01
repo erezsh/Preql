@@ -35,7 +35,7 @@ class Const(Expr):
 
 @dataclass
 class Ellipsis(Expr):
-    pass
+    exclude: List[str]
 
 @dataclass
 class Compare(Expr):
