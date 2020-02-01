@@ -146,10 +146,9 @@ class InternalFunction(Function):
 class List_(ast.Expr):
     elems: list
 
-
-# @dataclass
-# class Dict_(Expr):
-#     elems: dict
+@dataclass
+class Dict_(ast.Expr):
+    elems: dict
 
 
 # Other
@@ -234,6 +233,8 @@ def from_python(value):
     elif isinstance(value, list):
         # return ast.Const(None, types.ListType(types.String), value)
         return List_(None, list(map(from_python, value)))
+    elif isinstance(value, dict):
+        return Dict_(None, value)
     assert False, value
 
 

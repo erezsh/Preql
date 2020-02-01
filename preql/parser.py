@@ -165,6 +165,7 @@ class T(Transformer):
     return_stmt = ast.Return
     throw = ast.Throw
     if_stmt = ast.If
+    for_stmt = ast.For
     try_catch = ast.Try
     one = lambda self, meta, nullable, expr: ast.One(meta, expr, nullable is not None)
 

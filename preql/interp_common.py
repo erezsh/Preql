@@ -100,6 +100,5 @@ def assert_type(meta, t, type_, msg):
     if not isinstance(t, type_):
         raise pql_TypeError(meta, msg % (type_, t))
 
-
 sql_repr = objects.sql_repr
 make_value_instance = objects.make_value_instance

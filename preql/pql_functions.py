@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
-from .compiler import compile_remote, instanciate_table, compile_type_def, alias_table
+from .compiler import compile_remote, instanciate_table, compile_type_def, alias_table, exclude_id
 from .interp_common import State, get_alias, make_value_instance
 from .evaluate import simplify, evaluate, localize
 
@@ -111,11 +111,15 @@ def pql_count(state: State, obj: ast.Expr):
 def pql_temptable(state: State, expr: ast.Expr):
     expr = compile_remote(state, expr)
     assert isinstance(expr, objects.TableInstance)
+
     name = get_alias(state, "temp_" + expr.type.name)
     table = types.TableType(name, expr.type.columns, temporary=True)
 
     state.db.query(compile_type_def(state, table))
 
+    # if table.flat_length() != expr.type.flat_length():
+    #     assert False
+    # expr = exclude_id(state, expr)
     state.db.query(sql.Insert(types.null, table, expr.code), expr.subqueries)
 
     return instanciate_table(state, table, sql.TableName(table, table.name), [])
@@ -176,7 +180,8 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
             b = b.replace(table=alias_table(state, b.table))
             cols = a, b
         else:
-            assert isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance), (a,b)    # TODO better error message (TypeError?)
+            if not (isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance)):
+                raise pql_TypeError(None, f"join() got unexpected values:\n * {a}\n * {b}")
             a = alias_table(state, a)
             b = alias_table(state, b)
             cols = _auto_join(state, join, a, b)
@@ -262,6 +267,8 @@ def pql_cast_int(state: State, expr: ast.Expr):
 
     elif type_ == types.Int:
         return inst
+    elif isinstance(type_, types.IdType):
+        return inst.replace(type=types.Int)
     elif type_ == types.Float:
         value = localize(state, inst)
         return make_value_instance(int(value), types.Int)

@@ -206,4 +206,9 @@ class If(Statement):
     then: CodeBlock
     else_: Optional[CodeBlock] = None
 
+@dataclass
+class For(Statement):
+    var: str
+    iterable: Expr
+    do: CodeBlock
 

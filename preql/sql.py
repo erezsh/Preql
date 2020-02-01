@@ -357,6 +357,17 @@ class SelectValue(Atom, TableOperation):
         return f'SELECT {value.text} AS value'
 
 @dataclass
+class SelectValues(TableOperation):
+    # XXX Just use a regular select?
+    values: Dict[str, Sql]
+
+    def _compile(self, qb):
+        values = {name: v.compile(qb) for name, v in self.values.items()}
+        fields = {f'{v.text} as {name}' for name, v in values.items()}
+        return f'SELECT {fields}'
+
+
+@dataclass
 class Values(Table):
     values: List[Sql]
 

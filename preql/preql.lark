@@ -1,5 +1,5 @@
 stmts: _NL? stmt+
-?stmt: (table_def | struct_def | func_def | set_value | insert_rows | print | if_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
+?stmt: (table_def | struct_def | func_def | set_value | insert_rows | print | if_stmt | for_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
 
 table_def: "table" name "{" _sep? col_defs? "}" _NL
          | "table" name "=" expr _NL -> table_def_by_expr
@@ -20,6 +20,7 @@ typemod: PK | NULLABLE
 func_def: "func" name func_params ("=" expr _NL | codeblock _NL)
 try_catch: "try" codeblock _NL? "catch" "(" expr ")" codeblock _NL
 if_stmt: "if" "(" expr ")" codeblock (_NL | _NL? "else" codeblock _NL)
+for_stmt: "for" "(" name "in" expr ")" codeblock _NL
 codeblock: "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
 throw: "throw" expr _NL

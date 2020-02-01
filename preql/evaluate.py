@@ -27,7 +27,7 @@ RawSql = sql.RawSql
 Sql = sql.Sql
 
 from .interp_common import State, dy, get_alias, sql_repr, make_value_instance
-from .compiler import compile_remote, compile_type_def, instanciate_table, call_pql_func
+from .compiler import compile_remote, compile_type_def, instanciate_table, call_pql_func, exclude_id
 
 
 
@@ -99,6 +99,7 @@ def _execute(state: State, var_def: ast.SetValue):
 
 @dy
 def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstance):
+    # source = exclude_id(state, source)
 
     target = simplify(state, target_name)
 
@@ -107,9 +108,8 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
         if p not in source.type.columns:
             raise TypeError(None, f"Missing column {p} in table {source}")
 
-    assert len(params) == len(source.type.columns)
+    # assert len(params) == len(source.type.columns), (params, source)
 
-    # XXX something wrong
     code = sql.Insert(types.null, target.type, source.code)
     state.db.query(code, source.subqueries)
     return objects.null
@@ -148,6 +148,13 @@ def _execute(state: State, i: ast.If):
         execute(state, i.then)
     elif i.else_:
         execute(state, i.else_)
+
+@dy
+def _execute(state: State, f: ast.For):
+    expr = localize(state, evaluate(state, f.iterable))
+    for i in expr:
+        with state.use_scope({f.var: objects.from_python(i)}):
+            execute(state, f.do)
 
 @dy
 def _execute(state: State, t: ast.Try):

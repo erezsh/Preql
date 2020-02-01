@@ -431,6 +431,13 @@ def compile_remote(state: State, n: ast.Name):
     return compile_remote(state, v)
 
 @dy
+def compile_remote(state: State, d: objects.Dict_):
+    elems = {k:compile_remote(state, objects.from_python(v)) for k,v in d.elems.items()}
+    t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False)
+    code = sql.SelectValues(t, {k:v.code for k,v in elems.items()})
+    return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
+
+@dy
 def compile_remote(state: State, lst: objects.List_):
     # TODO generate (a,b,c) syntax for IN operations, with its own type
     # sql = "(" * join([e.code.text for e in objs], ",") * ")"
@@ -559,3 +566,8 @@ def instanciate_table(state: State, t: types.TableType, source: Sql, instances, 
         code = sql.Select(t, source, aliases)
 
     return objects.TableInstance(code, t, objects.merge_subqueries(instances), columns)
+
+
+def exclude_id(state, table):
+    proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=['id'] ))])
+    return compile_remote(state, proj)
