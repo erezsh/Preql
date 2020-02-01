@@ -353,7 +353,7 @@ class BasicTests(TestCase):
         assert is_eq(res, [("England",), ("United States",)])
 
         preql.exec("""names = temptable(Person{name}) """)
-        res = preql('names')
+        res = preql('names{name}')
         assert is_eq(res, [
             ("Erez Shinan",),
             ("Ephraim Kishon",),
@@ -477,10 +477,11 @@ class BasicTests(TestCase):
 
         res1 = preql.circles_contained1()
         res2 = preql.circles_contained2()
-        res3 = preql("temptable(circles_contained2())")
+        res3 = preql("temptable(circles_contained2()) {... !id}")
 
         assert res1 == res2, (res1, res2)
         assert res2 == res3, (list(res2), list(res3))
+
 
 
 

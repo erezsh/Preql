@@ -114,6 +114,8 @@ def pql_temptable(state: State, expr: ast.Expr):
 
     name = get_alias(state, "temp_" + expr.type.name)
     table = types.TableType(name, expr.type.columns, temporary=True, primary_keys=[['id']])
+    if 'id' not in table.columns:
+        table.columns['id'] = types.IdType(table)
 
     state.db.query(compile_type_def(state, table))
 

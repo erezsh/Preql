@@ -17,6 +17,7 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
     pks = []
     columns = []
 
+    pks = {'_'.join(pk) for pk in table.primary_keys}
     for name, c in table.flatten_type():
         type_ = compile_type(state, c)
         columns.append( f"{name} {type_}" )
@@ -26,8 +27,11 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
                 # In postgres, constraints on temporary tables may reference only temporary tables
                 s = f"FOREIGN KEY({name}) REFERENCES {c.type.name}(id)"
                 posts.append(s)
-        if c.primary_key:
-            pks.append(name)
+        # if c.primary_key:
+        #     if name not in pks:
+        #         breakpoint()
+        #     assert name in pks
+        #     pks.append(name)
 
     if pks:
         names = ", ".join(pks)
@@ -175,7 +179,7 @@ def compile_remote(state: State, proj: ast.Projection):
     # Make new type
     all_aliases = []
     new_columns = {}
-    new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), SafeDict(), True, [['id']]) # Maybe wrong
+    new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), SafeDict(), True, []) # Maybe wrong
     for name_, (remote_col, sql_alias) in fields + agg_fields:
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
@@ -433,7 +437,7 @@ def compile_remote(state: State, n: ast.Name):
 @dy
 def compile_remote(state: State, d: objects.Dict_):
     elems = {k:compile_remote(state, objects.from_python(v)) for k,v in d.elems.items()}
-    t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False)
+    t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
     code = sql.SelectValues(t, {k:v.code for k,v in elems.items()})
     return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
 
