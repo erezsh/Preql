@@ -146,6 +146,9 @@ def _expand_ellipsis(table, fields):
 def compile_remote(state: State, proj: ast.Projection):
     table = compile_remote(state, proj.table)
     # assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "%s")
+    if table is objects.EmptyList:
+        return table   # Empty list projection is always an empty list.
+
     if not isinstance(table, (objects.TableInstance, objects.StructColumnInstance)):
         raise pql_TypeError(proj.meta, f"Cannot project objects of type {table.type}")
 
@@ -262,8 +265,9 @@ def compile_remote(state: State, cmp: ast.Compare):
         cols = insts[1].columns
         if len(cols) > 1:
             raise pql_TypeError(cmp.meta, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
-        if list(cols.values())[0].type != insts[0].type:
-            raise pql_TypeError(cmp.meta, "Contains operator expects all types to match")
+        c_type = list(cols.values())[0].type
+        if c_type.effective_type() != insts[0].type.effective_type():
+            raise pql_TypeError(cmp.meta, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
     else:
         sql_cls = sql.Compare
@@ -435,14 +439,14 @@ def compile_remote(state: State, n: ast.Name):
     return compile_remote(state, v)
 
 @dy
-def compile_remote(state: State, d: objects.Dict_):
+def compile_remote(state: State, d: ast.Dict_):
     elems = {k:compile_remote(state, objects.from_python(v)) for k,v in d.elems.items()}
     t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
     code = sql.SelectValues(t, {k:v.code for k,v in elems.items()})
     return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
 
 @dy
-def compile_remote(state: State, lst: objects.List_):
+def compile_remote(state: State, lst: ast.List_):
     # TODO generate (a,b,c) syntax for IN operations, with its own type
     # sql = "(" * join([e.code.text for e in objs], ",") * ")"
     # type = length(objs)>0 ? objs[1].type : nothing
@@ -450,9 +454,10 @@ def compile_remote(state: State, lst: objects.List_):
     # Or just evaluate?
 
     if not lst.elems:
-        list_type = types.ListType(types.any_t)      # XXX Any type?
-        code = sql.EmptyList(list_type)
-        return instanciate_table(state, list_type, code, [])
+        # list_type = types.ListType(types.any_t)      # XXX Any type?
+        # code = sql.EmptyList(list_type)
+        # return instanciate_table(state, list_type, code, [])
+        return objects.EmptyList
 
     elems = compile_remote(state, lst.elems)
 
@@ -574,4 +579,11 @@ def instanciate_table(state: State, t: types.TableType, source: Sql, instances, 
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])
+    return compile_remote(state, proj)
+
+def rename_field(state, table, old, new):
+    proj = ast.Projection(None, table, [
+        ast.NamedField(None, None, ast.Ellipsis(None, [])),
+        ast.NamedField(None, new, ast.Name(None, old))
+        ])
     return compile_remote(state, proj)

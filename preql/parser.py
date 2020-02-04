@@ -87,7 +87,7 @@ class T(Transformer):
 
     @v_args(inline=False, meta=True)
     def list(self, items, meta):
-        return objects.List_(meta_d(self.code, meta), items)
+        return ast.List_(meta_d(self.code, meta), items)
 
     expr_list = as_list
     proj_exprs = as_list

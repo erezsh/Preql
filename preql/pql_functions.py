@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
-from .compiler import compile_remote, instanciate_table, compile_type_def, alias_table, exclude_fields
+from .compiler import compile_remote, instanciate_table, compile_type_def, alias_table, exclude_fields, rename_field
 from .interp_common import State, get_alias, make_value_instance
 from .evaluate import simplify, evaluate, localize
 
@@ -87,8 +87,9 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     res = isinstance(inst.type, type_)
     return make_value_instance(res, types.Bool)
 
-def _apply_sql_func(state, obj: ast.Expr, table_func, name):
+def _count(state, obj: ast.Expr, table_func, name):
     obj = compile_remote(state, obj)
+
     if isinstance(obj, objects.TableInstance):
         code = table_func(types.Int, obj.code)
     else:
@@ -105,7 +106,7 @@ def _apply_sql_func(state, obj: ast.Expr, table_func, name):
     return objects.Instance.make(code, types.Int, [obj])
 
 def pql_count(state: State, obj: ast.Expr):
-    return _apply_sql_func(state, obj, sql.CountTable, 'count')
+    return _count(state, obj, sql.CountTable, 'count')
 
 
 def pql_temptable(state: State, expr: ast.Expr):
@@ -121,9 +122,9 @@ def pql_temptable(state: State, expr: ast.Expr):
 
     # if table.flat_length() != expr.type.flat_length():
     #     assert False
-    # expr = exclude_id(state, expr)
     primary_keys, columns = table.flat_for_insert()
     expr = exclude_fields(state, expr, primary_keys)
+    # expr = rename_field(state, expr, primary_keys)
     state.db.query(sql.Insert(types.null, table, columns, expr.code), expr.subqueries)
 
     return instanciate_table(state, table, sql.TableName(table, table.name), [])
@@ -174,22 +175,21 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     (a,b) = exprs.values()
 
-    if joinall:
+    if isinstance(a, objects.ColumnReference) and isinstance(b, objects.ColumnReference):
+        a = a.replace(table=alias_table(state, a.table))
+        b = b.replace(table=alias_table(state, b.table))
+        cols = a, b
+        tables = [a.table, b.table]
+    else:
+        if not (isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance)):
+            raise pql_TypeError(None, f"join() got unexpected values:\n * {a}\n * {b}")
         a = alias_table(state, a)
         b = alias_table(state, b)
-        tables = (a,b)
-    else:
-        if isinstance(a, objects.ColumnReference) and isinstance(b, objects.ColumnReference):
-            a = a.replace(table=alias_table(state, a.table))
-            b = b.replace(table=alias_table(state, b.table))
-            cols = a, b
+        if joinall:
+            tables = (a, b)
         else:
-            if not (isinstance(a, objects.TableInstance) and isinstance(b, objects.TableInstance)):
-                raise pql_TypeError(None, f"join() got unexpected values:\n * {a}\n * {b}")
-            a = alias_table(state, a)
-            b = alias_table(state, b)
             cols = _auto_join(state, join, a, b)
-        tables = [c.table for c in cols]
+            tables = [c.table for c in cols]
 
     # tables = [alias_table(state, t) for t in tables]
 
@@ -345,7 +345,7 @@ def pql_ls(state: State, obj: types.PqlObject = objects.null):
 
     assert all(isinstance(s, str) for s in all_vars)
     names = [make_value_instance(str(s), types.String) for s in all_vars]
-    return compile_remote(state, objects.List_(None, names))
+    return compile_remote(state, ast.List_(None, names))
 
 
 

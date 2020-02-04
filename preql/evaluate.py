@@ -101,6 +101,9 @@ def _execute(state: State, var_def: ast.SetValue):
 @dy
 def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstance):
 
+    if source is objects.EmptyList: # Nothing to add
+        return objects.null
+
     target = simplify(state, target_name)
 
     params = dict(target.type.params())
@@ -286,8 +289,8 @@ def simplify(state: State, x: ast.Throw):
     return x
 
 @dy
-def simplify(state: State, c: objects.List_):
-    return objects.List_(c.meta, simplify_list(state, c.elems))
+def simplify(state: State, c: ast.List_):
+    return ast.List_(c.meta, simplify_list(state, c.elems))
 
 @dy
 def simplify(state: State, obj: ast.Compare):
@@ -429,8 +432,8 @@ def simplify(state: State, new: ast.NewRows):
         ids += [_new_row(state, obj, destructured_pairs)]
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
-    # return objects.List_(new.meta, [make_value_instance(rowid, obj.columns['id'], force_type=True) for rowid in ids])
-    return objects.List_(new.meta, ids)
+    # return ast.List_(new.meta, [make_value_instance(rowid, obj.columns['id'], force_type=True) for rowid in ids])
+    return ast.List_(new.meta, ids)
 
 
 @listgen

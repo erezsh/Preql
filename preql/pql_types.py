@@ -18,6 +18,9 @@ class PqlType(PqlObject):
     def actual_type(self):
         return self
 
+    def effective_type(self):   # XXX what
+        return self
+
     def flatten_type(self, path_base=[]):
         return [('_'.join(path), t) for path, t in self.flatten_path(path_base)]
 
@@ -196,31 +199,6 @@ class SetType(Collection):
     elemtype: PqlType
 
 
-@dataclass
-class DatumColumn(PqlType):
-    type: PqlType
-    default: Optional[PqlObject] = None
-
-    def actual_type(self):
-        return self.type
-
-    def restructure_result(self, i):
-        return self.type.restructure_result(i)
-
-    def flatten_path(self, path):
-        return self.type.flatten_path(path)
-
-    @property
-    def hide_from_init(self):
-        return self.type.hide_from_init
-
-@dataclass
-class RelationalColumn(AtomicType):
-    type: PqlType
-    query: Optional[Any] = None # XXX what now?
-
-    def restructure_result(self, i):
-        return self.type.restructure_result(i)
 
 @dataclass
 class TableType(Collection):
@@ -276,6 +254,37 @@ class TableType(Collection):
             i = iter(row)
             s = ({str(name): col.restructure_result(i) for name, col in self.columns.items()})
             yield s
+
+@dataclass
+class RelationalColumn(AtomicType):
+    type: TableType
+    query: Optional[Any] = None # XXX what now?
+
+    def restructure_result(self, i):
+        return self.type.restructure_result(i)
+
+    def effective_type(self):   # XXX Yikes
+        pks = ['_'.join(pk) for pk in self.type.primary_keys]
+        return self.type.columns[pks[0]]    # TODO what if there's more than one? Struct relation.. ??
+
+@dataclass
+class DatumColumn(PqlType):
+    type: PqlType
+    default: Optional[PqlObject] = None
+
+    def actual_type(self):
+        return self.type
+
+    def restructure_result(self, i):
+        return self.type.restructure_result(i)
+
+    def flatten_path(self, path):
+        return self.type.flatten_path(path)
+
+    @property
+    def hide_from_init(self):
+        return self.type.hide_from_init
+
 
 @dataclass
 class RowType(PqlType):

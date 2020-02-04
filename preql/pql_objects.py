@@ -140,16 +140,6 @@ class InternalFunction(Function):
         return f'<func {self.name}({params}) ...>'
 
 
-# Collections
-
-@dataclass
-class List_(ast.Expr):
-    elems: list
-
-@dataclass
-class Dict_(ast.Expr):
-    elems: dict
-
 
 # Other
 
@@ -225,16 +215,16 @@ def make_column_instance(code, type_, from_instances=()):
 
 def from_python(value):
     if value is None:
-        return objects.null
+        return null
     elif isinstance(value, str):
         return ast.Const(None, types.String, value)
     elif isinstance(value, int):
         return ast.Const(None, types.Int, value)
     elif isinstance(value, list):
         # return ast.Const(None, types.ListType(types.String), value)
-        return List_(None, list(map(from_python, value)))
+        return ast.List_(None, list(map(from_python, value)))
     elif isinstance(value, dict):
-        return Dict_(None, value)
+        return ast.Dict_(None, value)
     assert False, value
 
 
@@ -370,3 +360,16 @@ def aggregated(inst):
 
 
 null = ValueInstance.make(sql.null, types.null, [], None)
+
+@dataclass
+class EmptyListInstance(TableInstance):
+    """Special case, because it is untyped
+    """
+    def get_attr(self, name):
+        return EmptyList
+
+_empty_list_type = types.ListType(types.any_t)
+from collections import defaultdict
+def _any_column():
+    return EmptyList
+EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, [], defaultdict(_any_column))    # Singleton

@@ -212,3 +212,15 @@ class For(Statement):
     iterable: Expr
     do: CodeBlock
 
+
+
+
+# Collections
+
+@dataclass
+class List_(Expr):
+    elems: list
+
+@dataclass
+class Dict_(Expr):
+    elems: dict
