@@ -269,12 +269,12 @@ def test_nonzero(state: State, inst: objects.ValueInstance):
 
 @dy
 def simplify(state: State, obj: ast.Or):
-    # return obj.replace(args=simplify_list(state, obj.args))
     for expr in obj.args:
         inst = evaluate(state, expr)
         nz = test_nonzero(state, inst)
         if nz:
             return inst
+    return inst
 
 @dy
 def simplify(state: State, c: ast.CodeBlock):

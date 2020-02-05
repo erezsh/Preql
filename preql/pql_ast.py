@@ -177,7 +177,6 @@ class InsertRows(Statement):
 class FuncDef(Statement):
     userfunc: types.PqlObject   # XXX Why not use UserFunction?
 
-
 @dataclass
 class Print(Statement):
     value: Expr

@@ -27,7 +27,7 @@ throw: "throw" expr _NL
 set_value: atom "=" expr _NL
 print: "print" expr _NL
 func_params: "(" (param ("," param)*)? ")"
-param: name [":" type] ["=" expr]   // TODO type? default value?
+param: name [":" expr] ["=" expr]   // TODO type? default value?
 insert_rows: atom "+=" expr _NL
 
 _sep: "," | "," _NL | _NL

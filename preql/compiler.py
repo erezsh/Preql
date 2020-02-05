@@ -435,6 +435,7 @@ def compile_remote(state: State, c: ast.Const):
 @dy
 def compile_remote(state: State, n: ast.Name):
     v = simplify(state, n)
+    assert v is not None, n
     assert v is not n   # Protect against recursions
     return compile_remote(state, v)
 
@@ -446,14 +447,14 @@ def compile_remote(state: State, d: ast.Dict_):
     return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
 
 @dy
-def compile_remote(state: State, lst: ast.List_):
+def compile_remote(state: State, lst: ast.List_, elem_type=None):
     # TODO generate (a,b,c) syntax for IN operations, with its own type
     # sql = "(" * join([e.code.text for e in objs], ",") * ")"
     # type = length(objs)>0 ? objs[1].type : nothing
     # return Instance(Sql(sql), ArrayType(type, false))
     # Or just evaluate?
 
-    if not lst.elems:
+    if not lst.elems and elem_type is None:
         # list_type = types.ListType(types.any_t)      # XXX Any type?
         # code = sql.EmptyList(list_type)
         # return instanciate_table(state, list_type, code, [])
@@ -464,6 +465,8 @@ def compile_remote(state: State, lst: ast.List_):
     type_set = list({e.type for e in elems})
     if len(type_set) > 1:
         raise pql_TypeError(lst.meta, "Cannot create a list of mixed types: (%s)" % ', '.join(repr(t) for t in type_set))
+    elif elem_type is not None:
+        assert not type_set
     else:
         elem_type ,= type_set
 
@@ -505,6 +508,9 @@ def compile_remote(state: State, s: ast.Slice):
 @dy
 def compile_remote(state: State, sel: ast.Selection):
     table = compile_remote(state, sel.table)
+    if isinstance(table, types.PqlType):
+        return _apply_type_generics(state, table, sel.conds)
+
     assert_type(sel.meta, table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.columns):
@@ -516,6 +522,25 @@ def compile_remote(state: State, sel: ast.Selection):
     inst = objects.TableInstance.make(code, table.type, [table] + conds, table.columns)
     return inst
 
+
+def _apply_type_generics(state, gen_type, type_names):
+    type_objs = compile_remote(state, type_names)
+    if not type_objs:
+        raise pql_TypeError(None, f"Generics expression expected a type, got nothing.")
+    for o in type_objs:
+        if not isinstance(o, types.PqlType):
+            raise pql_TypeError(None, f"Generics expression expected a type, got '{o}'.")
+
+    if len(type_objs) > 1:
+        #t = types.Union
+        raise pql_TypeError("Union types not yet supported!")
+    else:
+        t ,= type_objs
+
+    try:
+        return gen_type.apply_inner_type(t)
+    except TypeError:
+        raise pql_TypeError(None, f"Type {t} isn't a container!")
 
 
 

@@ -24,6 +24,9 @@ class PqlType(PqlObject):
     def flatten_type(self, path_base=[]):
         return [('_'.join(path), t) for path, t in self.flatten_path(path_base)]
 
+    def apply_inner_type(self, t):
+        raise TypeError("This type isn't a 'generic', and has no inner type")
+
     hide_from_init = False
     primary_key = False
 
@@ -115,6 +118,7 @@ Bool = _Bool()
 DateTime = _DateTime()
 null = NullType()
 any_t = AnyType()
+object_t = PqlObject()
 
 
 # Collections
@@ -132,7 +136,7 @@ class ListType(Collection, AtomicOrList):
 
     @property
     def columns(self):
-        return {'value': self.elemtype}
+        return SafeDict({'value': self.elemtype})
     @property
     def name(self):
         return 'list_%s' % self.elemtype.name
@@ -149,6 +153,9 @@ class ListType(Collection, AtomicOrList):
 
     def __repr__(self):
         return f'list[{self.elemtype}]'
+
+    def apply_inner_type(self, t):
+        return type(self)(t)
 
 @dataclass
 class FunctionType(PqlType):
@@ -208,7 +215,7 @@ class TableType(Collection):
     primary_keys: List[List[str]]
 
     def __post_init__(self):
-        assert isinstance(self.columns, SafeDict)
+        assert isinstance(self.columns, SafeDict), self.columns
 
     def flatten_path(self, path=[]):
         return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())

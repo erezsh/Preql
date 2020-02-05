@@ -15,7 +15,7 @@ from . import sql
 @dataclass
 class Param(ast.Ast):
     name: str
-    type: Optional[Any] = None
+    type: Optional[types.PqlType] = None
     default: Optional[types.PqlObject] = None
     orig: Any = None # XXX temporary and lazy, for TableConstructor
 

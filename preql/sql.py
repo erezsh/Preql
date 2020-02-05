@@ -324,6 +324,7 @@ class InsertConsts(Sql):
     values: List[Sql]
 
     def _compile(self, qb):
+        assert self.values
 
         q = ['INSERT INTO', self.table.name,
              "(", ', '.join(self.cols), ")",
@@ -369,6 +370,8 @@ class Values(Table):
 
     def _compile(self, qb):
         values = [v.compile(qb) for v in self.values]
+        if not values:  # SQL doesn't support empty values
+            return 'SELECT NULL LIMIT 0'
         return 'VALUES' + ','.join(f'({v.text})' for v in values)
 
 class AllFields(Sql):

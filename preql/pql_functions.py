@@ -9,7 +9,7 @@ from . import pql_ast as ast
 from . import sql
 
 from .compiler import compile_remote, instanciate_table, compile_type_def, alias_table, exclude_fields, rename_field
-from .interp_common import State, get_alias, make_value_instance
+from .interp_common import State, get_alias, make_value_instance, dy
 from .evaluate import simplify, evaluate, localize
 
 def _pql_SQL_callback(state: State, var: str, instances):
@@ -175,6 +175,9 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     (a,b) = exprs.values()
 
+    if a is objects.EmptyList or b is objects.EmptyList:
+        raise pql_TypeError(None, "Cannot join on an untyped empty list")
+
     if isinstance(a, objects.ColumnReference) and isinstance(b, objects.ColumnReference):
         a = a.replace(table=alias_table(state, a.table))
         b = b.replace(table=alias_table(state, b.table))
@@ -190,8 +193,6 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
         else:
             cols = _auto_join(state, join, a, b)
             tables = [c.table for c in cols]
-
-    # tables = [alias_table(state, t) for t in tables]
 
     col_types = {name: types.StructType(name, {n:c.type for n, c in table.columns.items()})
                 for name, table in safezip(exprs, tables)}
@@ -259,6 +260,25 @@ def pql_type(state: State, obj: ast.Expr):
     # if isinstance(t, types.TableType):
     #     return types.TableType
     return t
+
+def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
+    inst = compile_remote(state, obj)
+    type_ = compile_remote(state, type_)
+    if not isinstance(type_, types.PqlType):
+        raise pql_TypeError(type_.meta, f"Cast expected a type, got {type_} instead.")
+
+    return _cast(state, inst.type, type_, inst)
+
+@dy
+def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
+    if inst_type == target_type:
+        return inst
+
+    if inst is objects.EmptyList:
+        return compile_remote(state, ast.List_(None, []), target_type.elemtype)
+
+    raise pql_TypeError(None, "Cast not fully implemented yet")
+
 
 def pql_cast_int(state: State, expr: ast.Expr):
     "Temporary function, for internal use"
@@ -365,6 +385,7 @@ internal_funcs = {
     'breakpoint': pql_breakpoint,
     'get_db_type': pql_get_db_type,
     '_cast_int': pql_cast_int,
+    'cast': pql_cast,
 }
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),

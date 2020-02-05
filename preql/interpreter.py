@@ -19,7 +19,7 @@ def _canonize_default(d):
 def _create_internal_func(fname, f):
     sig = inspect.signature(f)
     return objects.InternalFunction(fname, [
-        objects.Param(None, pname, type_, _canonize_default(sig.parameters[pname].default))
+        objects.Param(None, pname, types.any_t, _canonize_default(sig.parameters[pname].default))
         for pname, type_ in list(f.__annotations__.items())[1:]
     ], f)
 
@@ -29,7 +29,7 @@ def initial_namespace():
         fname: _create_internal_func(fname, f) for fname, f in internal_funcs.items()
     })
     ns.update(joins)
-    ns['list'] = types.ListType
+    ns['list'] = types.ListType(types.any_t)
     ns['aggregate'] = types.Aggregated
     ns['TypeError'] = pql_TypeError
     ns['ValueError'] = pql_ValueError
