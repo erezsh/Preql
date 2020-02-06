@@ -323,7 +323,7 @@ def simplify(state: State, o: ast.One):
     # TODO move these to the core/base module
     fname = '_only_one_or_none' if o.nullable else '_only_one'
     f = state.get_var(fname)
-    table = simplify(state, ast.FuncCall(o.meta, f, [o.expr]))
+    table = simplify(state, ast.FuncCall(o.meta, f, [o.expr]))  # TODO Use call_pql_func
     if isinstance(table.type, types.NullType):
         return table
 
@@ -438,6 +438,7 @@ def simplify(state: State, new: ast.NewRows):
 
 @listgen
 def _destructure_param_match(state, meta, param_match):
+    # TODO use cast rather than a ad-hoc hardwired destructure
     for k, v in param_match:
         v = localize(state, evaluate(state, v))
         if isinstance(k.type.actual_type(), types.StructType):
@@ -457,6 +458,7 @@ def _new_row(state, table, destructured_pairs):
     q = sql.InsertConsts(types.null, sql.TableName(table, table.name), keys, values)
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
+    # return rowid
     return make_value_instance(rowid, table.columns['id'], force_type=True)  # XXX find a nicer way
 
 @dy
@@ -474,17 +476,20 @@ def simplify(state: State, new: ast.New):
         res = simplify(state, ast.FuncCall(new.meta, f, new.args))
         return res
 
-    if isinstance(obj, objects.TableInstance):
-        obj = obj.type
-    # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
-    assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+    assert isinstance(obj, objects.TableInstance)  # XXX always the case?
     table = obj
+    # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
+    assert_type(new.meta, table.type, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
 
-    cons = TableConstructor.make(table)
+    cons = TableConstructor.make(table.type)
     matched = cons.match_params(new.args)
 
     destructured_pairs = _destructure_param_match(state, new.meta, matched)
-    return _new_row(state, table, destructured_pairs)
+    rowid = _new_row(state, table.type, destructured_pairs)
+    return rowid
+    # return make_value_instance(rowid, table.type.columns['id'], force_type=True)  # XXX find a nicer way
+    # expr = ast.One(None, ast.Selection(None, table, [ast.Compare(None, '==', [ast.Name(None, 'id'), make_value_instance(rowid)])]), False)
+    # return evaluate(state, expr)
 
 
 @dataclass

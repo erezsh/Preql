@@ -232,6 +232,10 @@ def sql_repr(x):
     if x is None:
         return sql.null
 
+    # if isinstance(x, dict):
+    #     v = {name:sql_repr(v) for name, v in x.items()}
+    #     return sql.SelectValues(types.StructType("_repr", {name:v.type for name, v in v.items()}), v)
+
     t = types.Primitive.by_pytype[type(x)]
     if t is types.DateTime:
         # TODO Better to pass the object instead of a string?

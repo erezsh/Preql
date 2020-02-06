@@ -423,6 +423,18 @@ class BasicTests(TestCase):
         self.assertRaises(pql_ValueError, preql, 'one? [1,2]')
         self.assertRaises(pql_ValueError, preql, 'one []')
 
+    def _test_new(self):
+        preql = self.Preql()
+        preql('''
+            table A { x: int }
+            a = new A(1)
+        ''')
+
+        self.assertEqual( preql.a , preql('one A[x==1]') )
+
+        # TODO
+        # assert preql('a == A[x==1]')
+
     def test_delete(self):
         preql = self.Preql()
         preql('''

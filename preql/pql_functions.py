@@ -257,8 +257,6 @@ def pql_type(state: State, obj: ast.Expr):
     """
     inst = compile_remote(state, obj)
     t = inst.type   # XXX concrete?
-    # if isinstance(t, types.TableType):
-    #     return types.TableType
     return t
 
 def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
