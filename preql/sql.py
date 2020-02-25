@@ -1,6 +1,6 @@
 from typing import List, Any, Optional, Dict
 
-from .utils import dataclass, SafeDict, listgen
+from .utils import dataclass, SafeDict, listgen, X
 from . import pql_types as types
 from .pql_types import PqlType
 
@@ -256,9 +256,7 @@ class Arith(Scalar):
         x = (f' {self.op} ').join(e.compile(qb).text for e in self.exprs)
         return f'({x})'
 
-    @property
-    def type(self):
-        return self.exprs[0].type   # TODO ensure type correctness
+    type = property(X.exprs[0].type)     # TODO ensure type correctness
 
 
 @dataclass
@@ -278,9 +276,7 @@ class TableArith(TableOperation):
 
         return code
 
-    @property
-    def type(self):
-        return self.exprs[0].type   # TODO ensure type correctness
+    type = property(X.exprs[0].type)   # TODO ensure type correctness
 
 
 @dataclass
@@ -291,9 +287,7 @@ class Neg(Sql):
         s = self.expr.compile(qb)
         return "-" + s.text
 
-    @property
-    def type(self):
-        return self.expr.type
+    type = property(X.expr.type)
 
 @dataclass
 class Desc(Sql):
@@ -303,9 +297,7 @@ class Desc(Sql):
         s = self.expr.compile(qb)
         return s.text + " DESC"
 
-    @property
-    def type(self):
-        return self.expr.type
+    type = property(X.expr.type)
 
 _reserved = {'index', 'create', 'unique', 'table', 'select', 'where', 'group', 'by', 'over'}
 
@@ -337,9 +329,7 @@ class ColumnAlias(Sql):
 
         return f'{value} AS {alias}'
 
-    @property
-    def type(self):
-        return self.value.type
+    type = property(X.value.type)
 
 
 @dataclass
@@ -389,13 +379,11 @@ class SelectValue(Atom, TableOperation):
         value = self.value.compile(qb)
         return f'SELECT {value.text} AS value'
 
-    @property
-    def type(self):
-        return self.value.type
+    type = property(X.value.type)
 
 @dataclass
 class SelectValues(TableOperation):
-    # XXX Just use a regular select?
+    # XXX Can we use a regular select?
     values: Dict[str, Sql]
 
     def _compile(self, qb):
@@ -485,7 +473,7 @@ class Select(TableOperation):
             sql += ' LIMIT ' + self.limit.compile(qb).text
         elif self.offset:
             if qb.target == sqlite:
-                sql += ' LIMIT -1'  # Sqlite only
+                sql += ' LIMIT -1'  # Sqlite only (and only old versions of it)
 
         if self.offset:
             sql += ' OFFSET ' + self.offset.compile(qb).text
@@ -494,6 +482,7 @@ class Select(TableOperation):
             sql += ' ORDER BY ' + ', '.join(o.compile(qb).text for o in self.order)
 
         return sql
+
 
 @dataclass
 class Subquery(Sql):
@@ -511,9 +500,7 @@ class Subquery(Sql):
         sql_code = self._compile(qb)
         return CompiledSQL(sql_code, self)
 
-    @property
-    def type(self):
-        return self.query.type
+    type = property(X.query.type)
 
 
 @dataclass

@@ -4,7 +4,7 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any
 
-from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for
+from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for, X
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import settings
 from . import pql_types as types
@@ -324,12 +324,10 @@ class ColumnReference(ColumnInstance):
     def column(self):
         return self.table.columns[self.name]
 
-    @property
-    def code(self):
-        return self.column.code
-    @property
-    def type(self):
-        return self.column.type
+
+    code = property(X.column.code)
+    type = property(X.column.type)
+
     @property
     def subqueries(self):
         return merge_subqueries([self.column, self.table])

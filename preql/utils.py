@@ -1,5 +1,6 @@
 from typing import _GenericAlias as TypeBase, Any, Union, Callable
 from functools import wraps
+from operator import getitem
 
 from runtype import dataclass
 
@@ -48,3 +49,23 @@ def find_duplicate(seq, key=lambda x:x):
         if k in found:
             return i
         found.add(k)
+
+
+class _X:
+    def __init__(self, path = None):
+        self.path = path or []
+
+    def __getattr__(self, attr):
+        x = getattr, attr
+        return type(self)(self.path+[x])
+
+    def __getitem__(self, item):
+        x = getitem, item
+        return type(self)(self.path+[x])
+
+    def __call__(self, obj):
+        for f, p in self.path:
+            obj = f(obj, p)
+        return obj
+
+X = _X()
