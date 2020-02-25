@@ -116,7 +116,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
 
     source = exclude_fields(state, source, primary_keys)
 
-    code = sql.Insert(types.null, target.type, columns, source.code)
+    code = sql.Insert(target.type, columns, source.code)
     state.db.query(code, source.subqueries)
     return objects.null
 
@@ -354,8 +354,8 @@ def simplify(state: State, d: ast.Delete):
             raise pql_ValueError(d.meta, "Delete error: Table does not contain id")
         id_ = row['id']
 
-        compare = sql.Compare(types.Bool, '=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
-        code = sql.Delete(types.null, sql.TableName(table.type, table.type.name), [compare])
+        compare = sql.Compare('=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
+        code = sql.Delete(sql.TableName(table.type, table.type.name), [compare])
         state.db.query(code, table.subqueries)
 
     return evaluate(state, d.table)
@@ -384,8 +384,8 @@ def simplify(state: State, u: ast.Update):
         id_ = row['id']
         if not set(proj) < set(row):
             raise pql_ValueError(u.meta, "Update error: Not all keys exist in table")
-        compare = sql.Compare(types.Bool, '=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
-        code = sql.Update(types.null, sql.TableName(table.type, table.type.name), sql_proj, [compare])
+        compare = sql.Compare('=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
+        code = sql.Update(sql.TableName(table.type, table.type.name), sql_proj, [compare])
         state.db.query(code, table.subqueries)
 
     # TODO return by ids to maintain consistency, and skip a possibly long query
@@ -455,7 +455,7 @@ def _new_row(state, table, destructured_pairs):
     keys = [name for (name, _) in destructured_pairs]
     values = [sql_repr(v) for (_,v) in destructured_pairs]
     # TODO use regular insert?
-    q = sql.InsertConsts(types.null, sql.TableName(table, table.name), keys, values)
+    q = sql.InsertConsts(sql.TableName(table, table.name), keys, values)
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
     # return rowid

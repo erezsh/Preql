@@ -70,7 +70,7 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
         # TODO this isn't in the tests!
         fields = [sql.Name(c, path) for path, c in inst.type.flatten_type()]
 
-        subq = sql.Subquery(type_, name, fields, code)
+        subq = sql.Subquery(name, fields, code)
         inst.subqueries[name] = subq
 
         return inst
@@ -91,7 +91,7 @@ def _count(state, obj: ast.Expr, table_func, name):
     obj = compile_remote(state, obj)
 
     if isinstance(obj, objects.TableInstance):
-        code = table_func(types.Int, obj.code)
+        code = table_func(obj.code)
     else:
         if not isinstance(obj.type, types.Aggregated):
             raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
@@ -101,7 +101,7 @@ def _count(state, obj: ast.Expr, table_func, name):
             # But what happens if there is no 'id'?
             obj = obj.get_attr('id')
 
-        code = sql.FieldFunc(types.Int, name, obj.code)
+        code = sql.FieldFunc(name, obj.code)
 
     return objects.Instance.make(code, types.Int, [obj])
 
@@ -125,7 +125,7 @@ def pql_temptable(state: State, expr: ast.Expr):
     primary_keys, columns = table.flat_for_insert()
     expr = exclude_fields(state, expr, primary_keys)
     # expr = rename_field(state, expr, primary_keys)
-    state.db.query(sql.Insert(types.null, table, columns, expr.code), expr.subqueries)
+    state.db.query(sql.Insert(table, columns, expr.code), expr.subqueries)
 
     return instanciate_table(state, table, sql.TableName(table, table.name), [])
 
@@ -150,7 +150,7 @@ def sql_bin_op(state, op, table1, table2, name):
     if l1 != l2:
         raise pql_TypeError(None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
-    code = sql.TableArith(t1.type, op, [t1.code, t2.code])
+    code = sql.TableArith(op, [t1.code, t2.code])
     # TODO new type, so it won't look like the physical table
     return objects.TableInstance.make(code, t1.type, [t1, t2], t1.columns)
 
@@ -208,7 +208,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
                     ]
     table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), SafeDict(col_types), False, primary_keys)
 
-    conds = [] if joinall else [sql.Compare(types.Bool, '=', [cols[0].code, cols[1].code])]
+    conds = [] if joinall else [sql.Compare('=', [cols[0].code, cols[1].code])]
 
     code = sql.Join(table_type, join, [t.code for t in tables], conds)
 

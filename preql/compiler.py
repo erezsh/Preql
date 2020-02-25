@@ -233,7 +233,7 @@ def compile_remote(state: State, order: ast.Order):
 @dy
 def compile_remote(state: State, expr: ast.DescOrder):
     obj = compile_remote(state, expr.value)
-    return obj.replace(code=sql.Desc(obj.type, obj.code))
+    return obj.replace(code=sql.Desc(obj.code))
 
 
 
@@ -251,7 +251,7 @@ def compile_remote(state: State, like: ast.Like):
     if p.type != types.String:
         raise pql_TypeError(like.pattern.meta.replace(parent=like.meta), f"Like (~) operator expects two strings")
 
-    code = sql.Like(types.Bool, s.code, p.code)
+    code = sql.Like(s.code, p.code)
     return objects.Instance.make(code, types.Bool, [s, p])
 
 @dy
@@ -287,7 +287,7 @@ def compile_remote(state: State, cmp: ast.Compare):
 
     insts = [_get_comparable_instance(i) for i in insts]
 
-    code = sql_cls(types.Bool, op, [i.code for i in insts])
+    code = sql_cls(op, [i.code for i in insts])
     inst = objects.Instance.make(code, types.Bool, insts)
     return inst
 
@@ -397,7 +397,7 @@ def _compile_arith(state, arith, a, b):
     elif arith.op == '//':
         op = '/'
 
-    code = sql.Arith(res_type, op, arg_codes)
+    code = sql.Arith(op, arg_codes)
     return objects.Instance.make(code, res_type, args)
 
 
@@ -476,7 +476,7 @@ def compile_remote(state: State, lst: ast.List_, elem_type=None):
     name = get_alias(state, "list_")
     inst = instanciate_table(state, list_type, sql.TableName(list_type, name), elems)
     fields = [sql.Name(elem_type, 'value')]
-    subq = sql.Subquery(list_type, name, fields, sql.Values(list_type, [e.code for e in elems]))
+    subq = sql.Subquery(name, fields, sql.Values(list_type, [e.code for e in elems]))
     inst.subqueries[name] = subq
     return inst
 
@@ -497,7 +497,7 @@ def compile_remote(state: State, s: ast.Slice):
     if s.range.stop:
         stop = compile_remote(state, s.range.stop)
         instances += [stop]
-        limit = sql.Arith(types.Int, '-', [stop.code, start.code])
+        limit = sql.Arith('-', [stop.code, start.code])
     else:
         limit = None
 

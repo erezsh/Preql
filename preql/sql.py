@@ -2,6 +2,7 @@ from typing import List, Any, Optional, Dict
 
 from .utils import dataclass, SafeDict, listgen
 from . import pql_types as types
+from .pql_types import PqlType
 
 
 sqlite = 'sqlite'
@@ -26,8 +27,6 @@ class QueryBuilder:
 
 @dataclass
 class Sql:
-    type: types.PqlType
-
     _is_select = False
 
     def compile(self, qb):  # Move to Expr? Doesn't apply to statements
@@ -54,6 +53,7 @@ class CompiledSQL:
 
 @dataclass
 class RawSql(Sql):
+    type: PqlType
     text: str
 
     def _compile(self, qb):
@@ -65,10 +65,12 @@ class RawSql(Sql):
 
 @dataclass
 class Null(Sql):
+    type = types.null
+
     def _compile(self, qb):
         return 'null'
 
-null = Null(types.null)
+null = Null()
 
 @dataclass
 class Scalar(Sql):
@@ -83,12 +85,14 @@ class Atom(Scalar):
 
 @dataclass
 class Primitive(Atom):
+    type: PqlType
     text: str
 
     def _compile(self, qb):
         return self.text
 
 
+@dataclass
 class Table(Sql):
 
     @listgen
@@ -102,6 +106,8 @@ class Table(Sql):
 
 @dataclass
 class EmptyList(Table):
+    type: PqlType
+
     _is_select = True
 
     def _compile(self, qb):
@@ -110,6 +116,7 @@ class EmptyList(Table):
 
 @dataclass
 class TableName(Table):
+    type: PqlType
     name: str
 
     # def _compile(self, qb):
@@ -132,15 +139,16 @@ class TableOperation(Table):
 class FieldFunc(Sql):
     name: str
     field: Sql
+    type = types.Int
 
     def _compile(self, qb):
-        assert self.type is types.Int
         return f'{self.name}({self.field.compile(qb).text})'
 
 
 @dataclass
 class CountTable(Scalar):
     table: Table
+    type = types.Int
 
     def _compile(self, qb):
         return f'(SELECT COUNT(*) FROM {self.table.compile(qb).text})'
@@ -148,6 +156,7 @@ class CountTable(Scalar):
 
 @dataclass
 class FuncCall(Sql):
+    type: PqlType
     name: str
     fields: List[Sql]
 
@@ -157,6 +166,7 @@ class FuncCall(Sql):
 
 @dataclass
 class Cast(Sql):
+    type: PqlType
     as_type: str
     value: Sql
 
@@ -166,8 +176,8 @@ class Cast(Sql):
 
 @dataclass
 class MakeArray(Sql):
+    type: PqlType
     field: Sql
-    type = list  # TODO correct object
 
     _sp = "|"
 
@@ -191,6 +201,7 @@ class MakeArray(Sql):
 class Contains(Scalar):
     op: str
     exprs: List[Sql]
+    type = types.Bool
 
     def _compile(self, qb):
         assert self.op
@@ -204,6 +215,7 @@ class Contains(Scalar):
 class Compare(Scalar):
     op: str
     exprs: List[Sql]
+    type = types.Bool
 
     def __post_init__(self):
         assert self.op in ('=', '<=', '>=', '<', '>', '!='), self.op
@@ -228,6 +240,7 @@ class Compare(Scalar):
 class Like(Scalar):
     string: Scalar
     pattern: Scalar
+    type = types.Bool
 
     def _compile(self, qb):
         s = self.string.compile(qb)
@@ -242,6 +255,10 @@ class Arith(Scalar):
     def _compile(self, qb):
         x = (f' {self.op} ').join(e.compile(qb).text for e in self.exprs)
         return f'({x})'
+
+    @property
+    def type(self):
+        return self.exprs[0].type   # TODO ensure type correctness
 
 
 @dataclass
@@ -261,6 +278,10 @@ class TableArith(TableOperation):
 
         return code
 
+    @property
+    def type(self):
+        return self.exprs[0].type   # TODO ensure type correctness
+
 
 @dataclass
 class Neg(Sql):
@@ -270,6 +291,10 @@ class Neg(Sql):
         s = self.expr.compile(qb)
         return "-" + s.text
 
+    @property
+    def type(self):
+        return self.expr.type
+
 @dataclass
 class Desc(Sql):
     expr: Sql
@@ -278,10 +303,15 @@ class Desc(Sql):
         s = self.expr.compile(qb)
         return s.text + " DESC"
 
+    @property
+    def type(self):
+        return self.expr.type
+
 _reserved = {'index', 'create', 'unique', 'table', 'select', 'where', 'group', 'by', 'over'}
 
 @dataclass
 class Name(Sql):
+    type: PqlType
     name: str
 
     def _compile(self, qb):
@@ -296,7 +326,7 @@ class ColumnAlias(Sql):
 
     @classmethod
     def make(cls, value, alias):
-        return cls(value.type, value, alias)
+        return cls(value, alias)
 
     def _compile(self, qb):
         alias = self.alias.compile(qb).text
@@ -307,12 +337,17 @@ class ColumnAlias(Sql):
 
         return f'{value} AS {alias}'
 
+    @property
+    def type(self):
+        return self.value.type
+
 
 @dataclass
 class Insert(Sql):
     table_type: types.TableType
     columns: List[str]
     query: Sql
+    type = types.null
 
     def _compile(self, qb):
         return f'INSERT INTO {self.table_type.name}({", ".join(self.columns)}) SELECT * FROM ' + self.query.compile(qb).text
@@ -322,6 +357,7 @@ class InsertConsts(Sql):
     table: Table
     cols: List[str]
     values: List[Sql]
+    type = types.null
 
     def _compile(self, qb):
         assert self.values
@@ -336,7 +372,7 @@ class InsertConsts(Sql):
 
 @dataclass
 class LastRowId(Atom):
-    type: types.PqlType = types.Int
+    type = types.Int
 
     def _compile(self, qb):
         if qb.target == sqlite:
@@ -353,6 +389,10 @@ class SelectValue(Atom, TableOperation):
         value = self.value.compile(qb)
         return f'SELECT {value.text} AS value'
 
+    @property
+    def type(self):
+        return self.value.type
+
 @dataclass
 class SelectValues(TableOperation):
     # XXX Just use a regular select?
@@ -363,9 +403,14 @@ class SelectValues(TableOperation):
         fields = {f'{v.text} as {name}' for name, v in values.items()}
         return f'SELECT {fields}'
 
+    @property
+    def type(self):
+        return list(self.values.values())[0].type   # TODO ensure types are correct
+
 
 @dataclass
 class Values(Table):
+    type: PqlType
     values: List[Sql]
 
     def _compile(self, qb):
@@ -374,7 +419,11 @@ class Values(Table):
             return 'SELECT NULL LIMIT 0'
         return 'VALUES' + ','.join(f'({v.text})' for v in values)
 
+
+@dataclass
 class AllFields(Sql):
+    type: PqlType
+
     def _compile(self, qb):
         return '*'
 
@@ -383,6 +432,7 @@ class Update(Sql):
     table: TableName
     fields: Dict[Sql, Sql]
     conds: List[Sql]
+    type = types.null
 
     def _compile(self, qb):
         fields_sql = ['%s = %s' % (k.compile(qb).text, v.compile(qb).text) for k, v in self.fields.items()]
@@ -399,6 +449,7 @@ class Update(Sql):
 class Delete(Sql):
     table: TableName
     conds: List[Sql]
+    type = types.null
 
     def _compile(self, qb):
         conds = ' AND '.join(c.compile(qb).text for c in self.conds)
@@ -406,6 +457,7 @@ class Delete(Sql):
 
 @dataclass
 class Select(TableOperation):
+    type: PqlType
     table: Sql # XXX Table won't work with RawSQL
     fields: List[Sql]
     conds: List[Sql] = ()
@@ -445,6 +497,7 @@ class Select(TableOperation):
 
 @dataclass
 class Subquery(Sql):
+    # type: PqlType
     table_name: str
     fields: List[Name]
     query: Sql
@@ -458,9 +511,14 @@ class Subquery(Sql):
         sql_code = self._compile(qb)
         return CompiledSQL(sql_code, self)
 
+    @property
+    def type(self):
+        return self.query.type
+
 
 @dataclass
 class Join(TableOperation):
+    type: PqlType
     join_op: str
     tables: List[Table]
     conds: List[Sql]
