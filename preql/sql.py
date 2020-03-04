@@ -490,6 +490,7 @@ class Subquery(Sql):
     table_name: str
     fields: List[Name]
     query: Sql
+    type = property(X.query.type)
 
     def _compile(self, qb):
         query = self.query.compile(qb).text
@@ -500,7 +501,6 @@ class Subquery(Sql):
         sql_code = self._compile(qb)
         return CompiledSQL(sql_code, self)
 
-    type = property(X.query.type)
 
 
 @dataclass

@@ -116,7 +116,7 @@ class Interface:
                 return self._wrap_result( self.interp.call_func(fname, [objects.from_python(a) for a in args]) )
             return delegate
         else:
-            return self._wrap_result( var )
+            return self._wrap_result( evaluate( self.interp.state, var ))
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"

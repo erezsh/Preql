@@ -50,7 +50,7 @@ class BasicTests(TestCase):
 
         preql.exec("""func query1() = Country[language=="en"]{name}""")
 
-        assert is_eq(preql.query1(), [("England",), ("United States",)])
+        assert is_eq(preql.query1(), [("England",), ("United States",)]), preql.query1()
 
         assert is_eq(preql("Person[country==isr]{name}"), [("Erez Shinan",), ("Ephraim Kishon",)])
 

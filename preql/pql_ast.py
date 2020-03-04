@@ -4,9 +4,11 @@ from .utils import dataclass
 from . import pql_types as types
 from .exceptions import Meta
 
+PqlObject = types.PqlObject
+
 
 @dataclass
-class Ast(types.PqlObject):
+class Ast(PqlObject):
     meta: Optional[Meta]
 
 class Expr(Ast): pass
@@ -25,7 +27,7 @@ class Name(Expr):
 @dataclass
 class Attr(Expr):
     "Reference to an attribute (usually a column)"
-    expr: Optional[types.PqlObject] #Expr
+    expr: Optional[PqlObject] #Expr
     name: str
 
 @dataclass
@@ -40,21 +42,21 @@ class Ellipsis(Expr):
 @dataclass
 class Compare(Expr):
     op: str
-    args: List[types.PqlObject]
+    args: List[PqlObject]
 
 @dataclass
 class Arith(Expr):
     op: str
-    args: List[types.PqlObject]
+    args: List[PqlObject]
 
 @dataclass
 class Or(Expr):
-    args: List[types.PqlObject]
+    args: List[PqlObject]
 
 @dataclass
 class Contains(Expr):
     op: str
-    args: List[types.PqlObject]
+    args: List[PqlObject]
 
 @dataclass
 class DescOrder(Expr):
@@ -68,19 +70,19 @@ class Like(Expr):
 @dataclass
 class NamedField(Expr):
     name: Optional[str]
-    value: types.PqlObject #(Expr, types.PqlType)
+    value: PqlObject #(Expr, types.PqlType)
 
 
 class TableOperation(Expr): pass
 
 @dataclass
 class Selection(TableOperation):
-    table: (Expr, types.PqlType)    # XXX find a single base-class
+    table: PqlObject
     conds: List[Expr]
 
 @dataclass
 class Projection(TableOperation):
-    table: types.PqlObject # (Expr, types.PqlType)    # XXX etc.
+    table: PqlObject
     fields: List[NamedField]
     groupby: bool = False
     agg_fields: List[NamedField] = ()
@@ -93,17 +95,17 @@ class Projection(TableOperation):
 
 @dataclass
 class Order(TableOperation):
-    table: Expr
+    table: PqlObject
     fields: List[Expr]
 
 @dataclass
 class Update(TableOperation):
-    table: Expr
+    table: PqlObject
     fields: List[NamedField]
 
 @dataclass
 class Delete(TableOperation):
-    table: Expr
+    table: PqlObject
     conds: List[Expr]
 
 @dataclass
@@ -128,7 +130,7 @@ class Range(Expr):
 
 @dataclass
 class One(Expr):
-    expr: Expr
+    expr: PqlObject
     nullable: bool
 
 @dataclass
@@ -179,15 +181,15 @@ class FuncDef(Statement):
 
 @dataclass
 class Print(Statement):
-    value: Expr
+    value: PqlObject
 
 @dataclass
 class Return(Statement):
-    value: Expr
+    value: PqlObject
 
 @dataclass
 class Throw(Statement):
-    value: Expr
+    value: PqlObject
 
 @dataclass
 class CodeBlock(Statement):
@@ -201,14 +203,14 @@ class Try(Statement):
 
 @dataclass
 class If(Statement):
-    cond: Expr
-    then: CodeBlock
+    cond: PqlObject
+    then: Statement
     else_: Optional[CodeBlock] = None
 
 @dataclass
 class For(Statement):
     var: str
-    iterable: Expr
+    iterable: PqlObject
     do: CodeBlock
 
 

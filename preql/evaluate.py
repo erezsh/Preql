@@ -67,11 +67,6 @@ def resolve(state: State, type_: ast.Type) -> types.PqlType:
     return state.get_var(type_.name)
 
 
-
-
-
-
-
 @dy
 def _execute(state: State, struct_def: ast.StructDef):
     resolve(state, struct_def)
@@ -94,6 +89,7 @@ def _set_value(state: State, attr: ast.Attr, value):
 @dy
 def _execute(state: State, var_def: ast.SetValue):
     res = simplify(state, var_def.value)
+    res = resolve_effects(state, res)
     _set_value(state, var_def.name, res)
 
 
@@ -126,7 +122,7 @@ def _execute(state: State, insert_rows: ast.InsertRows):
         # TODO support Attr
         raise pql_SyntaxError(insert_rows.meta, "L-value must be table name")
 
-    rval = compile_remote(state, simplify(state, insert_rows.value))
+    rval = evaluate(state, simplify(state, insert_rows.value))
     return _copy_rows(state, insert_rows.name, rval)
 
 @dy
@@ -205,28 +201,15 @@ def simplify(state: State, n: ast.Name):
     # Don't recurse simplify, to allow granular dereferences
     # The assumption is that the stored variable is already simplified
     obj = state.get_var(n.name)
-    # if isinstance(obj, types.TableType):
-    #     return instanciate_table(state, obj, sql.TableName(obj, obj.name), [])
     return obj
 
-@dy
-def simplify(state: State, c: ast.Const):
-    return c
 
-@dy
-def simplify(state: State, a: ast.Attr):
-    obj = simplify(state, a.expr)
-    return ast.Attr(a.meta, obj, a.name)
 
-#     assert isinstance(obj, types.PqlType)   # Only tested on types so far
-#     if a.name == 'name':
-#         return ast.Const(a.meta, types.String, obj.name)
-#     raise pql_AttributeError(a.meta, "Type '%s' has no attribute '%s'" % (obj, a.name))
-
+# XXX This is a big one!
 @dy
 def simplify(state: State, funccall: ast.FuncCall):
     # func = simplify(state, funccall.func)
-    func = compile_remote(state, funccall.func)
+    func = simplify(state, funccall.func)
 
     if isinstance(func, types.Primitive):
         # Cast to primitive
@@ -243,19 +226,17 @@ def simplify(state: State, funccall: ast.FuncCall):
         with state.use_scope({p.name:simplify(state, a) for p,a in args}):
             if isinstance(func.expr, ast.CodeBlock):
                 try:
-                    return execute(state, func.expr)
+                    return execute(state, func.expr)    # TODO remove this. Solve with smarter simplify and LazyObject / DelayedCompilation
+                    # return evaluate(state, func.expr)
                 except ReturnSignal as r:
                     return r.value
 
-            r = simplify(state, func.expr)
-            return r
+            else:
+                r = evaluate(state, func.expr)
+                return r
     else:
+        # TODO ensure pure function
         return func.func(state, *[v for k,v in args])
-
-
-@dy
-def simplify(state: State, obj: ast.Arith):
-    return obj.replace(args=simplify_list(state, obj.args))
 
 
 @dy
@@ -267,59 +248,18 @@ def test_nonzero(state: State, table: objects.TableInstance):
 def test_nonzero(state: State, inst: objects.ValueInstance):
     return bool(inst.local_value)
 
-@dy
-def simplify(state: State, obj: ast.Or):
-    for expr in obj.args:
-        inst = evaluate(state, expr)
-        nz = test_nonzero(state, inst)
-        if nz:
-            return inst
-    return inst
+# TODO isn't this needed somewhere??
+# @dy
+# def simplify(state: State, obj: ast.Or):
+#     for expr in obj.args:
+#         inst = evaluate(state, expr)
+#         nz = test_nonzero(state, inst)
+#         if nz:
+#             return inst
+#     return inst
 
 @dy
-def simplify(state: State, c: ast.CodeBlock):
-    return ast.CodeBlock(c.meta, simplify_list(state, c.statements))
-
-@dy
-def simplify(state: State, x: ast.If):
-    # TODO if cond can be simplified to a constant, just cull either then or else
-    return x
-@dy
-def simplify(state: State, x: ast.Throw):
-    return x
-
-@dy
-def simplify(state: State, c: ast.List_):
-    return ast.List_(c.meta, simplify_list(state, c.elems))
-
-@dy
-def simplify(state: State, obj: ast.Compare):
-    return obj.replace(args=simplify_list(state, obj.args))
-    # return ast.Compare(c.meta, c.op, simplify_list(state, c.args))
-@dy
-def simplify(state: State, obj: ast.Like):
-    s = simplify(state, obj.str)
-    p = simplify(state, obj.pattern)
-    return obj.replace(str=s, pattern=p)
-
-@dy
-def simplify(state: State, c: ast.Selection):
-    # TODO: merge nested selection
-    # table = simplify(state, c.table)
-    # return ast.Selection(table, c.conds)
-    return compile_remote(state, c)
-
-@dy
-def simplify(state: State, p: ast.Projection):
-    # TODO: unite nested projection
-    # table = simplify(state, p.table)
-    # return ast.Projection(table, p.fields, p.groupby, p.agg_fields)
-    return compile_remote(state, p)
-@dy
-def simplify(state: State, o: ast.Order):
-    return compile_remote(state, o)
-@dy
-def simplify(state: State, o: ast.One):
+def resolve_effects(state: State, o: ast.One):
     # TODO move these to the core/base module
     fname = '_only_one_or_none' if o.nullable else '_only_one'
     f = state.get_var(fname)
@@ -330,19 +270,12 @@ def simplify(state: State, o: ast.One):
     assert isinstance(table, objects.TableInstance), table
     row ,= localize(state, table) # Must be 1 row
     rowtype = types.RowType(table.type)
-    # return objects.RowInstance.make(res.code.replace(type=rowtype), rowtype, [res], res)
     # XXX ValueInstance is the right object? Why not throw away 'code'? Reusing it is inefficient
-    # return objects.ValueInstance.make(table.code, rowtype, [table], {k:compile_remote(state, from_python(v)) for k,v in row.items()})
     return objects.ValueInstance.make(table.code, rowtype, [table], row)
-    # return objects.RowInstance.make(res.code.replace(type=rowtype), rowtype, [res], res)
-    # return objects.Row(row)
 
 @dy
-def simplify(state: State, s: ast.Slice):
-    return compile_remote(state, s)
-
-@dy
-def simplify(state: State, d: ast.Delete):
+def resolve_effects(state: State, d: ast.Delete):
+    assert state.access_level >= state.AccessLevels.WRITE_DB
     # TODO Optimize: Delete on condition, not id, when possible
 
     cond_table = ast.Selection(d.meta, d.table, d.conds)
@@ -361,7 +294,8 @@ def simplify(state: State, d: ast.Delete):
     return evaluate(state, d.table)
 
 @dy
-def simplify(state: State, u: ast.Update):
+def resolve_effects(state: State, u: ast.Update):
+    assert state.access_level >= state.AccessLevels.WRITE_DB
     # TODO Optimize: Update on condition, not id, when possible
     table = evaluate(state, u.table)
     assert isinstance(table, objects.TableInstance)
@@ -376,7 +310,7 @@ def simplify(state: State, u: ast.Update):
 
     update_scope = {n:c.replace(code=sql.Name(c.type, n)) for n, c in table.columns.items()}
     with state.use_scope(update_scope):
-        proj = {f.name:compile_remote(state, f.value) for f in u.fields}
+        proj = {f.name:evaluate(state, f.value) for f in u.fields}
     sql_proj = {sql.Name(value.type, name): value.code for name, value in proj.items()}
     for row in localize(state, table):
         if 'id' not in row:
@@ -392,19 +326,54 @@ def simplify(state: State, u: ast.Update):
     return table
 
 
-
-def simplify_list(state, x):
-    return [simplify(state, e) for e in x]
-
 @dy
-def simplify(state: State, inst: objects.Instance):
-    return inst
-@dy
-def simplify(state: State, n: types.NullType):
-    return n
+def simplify(state: State, x):
+    return x
 
 @dy
-def simplify(state: State, new: ast.NewRows):
+def simplify(state: State, ls: list):
+    return [simplify(state, i) for i in ls]
+
+@dy
+def simplify(state: State, node: ast.Ast):
+    # TODO implement automatically with prerequisites
+    # return _simplify_ast(state, node)
+    return node
+
+@dy
+def compile_remote(state: State, node: ast.Ast):
+    return node
+@dy
+def compile_remote(state: State, x):
+    return x
+
+
+def _simplify_ast(state, node):
+    resolved = {k:simplify(state, v) for k, v in node
+                if isinstance(v, types.PqlObject) or isinstance(v, list) and all(isinstance(i, types.PqlObject) for i in v)}
+    return node.replace(**resolved)
+
+
+# @dy
+# def simplify(state: State, cb: ast.CodeBlock):
+#     # if len(cb.statements) == 1:
+#     #     return simplify(state, cb.statements[0])
+#     return _simplify_ast(state, cb)
+
+# @dy
+# def simplify(state: State, if_: ast.If):
+#     if_ = _simplify_ast(state, if_)
+#     if isinstance(if_.cond, objects.ValueInstance): # XXX a more general test?
+#         if if_.cond.local_value:
+#             return if_.then
+#         else:
+#             return if_.else_
+#     return if_
+
+
+@dy
+def resolve_effects(state: State, new: ast.NewRows):
+    assert state.access_level >= state.AccessLevels.WRITE_DB
     obj = state.get_var(new.type)
 
     if isinstance(obj, objects.TableInstance):
@@ -419,7 +388,7 @@ def simplify(state: State, new: ast.NewRows):
 
     # TODO postgres can do it better!
     field = arg.name
-    table = compile_remote(state, arg.value)
+    table = evaluate(state, arg.value)
     rows = localize(state, table)
 
     cons = TableConstructor.make(obj)
@@ -461,8 +430,11 @@ def _new_row(state, table, destructured_pairs):
     # return rowid
     return make_value_instance(rowid, table.columns['id'], force_type=True)  # XXX find a nicer way
 
+
 @dy
-def simplify(state: State, new: ast.New):
+def resolve_effects(state: State, new: ast.New):
+    assert state.access_level >= state.AccessLevels.WRITE_DB
+
     # XXX This function has side-effects.
     # Perhaps it belongs in resolve, rather than simplify?
     obj = state.get_var(new.type)
@@ -470,10 +442,10 @@ def simplify(state: State, new: ast.New):
     # XXX Assimilate this special case
     if isinstance(obj, type) and issubclass(obj, PreqlError):
         def create_exception(state, msg):
-            msg = localize(state, compile_remote(state, msg))
+            msg = localize(state, evaluate(state, msg))
             return obj(None, msg)
         f = objects.InternalFunction(obj.__name__, [objects.Param(None, 'message')], create_exception)
-        res = simplify(state, ast.FuncCall(new.meta, f, new.args))
+        res = evaluate(state, ast.FuncCall(new.meta, f, new.args))
         return res
 
     assert isinstance(obj, objects.TableInstance)  # XXX always the case?
@@ -514,11 +486,25 @@ def add_as_subquery(state: State, inst: objects.Instance):
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
 
+@dy
 def evaluate(state, obj):
-    simp_obj = simplify(state, obj)
-    assert simp_obj, obj
-    return compile_remote(state, simp_obj)
+    obj = simplify(state, obj)
+    assert obj, obj
 
+    if state.access_level < state.AccessLevels.COMPILE:
+        return obj
+    obj = compile_remote(state.reduce_access(state.AccessLevels.COMPILE), obj)
+
+    if state.access_level < state.AccessLevels.EVALUATE:
+        return obj
+    obj = resolve_effects(state, obj)
+
+    return obj
+
+
+@dy
+def resolve_effects(state, x):
+    return x
 
 #
 #    localize()

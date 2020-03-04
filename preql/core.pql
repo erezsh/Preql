@@ -2,9 +2,9 @@ func _sql_agg_func(name, field) {
     if (isa(field, aggregate)) {
         return SQL(int, name + "($field)")
     } else {
-        if (isa(field, list)) {
-            return int( field{ => value: _sql_agg_func(name, value) } )  # Recursive
-        }
+        # if (isa(field, list)) {
+        #     return int( field{ => value: _sql_agg_func(name, value) } )  # Recursive
+        # }
     }
     throw new TypeError(name + "() doesn't support field of type '" + (type(field).__name__) + "'")
 }

@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
-from .compiler import compile_remote, instanciate_table, compile_type_def, alias_table, exclude_fields, rename_field
+from .compiler import instanciate_table, compile_type_def, alias_table, exclude_fields, rename_field
 from .interp_common import State, get_alias, make_value_instance, dy
 from .evaluate import simplify, evaluate, localize
 
@@ -23,7 +23,7 @@ def _pql_SQL_callback(state: State, var: str, instances):
         # It exists to create nicer SQL code output
         inst = objects.TableInstance.make(sql.TableName(obj, obj.name), obj, [], {})
     else:
-        inst = compile_remote(state, obj)
+        inst = evaluate(state, obj)
 
         if isinstance(inst, objects.TableInstance):
 
@@ -82,13 +82,13 @@ def pql_breakpoint(state: State):
     state._py_api.start_repl()
 
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
-    inst = compile_remote(state, expr)
+    inst = evaluate(state, expr)
     type_ = simplify(state, type_expr)
     res = isinstance(inst.type, type_)
     return make_value_instance(res, types.Bool)
 
 def _count(state, obj: ast.Expr, table_func, name):
-    obj = compile_remote(state, obj)
+    obj = evaluate(state, obj)
 
     if isinstance(obj, objects.TableInstance):
         code = table_func(obj.code)
@@ -110,7 +110,7 @@ def pql_count(state: State, obj: ast.Expr):
 
 
 def pql_temptable(state: State, expr: ast.Expr):
-    expr = compile_remote(state, expr)
+    expr = evaluate(state, expr)
     assert isinstance(expr, objects.TableInstance)
 
     name = get_alias(state, "temp_" + expr.type.name)
@@ -142,8 +142,8 @@ def pql_get_db_type(state: State):
 
 
 def sql_bin_op(state, op, table1, table2, name):
-    t1 = compile_remote(state, table1)
-    t2 = compile_remote(state, table2)
+    t1 = evaluate(state, table1)
+    t2 = evaluate(state, table2)
     # TODO make sure both table types are compatiable
     l1 = len(t1.type.flatten_type())
     l2 = len(t2.type.flatten_type())
@@ -170,7 +170,7 @@ def pql_concat(state, t1, t2):
 
 def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
     assert len(exprs) == 2
-    exprs = {name: compile_remote(state, value) for name,value in exprs.items()}
+    exprs = {name: evaluate(state, value) for name,value in exprs.items()}
     assert all(isinstance(x, objects.Instance) for x in exprs.values())
 
     (a,b) = exprs.values()
@@ -255,13 +255,13 @@ def pql_type(state: State, obj: ast.Expr):
     """
     Returns the type of the given object
     """
-    inst = compile_remote(state, obj)
+    inst = evaluate(state, obj)
     t = inst.type   # XXX concrete?
     return t
 
 def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
-    inst = compile_remote(state, obj)
-    type_ = compile_remote(state, type_)
+    inst = evaluate(state, obj)
+    type_ = evaluate(state, type_)
     if not isinstance(type_, types.PqlType):
         raise pql_TypeError(type_.meta, f"Cast expected a type, got {type_} instead.")
 
@@ -273,7 +273,7 @@ def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
         return inst
 
     if inst is objects.EmptyList:
-        return compile_remote(state, ast.List_(None, []), target_type.elemtype)
+        return evaluate(state, ast.List_(None, []), target_type.elemtype)
 
     raise pql_TypeError(None, "Cast not fully implemented yet")
 
@@ -281,7 +281,7 @@ def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
 def pql_cast_int(state: State, expr: ast.Expr):
     "Temporary function, for internal use"
     # TODO make this function less ugly and better for the user
-    inst = compile_remote(state, expr)
+    inst = evaluate(state, expr)
     type_ = inst.type
     if isinstance(type_, types.TableType):
         assert len(inst.columns) == 1
@@ -325,7 +325,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
 
 
     lines = []
-    inst = compile_remote(state, obj)
+    inst = evaluate(state, obj)
     if isinstance(inst, objects.Function):
         # lines += [
         #     f"Function {inst.name}, accepts {len(inst.params)} parameters:"
@@ -354,7 +354,7 @@ def pql_ls(state: State, obj: types.PqlObject = objects.null):
     If no object is given, lists the names in the current namespace.
     """
     if obj is not objects.null:
-        inst = compile_remote(state, obj)
+        inst = evaluate(state, obj)
         if not isinstance(inst, objects.TableInstance):
             raise pql_TypeError(obj.meta, "Argument to ls() must be a table")
         all_vars = list(inst.columns)
@@ -363,7 +363,7 @@ def pql_ls(state: State, obj: types.PqlObject = objects.null):
 
     assert all(isinstance(s, str) for s in all_vars)
     names = [make_value_instance(str(s), types.String) for s in all_vars]
-    return compile_remote(state, ast.List_(None, names))
+    return evaluate(state, ast.List_(None, names))
 
 
 

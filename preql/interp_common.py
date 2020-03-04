@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from copy import copy
 
 import dsnparse
 
@@ -19,15 +20,28 @@ dy = Dispatch()
 def simplify():
     raise NotImplementedError()
 
+@dy
+def evaluate():
+    raise NotImplementedError()
 
+
+class AccessLevels:
+    COMPILE = 1
+    EVALUATE = 2
+    READ_DB = 3
+    WRITE_DB = 4
 
 class State:
+    AccessLevels = AccessLevels
+
     def __init__(self, db, fmt, ns=None):
         self.db = db
         self.fmt = fmt
 
         self.ns = ns or [{}]
-        self.tick = 0
+        self.tick = [0]
+
+        self.access_level = AccessLevels.WRITE_DB
 
     def get_var(self, name):
         for scope in reversed(self.ns):
@@ -57,6 +71,13 @@ class State:
         s = State(self.db, self.fmt)
         s.ns = [dict(n) for n in self.ns]
         s.tick = self.tick
+        s.access_level = self.access_level
+        return s
+
+    def reduce_access(self, new_level):
+        assert new_level <= self.access_level
+        s = copy(self)
+        s.access_level = new_level
         return s
 
     @contextmanager
@@ -92,8 +113,8 @@ def get_alias(state: State, obj):
     if isinstance(obj, objects.TableInstance):
         return get_alias(state, obj.type.name)
 
-    state.tick += 1
-    return obj + str(state.tick)
+    state.tick[0] += 1
+    return obj + str(state.tick[0])
 
 
 def assert_type(meta, t, type_, msg):

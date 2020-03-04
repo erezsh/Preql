@@ -99,3 +99,7 @@ class ReturnSignal(Exception):
 @dataclass
 class pql_DatabaseQueryError(PreqlError):
     message: str
+
+@dataclass
+class pql_CompileError(PreqlError):
+    message: str

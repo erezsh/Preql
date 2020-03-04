@@ -1,12 +1,12 @@
 from .utils import safezip, listgen, SafeDict, find_duplicate
-from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError
+from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError, pql_CompileError
 
 from . import settings
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify, assert_type, make_value_instance
+from .interp_common import dy, State, get_alias, simplify, assert_type, make_value_instance, evaluate
 
 
 Sql = sql.Sql
@@ -95,8 +95,11 @@ def _process_fields(state: State, fields):
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
         sql_friendly_name = name.replace(".", "_")
 
-        v = compile_remote(state, f.value)
-        assert isinstance(v, objects.Instance), (v, f.value)
+        # v = compile_remote(state, f.value)
+        v = evaluate(state, f.value)
+        if not isinstance(v, objects.Instance): #, (v, f.value)
+            assert state.access_level <= state.AccessLevels.COMPILE, v
+            raise pql_CompileError(None, f"Preql cannot compile expression: {v}")   # TODO better message
 
         if isinstance(v.type, types.Aggregated):
 
@@ -144,7 +147,7 @@ def _expand_ellipsis(table, fields):
 
 @dy
 def compile_remote(state: State, proj: ast.Projection):
-    table = compile_remote(state, proj.table)
+    table = evaluate(state, proj.table)
     # assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "%s")
     if table is objects.EmptyList:
         return table   # Empty list projection is always an empty list.
@@ -211,18 +214,13 @@ def compile_remote(state: State, proj: ast.Projection):
     # Make Instance
     return objects.TableInstance.make(code, new_table_type, [table], new_columns)
 
-
-@dy
-def compile_remote(state: State, update: ast.Update):
-    return compile_remote(state, simplify(state, update))
-
 @dy
 def compile_remote(state: State, order: ast.Order):
-    table = compile_remote(state, order.table)
+    table = evaluate(state, order.table)
     assert_type(order.meta, table.type, types.TableType, "'order' expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.columns):
-        fields = compile_remote(state, order.fields)
+        fields = evaluate(state, order.fields)
 
     fields = [_ensure_col_instance(state, of.meta, f) for f, of in safezip(fields, order.fields)]
 
@@ -232,20 +230,20 @@ def compile_remote(state: State, order: ast.Order):
 
 @dy
 def compile_remote(state: State, expr: ast.DescOrder):
-    obj = compile_remote(state, expr.value)
+    obj = evaluate(state, expr.value)
     return obj.replace(code=sql.Desc(obj.code))
 
 
 
 @dy
 def compile_remote(state: State, lst: list):
-    return [compile_remote(state, e) for e in lst]
+    return [evaluate(state, e) for e in lst]
 
 
 @dy
 def compile_remote(state: State, like: ast.Like):
-    s = compile_remote(state, like.str)
-    p = compile_remote(state, like.pattern)
+    s = evaluate(state, like.str)
+    p = evaluate(state, like.pattern)
     if s.type != types.String:
         raise pql_TypeError(like.str.meta.replace(parent=like.meta), f"Like (~) operator expects two strings")
     if p.type != types.String:
@@ -256,7 +254,7 @@ def compile_remote(state: State, like: ast.Like):
 
 @dy
 def compile_remote(state: State, cmp: ast.Compare):
-    insts = compile_remote(state, cmp.args)
+    insts = evaluate(state, cmp.args)
 
     if cmp.op == 'in' or cmp.op == '!in':
         sql_cls = sql.Contains
@@ -298,10 +296,10 @@ def _get_comparable_instance(i):
 
 @dy
 def compile_remote(state: State, attr: ast.Attr):
-    inst = compile_remote(state, attr.expr)
+    inst = evaluate(state, attr.expr)
 
     try:
-        return compile_remote(state, inst.get_attr(attr.name))
+        return evaluate(state, inst.get_attr(attr.name))
     except pql_AttributeError:
         meta = attr.name.meta.replace(parent=attr.meta)
         raise pql_AttributeError(meta, f"'{inst.repr(state)}' has no attribute {attr.name} (compiler_type={type(inst)}")
@@ -310,14 +308,14 @@ def compile_remote(state: State, attr: ast.Attr):
 
 def call_pql_func(state, name, args):
     expr = ast.FuncCall(None, ast.Name(None, name), args)
-    return compile_remote(state, expr)
+    return evaluate(state, expr)
 
 
 
 
 @dy
 def compile_remote(state: State, arith: ast.Arith):
-    args = compile_remote(state, arith.args)
+    args = evaluate(state, arith.args)
     return _compile_arith(state, arith, *args)
 
 @dy
@@ -401,25 +399,10 @@ def _compile_arith(state, arith, a, b):
     return objects.Instance.make(code, res_type, args)
 
 
-@dy # Could happen because sometimes simplify(...) calls compile_remote
-def compile_remote(state: State, i: objects.Instance):
-    return i
-
-@dy
-def compile_remote(state: State, t: types.PqlType):
-    return t
-@dy
-def compile_remote(state: State, x: Exception):
-    return x
-@dy
-def compile_remote(state: State, f: objects.Function):
-    "Functions don't need compilation"
-    return f
-
-@dy
-def compile_remote(state: State, f: ast.FuncCall):
-    res = simplify(state, f)
-    return compile_remote(state, res)
+# @dy
+# def compile_remote(state: State, f: ast.FuncCall):
+#     res = simplify(state, f)
+#     return evaluate(state, res)
 @dy
 def compile_remote(state: State, x: ast.Ellipsis):
     raise pql_SyntaxError(x.meta, "Ellipsis not allowed here")
@@ -432,16 +415,16 @@ def compile_remote(state: State, c: ast.Const):
         return objects.null
     return make_value_instance(c.value, c.type)
 
-@dy
-def compile_remote(state: State, n: ast.Name):
-    v = simplify(state, n)
-    assert v is not None, n
-    assert v is not n   # Protect against recursions
-    return compile_remote(state, v)
+# @dy
+# def compile_remote(state: State, n: ast.Name):
+#     v = simplify(state, n)
+#     assert v is not None, n
+#     assert v is not n   # Protect against recursions
+#     return evaluate(state, v)
 
 @dy
 def compile_remote(state: State, d: ast.Dict_):
-    elems = {k:compile_remote(state, objects.from_python(v)) for k,v in d.elems.items()}
+    elems = {k:evaluate(state, objects.from_python(v)) for k,v in d.elems.items()}
     t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
     code = sql.SelectValues(t, {k:v.code for k,v in elems.items()})
     return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
@@ -460,7 +443,7 @@ def compile_remote(state: State, lst: ast.List_, elem_type=None):
         # return instanciate_table(state, list_type, code, [])
         return objects.EmptyList
 
-    elems = compile_remote(state, lst.elems)
+    elems = evaluate(state, lst.elems)
 
     type_set = list({e.type for e in elems})
     if len(type_set) > 1:
@@ -483,19 +466,19 @@ def compile_remote(state: State, lst: ast.List_, elem_type=None):
 
 @dy
 def compile_remote(state: State, s: ast.Slice):
-    table = compile_remote(state, s.table)
+    table = evaluate(state, s.table)
     # TODO if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
 
     assert_type(s.meta, table.type, types.Collection, "Slice expected an object of type '%s', instead got '%s'")
 
     instances = [table]
     if s.range.start:
-        start = compile_remote(state, s.range.start)
+        start = evaluate(state, s.range.start)
         instances += [start]
     else:
         start = make_value_instance(0)
     if s.range.stop:
-        stop = compile_remote(state, s.range.stop)
+        stop = evaluate(state, s.range.stop)
         instances += [stop]
         limit = sql.Arith('-', [stop.code, start.code])
     else:
@@ -507,14 +490,14 @@ def compile_remote(state: State, s: ast.Slice):
 
 @dy
 def compile_remote(state: State, sel: ast.Selection):
-    table = compile_remote(state, sel.table)
+    table = evaluate(state, sel.table)
     if isinstance(table, types.PqlType):
         return _apply_type_generics(state, table, sel.conds)
 
     assert_type(sel.meta, table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.columns):
-        conds = compile_remote(state, sel.conds)
+        conds = evaluate(state, sel.conds)
 
     conds = [_ensure_col_instance(state, of.meta, f) for f, of in safezip(conds, sel.conds)]
 
@@ -524,7 +507,7 @@ def compile_remote(state: State, sel: ast.Selection):
 
 
 def _apply_type_generics(state, gen_type, type_names):
-    type_objs = compile_remote(state, type_names)
+    type_objs = evaluate(state, type_names)
     if not type_objs:
         raise pql_TypeError(None, f"Generics expression expected a type, got nothing.")
     for o in type_objs:
@@ -604,11 +587,11 @@ def instanciate_table(state: State, t: types.TableType, source: Sql, instances, 
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])
-    return compile_remote(state, proj)
+    return evaluate(state, proj)
 
 def rename_field(state, table, old, new):
     proj = ast.Projection(None, table, [
         ast.NamedField(None, None, ast.Ellipsis(None, [])),
         ast.NamedField(None, new, ast.Name(None, old))
         ])
-    return compile_remote(state, proj)
+    return evaluate(state, proj)
