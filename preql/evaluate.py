@@ -222,21 +222,22 @@ def simplify(state: State, funccall: ast.FuncCall):
         raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
 
     args = func.match_params(funccall.args)
+    args = {p.name:evaluate(state, a) for p,a in args}
     if isinstance(func, objects.UserFunction):
-        with state.use_scope({p.name:simplify(state, a) for p,a in args}):
+        with state.use_scope(args):
+            expr = evaluate(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
+
             if isinstance(func.expr, ast.CodeBlock):
                 try:
-                    return execute(state, func.expr)    # TODO remove this. Solve with smarter simplify and LazyObject / DelayedCompilation
-                    # return evaluate(state, func.expr)
+                    return execute(state, expr)
                 except ReturnSignal as r:
                     return r.value
-
             else:
-                r = evaluate(state, func.expr)
+                r = evaluate(state, expr)
                 return r
     else:
         # TODO ensure pure function
-        return func.func(state, *[v for k,v in args])
+        return func.func(state, *args.values())
 
 
 @dy
@@ -352,6 +353,14 @@ def _simplify_ast(state, node):
     resolved = {k:simplify(state, v) for k, v in node
                 if isinstance(v, types.PqlObject) or isinstance(v, list) and all(isinstance(i, types.PqlObject) for i in v)}
     return node.replace(**resolved)
+
+# @dy
+# def compile_remote(state: State, cb: ast.CodeBlock):
+#     return cb.replace(statements=compile_remote(state, cb.statements))
+
+# @dy
+# def compile_remote(state: State, i: ast.If):
+#     return i.replace(cond=compile_remote(state, i.cond))
 
 
 # @dy
