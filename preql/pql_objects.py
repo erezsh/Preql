@@ -2,7 +2,7 @@
 A collection of objects that may come to interaction with the user.
 """
 
-from typing import List, Optional, Callable, Any
+from typing import List, Optional, Callable, Any, Dict
 
 from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for, X
 from .exceptions import pql_TypeError, pql_AttributeError
@@ -18,6 +18,21 @@ class Param(ast.Ast):
     type: Optional[types.PqlType] = None
     default: Optional[types.PqlObject] = None
     orig: Any = None # XXX temporary and lazy, for TableConstructor
+
+@dataclass
+class ParamDict(types.PqlObject):
+    params: Dict[str, types.PqlObject]
+
+    def __len__(self):
+        return len(self.params)
+
+    def items(self):
+        return self.params.items()
+
+    @property
+    def type(self):
+        return tuple(p.type for p in self.params.values())
+
 
 class Function(types.PqlObject):
     param_collector = None
@@ -72,7 +87,7 @@ class Function(types.PqlObject):
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values
         if collected:
-            matched.append((self.param_collector, collected))
+            matched.append((self.param_collector, ParamDict(collected)))
         return matched
 
 

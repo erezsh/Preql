@@ -9,7 +9,7 @@ class PqlObject:    # XXX should be in a base module
     def repr(self, pql):
         return repr(self)
 
-class PqlType(PqlObject):
+class _PqlType(PqlObject):
     """PqlType annotates the type of all instances """
 
     def kernel_type(self):
@@ -29,6 +29,9 @@ class PqlType(PqlObject):
 
     hide_from_init = False
     primary_key = False
+
+class PqlType(_PqlType):
+    type = _PqlType  # Unfortunately no simple way to do self-reference
 
 # Primitives
 

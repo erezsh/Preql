@@ -221,10 +221,21 @@ def simplify(state: State, funccall: ast.FuncCall):
         meta = meta.replace(parent=meta)
         raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
 
-    args = func.match_params(funccall.args)
-    args = {p.name:evaluate(state, a) for p,a in args}
+    matched_args = func.match_params(funccall.args)
+    args = {p.name:evaluate(state, a) for p,a in matched_args}
+    try:
+        sig = (funccall.func,) + tuple(a.type for a in args.values())
+    except:
+        raise
+
     if isinstance(func, objects.UserFunction):
         with state.use_scope(args):
+            # if sig in _cache:
+            #     expr = _cache[sig]
+            # else:
+            #     expr = evaluate(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
+            #     _cache[sig] = expr
+
             expr = evaluate(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
 
             if isinstance(func.expr, ast.CodeBlock):
@@ -239,6 +250,7 @@ def simplify(state: State, funccall: ast.FuncCall):
         # TODO ensure pure function
         return func.func(state, *args.values())
 
+_cache = {}
 
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
@@ -494,6 +506,9 @@ def add_as_subquery(state: State, inst: objects.Instance):
     name = get_alias(state, inst)
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
+@dy
+def simplify(state: State, d: objects.ParamDict):
+    return d.replace(params={name: evaluate(state, v) for name, v in d.params.items()})
 
 @dy
 def evaluate(state, obj):

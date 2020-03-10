@@ -4,6 +4,9 @@ from operator import getitem
 
 from runtype import dataclass
 
+from . import settings
+dataclass = dataclass(check_types=settings.debug)
+
 
 class SafeDict(dict):
     def __setitem__(self, key, value):
