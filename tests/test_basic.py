@@ -31,7 +31,10 @@ class BasicTests(TestCase):
     def test_basic1(self):
         preql = self.Preql()
         preql.load('country_person.pql', rel_to=__file__)
+        res = preql('[1,2,3]{=>sum(value*value)}')
+        assert res == [{'sum': 14}], list(res)
 
+        self._test_cache(preql)
         self._test_basic(preql)
         self._test_ellipsis(preql)
         self._test_ellipsis_exclude(preql)
@@ -57,10 +60,17 @@ class BasicTests(TestCase):
         res = preql("Person[id!=me]{name}")
         assert is_eq(res, [("Ephraim Kishon",), ("Eric Blaire",), ("H.G. Wells",), ("John Steinbeck",)])
 
+    def _test_cache(self, preql):
+        # Ensure that names affect type
+        self.assertEqual( list(preql('Person {name2: name}')[0].keys()), ['name2'])
+        self.assertEqual( list(preql('Person {name}')[0].keys()) , ['name'])
+        self.assertEqual( list(preql('Person {name2: name}')[0].keys()), ['name2'])
+
     def _test_ellipsis(self, preql):
+
         assert preql('Person {name, ...}[name=="Erez Shinan"]') == [{'name': 'Erez Shinan', 'id': 1, 'country': 1}]
 
-        assert list(preql('Person {name, ...}')[0].keys()) == ['name', 'id', 'country']
+        self.assertEqual( list(preql('Person {name, ...}')[0].keys()) , ['name', 'id', 'country'])
         assert list(preql('Person {country, ...}')[0].keys()) == ['country', 'id', 'name']
         assert list(preql('Person {..., id}')[0].keys()) == ['name', 'country', 'id']
         assert list(preql('Person {country, ..., id}')[0].keys()) == ['country', 'name', 'id']
@@ -140,7 +150,7 @@ class BasicTests(TestCase):
         """)
 
         res = preql("query6(isr){name}")
-        assert is_eq(res, [("Ephraim Kishon",)])
+        assert is_eq(res, [("Ephraim Kishon",)]), type(res)
 
         res = preql("query7()")
         assert isinstance(res, UserFunction)

@@ -1,3 +1,4 @@
+from copy import copy
 from typing import Optional
 
 from .utils import safezip, listgen, SafeDict
@@ -50,35 +51,48 @@ def _pql_SQL_callback(state: State, var: str, instances):
     qb = sql.QueryBuilder(state.db.target, False)
     return '%s' % inst.code.compile(qb).text
 
+
 import re
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
-    type_ = simplify(state, type_expr)
-    sql_code = localize(state, evaluate(state, code_expr))
-    assert isinstance(sql_code, str)
+    # TODO optimize for when the string is known (prefetch the variables and return Sql)
+    type_ = evaluate(state, type_expr)
+    code_expr2 = evaluate(state, code_expr)
+    return ast.ResolveParametersString(None, type_, code_expr2)
 
-    # TODO escaping for security?
-    instances = []
-    expanded = re.sub(r"\$\w+", lambda m: _pql_SQL_callback(state, m, instances), sql_code)
 
-    code = sql.RawSql(type_, expanded)
+    # return
+    # assert isinstance(code_expr, str), code_expr   # Otherwise requires to snapshot the namespace
+    # embedded_vars = re.findall(r"\$(\w+)", code_expr)
+    # return ast.ResolveParametersString(code_expr.meta, type_, code_expr, {name: state.get_var(name) for name in embedded_vars})
+    # return
 
-    # TODO validation!!
-    if isinstance(type_, types.TableType):
-        name = get_alias(state, "subq_")
+    # type_ = simplify(state, type_expr)
+    # sql_code = localize(state, evaluate(state, code_expr))
+    # assert isinstance(sql_code, str)
 
-        inst = instanciate_table(state, type_, sql.TableName(type_, name), instances)
-        # TODO this isn't in the tests!
-        fields = [sql.Name(c, path) for path, c in inst.type.flatten_type()]
+    # # TODO escaping for security?
+    # instances = []
 
-        subq = sql.Subquery(name, fields, code)
-        inst.subqueries[name] = subq
+    # expanded = re.sub(r"\$\w+", lambda m: _pql_SQL_callback(state, m, instances), sql_code)
+    # code = sql.RawSql(type_, expanded)
+    # # code = sql.ResolveParameters(sql_code)
 
-        return inst
+    # # TODO validation!!
+    # if isinstance(type_, types.TableType):
+    #     name = get_alias(state, "subq_")
 
-    return objects.Instance.make(code, type_, instances)
+    #     inst = instanciate_table(state, type_, sql.TableName(type_, name), instances)
+    #     # TODO this isn't in the tests!
+    #     fields = [sql.Name(c, path) for path, c in inst.type.flatten_type()]
+
+    #     subq = sql.Subquery(name, fields, code)
+    #     inst.subqueries[name] = subq
+
+    #     return inst
+
+    # return objects.Instance.make(code, type_, instances)
 
 def pql_breakpoint(state: State):
-    # breakpoint()
     state._py_api.start_repl()
 
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
@@ -90,7 +104,8 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
 def _count(state, obj: ast.Expr, table_func, name):
     obj = evaluate(state, obj)
 
-    if isinstance(obj, objects.TableInstance):
+    # if isinstance(obj, objects.TableInstance):
+    if isinstance(obj.type, types.TableType):
         code = table_func(obj.code)
     else:
         if not isinstance(obj.type, types.Aggregated):
@@ -111,10 +126,10 @@ def pql_count(state: State, obj: ast.Expr):
 
 def pql_temptable(state: State, expr: ast.Expr):
     expr = evaluate(state, expr)
-    assert isinstance(expr, objects.TableInstance)
+    assert isinstance(expr, objects.TableInstance), expr
 
     name = get_alias(state, "temp_" + expr.type.name)
-    table = types.TableType(name, expr.type.columns, temporary=True, primary_keys=[['id']])
+    table = types.TableType(name, copy(expr.type.columns), temporary=True, primary_keys=[['id']])
     if 'id' not in table.columns:
         table.columns['id'] = types.IdType(table)
 
@@ -137,6 +152,7 @@ def pql_get_db_type(state: State):
         - "sqlite"
         - "postgres"
     """
+    assert state.access_level >= state.AccessLevels.EVALUATE
     return make_value_instance(state.db.target, types.String)
 
 

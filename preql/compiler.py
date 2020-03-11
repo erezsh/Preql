@@ -1,12 +1,13 @@
 from .utils import safezip, listgen, SafeDict, find_duplicate
 from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError, pql_CompileError
+from . import exceptions as exc
 
 from . import settings
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, simplify, assert_type, make_value_instance, evaluate
+from .interp_common import dy, State, get_alias, assert_type, make_value_instance, evaluate
 
 
 Sql = sql.Sql
@@ -27,11 +28,6 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
                 # In postgres, constraints on temporary tables may reference only temporary tables
                 s = f"FOREIGN KEY({name}) REFERENCES {c.type.name}(id)"
                 posts.append(s)
-        # if c.primary_key:
-        #     if name not in pks:
-        #         breakpoint()
-        #     assert name in pks
-        #     pks.append(name)
 
     if pks:
         names = ", ".join(pks)
@@ -99,7 +95,8 @@ def _process_fields(state: State, fields):
         v = evaluate(state, f.value)
         if not isinstance(v, objects.Instance): #, (v, f.value)
             assert state.access_level <= state.AccessLevels.COMPILE, v
-            raise pql_CompileError(None, f"Preql cannot compile expression: {v}")   # TODO better message
+            # raise pql_CompileError(None, f"Preql cannot compile expression: {v}")   # TODO better message
+            raise exc.InsufficientAccessLevel()
 
         if isinstance(v.type, types.Aggregated):
 
@@ -122,7 +119,6 @@ def _ensure_col_instance(state, meta, i):
         return objects.make_column_instance(i.code, i.type, [i])
 
     raise pql_TypeError(meta, f"Expected a valid expression. Instead got: {i.repr(state)} (compiler_type={type(i)})")
-    # assert False, i
 
 
 
@@ -146,15 +142,26 @@ def _expand_ellipsis(table, fields):
 
 
 @dy
+def compile_remote(state: State, x):
+    return x
+@dy
+def compile_remote(state: State, node: ast.Ast):
+    return node
+
+@dy
 def compile_remote(state: State, proj: ast.Projection):
     table = evaluate(state, proj.table)
     # assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "%s")
     if table is objects.EmptyList:
         return table   # Empty list projection is always an empty list.
 
+    assert isinstance(table, objects.Instance)
+
+    # if not isinstance(table.type, types.Collection):
     if not isinstance(table, (objects.TableInstance, objects.StructColumnInstance)):
         raise pql_TypeError(proj.meta, f"Cannot project objects of type {table.type}")
 
+    # breakpoint()
     fields = _expand_ellipsis(table, proj.fields)
 
     # Test duplicates in field names. If an automatic name is used, collision should be impossible
@@ -297,20 +304,20 @@ def _get_comparable_instance(i):
 @dy
 def compile_remote(state: State, attr: ast.Attr):
     inst = evaluate(state, attr.expr)
+    # if not isinstance(inst, objects.Instance):
+        # return inst
 
-    try:
-        return evaluate(state, inst.get_attr(attr.name))
-    except pql_AttributeError:
-        meta = attr.name.meta.replace(parent=attr.meta)
-        raise pql_AttributeError(meta, f"'{inst.repr(state)}' has no attribute {attr.name} (compiler_type={type(inst)}")
+    return evaluate(state, inst.get_attr(attr.name))
+    # try:
+    # except pql_AttributeError:
+    #     meta = attr.name.meta.replace(parent=attr.meta)
+    #     raise pql_AttributeError(meta, f"'{inst.repr(state)}' has no attribute {attr.name} (compiler_type={type(inst)}")
 
 
 
 def call_pql_func(state, name, args):
     expr = ast.FuncCall(None, ast.Name(None, name), args)
     return evaluate(state, expr)
-
-
 
 
 @dy
@@ -399,10 +406,6 @@ def _compile_arith(state, arith, a, b):
     return objects.Instance.make(code, res_type, args)
 
 
-# @dy
-# def compile_remote(state: State, f: ast.FuncCall):
-#     res = simplify(state, f)
-#     return evaluate(state, res)
 @dy
 def compile_remote(state: State, x: ast.Ellipsis):
     raise pql_SyntaxError(x.meta, "Ellipsis not allowed here")
@@ -414,13 +417,6 @@ def compile_remote(state: State, c: ast.Const):
         assert c.value is None
         return objects.null
     return make_value_instance(c.value, c.type)
-
-# @dy
-# def compile_remote(state: State, n: ast.Name):
-#     v = simplify(state, n)
-#     assert v is not None, n
-#     assert v is not n   # Protect against recursions
-#     return evaluate(state, v)
 
 @dy
 def compile_remote(state: State, d: ast.Dict_):
@@ -494,6 +490,9 @@ def compile_remote(state: State, sel: ast.Selection):
     if isinstance(table, types.PqlType):
         return _apply_type_generics(state, table, sel.conds)
 
+    if not isinstance(table, objects.Instance):
+        return sel.replace(table=table)
+
     assert_type(sel.meta, table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.columns):
@@ -504,6 +503,15 @@ def compile_remote(state: State, sel: ast.Selection):
     code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], conds=[c.code for c in conds])
     inst = objects.TableInstance.make(code, table.type, [table] + conds, table.columns)
     return inst
+
+
+@dy
+def compile_remote(state: State, param: ast.Parameter):
+    if state.access_level == state.AccessLevels.COMPILE:
+        # return objects.Instance.make(sql.Parameter(param.type, param.name), param.type, [])
+        return make_instance(sql.Parameter(param.type, param.name), param.type, [])
+    else:
+        return state.get_var(param.name)
 
 
 def _apply_type_generics(state, gen_type, type_names):
@@ -583,6 +591,13 @@ def instanciate_table(state: State, t: types.TableType, source: Sql, instances, 
         code = sql.Select(t, source, aliases)
 
     return objects.TableInstance(code, t, objects.merge_subqueries(instances), columns)
+
+def make_instance(code, type_, from_instances=()):
+    if isinstance(type_, types.Collection):
+        columns = {name: objects.make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in type_.columns.items()}
+        return objects.TableInstance.make(code, type_, from_instances, columns)
+    else:
+        return objects.Instance.make(code, type_, from_instances)
 
 
 def exclude_fields(state, table, fields):

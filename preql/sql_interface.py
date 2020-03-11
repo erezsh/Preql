@@ -1,13 +1,15 @@
+from .utils import benchmark
+
 from .sql import Sql, CompiledSQL, Select, QueryBuilder, sqlite, postgres
 from . import exceptions
 
 from .pql_types import Primitive, null    # XXX Code smell?
 
 class SqlInterface:
-    def query(self, sql, subqueries=None, qargs=(), quiet=False):
+    def query(self, sql, subqueries=None, qargs=(), quiet=False, state=None):
         assert isinstance(sql, Sql), sql
 
-        qb = QueryBuilder(self.target)
+        qb = QueryBuilder(self.target, parameters=state and [state.ns])
 
         if subqueries:
             subqs = [q.compile(qb).text for (name, q) in subqueries.items()]

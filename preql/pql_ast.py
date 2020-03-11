@@ -1,4 +1,4 @@
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Dict
 
 from .utils import dataclass
 from . import pql_types as types
@@ -23,6 +23,27 @@ class Name(Expr):
 
     def __repr__(self):
         return f'Name({self.name})'
+
+@dataclass
+class Parameter(Expr):
+    "A typed object without a value"
+    name: str
+    type: types.PqlType
+
+@dataclass
+class ResolveParameters(Expr):
+    obj: PqlObject
+    values: Dict[str, PqlObject]
+
+    type = Ast  # XXX Not the place!
+
+@dataclass
+class ResolveParametersString(Expr):
+    type: PqlObject
+    string: PqlObject
+    # values: Dict[str, PqlObject]
+    # state: Any
+
 
 @dataclass
 class Attr(Expr):

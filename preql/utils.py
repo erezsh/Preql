@@ -72,3 +72,41 @@ class _X:
         return obj
 
 X = _X()
+
+
+import time
+from contextlib import contextmanager
+class Benchmark:
+    def __init__(self):
+        self.total = {}
+
+    @contextmanager
+    def measure(self, name):
+        if name not in self.total:
+            self.total[name] = 0
+
+        start = time.time()
+        try:
+            yield
+        finally:
+            total = time.time() - start
+            self.total[name] += total
+
+    def measure_func(self, f):
+        @wraps(f)
+        def _f(*args, **kwargs):
+            with benchmark.measure(f.__name__):
+                return f(*args, **kwargs)
+        return _f
+
+    def reset(self):
+        self.total = {}
+
+    def print(self):
+        scores = [(total, name) for name, total in self.total.items()]
+        scores.sort(reverse=True)
+        print('---')
+        for total, name in scores:
+            print('%.4f\t%s' % (total, name))
+
+benchmark = Benchmark()

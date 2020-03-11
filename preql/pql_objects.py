@@ -20,6 +20,10 @@ class Param(ast.Ast):
     orig: Any = None # XXX temporary and lazy, for TableConstructor
 
 @dataclass
+class ParamDictType(types.PqlType):
+    types: Dict[str, types.PqlType]
+
+@dataclass
 class ParamDict(types.PqlObject):
     params: Dict[str, types.PqlObject]
 
@@ -31,7 +35,8 @@ class ParamDict(types.PqlObject):
 
     @property
     def type(self):
-        return tuple(p.type for p in self.params.values())
+        # return tuple(p.type for p in self.params.values())
+        return ParamDictType({n:p.type for n, p in self.params.items()})
 
 
 class Function(types.PqlObject):
@@ -40,6 +45,10 @@ class Function(types.PqlObject):
     @property
     def type(self):
         return types.FunctionType(tuple(p.type for p in self.params), self.param_collector is not None)
+
+    def match_params_fast(self, args):
+        return [(p, a) for p, a in zip(self.params, args)]
+
 
     def match_params(self, args):
         # Canonize args for the rest of the function
@@ -228,6 +237,7 @@ def make_column_instance(code, type_, from_instances=()):
 
 
 
+
 def from_python(value):
     if value is None:
         return null
@@ -270,7 +280,7 @@ def make_value_instance(value, type_=None, force_type=False):
         assert r.type == type_, (r.type, type_)
     else:
         type_ = r.type
-    if settings.optimize:
+    if settings.optimize:   # XXX a little silly? But maybe good for tests?
         return ValueInstance.make(r, type_, [], value)
     else:
         return Instance.make(r, type_, [])

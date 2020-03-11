@@ -11,6 +11,7 @@ from .interpreter import Interpreter
 from .evaluate import localize, evaluate
 from .interp_common import create_engine
 from .compiler import call_pql_func
+from .utils import benchmark
 
 
 def _make_const(value):
@@ -113,13 +114,16 @@ class Interface:
         if isinstance(var, objects.Function):
             def delegate(*args, **kw):
                 assert not kw
-                return self._wrap_result( self.interp.call_func(fname, [objects.from_python(a) for a in args]) )
+                pql_args = [objects.from_python(a) for a in args]
+                pql_res = self.interp.call_func(fname, pql_args)
+                return self._wrap_result( pql_res )
             return delegate
         else:
             return self._wrap_result( evaluate( self.interp.state, var ))
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
+        assert not isinstance(res, ast.Ast)
         return promise(self.interp.state, res)  # TODO session, not state
 
 

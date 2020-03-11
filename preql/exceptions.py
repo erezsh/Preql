@@ -28,6 +28,10 @@ class Meta:
     def __repr__(self):
         return '<Meta>'
 
+
+class InsufficientAccessLevel(Exception):
+    pass
+
 @dataclass
 class PreqlError(Exception):
     meta: Optional[Meta]

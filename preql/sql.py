@@ -9,11 +9,12 @@ sqlite = 'sqlite'
 postgres = 'postgres'
 
 class QueryBuilder:
-    def __init__(self, target, is_root=True, start_count=0):
+    def __init__(self, target, is_root=True, start_count=0, parameters=None):
         self.target = target
         self.is_root = is_root
 
         self.counter = start_count
+        self.parameters = parameters or []
 
     def get_alias(self):
         self.counter += 1
@@ -22,7 +23,7 @@ class QueryBuilder:
     def replace(self, is_root):
         if is_root == self.is_root:
             return self # Optimize
-        return QueryBuilder(self.target, is_root, self.counter)
+        return QueryBuilder(self.target, is_root, self.counter, self.parameters)
 
 
 @dataclass
@@ -31,7 +32,7 @@ class Sql:
 
     def compile(self, qb):  # Move to Expr? Doesn't apply to statements
         sql_code = self._compile(qb.replace(is_root=False))
-        assert isinstance(sql_code, str)
+        assert isinstance(sql_code, str), self
 
         if self._is_select:
             if not qb.is_root:
@@ -71,6 +72,36 @@ class Null(Sql):
         return 'null'
 
 null = Null()
+
+@dataclass
+class Parameter(Sql):
+    type: PqlType
+    name: str
+
+    def _compile(self, qb):
+        obj = qb.parameters[-1].get_var(self.name)
+        assert obj.type == self.type
+        return obj.code.compile(qb).text
+
+
+@dataclass
+class ResolveParameters(Sql):
+    obj: Sql
+    # values: Dict[str, Sql]
+    ns: object
+
+    def _compile(self, qb):
+        assert False
+        qb.parameters.append(self.ns)
+        obj = self.obj.compile(qb.replace(is_root=True))
+        qb.parameters.pop()
+        return obj.text
+
+    @property
+    def type(self):
+        return self.obj.type
+
+
 
 @dataclass
 class Scalar(Sql):
@@ -147,7 +178,7 @@ class FieldFunc(Sql):
 
 @dataclass
 class CountTable(Scalar):
-    table: Table
+    table: Sql
     type = types.Int
 
     def _compile(self, qb):
@@ -344,7 +375,7 @@ class Insert(Sql):
 
 @dataclass
 class InsertConsts(Sql):
-    table: Table
+    table: Sql
     cols: List[str]
     values: List[Sql]
     type = types.null

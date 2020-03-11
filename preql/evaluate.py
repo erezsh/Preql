@@ -14,11 +14,14 @@
 #         execute remote queries
 #         simplify (compute) into the final result
 
+from copy import copy
 from typing import List, Optional, Any
 
+from .utils import benchmark
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type
-from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError
+from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError, pql_CompileError
+from . import exceptions as exc
 from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -142,6 +145,19 @@ def _execute(state: State, p: ast.Print):
 def _execute(state: State, cb: ast.CodeBlock):
     for stmt in cb.statements:
         execute(state, stmt)
+    # except ReturnSignal as r:
+    #     return r.value
+
+@dy
+def simplify(state: State, cb: ast.CodeBlock):
+    return execute(state, cb)
+
+#     # assert state.access_level >= state.AccessLevels.EVALUATE
+#     try:
+#         return execute(state, cb)
+#     except ReturnSignal as r:
+#         return r.value
+
 
 @dy
 def _execute(state: State, i: ast.If):
@@ -176,7 +192,11 @@ def _execute(state: State, r: ast.Return):
 
 @dy
 def _execute(state: State, t: ast.Throw):
-    raise evaluate(state, t.value)
+    e = evaluate(state, t.value)
+    if isinstance(e, ast.Ast):
+        raise exc.InsufficientAccessLevel()
+    assert isinstance(e, Exception), e
+    raise e
 
 def execute(state, stmt):
     try:
@@ -205,11 +225,10 @@ def simplify(state: State, n: ast.Name):
 
 
 
-# XXX This is a big one!
 @dy
 def simplify(state: State, funccall: ast.FuncCall):
     # func = simplify(state, funccall.func)
-    func = simplify(state, funccall.func)
+    func = evaluate(state, funccall.func)
 
     if isinstance(func, types.Primitive):
         # Cast to primitive
@@ -221,36 +240,92 @@ def simplify(state: State, funccall: ast.FuncCall):
         meta = meta.replace(parent=meta)
         raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
 
-    matched_args = func.match_params(funccall.args)
+    return eval_func_call(state, func, funccall.args, funccall.meta)
+
+
+def eval_func_call(state, func, args, meta=None):
+
+    # XXX This is a big one!
+
+    matched_args = func.match_params(args)
+    # matched_args = func.match_params_fast(args)
     args = {p.name:evaluate(state, a) for p,a in matched_args}
-    try:
-        sig = (funccall.func,) + tuple(a.type for a in args.values())
-    except:
-        raise
 
     if isinstance(func, objects.UserFunction):
-        with state.use_scope(args):
+        # with state.use_scope(args):
             # if sig in _cache:
             #     expr = _cache[sig]
             # else:
             #     expr = evaluate(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
             #     _cache[sig] = expr
 
-            expr = evaluate(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
+        # TODO make tests to ensure caching was successful
+        if True:
+            params = {name: ast.Parameter(meta, name, value.type) for name, value in args.items()}
+            sig = (func.name,) + tuple(a.type for a in args.values())
 
-            if isinstance(func.expr, ast.CodeBlock):
-                try:
-                    return execute(state, expr)
-                except ReturnSignal as r:
-                    return r.value
-            else:
-                r = evaluate(state, expr)
-                return r
+            try:
+                # with state.use_scope(args):
+                with state.use_scope(params):
+                    if sig in state._cache:
+                        expr = state._cache[sig]
+                    else:
+                        print("Compiling..", func)
+                        expr = _call_expr(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
+                        print("Compiled successfully")
+                        state._cache[sig] = expr
+
+                expr = ast.ResolveParameters(meta, expr, args)
+            except exc.InsufficientAccessLevel:
+                # Don't cache
+                expr = func.expr
+        else:
+            expr = func.expr
+
+        with state.use_scope(args):
+            with benchmark.measure('call_expr'):
+                res = _call_expr(state, expr)
+
+            if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
+                raise exc.InsufficientAccessLevel()
+
+            return res
     else:
         # TODO ensure pure function
         return func.func(state, *args.values())
 
-_cache = {}
+
+def _call_expr(state, expr):
+    try:
+        return evaluate(state, expr)
+    except ReturnSignal as r:
+        return r.value
+
+@dy
+def resolve_parameters(state: State, x):
+    return x
+
+@dy
+def resolve_parameters(state: State, res: ast.ResolveParameters):
+
+    # XXX use a different mechanism??
+    if isinstance(res.obj, objects.Instance):
+        obj = res.obj
+    else:
+        with state.use_scope(res.values):
+            obj = evaluate(state, res.obj)
+
+    if state.access_level < state.AccessLevels.WRITE_DB: #, (state.access_level, inst)
+        raise exc.InsufficientAccessLevel()
+
+    if not isinstance(obj, objects.Instance):
+        if isinstance(obj, objects.Function):
+            return obj
+        return res.replace(obj=obj)
+
+    code = _resolve_sql_parameters(state, obj.code)
+
+    return obj.replace(code=code)
 
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
@@ -271,17 +346,107 @@ def test_nonzero(state: State, inst: objects.ValueInstance):
 #             return inst
 #     return inst
 
+
+def _raw_sql_callback(state: State, var: str, instances):
+    var = var.group()
+    assert var[0] == '$'
+    var_name = var[1:]
+    obj = state.get_var(var_name)
+
+    if isinstance(obj, types.TableType):
+        # This branch isn't strictly necessary
+        # It exists to create nicer SQL code output
+        inst = objects.TableInstance.make(sql.TableName(obj, obj.name), obj, [], {})
+    else:
+        inst = evaluate(state, obj)
+
+        if isinstance(inst, objects.TableInstance):
+
+            # Make new type
+            new_columns = {
+                name: objects.make_column_instance(sql.Name(col.type, name), col.type, [col])
+                for name, col in inst.columns.items()
+            }
+
+            # Make code
+            sql_fields = [
+                sql.ColumnAlias.make(o.code, n.code)
+                for old, new in safezip(inst.columns.values(), new_columns.values())
+                for o, n in safezip(old.flatten(), new.flatten())
+            ]
+
+            code = sql.Select(inst.type, inst.code, sql_fields)
+
+            # Make Instance
+            inst = objects.TableInstance.make(code, inst.type, [inst], new_columns)
+
+    instances.append(inst)
+
+    qb = sql.QueryBuilder(state.db.target, False)
+    code = _resolve_sql_parameters(state, inst.code)
+    return '%s' % code.compile(qb).text
+
+
+
+@dy
+def resolve_parameters(state: State, p: ast.Parameter):
+    return state.get_var(p.name)
+
+
+# TODO move this to SQL compilation??
+import re
+@dy
+def resolve_effects(state: State, rps: ast.ResolveParametersString):
+    assert state.access_level >= state.AccessLevels.EVALUATE
+    sql_code = localize(state, evaluate(state, rps.string))
+    assert isinstance(sql_code, str)
+
+    type_ = evaluate(state, rps.type)
+    assert isinstance(type_, types.PqlType), type_
+
+    instances = []
+    expanded = re.sub(r"\$\w+", lambda m: _raw_sql_callback(state, m, instances), sql_code)
+    code = sql.RawSql(type_, expanded)
+    # code = sql.ResolveParameters(sql_code)
+
+    # TODO validation!!
+    if isinstance(type_, types.TableType):
+        name = get_alias(state, "subq_")
+
+        inst = instanciate_table(state, type_, sql.TableName(type_, name), instances)
+        # TODO this isn't in the tests!
+        fields = [sql.Name(c, path) for path, c in inst.type.flatten_type()]
+
+        subq = sql.Subquery(name, fields, code)
+        inst.subqueries[name] = subq
+
+        return inst
+
+    return objects.Instance.make(code, type_, instances)
+
+
 @dy
 def resolve_effects(state: State, o: ast.One):
     # TODO move these to the core/base module
-    fname = '_only_one_or_none' if o.nullable else '_only_one'
-    f = state.get_var(fname)
-    table = simplify(state, ast.FuncCall(o.meta, f, [o.expr]))  # TODO Use call_pql_func
+    # fname = '_only_one_or_none' if o.nullable else '_only_one'
+    # f = state.get_var(fname)
+    # table = evaluate(state, ast.FuncCall(o.meta, f, [o.expr]))  # TODO Use call_pql_func
+    table = evaluate(state, ast.Slice(None, o.expr, ast.Range(None, None, ast.Const(None, types.Int, 2))))
+    if isinstance(table, ast.Ast):
+        return table
     if isinstance(table.type, types.NullType):
         return table
 
     assert isinstance(table, objects.TableInstance), table
-    row ,= localize(state, table) # Must be 1 row
+    rows = localize(state, table) # Must be 1 row
+    if len(rows) == 0:
+        if not o.nullable:
+            raise pql_ValueError(o.meta, "'one' expected a single result, got an empty expression")
+        return objects.null
+    elif len(rows) > 1:
+        raise pql_ValueError(o.meta, "'one' expected a single result, got more")
+
+    row ,= rows
     rowtype = types.RowType(table.type)
     # XXX ValueInstance is the right object? Why not throw away 'code'? Reusing it is inefficient
     return objects.ValueInstance.make(table.code, rowtype, [table], row)
@@ -353,26 +518,11 @@ def simplify(state: State, node: ast.Ast):
     # return _simplify_ast(state, node)
     return node
 
-@dy
-def compile_remote(state: State, node: ast.Ast):
-    return node
-@dy
-def compile_remote(state: State, x):
-    return x
-
 
 def _simplify_ast(state, node):
     resolved = {k:simplify(state, v) for k, v in node
                 if isinstance(v, types.PqlObject) or isinstance(v, list) and all(isinstance(i, types.PqlObject) for i in v)}
     return node.replace(**resolved)
-
-# @dy
-# def compile_remote(state: State, cb: ast.CodeBlock):
-#     return cb.replace(statements=compile_remote(state, cb.statements))
-
-# @dy
-# def compile_remote(state: State, i: ast.If):
-#     return i.replace(cond=compile_remote(state, i.cond))
 
 
 # @dy
@@ -517,10 +667,18 @@ def evaluate(state, obj):
 
     if state.access_level < state.AccessLevels.COMPILE:
         return obj
-    obj = compile_remote(state.reduce_access(state.AccessLevels.COMPILE), obj)
+
+    # obj = compile_remote(state.reduce_access(state.AccessLevels.COMPILE), obj)
+    obj = compile_remote(state, obj)
 
     if state.access_level < state.AccessLevels.EVALUATE:
         return obj
+
+    obj = resolve_parameters(state, obj)
+
+    if state.access_level < state.AccessLevels.READ_DB:
+        return obj
+
     obj = resolve_effects(state, obj)
 
     return obj
@@ -536,9 +694,41 @@ def resolve_effects(state, x):
 #
 # Return the local value of the expression. Only requires computation if the value is an instance.
 #
+from copy import copy
 @dy
-def localize(session, inst: objects.Instance):
-    return session.db.query(inst.code, inst.subqueries)
+def __resolve_sql_parameters(ns, param: sql.Parameter):
+    inst = ns.get_var(param.name)
+    assert isinstance(inst, objects.Instance)
+    assert inst.type == param.type
+    ns = type(ns)(ns.ns[-1])
+    return __resolve_sql_parameters(ns, inst.code)
+
+@dy
+def __resolve_sql_parameters(ns, l: list):
+    return [__resolve_sql_parameters(ns, n) for n in l]
+
+@dy
+def __resolve_sql_parameters(ns, node):
+    resolved = {k:__resolve_sql_parameters(ns, v) for k, v in node
+                if isinstance(v, Sql) or isinstance(v, list) and all(isinstance(i, Sql) for i in v)}
+    return node.replace(**resolved)
+
+def _resolve_sql_parameters(state, node):
+    # XXX working but inefficient. Use Sql.compile for it, or just move to text-based parameter resolution
+    return __resolve_sql_parameters(state.ns, node)
+    # return sql.ResolveParameters(node, copy(state.ns))
+
+
+@dy
+def localize(state, inst: objects.Instance):
+    if state.access_level < state.AccessLevels.WRITE_DB: #, (state.access_level, inst)
+        raise exc.InsufficientAccessLevel()
+
+    # code = _resolve_sql_parameters(state, inst.code)
+    code = inst.code
+    # code = inst.code
+
+    return state.db.query(code, inst.subqueries, state=state)
 
 @dy
 def localize(state, inst: objects.ValueInstance):

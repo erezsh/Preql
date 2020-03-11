@@ -242,6 +242,7 @@ def parse_stmts(s):
 
     return T(code=s).transform(tree)
 
+d = {}
 def parse_expr(s):
     tree = parser.parse(s, start="expr")
     return T(code=s).transform(tree)

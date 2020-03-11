@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from .utils import SafeDict
+from .utils import SafeDict, benchmark
 from .exceptions import PreqlError, pql_TypeError, pql_ValueError
 
-from .evaluate import State, execute, evaluate, simplify, localize, resolve_effects
+from .evaluate import State, execute, evaluate, simplify, localize, resolve_effects, eval_func_call
 from .parser import parse_stmts, parse_expr
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -42,14 +42,8 @@ class Interpreter:
         self.include('core.pql', __file__) # TODO use an import mechanism instead
 
     def call_func(self, fname, args):
-        obj = simplify(self.state, ast.Name(None, fname))
-        if isinstance(obj, objects.TableInstance):
-            assert not args, args
-            # return localize(self.state, obj)
-            return obj
-
-        funccall = ast.FuncCall(None, ast.Name(None, fname), args)
-        return evaluate(self.state, funccall)
+        with benchmark.measure('call_func'):
+            return eval_func_call(self.state, self.state.get_var(fname), args, None)
 
     def eval_expr(self, code, args):
         expr_ast = parse_expr(code)

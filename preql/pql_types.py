@@ -2,6 +2,7 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 from .utils import dataclass, listgen, concat_for, SafeDict
+from . import exceptions as exc
 
 class PqlObject:    # XXX should be in a base module
     "Any object that the user might interact with through the language, as so has to behave like an object inside Preql"
@@ -9,7 +10,13 @@ class PqlObject:    # XXX should be in a base module
     def repr(self, pql):
         return repr(self)
 
-class _PqlType(PqlObject):
+    def get_attr(self, attr):
+        if attr == '__name__':
+            from .pql_objects import make_value_instance    # XXX bad!!
+            return make_value_instance(type(self).__name__)
+        raise exc.pql_AttributeError(None, f"{self} has no attribute: {attr}")
+
+class PqlType(PqlObject):
     """PqlType annotates the type of all instances """
 
     def kernel_type(self):
@@ -30,8 +37,7 @@ class _PqlType(PqlObject):
     hide_from_init = False
     primary_key = False
 
-class PqlType(_PqlType):
-    type = _PqlType  # Unfortunately no simple way to do self-reference
+PqlType.type = PqlType()
 
 # Primitives
 
@@ -237,14 +243,14 @@ class TableType(Collection):
         return len(self.flatten_path())
 
     def __repr__(self):
-        # return f'TableType({self.name})'
-        return f'TableType({self.name}, {{{", ".join(repr(t) for t in self.columns.values())}}})'
+        return f'TableType({self.name})'
+        # return f'TableType({self.name}, {{{", ".join(repr(t) for t in self.columns.values())}}})'
 
     def repr(self, pql):
         return f'{self.name}{{{", ".join(t.repr(pql) for t in self.columns.values())}}}'
 
     def _data_columns(self):
-        return [c if not isinstance(c, IdType) else "id" for c in self.columns.values()]
+        return [(name, c) if not isinstance(c, IdType) else "id" for name, c in self.columns.items()]
 
     def __hash__(self):
         return hash(tuple(self._data_columns()))
