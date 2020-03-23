@@ -1,7 +1,6 @@
 from time import time
 import sys
 import logging
-from pathlib import Path
 
 ### XXX Fix for Python 3.8 bug (https://github.com/prompt-toolkit/python-prompt-toolkit/issues/1023)
 import asyncio

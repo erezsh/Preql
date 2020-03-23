@@ -1,17 +1,13 @@
-from pathlib import Path
 from contextlib import contextmanager
 
 import tabulate
 
-from . import pql_types as types
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate
-from .interp_common import create_engine
-from .compiler import call_pql_func
-from .utils import benchmark
+from .interp_common import create_engine, call_pql_func
 
 
 def _make_const(value):

@@ -1,27 +1,32 @@
-from .utils import benchmark
-
-from .sql import Sql, CompiledSQL, Select, QueryBuilder, sqlite, postgres
+from .sql import Sql, QueryBuilder, sqlite, postgres
 from . import exceptions
 
-from .pql_types import Primitive, null    # XXX Code smell?
+from .pql_types import null
+
 
 class SqlInterface:
+    def __init__(self, debug=True):
+        self._debug = debug
+
     def query(self, sql, subqueries=None, qargs=(), quiet=False, state=None):
         assert isinstance(sql, Sql), sql
+        sql_code = self._compile_sql(sql, subqueries, qargs, state)
 
-        qb = QueryBuilder(self.target, parameters=state and [state.ns])
-
-        if subqueries:
-            subqs = [q.compile(qb).text for (name, q) in subqueries.items()]
-            sql_code = 'WITH ' + ',\n     '.join(subqs) + '\n'
-        else:
-            sql_code = ''
-
-        compiled = sql.compile(qb)
-        sql_code += compiled.text
-        c = self._conn.cursor()
         if self._debug and not quiet:
             print_sql(sql_code)
+
+        cur = self._execute_sql(sql_code)
+
+        return self._import_result(sql.type, cur)
+
+    def _import_result(self, sql_type, c):
+        if sql_type is not null:
+            res = c.fetchall()
+            imp = sql_type.import_result
+            return imp(res)
+
+    def _execute_sql(self, sql_code):
+        c = self._conn.cursor()
 
         try:
             c.execute(sql_code)
@@ -31,37 +36,27 @@ class SqlInterface:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
             raise exceptions.pql_DatabaseQueryError(None, msg%(sql_code, e))
 
-        if sql.type is not null:
-            res = c.fetchall()
-            imp = sql.type.import_result
-            return imp(res)
+        return c
+
+
+    def _compile_sql(self, sql, subqueries=None, qargs=(), state=None):
+        qb = QueryBuilder(self.target, parameters=state and [state.ns])
+
+        if subqueries:
+            subqs = [q.compile(qb).text for (name, q) in subqueries.items()]
+            sql_code = 'WITH ' + ',\n     '.join(subqs) + '\n'
+        else:
+            sql_code = ''
+        compiled = sql.compile(qb)
+        sql_code += compiled.text
+        return sql_code
+
 
     def commit(self):
         self._conn.commit()
 
     def close(self):
         self._conn.close()
-
-    def _old_addmany(self, table, cols, values):
-        assert all(len(v)==len(cols) for v in values), (cols, values[0])
-
-        c = self._conn.cursor()
-        qmarks = ','.join(['?'] * len(cols))
-        cols_str = ','.join(cols)
-        sql = f'INSERT INTO {table} ({cols_str}) VALUES ({qmarks})'
-        if self._debug:
-            print_sql(sql)
-        ids = []
-        for v in values:
-            c.execute(sql, v)
-            ids.append(c.lastrowid)
-        # c.executemany(sql, values)
-        assert len(ids) == len(set(ids))
-        inserted = len(ids)
-        if self._debug:
-            print('#-- Inserted %d rows' % inserted)
-        assert inserted == len(values)
-        return ids
 
 
 def print_sql(sql):

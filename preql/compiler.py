@@ -7,13 +7,11 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, get_alias, assert_type, make_value_instance, evaluate
+from .interp_common import dy, State, assert_type, make_value_instance, evaluate, call_pql_func
 
-
-Sql = sql.Sql
 
 @dy
-def compile_type_def(state: State, table: types.TableType) -> Sql:
+def compile_type_def(state: State, table: types.TableType) -> sql.Sql:
     posts = []
     pks = []
     columns = []
@@ -34,10 +32,8 @@ def compile_type_def(state: State, table: types.TableType) -> Sql:
         posts.append(f"PRIMARY KEY ({names})")
 
     # Consistent among SQL databases
-    if table.temporary:
-        return sql.RawSql(types.null, f"CREATE TEMPORARY TABLE {table.name} (" + ", ".join(columns + posts) + ")")
-    else:
-        return sql.RawSql(types.null, f"CREATE TABLE if not exists {table.name} (" + ", ".join(columns + posts) + ")")
+    command = "CREATE TEMPORARY TABLE" if table.temporary else "CREATE TABLE IF NOT EXISTS"
+    return sql.RawSql(types.null, f"{command} {table.name} (" + ", ".join(columns + posts) + ")")
 
 @dy
 def compile_type(state: State, type_: types.RelationalColumn):
@@ -63,9 +59,6 @@ def _compile_type_primitive(type, nullable):
 @dy
 def compile_type(state: State, type: types.Primitive, nullable=False):
     return _compile_type_primitive(type, nullable)
-# @dy
-# def compile_type(state: State, type: types._DateTime, nullable=False):
-#     return _compile_type_primitive(type, nullable)
 
 @dy
 def compile_type(state: State, type: types.OptionalType):
@@ -83,7 +76,6 @@ def compile_type(state: State, idtype: types.IdType, nullable=False):
 
 
 def _process_fields(state: State, fields):
-    "Returns {var_name: (col_instance, sql_alias)}"
     processed_fields = []
     for f in fields:
 
@@ -91,12 +83,11 @@ def _process_fields(state: State, fields):
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
         sql_friendly_name = name.replace(".", "_")
 
-        # v = compile_remote(state, f.value)
         v = evaluate(state, f.value)
-        if not isinstance(v, objects.Instance): #, (v, f.value)
-            assert state.access_level <= state.AccessLevels.COMPILE, v
-            # raise pql_CompileError(None, f"Preql cannot compile expression: {v}")   # TODO better message
+        if isinstance(v, ast.ResolveParametersString):
             raise exc.InsufficientAccessLevel()
+
+        assert isinstance(v, objects.Instance)
 
         if isinstance(v.type, types.Aggregated):
 
@@ -107,7 +98,7 @@ def _process_fields(state: State, fields):
 
         v = _ensure_col_instance(state, f.meta, v)
 
-        processed_fields.append( [name, (v, get_alias(state, sql_friendly_name)) ] )   # TODO Don't create new alias for fields that don't change?
+        processed_fields.append( [name, (v, state.unique_name(sql_friendly_name)) ] )   # TODO Don't create new alias for fields that don't change?
 
     return processed_fields
 
@@ -161,7 +152,6 @@ def compile_remote(state: State, proj: ast.Projection):
     if not isinstance(table, (objects.TableInstance, objects.StructColumnInstance)):
         raise pql_TypeError(proj.meta, f"Cannot project objects of type {table.type}")
 
-    # breakpoint()
     fields = _expand_ellipsis(table, proj.fields)
 
     # Test duplicates in field names. If an automatic name is used, collision should be impossible
@@ -185,14 +175,14 @@ def compile_remote(state: State, proj: ast.Projection):
         # Create a new struct, to replace the projected struct.
         assert not agg_fields
         members = {name: inst for name, (inst, _a) in fields}
-        struct_type = types.StructType(get_alias(state, "struct_proj"), {name:m.type for name, m in members.items()})
+        struct_type = types.StructType(state.unique_name("struct_proj"), {name:m.type for name, m in members.items()})
         return objects.StructColumnInstance.make(table.code, struct_type, [], members)
 
 
     # Make new type
     all_aliases = []
     new_columns = {}
-    new_table_type = types.TableType(get_alias(state, table.type.name + "_proj"), SafeDict(), True, []) # Maybe wrong
+    new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, []) # Maybe wrong
     for name_, (remote_col, sql_alias) in fields + agg_fields:
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
@@ -231,7 +221,7 @@ def compile_remote(state: State, order: ast.Order):
 
     fields = [_ensure_col_instance(state, of.meta, f) for f, of in safezip(fields, order.fields)]
 
-    code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], order=[c.code for c in fields])
+    code = sql.table_order(table, [c.code for c in fields])
 
     return objects.TableInstance.make(code, table.type, [table] + fields, table.columns)
 
@@ -262,6 +252,7 @@ def compile_remote(state: State, like: ast.Like):
 @dy
 def compile_remote(state: State, cmp: ast.Compare):
     insts = evaluate(state, cmp.args)
+    assert all(isinstance(i, objects.Instance) for i in insts), (cmp.args, state.access_level)
 
     if cmp.op == 'in' or cmp.op == '!in':
         sql_cls = sql.Contains
@@ -302,25 +293,6 @@ def _get_comparable_instance(i):
     return i
 
 @dy
-def compile_remote(state: State, attr: ast.Attr):
-    inst = evaluate(state, attr.expr)
-    # if not isinstance(inst, objects.Instance):
-        # return inst
-
-    return evaluate(state, inst.get_attr(attr.name))
-    # try:
-    # except pql_AttributeError:
-    #     meta = attr.name.meta.replace(parent=attr.meta)
-    #     raise pql_AttributeError(meta, f"'{inst.repr(state)}' has no attribute {attr.name} (compiler_type={type(inst)}")
-
-
-
-def call_pql_func(state, name, args):
-    expr = ast.FuncCall(None, ast.Name(None, name), args)
-    return evaluate(state, expr)
-
-
-@dy
 def compile_remote(state: State, arith: ast.Arith):
     args = evaluate(state, arith.args)
     return _compile_arith(state, arith, *args)
@@ -343,6 +315,7 @@ def _compile_arith(state, arith, a: objects.TableInstance, b: objects.TableInsta
 
     try:
         return state.get_var(op).func(state, a, b)
+        # return call_pql_func(state, op, [a,b])
     except PreqlError as e:
         raise e.replace(meta=arith.meta) from e
 
@@ -383,26 +356,12 @@ def _compile_arith(state, arith, a, b):
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
-
     if not all(isinstance(a.type, (types.Primitive, types.ListType)) for a in args):
         meta = arith.op.meta.replace(parent=arith.meta)
         raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
-
-    arg_codes = [a.code for a in args]
-    res_type ,= arg_types_set
-    op = arith.op
-    if arg_types_set == {types.String}:
-        if arith.op != '+':
-            meta = arith.op.meta.replace(parent=arith.meta)
-            raise pql_TypeError(meta, f"Operator '{arith.op}' not supported for strings.")
-        op = '||'
-    elif arith.op == '/':
-        arg_codes[0] = sql.Cast(types.Float, 'float', arg_codes[0])
-    elif arith.op == '//':
-        op = '/'
-
-    code = sql.Arith(op, arg_codes)
+    res_type ,= {a.type for a in args}
+    code = sql.arith(res_type, arith.op, [a.code for a in args], arith.meta)
     return objects.Instance.make(code, res_type, args)
 
 
@@ -422,7 +381,7 @@ def compile_remote(state: State, c: ast.Const):
 def compile_remote(state: State, d: ast.Dict_):
     elems = {k:evaluate(state, objects.from_python(v)) for k,v in d.elems.items()}
     t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
-    code = sql.SelectValues(t, {k:v.code for k,v in elems.items()})
+    code = sql.RowDict({k:v.code for k,v in elems.items()})
     return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
 
 @dy
@@ -434,9 +393,6 @@ def compile_remote(state: State, lst: ast.List_, elem_type=None):
     # Or just evaluate?
 
     if not lst.elems and elem_type is None:
-        # list_type = types.ListType(types.any_t)      # XXX Any type?
-        # code = sql.EmptyList(list_type)
-        # return instanciate_table(state, list_type, code, [])
         return objects.EmptyList
 
     elems = evaluate(state, lst.elems)
@@ -449,13 +405,13 @@ def compile_remote(state: State, lst: ast.List_, elem_type=None):
     else:
         elem_type ,= type_set
 
-    list_type = types.ListType(elem_type)
 
     # code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
-    name = get_alias(state, "list_")
-    inst = instanciate_table(state, list_type, sql.TableName(list_type, name), elems)
-    fields = [sql.Name(elem_type, 'value')]
-    subq = sql.Subquery(name, fields, sql.Values(list_type, [e.code for e in elems]))
+    list_type = types.ListType(elem_type)
+    name = state.unique_name("list_")
+    table_code, subq = sql.create_list(list_type, name, [e.code for e in elems])
+
+    inst = objects.instanciate_table(state, list_type, table_code, elems)
     inst.subqueries[name] = subq
     return inst
 
@@ -473,14 +429,14 @@ def compile_remote(state: State, s: ast.Slice):
         instances += [start]
     else:
         start = make_value_instance(0)
+
     if s.range.stop:
         stop = evaluate(state, s.range.stop)
         instances += [stop]
-        limit = sql.Arith('-', [stop.code, start.code])
     else:
-        limit = None
+        stop = None
 
-    code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], offset=start.code, limit=limit)
+    code = sql.table_slice(table, start.code, stop and stop.code)
     # return table.remake(code=code)
     return objects.TableInstance.make(code, table.type, instances, table.columns)
 
@@ -500,16 +456,14 @@ def compile_remote(state: State, sel: ast.Selection):
 
     conds = [_ensure_col_instance(state, of.meta, f) for f, of in safezip(conds, sel.conds)]
 
-    code = sql.Select(table.type, table.code, [sql.AllFields(table.type)], conds=[c.code for c in conds])
-    inst = objects.TableInstance.make(code, table.type, [table] + conds, table.columns)
-    return inst
+    code = sql.table_selection(table, [c.code for c in conds])
 
+    return objects.TableInstance.make(code, table.type, [table] + conds, table.columns)
 
 @dy
 def compile_remote(state: State, param: ast.Parameter):
     if state.access_level == state.AccessLevels.COMPILE:
-        # return objects.Instance.make(sql.Parameter(param.type, param.name), param.type, [])
-        return make_instance(sql.Parameter(param.type, param.name), param.type, [])
+        return objects.make_instance(sql.Parameter(param.type, param.name), param.type, [])
     else:
         return state.get_var(param.name)
 
@@ -553,60 +507,10 @@ def guess_field_name(f: ast.FuncCall):
 
 
 
-def instanciate_column(state: State, name, t, insts=[]):
-    return objects.make_column_instance(sql.Name(t, get_alias(state, name)), t, insts)
 
-
-def alias_table(state: State, t):
-    new_columns = {
-        name: instanciate_column(state, name, col.type, [col])
-        for name, col in t.columns.items()
-    }
-
-    # Make code
-    sql_fields = [
-        sql.ColumnAlias.make(o.code, n.code)
-        for old, new in safezip(t.columns.values(), new_columns.values())
-        for o, n in safezip(old.flatten(), new.flatten())
-    ]
-
-    code = sql.Select(t.type, t.code, sql_fields)
-    return t.replace(code=code, columns=new_columns)
-
-
-def instanciate_table(state: State, t: types.TableType, source: Sql, instances, values=None):
-    if values is None:
-        columns = {name: objects.make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in t.columns.items()}
-        code = source
-    else:
-        columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
-
-        atoms = [atom
-                    for name, inst in columns.items()
-                    for path, atom in inst.flatten([name])
-                ]
-
-        aliases = [ sql.ColumnAlias.make(value, atom.code) for value, atom in safezip(values, atoms) ]
-
-        code = sql.Select(t, source, aliases)
-
-    return objects.TableInstance(code, t, objects.merge_subqueries(instances), columns)
-
-def make_instance(code, type_, from_instances=()):
-    if isinstance(type_, types.Collection):
-        columns = {name: objects.make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in type_.columns.items()}
-        return objects.TableInstance.make(code, type_, from_instances, columns)
-    else:
-        return objects.Instance.make(code, type_, from_instances)
-
-
-def exclude_fields(state, table, fields):
-    proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])
-    return evaluate(state, proj)
-
-def rename_field(state, table, old, new):
-    proj = ast.Projection(None, table, [
-        ast.NamedField(None, None, ast.Ellipsis(None, [])),
-        ast.NamedField(None, new, ast.Name(None, old))
-        ])
-    return evaluate(state, proj)
+# def rename_field(state, table, old, new):
+#     proj = ast.Projection(None, table, [
+#         ast.NamedField(None, None, ast.Ellipsis(None, [])),
+#         ast.NamedField(None, new, ast.Name(None, old))
+#         ])
+#     return evaluate(state, proj)

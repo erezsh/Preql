@@ -1,8 +1,10 @@
 from typing import List, Any, Optional, Dict
 
-from .utils import dataclass, SafeDict, listgen, X
+from .utils import dataclass, listgen, X
 from . import pql_types as types
-from .pql_types import PqlType
+from . import exceptions as exc
+
+PqlType = types.PqlType
 
 
 sqlite = 'sqlite'
@@ -16,7 +18,7 @@ class QueryBuilder:
         self.counter = start_count
         self.parameters = parameters or []
 
-    def get_alias(self):
+    def unique_name(self):
         self.counter += 1
         return 't%d' % self.counter
 
@@ -37,7 +39,7 @@ class Sql:
         if self._is_select:
             if not qb.is_root:
                 if qb.target == 'postgres':
-                    sql_code = f'({sql_code}) {qb.get_alias()}' # postgres requires an alias
+                    sql_code = f'({sql_code}) {qb.unique_name()}' # postgres requires an alias
                 else:
                     sql_code = f'({sql_code})'
         else:
@@ -90,17 +92,15 @@ class ResolveParameters(Sql):
     # values: Dict[str, Sql]
     ns: object
 
-    def _compile(self, qb):
-        assert False
+    def compile(self, qb):
         qb.parameters.append(self.ns)
-        obj = self.obj.compile(qb.replace(is_root=True))
+        obj = self.obj.compile(qb)
         qb.parameters.pop()
-        return obj.text
+        return obj
 
     @property
     def type(self):
         return self.obj.type
-
 
 
 @dataclass
@@ -413,18 +413,11 @@ class SelectValue(Atom, TableOperation):
     type = property(X.value.type)
 
 @dataclass
-class SelectValues(TableOperation):
-    # XXX Can we use a regular select?
+class RowDict(Sql):
     values: Dict[str, Sql]
 
     def _compile(self, qb):
-        values = {name: v.compile(qb) for name, v in self.values.items()}
-        fields = {f'{v.text} as {name}' for name, v in values.items()}
-        return f'SELECT {fields}'
-
-    @property
-    def type(self):
-        return list(self.values.values())[0].type   # TODO ensure types are correct
+        return {f'{v.compile(qb).text} as {name}' for name, v in self.values.items()}
 
 
 @dataclass
@@ -552,3 +545,48 @@ class Join(TableOperation):
             conds = '1=1'   # Postgres requires ON clause
 
         return f'SELECT * FROM {join_sql} ON {conds}'
+
+
+
+
+
+def deletes_by_ids(table, ids):
+    for id_ in ids:
+        compare = Compare('=', [Name(types.Int, 'id'), Primitive(types.Int, str(id_))])
+        yield Delete(TableName(table.type, table.type.name), [compare])
+
+def updates_by_ids(table, proj, ids):
+    sql_proj = {Name(value.type, name): value.code for name, value in proj.items()}
+    for id_ in ids:
+        compare = Compare('=', [Name(types.Int, 'id'), Primitive(types.Int, str(id_))])
+        yield Update(TableName(table.type, table.type.name), sql_proj, [compare])
+
+def create_list(list_type, name, elems):
+    fields = [Name(list_type.elemtype, 'value')]
+    subq = Subquery(name, fields, Values(list_type, elems))
+    table = TableName(list_type, name)
+    return table, subq
+
+def table_slice(table, start, stop):
+    limit = Arith('-', [stop, start]) if stop else None
+    return Select(table.type, table.code, [AllFields(table.type)], offset=start, limit=limit)
+
+def table_selection(table, conds):
+    return Select(table.type, table.code, [AllFields(table.type)], conds=conds)
+
+def table_order(table, fields):
+    return Select(table.type, table.code, [AllFields(table.type)], order=fields)
+
+def arith(res_type, op, args, meta):
+    arg_codes = list(args)
+    if res_type == types.String:
+        if op != '+':
+            meta = op.meta.replace(parent=meta)
+            raise exc.pql_TypeError(meta, f"Operator '{op}' not supported for strings.")
+        op = '||'
+    elif op == '/':
+        arg_codes[0] = Cast(types.Float, 'float', arg_codes[0])
+    elif op == '//':
+        op = '/'
+
+    return Arith(op, arg_codes)

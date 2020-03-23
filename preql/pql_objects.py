@@ -35,6 +35,7 @@ class ParamDict(types.PqlObject):
 
     @property
     def type(self):
+        # XXX is ParamDictType really necessary?
         # return tuple(p.type for p in self.params.values())
         return ParamDictType({n:p.type for n, p in self.params.items()})
 
@@ -51,6 +52,10 @@ class Function(types.PqlObject):
 
 
     def match_params(self, args):
+        # If no keyword arguments, matching is much simpler and faster
+        if all(not isinstance(a, ast.NamedField) for a in args):
+            return self.match_params_fast(args)
+
         # Canonize args for the rest of the function
         args = [a if isinstance(a, ast.NamedField) else ast.NamedField(None, None, a) for a in args]
 
@@ -257,10 +262,6 @@ def sql_repr(x):
     if x is None:
         return sql.null
 
-    # if isinstance(x, dict):
-    #     v = {name:sql_repr(v) for name, v in x.items()}
-    #     return sql.SelectValues(types.StructType("_repr", {name:v.type for name, v in v.items()}), v)
-
     t = types.Primitive.by_pytype[type(x)]
     if t is types.DateTime:
         # TODO Better to pass the object instead of a string?
@@ -400,3 +401,52 @@ from collections import defaultdict
 def _any_column():
     return EmptyList
 EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, [], defaultdict(_any_column))    # Singleton
+
+
+def make_instance(code, type_, from_instances=()):
+    if isinstance(type_, types.Collection):
+        columns = {name: make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in type_.columns.items()}
+        return TableInstance.make(code, type_, from_instances, columns)
+    else:
+        return Instance.make(code, type_, from_instances)
+
+
+
+def instanciate_column(state, name, t, insts=[]):
+    return make_column_instance(sql.Name(t, state.unique_name(name)), t, insts)
+
+
+def instanciate_table(state, t: types.TableType, source: sql.Sql, instances, values=None):
+    if values is None:
+        columns = {name: make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in t.columns.items()}
+        code = source
+    else:
+        columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
+
+        atoms = [atom
+                    for name, inst in columns.items()
+                    for path, atom in inst.flatten([name])
+                ]
+
+        aliases = [ sql.ColumnAlias.make(value, atom.code) for value, atom in safezip(values, atoms) ]
+
+        code = sql.Select(t, source, aliases)
+
+    return TableInstance(code, t, merge_subqueries(instances), columns)
+
+
+def alias_table(state, t):
+    new_columns = {
+        name: instanciate_column(state, name, col.type, [col])
+        for name, col in t.columns.items()
+    }
+
+    # Make code
+    sql_fields = [
+        sql.ColumnAlias.make(o.code, n.code)
+        for old, new in safezip(t.columns.values(), new_columns.values())
+        for o, n in safezip(old.flatten(), new.flatten())
+    ]
+
+    code = sql.Select(t.type, t.code, sql_fields)
+    return t.replace(code=code, columns=new_columns)

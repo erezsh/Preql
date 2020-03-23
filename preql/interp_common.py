@@ -5,7 +5,7 @@ import dsnparse
 
 from runtype import Dispatch
 
-from .exceptions import pql_NameNotFound, pql_TypeError, Meta
+from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, Meta
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -59,6 +59,13 @@ class State:
         s.access_level = new_level
         return s
 
+    def require_access(self, level):
+        if self.access_level < level:
+            raise InsufficientAccessLevel()
+    def catch_access(self, level):
+        if self.access_level < level:
+            raise Exception("Bad access. Security risk.")
+
     def connect(self, uri):
         print(f"[Preql] Connecting to {uri}")
         self.db = create_engine(uri, self.db._debug)
@@ -69,6 +76,16 @@ class State:
         return self.ns.set_var(name, value)
     def use_scope(self, scope: dict):
         return self.ns.use_scope(scope)
+
+
+
+    def unique_name(self, obj):
+        if isinstance(obj, objects.TableInstance):
+            return self.unique_name(obj.type.name)
+
+        self.tick[0] += 1
+        return obj + str(self.tick[0])
+
 
 class Namespace:
     def __init__(self, ns=None):
@@ -128,17 +145,18 @@ def create_engine(db_uri, debug):
 
 
 
-def get_alias(state: State, obj):
-    if isinstance(obj, objects.TableInstance):
-        return get_alias(state, obj.type.name)
-
-    state.tick[0] += 1
-    return obj + str(state.tick[0])
-
-
 def assert_type(meta, t, type_, msg):
     if not isinstance(t, type_):
         raise pql_TypeError(meta, msg % (type_, t))
+
+def exclude_fields(state, table, fields):
+    proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])
+    return evaluate(state, proj)
+
+def call_pql_func(state, name, args):
+    expr = ast.FuncCall(None, ast.Name(None, name), args)
+    return evaluate(state, expr)
+
 
 sql_repr = objects.sql_repr
 make_value_instance = objects.make_value_instance

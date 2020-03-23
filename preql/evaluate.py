@@ -16,10 +16,12 @@
 
 from copy import copy
 from typing import List, Optional, Any
+import logging
+import re
 
 from .utils import benchmark
 from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type
+from .interp_common import assert_type, exclude_fields
 from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError, pql_CompileError
 from . import exceptions as exc
 from . import pql_types as types
@@ -29,8 +31,8 @@ from . import sql
 RawSql = sql.RawSql
 Sql = sql.Sql
 
-from .interp_common import State, dy, get_alias, sql_repr, make_value_instance
-from .compiler import compile_remote, compile_type_def, instanciate_table, call_pql_func, exclude_fields
+from .interp_common import State, dy, sql_repr, make_value_instance
+from .compiler import compile_remote, compile_type_def
 
 
 
@@ -50,7 +52,7 @@ def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     for c in table_def.columns:
         t.columns[c.name] = resolve(state, c)
 
-    inst = instanciate_table(state, t, sql.TableName(t, t.name), [])
+    inst = objects.instanciate_table(state, t, sql.TableName(t, t.name), [])
     state.set_var(t.name, inst)
     return t
 
@@ -92,9 +94,13 @@ def _set_value(state: State, attr: ast.Attr, value):
 @dy
 def _execute(state: State, var_def: ast.SetValue):
     res = simplify(state, var_def.value)
-    res = resolve_effects(state, res)
+    res = apply_database_rw(state, res)
     _set_value(state, var_def.name, res)
 
+@dy
+def simplify(state: State, attr: ast.Attr):
+    inst = evaluate(state, attr.expr)
+    return evaluate(state, inst.get_attr(attr.name))
 
 
 @dy
@@ -248,17 +254,10 @@ def eval_func_call(state, func, args, meta=None):
     # XXX This is a big one!
 
     matched_args = func.match_params(args)
-    # matched_args = func.match_params_fast(args)
+
     args = {p.name:evaluate(state, a) for p,a in matched_args}
 
     if isinstance(func, objects.UserFunction):
-        # with state.use_scope(args):
-            # if sig in _cache:
-            #     expr = _cache[sig]
-            # else:
-            #     expr = evaluate(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
-            #     _cache[sig] = expr
-
         # TODO make tests to ensure caching was successful
         if True:
             params = {name: ast.Parameter(meta, name, value.type) for name, value in args.items()}
@@ -270,9 +269,9 @@ def eval_func_call(state, func, args, meta=None):
                     if sig in state._cache:
                         expr = state._cache[sig]
                     else:
-                        print("Compiling..", func)
+                        logging.info(f"Compiling.. {func}")
                         expr = _call_expr(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
-                        print("Compiled successfully")
+                        logging.info("Compiled successfully")
                         state._cache[sig] = expr
 
                 expr = ast.ResolveParameters(meta, expr, args)
@@ -315,8 +314,7 @@ def resolve_parameters(state: State, res: ast.ResolveParameters):
         with state.use_scope(res.values):
             obj = evaluate(state, res.obj)
 
-    if state.access_level < state.AccessLevels.WRITE_DB: #, (state.access_level, inst)
-        raise exc.InsufficientAccessLevel()
+    state.require_access(state.AccessLevels.WRITE_DB)
 
     if not isinstance(obj, objects.Instance):
         if isinstance(obj, objects.Function):
@@ -394,10 +392,11 @@ def resolve_parameters(state: State, p: ast.Parameter):
 
 
 # TODO move this to SQL compilation??
-import re
 @dy
-def resolve_effects(state: State, rps: ast.ResolveParametersString):
-    assert state.access_level >= state.AccessLevels.EVALUATE
+def apply_database_rw(state: State, rps: ast.ResolveParametersString):
+    # TODO if this is still here, it should be in evaluate, not db_rw
+    state.catch_access(state.AccessLevels.EVALUATE)
+
     sql_code = localize(state, evaluate(state, rps.string))
     assert isinstance(sql_code, str)
 
@@ -411,9 +410,9 @@ def resolve_effects(state: State, rps: ast.ResolveParametersString):
 
     # TODO validation!!
     if isinstance(type_, types.TableType):
-        name = get_alias(state, "subq_")
+        name = state.unique_name("subq_")
 
-        inst = instanciate_table(state, type_, sql.TableName(type_, name), instances)
+        inst = objects.instanciate_table(state, type_, sql.TableName(type_, name), instances)
         # TODO this isn't in the tests!
         fields = [sql.Name(c, path) for path, c in inst.type.flatten_type()]
 
@@ -426,11 +425,8 @@ def resolve_effects(state: State, rps: ast.ResolveParametersString):
 
 
 @dy
-def resolve_effects(state: State, o: ast.One):
+def apply_database_rw(state: State, o: ast.One):
     # TODO move these to the core/base module
-    # fname = '_only_one_or_none' if o.nullable else '_only_one'
-    # f = state.get_var(fname)
-    # table = evaluate(state, ast.FuncCall(o.meta, f, [o.expr]))  # TODO Use call_pql_func
     table = evaluate(state, ast.Slice(None, o.expr, ast.Range(None, None, ast.Const(None, types.Int, 2))))
     if isinstance(table, ast.Ast):
         return table
@@ -452,28 +448,30 @@ def resolve_effects(state: State, o: ast.One):
     return objects.ValueInstance.make(table.code, rowtype, [table], row)
 
 @dy
-def resolve_effects(state: State, d: ast.Delete):
-    assert state.access_level >= state.AccessLevels.WRITE_DB
+def apply_database_rw(state: State, d: ast.Delete):
+    state.catch_access(state.AccessLevels.WRITE_DB)
     # TODO Optimize: Delete on condition, not id, when possible
 
     cond_table = ast.Selection(d.meta, d.table, d.conds)
     table = evaluate(state, cond_table)
     assert isinstance(table, objects.TableInstance)
 
-    for row in localize(state, table):
-        if 'id' not in row:
+    rows = list(localize(state, table))
+    if rows:
+        if 'id' not in rows[0]:
             raise pql_ValueError(d.meta, "Delete error: Table does not contain id")
-        id_ = row['id']
 
-        compare = sql.Compare('=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
-        code = sql.Delete(sql.TableName(table.type, table.type.name), [compare])
-        state.db.query(code, table.subqueries)
+        ids = [row['id'] for row in rows]
+
+        for code in sql.deletes_by_ids(table, ids):
+            state.db.query(code, table.subqueries)
 
     return evaluate(state, d.table)
 
 @dy
-def resolve_effects(state: State, u: ast.Update):
-    assert state.access_level >= state.AccessLevels.WRITE_DB
+def apply_database_rw(state: State, u: ast.Update):
+    state.catch_access(state.AccessLevels.WRITE_DB)
+
     # TODO Optimize: Update on condition, not id, when possible
     table = evaluate(state, u.table)
     assert isinstance(table, objects.TableInstance)
@@ -489,16 +487,18 @@ def resolve_effects(state: State, u: ast.Update):
     update_scope = {n:c.replace(code=sql.Name(c.type, n)) for n, c in table.columns.items()}
     with state.use_scope(update_scope):
         proj = {f.name:evaluate(state, f.value) for f in u.fields}
-    sql_proj = {sql.Name(value.type, name): value.code for name, value in proj.items()}
-    for row in localize(state, table):
-        if 'id' not in row:
+
+    rows = list(localize(state, table))
+    if rows:
+        if 'id' not in rows[0]:
             raise pql_ValueError(u.meta, "Update error: Table does not contain id")
-        id_ = row['id']
-        if not set(proj) < set(row):
+        if not set(proj) < set(rows[0]):
             raise pql_ValueError(u.meta, "Update error: Not all keys exist in table")
-        compare = sql.Compare('=', [sql.Name(types.Int, 'id'), sql.Primitive(types.Int, str(id_))])
-        code = sql.Update(sql.TableName(table.type, table.type.name), sql_proj, [compare])
-        state.db.query(code, table.subqueries)
+
+        ids = [row['id'] for row in rows]
+
+        for code in sql.updates_by_ids(table, proj, ids):
+            state.db.query(code, table.subqueries)
 
     # TODO return by ids to maintain consistency, and skip a possibly long query
     return table
@@ -543,8 +543,9 @@ def _simplify_ast(state, node):
 
 
 @dy
-def resolve_effects(state: State, new: ast.NewRows):
-    assert state.access_level >= state.AccessLevels.WRITE_DB
+def apply_database_rw(state: State, new: ast.NewRows):
+    state.catch_access(state.AccessLevels.WRITE_DB)
+
     obj = state.get_var(new.type)
 
     if isinstance(obj, objects.TableInstance):
@@ -598,13 +599,12 @@ def _new_row(state, table, destructured_pairs):
     q = sql.InsertConsts(sql.TableName(table, table.name), keys, values)
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
-    # return rowid
     return make_value_instance(rowid, table.columns['id'], force_type=True)  # XXX find a nicer way
 
 
 @dy
-def resolve_effects(state: State, new: ast.New):
-    assert state.access_level >= state.AccessLevels.WRITE_DB
+def apply_database_rw(state: State, new: ast.New):
+    state.catch_access(state.AccessLevels.WRITE_DB)
 
     # XXX This function has side-effects.
     # Perhaps it belongs in resolve, rather than simplify?
@@ -647,13 +647,10 @@ class TableConstructor(objects.Function):
     def make(cls, table):
         return cls([objects.Param(name.meta, name, p, p.default, orig=p) for name, p in table.params()])
 
-    # def match_params(self, args):
-    #     return [(p.orig, v) for p, v in super().match_params(args)]
-
 
 def add_as_subquery(state: State, inst: objects.Instance):
     code_cls = sql.TableName if isinstance(inst, objects.TableInstance) else sql.Name
-    name = get_alias(state, inst)
+    name = state.unique_name(inst)
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
 @dy
@@ -679,13 +676,15 @@ def evaluate(state, obj):
     if state.access_level < state.AccessLevels.READ_DB:
         return obj
 
-    obj = resolve_effects(state, obj)
+    obj = apply_database_rw(state, obj)
+
+    assert not isinstance(obj, (ast.ResolveParameters, ast.ResolveParametersString))
 
     return obj
 
 
 @dy
-def resolve_effects(state, x):
+def apply_database_rw(state, x):
     return x
 
 #
@@ -714,21 +713,19 @@ def __resolve_sql_parameters(ns, node):
     return node.replace(**resolved)
 
 def _resolve_sql_parameters(state, node):
-    # XXX working but inefficient. Use Sql.compile for it, or just move to text-based parameter resolution
-    return __resolve_sql_parameters(state.ns, node)
-    # return sql.ResolveParameters(node, copy(state.ns))
+    # 1. Resolve parameters while compiling
+    return sql.ResolveParameters(node, copy(state.ns))
+    # 2. Resolve parameters before compiling. Eqv to (1) but slower
+    # return __resolve_sql_parameters(state.ns, node)
 
 
 @dy
 def localize(state, inst: objects.Instance):
-    if state.access_level < state.AccessLevels.WRITE_DB: #, (state.access_level, inst)
-        raise exc.InsufficientAccessLevel()
+    state.require_access(state.AccessLevels.WRITE_DB)
 
     # code = _resolve_sql_parameters(state, inst.code)
-    code = inst.code
-    # code = inst.code
 
-    return state.db.query(code, inst.subqueries, state=state)
+    return state.db.query(inst.code, inst.subqueries, state=state)
 
 @dy
 def localize(state, inst: objects.ValueInstance):

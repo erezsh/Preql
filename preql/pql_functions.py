@@ -9,9 +9,11 @@ from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
-from .compiler import instanciate_table, compile_type_def, alias_table, exclude_fields, rename_field
-from .interp_common import State, get_alias, make_value_instance, dy
+from .compiler import compile_type_def
+from .interp_common import State, make_value_instance, dy, exclude_fields
 from .evaluate import simplify, evaluate, localize
+
+alias_table = objects.alias_table
 
 def _pql_SQL_callback(state: State, var: str, instances):
     var = var.group()
@@ -128,7 +130,7 @@ def pql_temptable(state: State, expr: ast.Expr):
     expr = evaluate(state, expr)
     assert isinstance(expr, objects.TableInstance), expr
 
-    name = get_alias(state, "temp_" + expr.type.name)
+    name = state.unique_name("temp_" + expr.type.name)
     table = types.TableType(name, copy(expr.type.columns), temporary=True, primary_keys=[['id']])
     if 'id' not in table.columns:
         table.columns['id'] = types.IdType(table)
@@ -139,10 +141,9 @@ def pql_temptable(state: State, expr: ast.Expr):
     #     assert False
     primary_keys, columns = table.flat_for_insert()
     expr = exclude_fields(state, expr, primary_keys)
-    # expr = rename_field(state, expr, primary_keys)
     state.db.query(sql.Insert(table, columns, expr.code), expr.subqueries)
 
-    return instanciate_table(state, table, sql.TableName(table, table.name), [])
+    return objects.instanciate_table(state, table, sql.TableName(table, table.name), [])
 
 def pql_get_db_type(state: State):
     """
@@ -222,7 +223,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
                         for name, t in safezip(exprs, tables)
                         for pk in t.type.primary_keys
                     ]
-    table_type = types.TableType(get_alias(state, "joinall" if joinall else "join"), SafeDict(col_types), False, primary_keys)
+    table_type = types.TableType(state.unique_name("joinall" if joinall else "join"), SafeDict(col_types), False, primary_keys)
 
     conds = [] if joinall else [sql.Compare('=', [cols[0].code, cols[1].code])]
 

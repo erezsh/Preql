@@ -56,24 +56,3 @@ func sample_fast(tbl, size) {
     }
     return results + limit(tbl, size - count(results))
 }
-
-# func _only_one(table) {
-#     cnt = count(table)
-#     if (cnt == 0) {
-#         throw new ValueError("Table is empty")
-#     }
-#     if (cnt > 1) {
-#         throw new ValueError("More than one rows in table")
-#     }
-#     return table
-# }
-# func _only_one_or_none(table) {
-#     cnt = count(table)
-#     if (cnt == 0) {
-#         return null
-#     }
-#     if (cnt > 1) {
-#         throw new ValueError("More than one rows in table")
-#     }
-#     return table
-# }

@@ -1,3 +1,6 @@
+import time
+from contextlib import contextmanager
+
 from typing import _GenericAlias as TypeBase, Any, Union, Callable
 from functools import wraps
 from operator import getitem
@@ -74,8 +77,6 @@ class _X:
 X = _X()
 
 
-import time
-from contextlib import contextmanager
 class Benchmark:
     def __init__(self):
         self.total = {}
