@@ -8,7 +8,7 @@ from .parser import parse_stmts, parse_expr
 from . import pql_ast as ast
 from . import pql_objects as objects
 from . import pql_types as types
-from .interp_common import make_value_instance
+from .interp_common import new_value_instance
 
 from .pql_functions import internal_funcs, joins
 
@@ -69,6 +69,6 @@ class Interpreter:
             try:
                 value = value._to_pql()
             except AttributeError:
-                value = make_value_instance(value)
+                value = new_value_instance(value)
 
         self.state.set_var(name, value)

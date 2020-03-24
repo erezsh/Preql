@@ -19,9 +19,9 @@ class Param(ast.Ast):
     default: Optional[types.PqlObject] = None
     orig: Any = None # XXX temporary and lazy, for TableConstructor
 
-@dataclass
-class ParamDictType(types.PqlType):
-    types: Dict[str, types.PqlType]
+# @dataclass
+# class ParamDictType(types.PqlType):
+#     types: Dict[str, types.PqlType]
 
 @dataclass
 class ParamDict(types.PqlObject):
@@ -36,8 +36,8 @@ class ParamDict(types.PqlObject):
     @property
     def type(self):
         # XXX is ParamDictType really necessary?
-        # return tuple(p.type for p in self.params.values())
-        return ParamDictType({n:p.type for n, p in self.params.items()})
+        return tuple((n,p.type) for p in self.params.values())
+        # return ParamDictType({n:p.type for n, p in self.params.items()})
 
 
 class Function(types.PqlObject):
@@ -171,9 +171,31 @@ class InternalFunction(Function):
 
 
 # Other
+def get_attr_type(t, name):
+    # TODO move into methods?
+
+    t = t.actual_type()
+    if isinstance(t, types.StructType):
+        return t.members[name]
+
+    elif isinstance(t, types.OptionalType):
+        return get_attr_type(t.type, name)
+
+    elif isinstance(t, types.Aggregated):
+        elem_type = t.elemtype
+        return types.Aggregated(get_attr_type(elem_type, name))
+
+    elif isinstance(t, types.Collection):
+        return t.columns[name]
+
+    raise pql_AttributeError(name.meta, name)
+
+class AbsInstance(types.PqlObject):
+    def get_attr(self, name):
+        return AttrInstance(self, get_attr_type(self.type, name), name)
 
 @dataclass
-class Instance(types.PqlObject):
+class Instance(AbsInstance):
     code: sql.Sql
     type: types.PqlType
 
@@ -183,63 +205,9 @@ class Instance(types.PqlObject):
     def make(cls, code, type_, instances, *extra):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
-    def get_attr(self, name):
-        raise pql_AttributeError(name.meta, name)
 
     def repr(self, state):
         return f'<instance of {self.type.repr(state)}>'
-
-    def __post_init__(self):
-        assert not isinstance(self.type, types.DatumColumn)
-
-
-
-@dataclass
-class ColumnInstance(Instance):
-    type: types.PqlType
-
-
-class DatumColumnInstance(ColumnInstance):
-    def flatten_path(self, path=[]):
-        return [(path, self)]
-    def flatten(self):
-        return [self]
-
-
-@dataclass
-class StructColumnInstance(ColumnInstance):
-    code: type(None)
-    members: dict
-
-    def flatten_path(self, path=[]):
-        return concat_for(m.flatten_path(path + [name]) for name, m in self.members.items())
-    def flatten(self):
-        return [x for _,x in self.flatten_path()]
-
-    def get_attr(self, name):
-        try:
-            obj = self.members[name]
-            assert isinstance(obj, Instance)
-            return obj
-        except KeyError:
-            raise pql_AttributeError(name.meta, name)
-
-
-def make_column_instance(code, type_, from_instances=()):
-    type_ = type_.actual_type()
-    kernel = type_.kernel_type()
-
-    if isinstance(kernel, types.StructType):
-        # XXX this is all wrong!
-        assert isinstance(code, sql.Name)
-        struct_sql_name = code.compile(sql.QueryBuilder(None)).text
-        members = {name: make_column_instance(sql.Name(member, struct_sql_name+'_'+name), member)
-                   for name, member in kernel.members.items()}
-        return StructColumnInstance.make(None, type_, from_instances, members)
-    else:
-        return DatumColumnInstance.make(code, type_, from_instances)
-    assert False, type_
-
 
 
 
@@ -251,29 +219,14 @@ def from_python(value):
     elif isinstance(value, int):
         return ast.Const(None, types.Int, value)
     elif isinstance(value, list):
-        # return ast.Const(None, types.ListType(types.String), value)
         return ast.List_(None, list(map(from_python, value)))
     elif isinstance(value, dict):
         return ast.Dict_(None, value)
     assert False, value
 
 
-def sql_repr(x):
-    if x is None:
-        return sql.null
-
-    t = types.Primitive.by_pytype[type(x)]
-    if t is types.DateTime:
-        # TODO Better to pass the object instead of a string?
-        return sql.Primitive(t, repr(str(x)))
-
-    if t is types.String or t is types.Text:
-        return sql.Primitive(t, "'%s'" % str(x).replace("'", "''"))
-
-    return sql.Primitive(t, repr(x))
-
-def make_value_instance(value, type_=None, force_type=False):
-    r = sql_repr(value)
+def new_value_instance(value, type_=None, force_type=False):
+    r = sql.value(value)
     if force_type:
         assert type_
     elif type_:
@@ -281,7 +234,7 @@ def make_value_instance(value, type_=None, force_type=False):
         assert r.type == type_, (r.type, type_)
     else:
         type_ = r.type
-    if settings.optimize:   # XXX a little silly? But maybe good for tests?
+    if settings.optimize:   # XXX a little silly? But maybe good for tests
         return ValueInstance.make(r, type_, [], value)
     else:
         return Instance.make(r, type_, [])
@@ -298,73 +251,29 @@ class ValueInstance(Instance):
         return super().get_attr(name)
 
 
-
 @dataclass
 class TableInstance(Instance):
-    columns: dict
-
-    def get_attr(self, name):
-        try:
-            return ColumnReference(self, name)
-        except KeyError:
-            raise pql_AttributeError(name.meta, name)
-
-    def flatten_path(self, path=[]):
-        return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
-    def flatten(self):
-        return [x for _,x in self.flatten_path()]
-
-    def to_struct_column(self):
-        # return make_column_instance(None, self.type.to_struct_type(), [self])
-        return StructColumnInstance(None, self.type.to_struct_type(), self.subqueries, self.columns)
+    @property
+    def columns(self):
+        return {n:Instance.make(sql.Name(t, n), t, []) for n, t in self.type.columns.items()}
 
 
 @dataclass
-class RowInstance(Instance):
-    type: types.RowType
-    table: TableInstance
-
-    # @classmethod
-    # def from_table(cls, t):
-    #     rowtype = types.RowType(t.type)
-    #     return cls.make(t.code.replace(type=rowtype), rowtype, [t], t)
-
-    # def get_attr(self, name):
-    #     col = table.get_attr(name)
-
-
-# @dataclass
-class ColumnReference(ColumnInstance):
-    table: TableInstance
+class AttrInstance(AbsInstance):
+    parent: AbsInstance
+    type: types.PqlType
     name: str
 
-    def replace(self, table):
-        return type(self)(table, self.name)
-
-    def __init__(self, table, name):
-        self.table = table
-        self.name = name
-        assert self.column
-
     @property
-    def column(self):
-        return self.table.columns[self.name]
-
-
-    code = property(X.column.code)
-    type = property(X.column.type)
+    def code(self):
+        # XXX a little ugly. may cause future bugs?
+        c = self.parent.code
+        assert isinstance(c, sql.Name)
+        return sql.Name(c.type, types.join_names((c.name, self.name)))
 
     @property
     def subqueries(self):
-        return merge_subqueries([self.column, self.table])
-
-    def flatten_path(self, path):
-        return self.column.flatten_path(path)
-    def flatten(self):
-        return self.column.flatten()
-
-    def get_attr(self, name):
-        return self.column.get_attr(name)
+        return self.parent.subqueries
 
 
 def merge_subqueries(instances):
@@ -372,19 +281,7 @@ def merge_subqueries(instances):
 
 
 def aggregated(inst):
-    assert not isinstance(inst, TableInstance)  # Should be struct instead
-
-    if isinstance(inst, StructColumnInstance):
-        new_members = {name:aggregated(c) for name, c in inst.members.items()}
-        # return TableInstance.make(inst.code, types.Aggregated(inst.type), [inst], new_members)
-        return inst.replace(type=types.Aggregated(inst.type), members=new_members)
-
-    elif isinstance(inst, ColumnInstance):
-        col_type = types.Aggregated(inst.type)
-        return inst.replace(type=col_type)
-
-    assert not isinstance(inst.type, types.TableType), inst.type
-    return Instance.make(inst.code, types.Aggregated(inst.type), [inst])
+    return inst.replace(type=types.Aggregated(inst.type))
 
 
 null = ValueInstance.make(sql.null, types.null, [], None)
@@ -397,56 +294,23 @@ class EmptyListInstance(TableInstance):
         return EmptyList
 
 _empty_list_type = types.ListType(types.any_t)
-from collections import defaultdict
-def _any_column():
-    return EmptyList
-EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, [], defaultdict(_any_column))    # Singleton
+# from collections import defaultdict
+EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
 
 
-def make_instance(code, type_, from_instances=()):
-    if isinstance(type_, types.Collection):
-        columns = {name: make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in type_.columns.items()}
-        return TableInstance.make(code, type_, from_instances, columns)
-    else:
-        return Instance.make(code, type_, from_instances)
-
-
-
-def instanciate_column(state, name, t, insts=[]):
-    return make_column_instance(sql.Name(t, state.unique_name(name)), t, insts)
-
-
-def instanciate_table(state, t: types.TableType, source: sql.Sql, instances, values=None):
-    if values is None:
-        columns = {name: make_column_instance(sql.Name(c.actual_type(), name), c) for name, c in t.columns.items()}
-        code = source
-    else:
-        columns = {name: instanciate_column(state, name, c) for name, c in t.columns.items()}
-
-        atoms = [atom
-                    for name, inst in columns.items()
-                    for path, atom in inst.flatten([name])
-                ]
-
-        aliases = [ sql.ColumnAlias.make(value, atom.code) for value, atom in safezip(values, atoms) ]
-
-        code = sql.Select(t, source, aliases)
-
-    return TableInstance(code, t, merge_subqueries(instances), columns)
-
-
-def alias_table(state, t):
-    new_columns = {
-        name: instanciate_column(state, name, col.type, [col])
-        for name, col in t.columns.items()
-    }
+def alias_table(t, name):
+    assert isinstance(t, Instance)
+    assert isinstance(t.type, types.Collection), t.type
 
     # Make code
     sql_fields = [
-        sql.ColumnAlias.make(o.code, n.code)
-        for old, new in safezip(t.columns.values(), new_columns.values())
-        for o, n in safezip(old.flatten(), new.flatten())
+        sql.ColumnAlias.make(sql.Name(ot, on), types.join_names((name, on)))
+        for (on, ot) in t.type.flatten_type()
     ]
 
     code = sql.Select(t.type, t.code, sql_fields)
-    return t.replace(code=code, columns=new_columns)
+    return t.replace(code=code)
+
+
+def new_table(type_, name=None, instances=None):
+    return TableInstance.make(sql.TableName(type_, name or type_.name), type_, instances or [])

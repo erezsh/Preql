@@ -337,24 +337,31 @@ class Name(Sql):
     type: PqlType
     name: str
 
+    def __post_init__(self):
+        assert self.name, self.type
+
     def _compile(self, qb):
-        if self.name.lower() in _reserved:
-            return self.name + "_"
-        return self.name
+        return _safe_name(self.name)
+
+def _safe_name(base):
+    "Return a name that is safe for use as variable. Must be consistent (pure func)"
+    if base.lower() in _reserved:
+        return base + "_"
+    return base
 
 @dataclass
 class ColumnAlias(Sql):
     value: Sql
-    alias: Sql
+    alias: str
 
     @classmethod
     def make(cls, value, alias):
         return cls(value, alias)
 
     def _compile(self, qb):
-        alias = self.alias.compile(qb).text
+        alias = _safe_name(self.alias)
         value = self.value.compile(qb).text
-        assert alias and value
+        assert alias and value, (alias, value)
         if value == alias:  # TODO disable when unoptimized?
             return alias  # This is just for beauty, it's not necessary for function
 
@@ -590,3 +597,20 @@ def arith(res_type, op, args, meta):
         op = '/'
 
     return Arith(op, arg_codes)
+
+
+
+
+def value(x):
+    if x is None:
+        return null
+
+    t = types.Primitive.by_pytype[type(x)]
+    if t is types.DateTime:
+        # TODO Better to pass the object instead of a string?
+        return Primitive(t, repr(str(x)))
+
+    if t is types.String or t is types.Text:
+        return Primitive(t, "'%s'" % str(x).replace("'", "''"))
+
+    return Primitive(t, repr(x))

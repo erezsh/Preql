@@ -31,7 +31,7 @@ from . import sql
 RawSql = sql.RawSql
 Sql = sql.Sql
 
-from .interp_common import State, dy, sql_repr, make_value_instance
+from .interp_common import State, dy, new_value_instance
 from .compiler import compile_remote, compile_type_def
 
 
@@ -52,8 +52,7 @@ def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     for c in table_def.columns:
         t.columns[c.name] = resolve(state, c)
 
-    inst = objects.instanciate_table(state, t, sql.TableName(t, t.name), [])
-    state.set_var(t.name, inst)
+    state.set_var(t.name, objects.new_table(t))
     return t
 
 @dy
@@ -61,7 +60,7 @@ def resolve(state: State, col_def: ast.ColumnDef):
     col = resolve(state, col_def.type)
 
     query = col_def.query
-    if isinstance(col, objects.TableInstance):
+    if isinstance(col.type, types.TableType):
         return types.RelationalColumn(col.type, query)
 
     assert not query
@@ -100,6 +99,7 @@ def _execute(state: State, var_def: ast.SetValue):
 @dy
 def simplify(state: State, attr: ast.Attr):
     inst = evaluate(state, attr.expr)
+    # return evaluate(state, inst.get_attr(attr.name))
     return evaluate(state, inst.get_attr(attr.name))
 
 
@@ -354,29 +354,9 @@ def _raw_sql_callback(state: State, var: str, instances):
     if isinstance(obj, types.TableType):
         # This branch isn't strictly necessary
         # It exists to create nicer SQL code output
-        inst = objects.TableInstance.make(sql.TableName(obj, obj.name), obj, [], {})
+        inst = objects.new_table(obj)
     else:
         inst = evaluate(state, obj)
-
-        if isinstance(inst, objects.TableInstance):
-
-            # Make new type
-            new_columns = {
-                name: objects.make_column_instance(sql.Name(col.type, name), col.type, [col])
-                for name, col in inst.columns.items()
-            }
-
-            # Make code
-            sql_fields = [
-                sql.ColumnAlias.make(o.code, n.code)
-                for old, new in safezip(inst.columns.values(), new_columns.values())
-                for o, n in safezip(old.flatten(), new.flatten())
-            ]
-
-            code = sql.Select(inst.type, inst.code, sql_fields)
-
-            # Make Instance
-            inst = objects.TableInstance.make(code, inst.type, [inst], new_columns)
 
     instances.append(inst)
 
@@ -412,13 +392,13 @@ def apply_database_rw(state: State, rps: ast.ResolveParametersString):
     if isinstance(type_, types.TableType):
         name = state.unique_name("subq_")
 
-        inst = objects.instanciate_table(state, type_, sql.TableName(type_, name), instances)
         # TODO this isn't in the tests!
-        fields = [sql.Name(c, path) for path, c in inst.type.flatten_type()]
+        fields = [sql.Name(c, path) for path, c in type_.flatten_type()]
 
         subq = sql.Subquery(name, fields, code)
-        inst.subqueries[name] = subq
 
+        inst = objects.new_table(type_, name, instances)
+        inst.subqueries[name] = subq
         return inst
 
     return objects.Instance.make(code, type_, instances)
@@ -433,7 +413,7 @@ def apply_database_rw(state: State, o: ast.One):
     if isinstance(table.type, types.NullType):
         return table
 
-    assert isinstance(table, objects.TableInstance), table
+    assert isinstance(table.type, types.Collection), table
     rows = localize(state, table) # Must be 1 row
     if len(rows) == 0:
         if not o.nullable:
@@ -454,7 +434,7 @@ def apply_database_rw(state: State, d: ast.Delete):
 
     cond_table = ast.Selection(d.meta, d.table, d.conds)
     table = evaluate(state, cond_table)
-    assert isinstance(table, objects.TableInstance)
+    assert isinstance(table.type, types.TableType)
 
     rows = list(localize(state, table))
     if rows:
@@ -474,7 +454,7 @@ def apply_database_rw(state: State, u: ast.Update):
 
     # TODO Optimize: Update on condition, not id, when possible
     table = evaluate(state, u.table)
-    assert isinstance(table, objects.TableInstance)
+    assert isinstance(table.type, types.TableType)
     assert all(f.name for f in u.fields)
 
     # TODO verify table is concrete (i.e. lvalue, not a transitory expression)
@@ -548,9 +528,6 @@ def apply_database_rw(state: State, new: ast.NewRows):
 
     obj = state.get_var(new.type)
 
-    if isinstance(obj, objects.TableInstance):
-        obj = obj.type
-
     assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
 
     if len(new.args) > 1:
@@ -573,7 +550,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
         ids += [_new_row(state, obj, destructured_pairs)]
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
-    # return ast.List_(new.meta, [make_value_instance(rowid, obj.columns['id'], force_type=True) for rowid in ids])
+    # return ast.List_(new.meta, [new_value_instance(rowid, obj.columns['id'], force_type=True) for rowid in ids])
     return ast.List_(new.meta, ids)
 
 
@@ -594,12 +571,12 @@ def _destructure_param_match(state, meta, param_match):
 
 def _new_row(state, table, destructured_pairs):
     keys = [name for (name, _) in destructured_pairs]
-    values = [sql_repr(v) for (_,v) in destructured_pairs]
+    values = [sql.value(v) for (_,v) in destructured_pairs]
     # TODO use regular insert?
     q = sql.InsertConsts(sql.TableName(table, table.name), keys, values)
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
-    return make_value_instance(rowid, table.columns['id'], force_type=True)  # XXX find a nicer way
+    return new_value_instance(rowid, table.columns['id'], force_type=True)  # XXX find a nicer way
 
 
 @dy
@@ -630,8 +607,8 @@ def apply_database_rw(state: State, new: ast.New):
     destructured_pairs = _destructure_param_match(state, new.meta, matched)
     rowid = _new_row(state, table.type, destructured_pairs)
     return rowid
-    # return make_value_instance(rowid, table.type.columns['id'], force_type=True)  # XXX find a nicer way
-    # expr = ast.One(None, ast.Selection(None, table, [ast.Compare(None, '==', [ast.Name(None, 'id'), make_value_instance(rowid)])]), False)
+    # return new_value_instance(rowid, table.type.columns['id'], force_type=True)  # XXX find a nicer way
+    # expr = ast.One(None, ast.Selection(None, table, [ast.Compare(None, '==', [ast.Name(None, 'id'), new_value_instance(rowid)])]), False)
     # return evaluate(state, expr)
 
 
@@ -649,7 +626,7 @@ class TableConstructor(objects.Function):
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
-    code_cls = sql.TableName if isinstance(inst, objects.TableInstance) else sql.Name
+    code_cls = sql.TableName if isinstance(inst.type, types.Collection) else sql.Name
     name = state.unique_name(inst)
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 

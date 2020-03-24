@@ -2,6 +2,7 @@ from contextlib import contextmanager
 
 import tabulate
 
+from . import settings
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
@@ -78,7 +79,7 @@ class TablePromise:
 
 
 def promise(state, inst):
-    if isinstance(inst, objects.TableInstance):
+    if isinstance(inst.type, types.Collection):
         if not isinstance(inst.type, types.ListType):
             return TablePromise(state, inst)
 
@@ -88,7 +89,7 @@ def promise(state, inst):
 class Interface:
     __name__ = "Preql"
 
-    def __init__(self, db_uri=None, debug=True, save_last=None):
+    def __init__(self, db_uri=None, debug=settings.debug, save_last=None):
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
 

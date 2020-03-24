@@ -80,9 +80,6 @@ class State:
 
 
     def unique_name(self, obj):
-        if isinstance(obj, objects.TableInstance):
-            return self.unique_name(obj.type.name)
-
         self.tick[0] += 1
         return obj + str(self.tick[0])
 
@@ -158,5 +155,4 @@ def call_pql_func(state, name, args):
     return evaluate(state, expr)
 
 
-sql_repr = objects.sql_repr
-make_value_instance = objects.make_value_instance
+new_value_instance = objects.new_value_instance

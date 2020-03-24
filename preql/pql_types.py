@@ -12,12 +12,15 @@ class PqlObject:    # XXX should be in a base module
 
     def get_attr(self, attr):
         if attr == '__name__':
-            from .pql_objects import make_value_instance    # XXX bad!!
-            return make_value_instance(type(self).__name__)
+            from .pql_objects import new_value_instance    # XXX bad!!
+            return new_value_instance(type(self).__name__)
         raise exc.pql_AttributeError(None, f"{self} has no attribute: {attr}")
 
 class PqlType(PqlObject):
     """PqlType annotates the type of all instances """
+
+    def __init__(self):
+        assert type(self) is not PqlType
 
     def kernel_type(self):
         return self
@@ -29,7 +32,10 @@ class PqlType(PqlObject):
         return self
 
     def flatten_type(self, path_base=[]):
-        return [('_'.join(path), t) for path, t in self.flatten_path(path_base)]
+        return [(join_names(path), t) for path, t in self.flatten_path(path_base)]
+
+    def flatten_path(self, *args):
+        raise NotImplementedError()
 
     def apply_inner_type(self, t):
         raise TypeError("This type isn't a 'generic', and has no inner type")
@@ -37,7 +43,7 @@ class PqlType(PqlObject):
     hide_from_init = False
     primary_key = False
 
-PqlType.type = PqlType()
+PqlType.type = PqlType
 
 # Primitives
 
@@ -135,7 +141,11 @@ object_t = PqlObject()
 class Collection(PqlType):
 
     def to_struct_type(self):
-        return StructType(self.name, {name: col for name, col in self.columns.items()})
+        return StructType(self.name, {name: col.actual_type() for name, col in self.columns.items()})
+
+    def flatten_path(self, path=[]):
+        return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
+
 
 @dataclass
 class ListType(Collection, AtomicOrList):
@@ -166,6 +176,7 @@ class ListType(Collection, AtomicOrList):
     def apply_inner_type(self, t):
         return type(self)(t)
 
+
 @dataclass
 class FunctionType(PqlType):
     param_types: List[Any]
@@ -191,6 +202,10 @@ class OptionalType(PqlType):
     def kernel_type(self):
         return self.type.kernel_type()
 
+    @property
+    def members(self):  # XXX this is just a hack
+        return self.type.members
+
 # Not supported by Postgres. Will require a trick (either alternating within a column tuple, or json type, etc)
 # @dataclass
 # class UnionType(AtomicType):
@@ -198,7 +213,7 @@ class OptionalType(PqlType):
 
 #     @property
 #     def name(self):
-#         return 'union_%s' % '_'.join(t.name for t in self.types)
+#         return 'union_%s' % join_names(t.name for t in self.types)
 
 #     def __repr__(self):
 #         return f'union{self.types}'
@@ -226,12 +241,9 @@ class TableType(Collection):
     def __post_init__(self):
         assert isinstance(self.columns, SafeDict), self.columns
 
-    def flatten_path(self, path=[]):
-        return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
-
     def flat_for_insert(self):
         columns = [name for name, _t in self.flatten_type()]
-        primary_keys = {'_'.join(pk) for pk in self.primary_keys}   # XXX
+        primary_keys = {join_names(pk) for pk in self.primary_keys}   # XXX
         columns = [c for c in columns if c not in primary_keys]
         return list(primary_keys), columns
 
@@ -280,7 +292,7 @@ class RelationalColumn(AtomicType):
         return self.type.restructure_result(i)
 
     def effective_type(self):   # XXX Yikes
-        pks = ['_'.join(pk) for pk in self.type.primary_keys]
+        pks = [join_names(pk) for pk in self.type.primary_keys]
         return self.type.columns[pks[0]]    # TODO what if there's more than one? Struct relation.. ??
 
 @dataclass
@@ -343,3 +355,5 @@ class IdType(_Int):
     def __repr__(self):
         return f'{self.table.name}.id'
 
+def join_names(names):
+    return "_".join(names)
