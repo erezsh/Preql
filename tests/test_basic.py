@@ -231,6 +231,18 @@ class BasicTests(TestCase):
         assert list(preql.q2) == [{'value': 3}]
         # assert list(preql.q3) == [{'a': {'value': 3}}]    # TODO
 
+    def test_agg_funcs(self):
+        preql = self.Preql()
+        preql("""
+            func sqsum(x) = sum(x*x)
+        """)
+        # self.assertEqual( preql.sqsum(2), 4 )
+
+        self.assertEqual( preql('one [2, 4]{=> sqsum(value)}')['sqsum'], 20)
+        self.assertEqual( preql('sum([2, 4])'), 6)
+        self.assertEqual( preql.sum([2, 4]), 6 )
+        # TODO sqsum([2,4])  -->  sum([2,4]*[2,4]) --> sum([4, 16])
+
     def _test_groupby(self, preql):
         res = preql("Country {language => count(id)}")
         assert is_eq(res, [("en", 2), ("he", 1)])

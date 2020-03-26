@@ -298,14 +298,14 @@ _empty_list_type = types.ListType(types.any_t)
 EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
 
 
-def alias_table(t, name):
+def aliased_table(t, name):
     assert isinstance(t, Instance)
     assert isinstance(t.type, types.Collection), t.type
 
     # Make code
     sql_fields = [
-        sql.ColumnAlias.make(sql.Name(ot, on), types.join_names((name, on)))
-        for (on, ot) in t.type.flatten_type()
+        sql.ColumnAlias.make(sql.Name(t, n), types.join_names((name, n)))
+        for (n, t) in t.type.flatten_type()
     ]
 
     code = sql.Select(t.type, t.code, sql_fields)

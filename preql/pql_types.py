@@ -222,8 +222,10 @@ class OptionalType(PqlType):
 #         return hash(tuple(self.types))
 
 
-class Aggregated(ListType):
-    pass
+@dataclass
+class Aggregated(AtomicOrList):
+    elemtype: PqlType
+
 
 @dataclass
 class SetType(Collection):
@@ -357,3 +359,5 @@ class IdType(_Int):
 
 def join_names(names):
     return "_".join(names)
+
+

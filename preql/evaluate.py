@@ -259,7 +259,7 @@ def eval_func_call(state, func, args, meta=None):
 
     if isinstance(func, objects.UserFunction):
         # TODO make tests to ensure caching was successful
-        if True:
+        if False:
             params = {name: ast.Parameter(meta, name, value.type) for name, value in args.items()}
             sig = (func.name,) + tuple(a.type for a in args.values())
 

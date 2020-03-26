@@ -95,10 +95,34 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
 def pql_breakpoint(state: State):
     state._py_api.start_repl()
 
+
+@dy
+def _pql_issubclass(a, b):
+    return False
+
+@dy
+def _pql_issubclass(a: types.Primitive, b: types.ListType):
+    return False
+
+@dy
+def _pql_issubclass(a, b: types.AnyType):
+    assert b is types.any_t
+    return True
+
+@dy
+def _pql_issubclass(a: types.ListType, b: types.ListType):
+    return _pql_issubclass(a.elemtype, b.elemtype)
+
+@dy
+def _pql_issubclass(a: types.Aggregated, b: types.Aggregated):
+    return _pql_issubclass(a.elemtype, b.elemtype)
+
+
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     inst = evaluate(state, expr)
     type_ = simplify(state, type_expr)
-    res = isinstance(inst.type, type_)
+    # res = isinstance(inst.type, type_)
+    res = _pql_issubclass(inst.type, type_)
     return new_value_instance(res, types.Bool)
 
 def _count(state, obj: ast.Expr, table_func, name):
@@ -211,7 +235,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
         structs = {name: types.OptionalType(t) if n else t
                     for (name, t), n in safezip(structs.items(), nullable)}
 
-    tables = [objects.alias_table(t, n) for n, t in safezip(exprs, tables)]
+    tables = [objects.aliased_table(t, n) for n, t in safezip(exprs, tables)]
 
     primary_keys = [ [name] + pk
                         for name, t in safezip(exprs, tables)
@@ -352,7 +376,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
         if isinstance(inst, objects.InternalFunction) and inst.func.__doc__:
             lines += [inst.func.__doc__]
     else:
-        raise pql_TypeError(obj.meta, "help() only accepts functions at the moment")
+        raise pql_TypeError(None, "help() only accepts functions at the moment")
 
     text = '\n'.join(lines)
     return new_value_instance(text, types.String)
@@ -370,7 +394,7 @@ def pql_ls(state: State, obj: types.PqlObject = objects.null):
             raise pql_TypeError(obj.meta, "Argument to ls() must be a table")
         all_vars = list(inst.columns)
     else:
-        all_vars = list(state.get_all_vars())
+        all_vars = list(state.ns.get_all_vars())
 
     assert all(isinstance(s, str) for s in all_vars)
     names = [new_value_instance(str(s), types.String) for s in all_vars]

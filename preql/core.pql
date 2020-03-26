@@ -1,13 +1,12 @@
-func _sql_agg_func(name, field) {
-    if (isa(field, aggregate)) {
-        return SQL(int, name + "($field)")
+func _sql_agg_func(name, obj) {
+    if (isa(obj, aggregate)) {
+        return SQL(int, name + "($obj)")
     } else {
-        # if (isa(field, list)) {
-        #     return int( field{ => value: _sql_agg_func(name, value) } )  # Recursive
-        # }
-        blaaa
+        if (isa(obj, list)) {
+            return int( obj{ => value: _sql_agg_func(name, value) } )  # Recursive
+        }
     }
-    throw new TypeError(name + "() doesn't support field of type '" + (type(field).__name__) + "'")
+    throw new TypeError(name + "() doesn't support object of type '" + (type(field).__name__) + "'")
 }
 func sum(field) = _sql_agg_func("SUM", field)
 func min(field) = _sql_agg_func("MIN", field)

@@ -353,7 +353,7 @@ def _compile_arith(state, arith, a, b):
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
-    if not all(isinstance(a.type.actual_type(), (types.Primitive, types.ListType)) for a in args):
+    if not all(isinstance(a.type.actual_type(), (types.Primitive, types.Aggregated)) for a in args):
         meta = arith.op.meta.replace(parent=arith.meta)
         raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
