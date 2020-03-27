@@ -340,7 +340,7 @@ class RowType(PqlType):
 
 
 @dataclass
-class StructType(Collection):
+class StructType(PqlType):
     name: str
     members: Dict[str, PqlType]
 

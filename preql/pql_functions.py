@@ -218,7 +218,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
         cols = a, b
         tables = [a.parent, b.parent]
     else:
-        if not (isinstance(a.type, types.TableType) and isinstance(b.type, types.TableType)):
+        if not (isinstance(a.type, types.Collection) and isinstance(b.type, types.Collection)):
             raise pql_TypeError(None, f"join() got unexpected values:\n * {a}\n * {b}")
         if joinall:
             tables = (a, b)

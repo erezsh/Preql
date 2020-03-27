@@ -135,7 +135,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
     assert isinstance(table, objects.Instance)
 
-    if not isinstance(table.type, types.Collection):
+    if not isinstance(table.type, (types.Collection, types.StructType)):
         raise pql_TypeError(proj.meta, f"Cannot project objects of type {table.type}")
 
     fields = _expand_ellipsis(table, proj.fields)
@@ -145,7 +145,7 @@ def compile_remote(state: State, proj: ast.Projection):
     if dup:
         raise pql_TypeError(dup.meta, f"Field '{dup.name}' was already used in this projection")
 
-    assert isinstance(table.type, types.Collection)
+    assert isinstance(table.type, types.Collection), table
     columns = table.columns
     # columns = SafeDict(columns).update({'this': table.to_struct_column()}) # XXX Is this the right place to introduce `this` ?
 
@@ -157,29 +157,29 @@ def compile_remote(state: State, proj: ast.Projection):
         with state.use_scope({n:objects.aggregated(c) for n,c in columns.items()}):
             agg_fields = _process_fields(state, proj.agg_fields)
 
+    all_fields = fields + agg_fields
+
     # Make new type
-    all_aliases = []
     new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], code_prefix=state.unique_name('proj_')) # Maybe wrong
-    for name_, remote_col in fields + agg_fields:
-        assert isinstance(remote_col, objects.AbsInstance)
+    for name_, inst in all_fields:
+        assert isinstance(inst, objects.AbsInstance)
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
         i = 1
         while name in new_table_type.columns:
             name = name_ + str(i)
             i += 1
-        new_table_type.columns[name] = remote_col.type
-        all_aliases.append(remote_col)
+        new_table_type.columns[name] = inst.type
 
     # Make code
-    flat_aliases = [code
-                    for a in all_aliases
-                    for code in _flatten_code(a.type.actual_type(), a.code)]
+    flat_codes = [code
+                    for _, inst in all_fields
+                    for code in _flatten_code(inst.type.actual_type(), inst.code)]
 
     # TODO if nn != on
     sql_fields = [
         sql.ColumnAlias.make(code, nn)
-        for code, (nn, nt) in safezip(flat_aliases, new_table_type.flatten_type())
+        for code, (nn, _nt) in safezip(flat_codes, new_table_type.flatten_type())
     ]
 
     groupby = []

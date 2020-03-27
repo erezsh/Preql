@@ -205,10 +205,8 @@ class Instance(AbsInstance):
     def make(cls, code, type_, instances, *extra):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
-
     def repr(self, state):
         return f'<instance of {self.type.repr(state)}>'
-
 
 
 def from_python(value):
