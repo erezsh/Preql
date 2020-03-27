@@ -381,6 +381,8 @@ def apply_database_rw(state: State, rps: ast.ResolveParametersString):
     assert isinstance(sql_code, str)
 
     type_ = evaluate(state, rps.type)
+    if isinstance(type_, objects.Instance):
+        type_ = type_.type
     assert isinstance(type_, types.PqlType), type_
 
     instances = []

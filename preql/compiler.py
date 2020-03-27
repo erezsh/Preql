@@ -81,7 +81,6 @@ def _process_fields(state: State, fields):
 
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
-        sql_friendly_name = name.replace(".", "_")
 
         v = evaluate(state, f.value)
         if isinstance(v, ast.ResolveParametersString):
@@ -96,17 +95,9 @@ def _process_fields(state: State, fields):
 
             v = objects.Instance.make(sql.MakeArray(v.type, v.code), v.type, [v])
 
-        v = _ensure_col_instance(state, f.meta, v)
-
-        processed_fields.append( [name, (v, sql_friendly_name) ] )   # TODO Don't create new alias for fields that don't change?
+        processed_fields.append( [name, v] )
 
     return processed_fields
-
-def _ensure_col_instance(state, meta, i):
-    # TODO get rid
-    assert isinstance(i, objects.AbsInstance)
-    return i
-
 
 
 @listgen
@@ -155,7 +146,7 @@ def compile_remote(state: State, proj: ast.Projection):
         raise pql_TypeError(dup.meta, f"Field '{dup.name}' was already used in this projection")
 
     assert isinstance(table.type, types.Collection)
-    columns = {n:objects.Instance.make(sql.Name(t, n), t, []) for n,t in table.type.columns.items()}
+    columns = table.columns
     # columns = SafeDict(columns).update({'this': table.to_struct_column()}) # XXX Is this the right place to introduce `this` ?
 
     with state.use_scope(columns):
@@ -168,8 +159,8 @@ def compile_remote(state: State, proj: ast.Projection):
 
     # Make new type
     all_aliases = []
-    new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, []) # Maybe wrong
-    for name_, (remote_col, sql_alias) in fields + agg_fields:
+    new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], code_prefix=state.unique_name('proj_')) # Maybe wrong
+    for name_, remote_col in fields + agg_fields:
         assert isinstance(remote_col, objects.AbsInstance)
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
@@ -193,7 +184,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
     groupby = []
     if proj.groupby and fields:
-        groupby = [sql.Name(rc.type, sql_alias) for _n, (rc, sql_alias) in fields]
+        groupby = [sql.Name(rc.type, new_table_type.column_codename(n)) for n, rc in fields]
 
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
@@ -217,8 +208,6 @@ def compile_remote(state: State, order: ast.Order):
 
     with state.use_scope(table.columns):
         fields = evaluate(state, order.fields)
-
-    fields = [_ensure_col_instance(state, of.meta, f) for f, of in safezip(fields, order.fields)]
 
     code = sql.table_order(table, [c.code for c in fields])
 
@@ -450,8 +439,6 @@ def compile_remote(state: State, sel: ast.Selection):
 
     with state.use_scope(table.columns):
         conds = evaluate(state, sel.conds)
-
-    conds = [_ensure_col_instance(state, of.meta, f) for f, of in safezip(conds, sel.conds)]
 
     code = sql.table_selection(table, [c.code for c in conds])
 

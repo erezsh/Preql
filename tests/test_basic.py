@@ -34,12 +34,12 @@ class BasicTests(TestCase):
         res = preql('[1,2,3]{=>sum(value*value)}')
         assert res == [{'sum': 14}], list(res)
 
-        self._test_cache(preql)
         self._test_basic(preql)
         self._test_ellipsis(preql)
         self._test_ellipsis_exclude(preql)
         self._test_user_functions(preql)
         self._test_joins(preql)
+        self._test_cache(preql)
         self._test_groupby(preql)
         self._test_temptable(preql)
 
@@ -49,6 +49,10 @@ class BasicTests(TestCase):
         assert preql("1") == 1
         assert preql("1 / 2") == 0.5
         assert preql("10 // 3") == 3
+
+        # GroupBy will use the old value if TableTypes aren't versioned
+        self.assertEqual( preql("[1,2,3]{v: value//2 => sum(value)}").to_json(), [{'v':0, 'sum': 1}, {'v':1, 'sum':5}])
+        self.assertEqual( preql("[1,2,3]{value: value//2 => sum(value)}").to_json(), [{'value':0, 'sum': 1}, {'value':1, 'sum':5}])
 
 
         preql.exec("""func query1() = Country[language=="en"]{name}""")
@@ -230,6 +234,52 @@ class BasicTests(TestCase):
         assert list(preql.q1) == [{'value': 1}]
         assert list(preql.q2) == [{'value': 3}]
         # assert list(preql.q3) == [{'a': {'value': 3}}]    # TODO
+
+    def test_update(self):
+        preql = self.Preql()
+        preql("""
+            table Point {x: int, y: int}
+            new Point(1,3)
+            new Point(2,7)
+            new Point(3,1)
+            new Point(4,2)
+
+            func p() = Point[x==3] update{y: y + 13}
+            """)
+
+        # TODO better syntax
+        self.assertEqual( preql.p().to_json()[0]['y'], 14)
+        self.assertEqual( preql.p().to_json()[0]['y'], 27)
+
+    def test_SQL(self):
+        preql = self.Preql()
+        preql("""
+            table Point {x: int, y: int}
+            new Point(1,3)
+            new Point(2,7)
+            new Point(3,1)
+            new Point(4,2)
+
+            x = 4
+            func f1() = SQL(int, "$x+5")
+            func f2() = SQL(Point, "SELECT * FROM $Point WHERE x > 2")
+            func f3() = SQL(Point, "SELECT * FROM $Point") { x: x // 2 => y}
+            zz = Point[x==2]
+            func f4() = SQL(Point, "SELECT * FROM $zz") {y}
+
+            """)
+
+        self.assertEqual( preql.f1(), 9)
+        self.assertEqual( len(preql.f2()), 2)
+        self.assertEqual( len(preql.f3()), 3)
+        if preql.engine.target == sql.sqlite:
+            self.assertEqual( preql.f3().to_json()[0]['y'], '3' )
+        else:
+            self.assertEqual( preql.f3().to_json()[0]['y'], [3] )
+        self.assertEqual( len(preql.f4()), 1)
+        self.assertEqual( preql.f4().to_json(), [{'y': 7}])
+
+
 
     def test_agg_funcs(self):
         preql = self.Preql()

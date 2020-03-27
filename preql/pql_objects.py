@@ -255,7 +255,7 @@ class ValueInstance(Instance):
 class TableInstance(Instance):
     @property
     def columns(self):
-        return {n:Instance.make(sql.Name(t, n), t, []) for n, t in self.type.columns.items()}
+        return {n:Instance.make(sql.Name(t, cn), t, []) for n, t, cn in self.type.columns_with_codenames()}
 
 
 @dataclass
