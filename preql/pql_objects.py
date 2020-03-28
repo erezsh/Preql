@@ -194,6 +194,19 @@ class AbsInstance(types.PqlObject):
     def get_attr(self, name):
         return AttrInstance(self, get_attr_type(self.type, name), name)
 
+    def flatten_code(self):
+        t = self.type.actual_type()
+        if isinstance(t, types.OptionalType):   # XXX what's this?
+            t = t.type
+
+        # XXX smarter way?
+        if isinstance(t, types.StructType):
+            assert isinstance(self.code, sql.Name)
+            return [sql.Name(t, name) for name, t in t.flatten_type([self.code.name])]
+        else:
+            return [self.code]
+
+
 @dataclass
 class Instance(AbsInstance):
     code: sql.Sql
@@ -207,6 +220,7 @@ class Instance(AbsInstance):
 
     def repr(self, state):
         return f'<instance of {self.type.repr(state)}>'
+
 
 
 def from_python(value):
@@ -255,6 +269,13 @@ class TableInstance(Instance):
     def columns(self):
         return {n:Instance.make(sql.Name(t, cn), t, []) for n, t, cn in self.type.columns_with_codenames()}
 
+@dataclass
+class StructInstance(AbsInstance):
+    type: types.StructType
+    members: dict
+
+    def flatten_code(self):
+        return [m.code for n,m in self.members.items()] # TODO recursive call?
 
 @dataclass
 class AttrInstance(AbsInstance):

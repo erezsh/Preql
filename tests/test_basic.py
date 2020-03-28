@@ -279,6 +279,21 @@ class BasicTests(TestCase):
         self.assertEqual( len(preql.f4()), 1)
         self.assertEqual( preql.f4().to_json(), [{'y': 7}])
 
+    def test_nested_projections(self):
+        preql = self.Preql()
+
+        # TODO make these work, or at least throw a graceful error
+        # print( preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {b => a}") )
+        # preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {count(b) => a}")
+
+        res = preql("one joinall(a:[1,2], b:[2, 3]) {a: a.value => b: count(b.value)} {b => a: count(a)}")
+        self.assertEqual( res, {'b':2, 'a':2} )
+
+        res1 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value}, a}")
+        res2 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value}, a{value}}")
+        self.assertEqual( res1, res2 )
+        # res3 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value, ...}, a{...}}")
+        # self.assertEqual( res1, res3 )
 
 
     def test_agg_funcs(self):

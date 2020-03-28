@@ -145,12 +145,21 @@ def compile_remote(state: State, proj: ast.Projection):
     if dup:
         raise pql_TypeError(dup.meta, f"Field '{dup.name}' was already used in this projection")
 
-    assert isinstance(table.type, types.Collection), table
-    columns = table.columns
+
+    if isinstance(table.type, types.StructType):
+        columns = {n:objects.Instance.make(sql.Name(t, types.join_names((table.code.name, n))), t, []) for n, t in table.type.members.items()}
+    else:
+        assert isinstance(table.type, types.Collection), table
+        columns = table.columns
     # columns = SafeDict(columns).update({'this': table.to_struct_column()}) # XXX Is this the right place to introduce `this` ?
 
     with state.use_scope(columns):
         fields = _process_fields(state, fields)
+
+    if isinstance(table.type, types.StructType):
+        t = types.StructType(table.code.name, {n:c.type for n,c in fields})
+        return objects.StructInstance(t, dict(fields))
+
 
     agg_fields = []
     if proj.agg_fields:
@@ -163,6 +172,7 @@ def compile_remote(state: State, proj: ast.Projection):
     new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], code_prefix=state.unique_name('proj_')) # Maybe wrong
     for name_, inst in all_fields:
         assert isinstance(inst, objects.AbsInstance)
+
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
         i = 1
@@ -174,7 +184,7 @@ def compile_remote(state: State, proj: ast.Projection):
     # Make code
     flat_codes = [code
                     for _, inst in all_fields
-                    for code in _flatten_code(inst.type.actual_type(), inst.code)]
+                    for code in inst.flatten_code()]
 
     # TODO if nn != on
     sql_fields = [
@@ -190,16 +200,6 @@ def compile_remote(state: State, proj: ast.Projection):
 
     # Make Instance
     return objects.TableInstance.make(code, new_table_type, [table])
-
-def _flatten_code(type_, code):
-    # XXX smarter way?
-    if isinstance(type_, types.StructType):
-        assert isinstance(code, sql.Name)
-        return [sql.Name(t, name) for name, t in type_.flatten_type([code.name])]
-    elif isinstance(type_, types.OptionalType): # XXX Must be a smarter way of doing this
-        return _flatten_code(type_.type, code)  # XXX Inherit optional?
-    else:
-        return [code]
 
 @dy
 def compile_remote(state: State, order: ast.Order):

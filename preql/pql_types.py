@@ -360,6 +360,8 @@ class StructType(PqlType):
     def flatten_path(self, path):
         return concat_for(col.flatten_path(path + [name]) for name, col in self.members.items())
 
+    def columns_with_codenames(self):
+        return [(n,t,n) for n,t in self.members.items()]
 
 @dataclass
 class IdType(_Int):
