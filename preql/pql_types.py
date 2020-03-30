@@ -152,6 +152,9 @@ class Collection(PqlType):
     def columns_with_codenames(self):
         return [(n,t,self.column_codename(n)) for n,t in self.columns.items()]
 
+    def get_attr(self, name):
+        return self.columns[name]
+
 
 
 @dataclass
@@ -358,6 +361,11 @@ class StructType(PqlType):
 
     def columns_with_codenames(self):
         return [(n,t,n) for n,t in self.members.items()]
+
+    @property
+    def columns(self):
+        # XXX time to give it up?
+        return self.members
 
 @dataclass
 class IdType(_Int):

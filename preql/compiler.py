@@ -91,10 +91,7 @@ def _process_fields(state: State, fields):
             raise pql_TypeError(None, f"Projection field is not an instance. Instead it is: {v}")
 
         if isinstance(v.type, types.Aggregated):
-
-            if isinstance(v.type, types.StructType):
-                raise NotImplementedError("Cannot make an array of structs at the moment.") # XXX silly limitation
-
+            v = v.primary_key()
             v = objects.make_instance(sql.MakeArray(v.type, v.code), v.type, [v])
 
         processed_fields.append( [name, v] )
@@ -149,6 +146,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
 
     if isinstance(table.type, types.StructType):
+        # XXX time to give it up?
         columns = table.members
     else:
         assert isinstance(table.type, types.Collection), table
@@ -193,14 +191,17 @@ def compile_remote(state: State, proj: ast.Projection):
         for code, (nn, _nt) in safezip(flat_codes, new_table_type.flatten_type())
     ]
 
+    # Make Instance
+    new_table = objects.TableInstance.make(sql.null, new_table_type, [table])
+
     groupby = []
     if proj.groupby and fields:
-        groupby = [sql.Name(rc.type, new_table_type.column_codename(n)) for n, rc in fields]
+        groupby = [new_table.columns[n].primary_key().code for n, rc in fields]
 
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
     # Make Instance
-    return objects.TableInstance.make(code, new_table_type, [table])
+    return new_table.replace(code=code)
 
 @dy
 def compile_remote(state: State, order: ast.Order):

@@ -170,29 +170,11 @@ class InternalFunction(Function):
 
 
 
-# Other
-def get_attr_type(t, name):
-    # TODO move into methods?
-
-    t = t.actual_type()
-    if isinstance(t.kernel_type(), types.StructType):
-        return t.members[name]
-
-    elif isinstance(t, types.OptionalType):
-        return get_attr_type(t.type, name)
-
-    elif isinstance(t, types.Aggregated):
-        elem_type = t.elemtype
-        return types.Aggregated(get_attr_type(elem_type, name))
-
-    elif isinstance(t, types.Collection):
-        return t.columns[name]
-
-    raise pql_AttributeError(name.meta, name)
+# Instances
 
 class AbsInstance(types.PqlObject):
     def get_attr(self, name):
-        return AttrInstance(self, get_attr_type(self.type, name), name)
+        return AttrInstance(self, self.type.get_attr(name), name)
 
 @dataclass
 class Instance(AbsInstance):

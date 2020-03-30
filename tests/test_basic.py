@@ -287,8 +287,19 @@ class BasicTests(TestCase):
         self.assertEqual( res1, res2 )
 
         # TODO make these work, or at least throw a graceful error
-        # print( preql("joinall(a:[1,2], b:[2, 3]) {a => b}" ))
-        # print( preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {b => a}") )
+        if preql.engine.target == sql.sqlite:
+            res = [{'a': {'value': 1}, 'b': '3|4'}, {'a': {'value': 2}, 'b': '3|4'}]
+        else:
+            res = [{'a': {'value': 1}, 'b': [3, 4]}, {'a': {'value': 2}, 'b': [3, 4]}]
+
+        self.assertEqual(preql("joinall(a:[1,2], b:[3, 4]) {a => b}" ), res)
+
+        if preql.engine.target == sql.sqlite:
+            res = [{'b': '2|3', 'a': '1|2'}]
+        else:
+            res = [{'b': [2, 3], 'a': [1, 2]}]
+
+        self.assertEqual(preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {b => a}"), res)
         # preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {count(b) => a}")
 
         res = preql("one joinall(a:[1,2], b:[2, 3]) {a: a.value => b: count(b.value)} {b => a: count(a)}")
@@ -297,8 +308,8 @@ class BasicTests(TestCase):
         res1 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value}, a}")
         res2 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value}, a{value}}")
         self.assertEqual( res1, res2 )
-        # res3 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value, ...}, a{...}}")
-        # self.assertEqual( res1, res3 )
+        res3 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value, ...}, a{...}}")
+        self.assertEqual( res1, res3 )
 
         res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) ")
         assert len(res1) == 8
@@ -307,6 +318,12 @@ class BasicTests(TestCase):
 
         res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab.a, ab.b, c}")
         assert len(res1) == 8
+
+        res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab.a.value, ab.b.value, c}")
+        assert len(res1) == 8
+
+        res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab {b: b.value, a: a.value}, c}[..1]")
+        self.assertEqual(res1.to_json(), [{'ab': {'b': 2, 'a': 1}, 'c': {'value': 4}}])
 
 
     def test_agg_funcs(self):
