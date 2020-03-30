@@ -338,6 +338,13 @@ class BasicTests(TestCase):
         self.assertEqual( preql.sum([2, 4]), 6 )
         # TODO sqsum([2,4])  -->  sum([2,4]*[2,4]) --> sum([4, 16])
 
+    def test_strings(self):
+        preql = Preql()
+        self.assertEqual( preql('upper("ba")'), "BA" )
+        self.assertEqual( preql('lower("BA")'), "ba" )
+        self.assertEqual( preql('"ba" in "kabab"'), True )
+        self.assertEqual( preql('"bak" in "kabab"'), False )
+
     def _test_groupby(self, preql):
         res = preql("Country {language => count(id)}")
         assert is_eq(res, [("en", 2), ("he", 1)])

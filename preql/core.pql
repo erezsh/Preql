@@ -16,6 +16,10 @@ func limit(tbl, lim) = tbl[..lim] # XXX remove #SQL(type(table), "SELECT * FROM 
 func limit_offset(table, lim, offset) = SQL(type(table), "SELECT * FROM $table LIMIT $lim OFFSET $offset")
 func enum(tbl) = tbl{index: SQL(int, "row_number() over ()"), ...}
 
+func upper(s) = SQL(string, "upper($s)")
+func lower(s) = SQL(string, "lower($s)")
+func length(s) = SQL(string, "length($s)")
+
 if (get_db_type() == "postgres") {
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
     func now() = SQL(datetime, "NOW()") # Postgres

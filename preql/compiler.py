@@ -246,14 +246,18 @@ def compile_remote(state: State, cmp: ast.Compare):
 
     if cmp.op == 'in' or cmp.op == '!in':
         sql_cls = sql.Contains
-        assert_type(cmp.meta, insts[0].type, types.AtomicType, "Expecting type %s, got %s")
-        assert_type(cmp.meta, insts[1].type, types.Collection, "Expecting type %s, got %s")
-        cols = insts[1].columns
-        if len(cols) > 1:
-            raise pql_TypeError(cmp.meta, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
-        c_type = list(cols.values())[0].type
-        if c_type.effective_type() != insts[0].type.effective_type():
-            raise pql_TypeError(cmp.meta, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
+        if isinstance(insts[0].type, types._String) and isinstance(insts[1].type, types._String):
+            code = sql.Compare('>', [sql.FuncCall(types.Bool, 'INSTR', [i.code for i in reversed(insts)]), sql.value(0)])
+            return objects.make_instance(code, types.Bool, [])
+        else:
+            assert_type(cmp.meta, insts[0].type, types.AtomicType, "Expecting type %s, got %s")
+            assert_type(cmp.meta, insts[1].type, types.Collection, "Expecting type %s, got %s")
+            cols = insts[1].columns
+            if len(cols) > 1:
+                raise pql_TypeError(cmp.meta, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
+            c_type = list(cols.values())[0].type
+            if c_type.effective_type() != insts[0].type.effective_type():
+                raise pql_TypeError(cmp.meta, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
     else:
 
