@@ -282,7 +282,12 @@ class BasicTests(TestCase):
     def test_nested_projections(self):
         preql = self.Preql()
 
+        res1 = preql("joinall(a:[1,2], b:[2, 3]) {a.value => count(b.value)}")
+        res2 = preql("joinall(a:[1,2], b:[2, 3]) {a.value => count(b)}")
+        self.assertEqual( res1, res2 )
+
         # TODO make these work, or at least throw a graceful error
+        # print( preql("joinall(a:[1,2], b:[2, 3]) {a => b}" ))
         # print( preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {b => a}") )
         # preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {count(b) => a}")
 
@@ -294,6 +299,14 @@ class BasicTests(TestCase):
         self.assertEqual( res1, res2 )
         # res3 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value, ...}, a{...}}")
         # self.assertEqual( res1, res3 )
+
+        res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) ")
+        assert len(res1) == 8
+        res2 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab, c}")
+        assert res1 == res2
+
+        res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab.a, ab.b, c}")
+        assert len(res1) == 8
 
 
     def test_agg_funcs(self):

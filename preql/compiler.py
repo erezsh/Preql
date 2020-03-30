@@ -83,17 +83,19 @@ def _process_fields(state: State, fields):
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
 
         v = evaluate(state, f.value)
+
         if isinstance(v, ast.ResolveParametersString):
             raise exc.InsufficientAccessLevel()
 
-        assert isinstance(v, objects.AbsInstance)
+        if not isinstance(v, objects.AbsInstance):
+            raise pql_TypeError(None, f"Projection field is not an instance. Instead it is: {v}")
 
         if isinstance(v.type, types.Aggregated):
 
             if isinstance(v.type, types.StructType):
                 raise NotImplementedError("Cannot make an array of structs at the moment.") # XXX silly limitation
 
-            v = objects.Instance.make(sql.MakeArray(v.type, v.code), v.type, [v])
+            v = objects.make_instance(sql.MakeArray(v.type, v.code), v.type, [v])
 
         processed_fields.append( [name, v] )
 
@@ -133,7 +135,7 @@ def compile_remote(state: State, proj: ast.Projection):
     if table is objects.EmptyList:
         return table   # Empty list projection is always an empty list.
 
-    assert isinstance(table, objects.Instance)
+    assert isinstance(table, objects.AbsInstance), table
 
     if not isinstance(table.type, (types.Collection, types.StructType)):
         raise pql_TypeError(proj.meta, f"Cannot project objects of type {table.type}")
@@ -147,7 +149,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
 
     if isinstance(table.type, types.StructType):
-        columns = {n:objects.Instance.make(sql.Name(t, types.join_names((table.code.name, n))), t, []) for n, t in table.type.members.items()}
+        columns = table.members
     else:
         assert isinstance(table.type, types.Collection), table
         columns = table.columns
@@ -156,10 +158,9 @@ def compile_remote(state: State, proj: ast.Projection):
     with state.use_scope(columns):
         fields = _process_fields(state, fields)
 
-    if isinstance(table.type, types.StructType):
-        t = types.StructType(table.code.name, {n:c.type for n,c in fields})
+    if isinstance(table, objects.StructInstance):
+        t = types.StructType(state.unique_name('_nested_proj'), {n:c.type for n,c in fields})
         return objects.StructInstance(t, dict(fields))
-
 
     agg_fields = []
     if proj.agg_fields:
@@ -254,14 +255,17 @@ def compile_remote(state: State, cmp: ast.Compare):
             raise pql_TypeError(cmp.meta, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
     else:
+
         sql_cls = sql.Compare
-        # for i in insts:
-        #     assert_type(cmp.meta, i.type, types.AtomicType, "Expecting type %s, got %s")
         # TODO should be able to coalesce, int->float, id->int, etc.
         #      also different types should still be comparable to some degree?
         # type_set = {i.type for i in insts}
         # if len(type_set) > 1:
         #     raise pql_TypeError(cmp.meta, "Cannot compare two different types: %s" % type_set)
+        for i, inst in enumerate(insts):
+            if not isinstance(inst.type.actual_type(), types.AtomicType):
+                raise pql_TypeError(cmp.args[i].meta.replace(parent=cmp.meta), f"Compare not implemented for type {inst.type}")
+
 
     op = {
         '==': '=',
@@ -269,18 +273,19 @@ def compile_remote(state: State, cmp: ast.Compare):
         '<>': '!=',
     }.get(cmp.op, cmp.op)
 
-    insts = [_get_comparable_instance(i) for i in insts]
-
     code = sql_cls(op, [i.code for i in insts])
     inst = objects.Instance.make(code, types.Bool, insts)
     return inst
 
-def _get_comparable_instance(i):
-    return i
 
 @dy
 def compile_remote(state: State, arith: ast.Arith):
     args = evaluate(state, arith.args)
+
+    for i, a in enumerate(args):
+        if a.type.actual_type() is types.null:
+            raise pql_TypeError(arith.args[i].meta.replace(parent=arith.meta), "Cannot perform arithmetic on null values")
+
     return _compile_arith(state, arith, *args)
 
 @dy
@@ -348,7 +353,7 @@ def _compile_arith(state, arith, a, b):
 
     res_type ,= {a.type.actual_type() for a in args}
     code = sql.arith(res_type, arith.op, [a.code for a in args], arith.meta)
-    return objects.Instance.make(code, res_type, args)
+    return objects.make_instance(code, res_type, args)
 
 
 @dy

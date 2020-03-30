@@ -169,9 +169,6 @@ class ListType(Collection, AtomicOrList):
     def name(self):
         return 'list_%s' % self.elemtype.name
 
-    def kernel_type(self):
-        return self.elemtype
-
     def import_result(self, arr):
         assert all(len(e)==1 for e in arr)
         return [e[0] for e in arr]
@@ -239,7 +236,6 @@ class Aggregated(AtomicOrList):
 @dataclass
 class SetType(Collection):
     elemtype: PqlType
-
 
 
 @dataclass

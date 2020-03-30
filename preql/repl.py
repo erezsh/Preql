@@ -78,10 +78,18 @@ def start_repl(p):
             if not code.strip():
                 continue
 
-            # Evaluate
             start_time = time()
             try:
+                # Evaluate (Really just compile)
                 res = p(code)
+
+                # Print
+                if res is not None:
+                    if isinstance(res, types.PqlObject):
+                        res = res.repr(p.interp)
+
+                    print(res)
+
             except PreqlError as e:
                 # if e.meta:
                 #     print(f"Error at line {e.meta.start_line, e.meta.start_column}: {e}")
@@ -93,13 +101,6 @@ def start_repl(p):
                 logging.exception(e)
                 raise
                 # continue
-
-            # Print
-            if res is not None:
-                if isinstance(res, types.PqlObject):
-                    res = res.repr(p.interp)
-
-                print(res)
 
             duration = time() - start_time
             if duration > 1:

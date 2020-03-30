@@ -175,7 +175,7 @@ def get_attr_type(t, name):
     # TODO move into methods?
 
     t = t.actual_type()
-    if isinstance(t, types.StructType):
+    if isinstance(t.kernel_type(), types.StructType):
         return t.members[name]
 
     elif isinstance(t, types.OptionalType):
@@ -194,19 +194,6 @@ class AbsInstance(types.PqlObject):
     def get_attr(self, name):
         return AttrInstance(self, get_attr_type(self.type, name), name)
 
-    def flatten_code(self):
-        t = self.type.actual_type()
-        if isinstance(t, types.OptionalType):   # XXX what's this?
-            t = t.type
-
-        # XXX smarter way?
-        if isinstance(t, types.StructType):
-            assert isinstance(self.code, sql.Name)
-            return [sql.Name(t, name) for name, t in t.flatten_type([self.code.name])]
-        else:
-            return [self.code]
-
-
 @dataclass
 class Instance(AbsInstance):
     code: sql.Sql
@@ -221,7 +208,19 @@ class Instance(AbsInstance):
     def repr(self, state):
         return f'<instance of {self.type.repr(state)}>'
 
+    def __post_init__(self):
+        assert not isinstance(self.type.actual_type().kernel_type(), (types.StructType, types.Aggregated)), self.type
 
+    def flatten_code(self):
+        t = self.type.actual_type()
+        if isinstance(t, types.OptionalType):   # XXX what's this?
+            t = t.type
+
+        assert not isinstance(t.kernel_type(), types.StructType)
+        return [self.code]
+
+    def primary_key(self):
+        return self
 
 def from_python(value):
     if value is None:
@@ -267,15 +266,67 @@ class ValueInstance(Instance):
 class TableInstance(Instance):
     @property
     def columns(self):
-        return {n:Instance.make(sql.Name(t, cn), t, []) for n, t, cn in self.type.columns_with_codenames()}
+        return {n:make_instance_from_name(t, cn) for n, t, cn in self.type.columns_with_codenames()}
+
+def make_instance_from_name(t, cn):
+    t = t.actual_type()
+    if isinstance(t.kernel_type(), types.StructType):
+        return StructInstance(t, {n: make_instance_from_name(mt, types.join_names((cn, n))) for n,mt in t.members.items()})
+    return make_instance(sql.Name(t, cn), t, [])
+
+def make_instance(code, t, insts):
+    t = t.actual_type()
+    assert not isinstance(t.kernel_type(), types.StructType)
+    if isinstance(t, types.Aggregated):
+        return AggregatedInstance(t, make_instance(code, t.elemtype, insts))
+    else:
+        return Instance.make(code, t, insts)
+
+
+@dataclass
+class AggregatedInstance(AbsInstance):
+    type: types.PqlType
+    elem: AbsInstance
+
+    @property
+    def code(self):
+        return self.elem.code
+
+    @property
+    def subqueries(self):
+        return self.elem.subqueries
+
+    def get_attr(self, name):
+        x = self.elem.get_attr(name)
+        return make_instance(x.code, types.Aggregated(x.type), [x])
+
+    def flatten_code(self):
+        return self.elem.flatten_code()
+
+    def primary_key(self):
+        return self.elem.primary_key()
 
 @dataclass
 class StructInstance(AbsInstance):
-    type: types.StructType
+    type: types.PqlType
     members: dict
 
+    def __post_init__(self):
+        assert isinstance(self.type.actual_type().kernel_type(), types.StructType), self.type
+
+    @property
+    def subqueries(self):
+        return merge_subqueries(self.members.values())
+
     def flatten_code(self):
-        return [m.code for n,m in self.members.items()] # TODO recursive call?
+        return [c for m in self.members.values() for c in m.flatten_code()]
+
+    def get_attr(self, name):
+        return self.members[name]
+
+    def primary_key(self):
+        # XXX This is obviously wrong
+        return list(self.members.values())[0]
 
 @dataclass
 class AttrInstance(AbsInstance):
@@ -284,15 +335,22 @@ class AttrInstance(AbsInstance):
     name: str
 
     @property
-    def code(self):
-        # XXX a little ugly. may cause future bugs?
-        c = self.parent.code
-        assert isinstance(c, sql.Name)
-        return sql.Name(c.type, types.join_names((c.name, self.name)))
-
-    @property
     def subqueries(self):
         return self.parent.subqueries
+
+    @property
+    def code(self):
+        return self._resolve_attr().code
+
+    def flatten_code(self):
+        return self._resolve_attr().flatten_code()
+
+    def get_attr(self, name):
+        return self._resolve_attr().get_attr(name)
+
+    def _resolve_attr(self):
+        return self.parent.get_attr(self.name)
+
 
 
 def merge_subqueries(instances):
@@ -300,7 +358,7 @@ def merge_subqueries(instances):
 
 
 def aggregated(inst):
-    return inst.replace(type=types.Aggregated(inst.type))
+    return AggregatedInstance(types.Aggregated(inst.type), inst)
 
 
 null = ValueInstance.make(sql.null, types.null, [], None)

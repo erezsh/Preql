@@ -134,9 +134,7 @@ def _count(state, obj: ast.Expr, table_func, name):
         if not isinstance(obj.type, types.Aggregated):
             raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
 
-        # if isinstance(obj, objects.StructColumnInstance): # XXX Counting a struct means counting its id # But what happens if there is no 'id'?
-        #     obj = obj.get_attr('id')
-
+        obj = obj.primary_key()
         code = sql.FieldFunc(name, obj.code)
 
     return objects.Instance.make(code, types.Int, [obj])
