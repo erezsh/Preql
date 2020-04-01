@@ -1,8 +1,10 @@
 stmts: _NL? stmt+
 ?stmt: (table_def | struct_def | func_def | set_value | insert_rows | print | if_stmt | for_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
 
-table_def: "table" name "{" _sep? col_defs? "}" _NL
+table_def: "table" name "{" _sep? _table_contents "}" _NL
          | "table" name "=" expr _NL -> table_def_by_expr
+_table_contents: col_defs? //func_def*
+
 col_defs: (col_def _sep)* col_def _sep?
 col_def: name ":" coltype ["->" expr] ["=" expr]
 ?coltype: type

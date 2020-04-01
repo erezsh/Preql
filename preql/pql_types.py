@@ -16,11 +16,16 @@ class PqlObject:    # XXX should be in a base module
             return new_value_instance(type(self).__name__)
         raise exc.pql_AttributeError(None, f"{self} has no attribute: {attr}")
 
+    # def is_equal(self, other):
+    #     raise exc.pql_NotImplementedError(f"Equality of {self} not implemented")
+    def isa(self, t):
+        if not isinstance(t, PqlType):
+            raise exc.pql_TypeError(None, f"'type' argument to isa() isn't a type. It is {t}")
+        return self.type.issubclass(t)
+
+
 class PqlType(PqlObject):
     """PqlType annotates the type of all instances """
-
-    def __init__(self):
-        assert type(self) is not PqlType
 
     def kernel_type(self):
         return self
@@ -40,10 +45,19 @@ class PqlType(PqlObject):
     def apply_inner_type(self, t):
         raise TypeError("This type isn't a 'generic', and has no inner type")
 
+    def __repr__(self):
+        assert type(self) is PqlType
+        return 'type'
+
+    def issubclass(self, t):
+        # XXX this is incorrect. issubclass(int, type) returns true, when it shouldn't
+        assert isinstance(t, PqlType)
+        return isinstance(self, type(t))
+
     hide_from_init = False
     primary_key = False
 
-PqlType.type = PqlType
+PqlType.type = PqlType()
 
 # Primitives
 

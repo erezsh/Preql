@@ -290,7 +290,8 @@ def eval_func_call(state, func, args, meta=None):
 
             return res
     else:
-        # TODO ensure pure function
+        # TODO ensure pure function?
+        # TODO Ensure correct types
         return func.func(state, *args.values())
 
 

@@ -345,6 +345,19 @@ class BasicTests(TestCase):
         self.assertEqual( preql('"ba" in "kabab"'), True )
         self.assertEqual( preql('"bak" in "kabab"'), False )
 
+    # def test_methods(self):
+    #     preql = Preql()
+    #     preql('''
+    #         table Person {
+    #             name: string
+    #             born: datetime
+
+    #             func age() = now() - born
+    #         }
+
+    #     ''')
+    #     self.assertEqual( preql('upper("ba")'), "BA" )
+
     def _test_groupby(self, preql):
         res = preql("Country {language => count(id)}")
         assert is_eq(res, [("en", 2), ("he", 1)])

@@ -174,11 +174,16 @@ class ColumnDef(Ast, Definition):
     query: Optional[Expr] = None
     default: Optional[Expr] = None
 
+@dataclass
+class FuncDef(Statement, Definition):
+    userfunc: types.PqlObject   # XXX Why not use UserFunction?
+
 
 @dataclass
 class TableDef(Statement, Definition):
     name: str
-    columns: List[ColumnDef] = ()
+    columns: List[ColumnDef]
+    # methods: list = ()
     # meta: object
 
 @dataclass
@@ -195,10 +200,6 @@ class SetValue(Statement):
 class InsertRows(Statement):
     name: (Name, Attr)
     value: Expr
-
-@dataclass
-class FuncDef(Statement):
-    userfunc: types.PqlObject   # XXX Why not use UserFunction?
 
 @dataclass
 class Print(Statement):

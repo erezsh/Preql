@@ -122,7 +122,8 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     inst = evaluate(state, expr)
     type_ = simplify(state, type_expr)
     # res = isinstance(inst.type, type_)
-    res = _pql_issubclass(inst.type, type_)
+    res = inst.isa(type_)
+    # res = _pql_issubclass(inst.type, type_)
     return new_value_instance(res, types.Bool)
 
 def _count(state, obj: ast.Expr, table_func, name):

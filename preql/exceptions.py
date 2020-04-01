@@ -93,6 +93,10 @@ class pql_SyntaxError(PreqlError):
 class pql_JoinError(PreqlError):
     message: str
 
+@dataclass
+class pql_NotImplementedError(PreqlError):
+    message: str
+
 
 
 @dataclass

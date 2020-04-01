@@ -239,6 +239,7 @@ def compile_remote(state: State, like: ast.Like):
     code = sql.Like(s.code, p.code)
     return objects.Instance.make(code, types.Bool, [s, p])
 
+
 @dy
 def compile_remote(state: State, cmp: ast.Compare):
     insts = evaluate(state, cmp.args)

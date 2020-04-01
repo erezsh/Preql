@@ -164,7 +164,7 @@ class InternalFunction(Function):
     func: Callable
     param_collector: Optional[Param] = None
 
-    def repr(self, state):
+    def __repr__(self):
         params = ", ".join(p.name for p in self.params)
         return f'<func {self.name}({params}) ...>'
 
