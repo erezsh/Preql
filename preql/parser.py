@@ -86,17 +86,12 @@ class T(Transformer):
         return ast.Const(meta, types.Bool, True)
 
     @v_args(inline=False, meta=True)
-    def list(self, items, meta):
+    def pql_list(self, items, meta):
         return ast.List_(meta_d(self.code, meta), items)
 
-    expr_list = as_list
-    proj_exprs = as_list
+    any_list = as_list
     arguments = as_list
     func_params = as_list
-    func_args = as_list
-    col_defs = as_list
-    member_defs = as_list
-    stmts = as_list
 
 
     # types

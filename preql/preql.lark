@@ -1,19 +1,27 @@
-stmts: _NL? stmt+
+stmts: _NL? stmt+   -> any_list
 ?stmt: (table_def | struct_def | func_def | set_value | insert_rows | print | if_stmt | for_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
 
-table_def: "table" name "{" _sep? _table_contents "}" _NL
-         | "table" name "=" expr _NL -> table_def_by_expr
-_table_contents: col_defs? //func_def*
+_ml_seperated{item}: (item _ml_sep)* item _ml_sep?
+_ml_sep: "," | "," _NL | _NL
+_separated{item, sep}: (item sep)* item
 
-col_defs: (col_def _sep)* col_def _sep?
+pql_list: "[" _NL? _ml_seperated{expr}? "]"
+expr_list: "[" _NL? _ml_seperated{expr} "]" -> any_list
+proj_exprs: _ml_seperated{named_expr} -> any_list
+
+ml_list{item}: _ml_seperated{item} -> any_list   // multi-line list
+
+table_def: "table" name "{" _ml_sep? _table_contents "}" _NL
+         | "table" name "=" expr _NL -> table_def_by_expr
+_table_contents: ml_list{col_def}? //func_def*
+
 col_def: name ":" coltype ["->" expr] ["=" expr]
 ?coltype: type
         | m2m
 type: name [typemod]
 m2m: "[" type "]"
 
-struct_def: "struct" name "{" _sep? member_defs? "}" _NL
-member_defs: (member_def _sep)* member_def _sep?
+struct_def: "struct" name "{" _ml_sep? ml_list{member_def} "}" _NL
 member_def: name ":" type
 
 
@@ -26,26 +34,24 @@ for_stmt: "for" "(" name "in" expr ")" codeblock _NL
 codeblock: "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
 throw: "throw" expr _NL
-set_value: atom "=" expr _NL
 print: "print" expr _NL
-func_params: "(" (param ("," param)*)? ")"
+func_params: "(" _separated{param, ","}? ")"
 param: name [":" expr] ["=" expr]   // TODO type? default value?
 insert_rows: atom "+=" expr _NL
+set_value: atom "=" expr _NL
 
-_sep: "," | "," _NL | _NL
-expr_list: "[" _NL? (expr _sep)* expr _NL? "]"
 selection: molecule expr_list
 slice: molecule "[" range "]"
+range: [molecule] ".." molecule
+     | molecule ".." [molecule]
 
 projection: molecule "{" _NL? proj_exprs _NL? "}"
           | molecule "{" _NL? proj_exprs _NL? "=>" _NL? proj_exprs _NL? "}" -> projection_grouped
           | molecule "{" "=>" _NL? proj_exprs "}" -> projection_grouped_nokeys
           | molecule "{" proj_exprs _NL? "=>" "}" -> projection_grouped_novalues
 
-proj_exprs: named_expr (_sep named_expr)* _sep?
 
-expr_list2: (expr _sep)* expr -> expr_list
-order: molecule "order" "{" _NL? expr_list2 _NL? "}"
+order: molecule "order" "{" _NL? ml_list{expr} _NL? "}"
 update: molecule "update" "{" _NL? proj_exprs _NL? "}"
 delete: molecule "delete" expr_list
 
@@ -72,7 +78,7 @@ delete: molecule "delete" expr_list
 
 ?molecule: atom
      | func_call
-     | list
+     | pql_list
      | selection
      | projection
      | slice
@@ -91,8 +97,6 @@ delete: molecule "delete" expr_list
 
 one: "one" [NULLABLE] molecule
 
-list: "[" _NL? (expr (_sep expr)* _NL?)? "]"
-
 new: "new" name _func_args
      | _NEW_ARRAY name _func_args -> new_rows
 //    | _GET_OR_NEW name _func_args -> get_or_new
@@ -102,7 +106,7 @@ _NEW_ARRAY.10: "new[]"
 
 func_call: molecule _func_args
 _func_args: "(" func_args ")"
-func_args: (named_expr ("," named_expr)*)?
+func_args: _separated{named_expr, ","}? -> any_list
 
 named_expr: [name ":"] expr
 
@@ -115,8 +119,6 @@ named_expr: [name ":"] expr
       | ellipsis
      //  | range
 
-range: [molecule] ".." molecule
-     | molecule ".." [molecule]
 
 ellipsis: "..." exclude?
 exclude: exclude_name+
