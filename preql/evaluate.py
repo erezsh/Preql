@@ -28,11 +28,12 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
+from . import settings
 RawSql = sql.RawSql
 Sql = sql.Sql
 
 from .interp_common import State, dy, new_value_instance
-from .compiler import compile_remote, compile_type_def
+from .compiler import compile_to_inst, compile_type_def
 
 
 
@@ -67,15 +68,18 @@ def resolve(state: State, col_def: ast.ColumnDef):
     if isinstance(col, objects.TableInstance):
         col = col.type
         assert isinstance(col, types.TableType)
-    if isinstance(col, types.TableType):
+    if col.composed_of(types.TableType):
         return types.RelationalColumn(col, query)
 
     assert not query
-    return types.DatumColumn(col, col_def.default)
+    return types.DataColumn(col, col_def.default)
 
 @dy
 def resolve(state: State, type_: ast.Type) -> types.PqlType:
-    return state.get_var(type_.name)
+    t = state.get_var(type_.name)
+    if type_.nullable:
+        t = types.OptionalType(t)
+    return t
 
 
 @dy
@@ -99,15 +103,9 @@ def _set_value(state: State, attr: ast.Attr, value):
 
 @dy
 def _execute(state: State, var_def: ast.SetValue):
-    res = simplify(state, var_def.value)
-    res = apply_database_rw(state, res)
+    res = evaluate(state, var_def.value)
+    # res = apply_database_rw(state, res)
     _set_value(state, var_def.name, res)
-
-@dy
-def simplify(state: State, attr: ast.Attr):
-    inst = evaluate(state, attr.expr)
-    # return evaluate(state, inst.get_attr(attr.name))
-    return evaluate(state, inst.get_attr(attr.name))
 
 
 @dy
@@ -116,7 +114,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
     if source is objects.EmptyList: # Nothing to add
         return objects.null
 
-    target = simplify(state, target_name)
+    target = evaluate(state, target_name)
 
     params = dict(target.type.params())
     for p in params:
@@ -138,7 +136,7 @@ def _execute(state: State, insert_rows: ast.InsertRows):
         # TODO support Attr
         raise pql_SyntaxError(insert_rows.meta, "L-value must be table name")
 
-    rval = evaluate(state, simplify(state, insert_rows.value))
+    rval = evaluate(state, insert_rows.value)
     return _copy_rows(state, insert_rows.name, rval)
 
 @dy
@@ -158,19 +156,6 @@ def _execute(state: State, p: ast.Print):
 def _execute(state: State, cb: ast.CodeBlock):
     for stmt in cb.statements:
         execute(state, stmt)
-    # except ReturnSignal as r:
-    #     return r.value
-
-@dy
-def simplify(state: State, cb: ast.CodeBlock):
-    return execute(state, cb)
-
-#     # assert state.access_level >= state.AccessLevels.EVALUATE
-#     try:
-#         return execute(state, cb)
-#     except ReturnSignal as r:
-#         return r.value
-
 
 @dy
 def _execute(state: State, i: ast.If):
@@ -230,11 +215,62 @@ def execute(state, stmt):
 #      and also prevent compiling lists (which simplify doesn't prevent)
 
 @dy
+def simplify(state: State, cb: ast.CodeBlock):
+    return _execute(state, cb)
+
+@dy
 def simplify(state: State, n: ast.Name):
-    # Don't recurse simplify, to allow granular dereferences
-    # The assumption is that the stored variable is already simplified
-    obj = state.get_var(n.name)
-    return obj
+    # XXX what happens to caching if this is a global variable?
+    return state.get_var(n.name)
+
+@dy
+def simplify(state: State, x):
+    return x
+
+# @dy
+# def simplify(state: State, ls: list):
+#     return [simplify(state, i) for i in ls]
+
+# @dy
+# def simplify(state: State, d: objects.ParamDict):
+#     return d.replace(params={name: evaluate(state, v) for name, v in d.params.items()})
+
+# @dy
+# def simplify(state: State, node: ast.Ast):
+#     # TODO implement automatically with prerequisites
+#     # return _simplify_ast(state, node)
+#     return node
+
+# def _simplify_ast(state, node):
+#     resolved = {k:simplify(state, v) for k, v in node
+#                 if isinstance(v, types.PqlObject) or isinstance(v, list) and all(isinstance(i, types.PqlObject) for i in v)}
+#     return node.replace(**resolved)
+
+# @dy
+# def simplify(state: State, cb: ast.CodeBlock):
+#     # if len(cb.statements) == 1:
+#     #     return simplify(state, cb.statements[0])
+#     return _simplify_ast(state, cb)
+
+# @dy
+# def simplify(state: State, if_: ast.If):
+#     if_ = _simplify_ast(state, if_)
+#     if isinstance(if_.cond, objects.ValueInstance): # XXX a more general test?
+#         if if_.cond.local_value:
+#             return if_.then
+#         else:
+#             return if_.else_
+#     return if_
+
+# TODO isn't this needed somewhere??
+# @dy
+# def simplify(state: State, obj: ast.Or):
+#     for expr in obj.args:
+#         inst = evaluate(state, expr)
+#         nz = test_nonzero(state, inst)
+#         if nz:
+#             return inst
+#     return inst
 
 
 
@@ -279,7 +315,7 @@ def eval_func_call(state, func, args, meta=None):
         return func.func(state, *args.values())
     else:
         # TODO make tests to ensure caching was successful
-        if False:
+        if settings.cache:
             params = {name: ast.Parameter(meta, name, value.type) for name, value in args.items()}
             sig = (func.name,) + tuple(a.type for a in args.values())
 
@@ -350,17 +386,6 @@ def test_nonzero(state: State, table: objects.TableInstance):
 @dy
 def test_nonzero(state: State, inst: objects.ValueInstance):
     return bool(inst.local_value)
-
-# TODO isn't this needed somewhere??
-# @dy
-# def simplify(state: State, obj: ast.Or):
-#     for expr in obj.args:
-#         inst = evaluate(state, expr)
-#         nz = test_nonzero(state, inst)
-#         if nz:
-#             return inst
-#     return inst
-
 
 def _raw_sql_callback(state: State, var: str, instances):
     var = var.group()
@@ -504,44 +529,6 @@ def apply_database_rw(state: State, u: ast.Update):
 
 
 @dy
-def simplify(state: State, x):
-    return x
-
-@dy
-def simplify(state: State, ls: list):
-    return [simplify(state, i) for i in ls]
-
-@dy
-def simplify(state: State, node: ast.Ast):
-    # TODO implement automatically with prerequisites
-    # return _simplify_ast(state, node)
-    return node
-
-
-def _simplify_ast(state, node):
-    resolved = {k:simplify(state, v) for k, v in node
-                if isinstance(v, types.PqlObject) or isinstance(v, list) and all(isinstance(i, types.PqlObject) for i in v)}
-    return node.replace(**resolved)
-
-
-# @dy
-# def simplify(state: State, cb: ast.CodeBlock):
-#     # if len(cb.statements) == 1:
-#     #     return simplify(state, cb.statements[0])
-#     return _simplify_ast(state, cb)
-
-# @dy
-# def simplify(state: State, if_: ast.If):
-#     if_ = _simplify_ast(state, if_)
-#     if isinstance(if_.cond, objects.ValueInstance): # XXX a more general test?
-#         if if_.cond.local_value:
-#             return if_.then
-#         else:
-#             return if_.else_
-#     return if_
-
-
-@dy
 def apply_database_rw(state: State, new: ast.NewRows):
     state.catch_access(state.AccessLevels.WRITE_DB)
 
@@ -581,8 +568,8 @@ def _destructure_param_match(state, meta, param_match):
     # TODO use cast rather than a ad-hoc hardwired destructure
     for k, v in param_match:
         v = localize(state, evaluate(state, v))
-        if isinstance(k.type.actual_type(), types.StructType):
-            names = [name for name, t in k.orig.flatten_type([k.name])]
+        if isinstance(k.type, types.StructType):
+            names = [name for name, t in k.orig.col_type.flatten_type([k.name])]
             if not isinstance(v, list):
                 raise pql_TypeError(meta, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
             if len(v) != len(names):
@@ -644,18 +631,13 @@ class TableConstructor(objects.Function):
 
     @classmethod
     def make(cls, table):
-        return cls([objects.Param(name.meta, name, p, p.default, orig=p) for name, p in table.params()])
+        return cls([objects.Param(name.meta, name, p.col_type, p.default, orig=p) for name, p in table.params()])
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
     code_cls = sql.TableName if isinstance(inst.type, types.Collection) else sql.Name
     name = state.unique_name(inst)
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
-
-@dy
-def simplify(state: State, d: objects.ParamDict):
-    return d.replace(params={name: evaluate(state, v) for name, v in d.params.items()})
-
 
 
 @dy
@@ -670,8 +652,8 @@ def evaluate(state, obj):
     if state.access_level < state.AccessLevels.COMPILE:
         return obj
 
-    # obj = compile_remote(state.reduce_access(state.AccessLevels.COMPILE), obj)
-    obj = compile_remote(state, obj)
+    # obj = compile_to_inst(state.reduce_access(state.AccessLevels.COMPILE), obj)
+    obj = compile_to_inst(state, obj)
 
     if state.access_level < state.AccessLevels.EVALUATE:
         return obj
@@ -681,6 +663,7 @@ def evaluate(state, obj):
     if state.access_level < state.AccessLevels.READ_DB:
         return obj
 
+    # Apply read-write operations XXX still needs rethinking. For example, can't 'One' be lazy?
     obj = apply_database_rw(state, obj)
 
     assert not isinstance(obj, (ast.ResolveParameters, ast.ResolveParametersString))

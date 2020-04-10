@@ -76,7 +76,7 @@ class BasicTests(TestCase):
 
         self.assertEqual( list(preql('Person {name, ...}')[0].keys()) , ['name', 'id', 'country'])
         assert list(preql('Person {country, ...}')[0].keys()) == ['country', 'id', 'name']
-        assert list(preql('Person {..., id}')[0].keys()) == ['name', 'country', 'id']
+        self.assertEqual( list(preql('Person {..., id}')[0].keys()) , ['name', 'country', 'id'] )
         assert list(preql('Person {country, ..., id}')[0].keys()) == ['country', 'name', 'id']
 
         self.assertEqual( list(preql('Person {name2: name, ...}')[0].keys()), ['name2', 'id', 'country'])
@@ -228,7 +228,7 @@ class BasicTests(TestCase):
 
             q1 = t[a.value == 1] {a.value}
             q2 = t[b.value==null] {a.value}
-            q3 = t[b==null] {a}
+            #q3 = t[b==null] {a}
         """)
 
         assert list(preql.q1) == [{'value': 1}]
@@ -384,6 +384,8 @@ class BasicTests(TestCase):
     def _test_groupby(self, preql):
         res = preql("Country {language => count(id)}")
         assert is_eq(res, [("en", 2), ("he", 1)])
+
+        assert len(preql("Country {=> first(id)}")) == 1
 
         res = preql("join(p:Person, c:Country) {country:c.name => population:count(p.id)}")
         assert is_eq(res, [

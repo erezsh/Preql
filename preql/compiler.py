@@ -1,3 +1,5 @@
+import operator
+
 from .utils import safezip, listgen, SafeDict, find_duplicate
 from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError, pql_CompileError
 from . import exceptions as exc
@@ -41,8 +43,8 @@ def compile_type(state: State, type_: types.RelationalColumn):
     return 'INTEGER'    # Foreign-key is integer
 
 @dy
-def compile_type(state: State, type_: types.DatumColumn):
-    return compile_type(state, type_.type)
+def compile_type(state: State, type_: types.DataColumn):
+    return compile_type(state, type_.col_type)
 
 def _compile_type_primitive(type, nullable):
     s = {
@@ -119,18 +121,21 @@ def _expand_ellipsis(table, fields):
 
 
 @dy
-def compile_remote(state: State, x):
+def compile_to_inst(state: State, x):
     return x
 @dy
-def compile_remote(state: State, node: ast.Ast):
+def compile_to_inst(state: State, node: ast.Ast):
     return node
 
 @dy
-def compile_remote(state: State, proj: ast.Projection):
+def compile_to_inst(state: State, proj: ast.Projection):
     table = evaluate(state, proj.table)
     # assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "%s")
     if table is objects.EmptyList:
         return table   # Empty list projection is always an empty list.
+
+    if isinstance(table, ast.ResolveParametersString):
+        raise exc.InsufficientAccessLevel()
 
     assert isinstance(table, objects.AbsInstance), table
 
@@ -148,6 +153,10 @@ def compile_remote(state: State, proj: ast.Projection):
 
     with state.use_scope(attrs):
         fields = _process_fields(state, fields)
+
+    for name, f in fields:
+        if not (f.type.composed_of(types.AtomicType) or f.type.composed_of(types.StructType)):
+            raise exc.pql_TypeError(proj.meta, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
         t = types.StructType(state.unique_name('_nested_proj'), {n:c.type for n,c in fields})
@@ -196,16 +205,23 @@ def compile_remote(state: State, proj: ast.Projection):
     new_table = objects.TableInstance.make(sql.null, new_table_type, [table])
 
     groupby = []
-    if proj.groupby and fields:
-        groupby = [new_table.get_column(n).primary_key().code for n, rc in fields]
+    limit = None
+    if proj.groupby:
+        if fields:
+            groupby = [new_table.get_column(n).primary_key().code for n, rc in fields]
+        else:
+            limit = sql.Primitive(types.Int, '1')
+            # Alternatively we could
+            #   groupby = [sql.null]
+            # But postgres doesn't support it
 
-    code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
+    code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby, limit=limit)
 
     # Make Instance
     return new_table.replace(code=code)
 
 @dy
-def compile_remote(state: State, order: ast.Order):
+def compile_to_inst(state: State, order: ast.Order):
     table = evaluate(state, order.table)
     assert_type(order.meta, table.type, types.TableType, "'order' expected an object of type '%s', instead got '%s'")
 
@@ -217,19 +233,19 @@ def compile_remote(state: State, order: ast.Order):
     return objects.TableInstance.make(code, table.type, [table] + fields)
 
 @dy
-def compile_remote(state: State, expr: ast.DescOrder):
+def compile_to_inst(state: State, expr: ast.DescOrder):
     obj = evaluate(state, expr.value)
     return obj.replace(code=sql.Desc(obj.code))
 
 
 
 @dy
-def compile_remote(state: State, lst: list):
+def compile_to_inst(state: State, lst: list):
     return [evaluate(state, e) for e in lst]
 
 
 @dy
-def compile_remote(state: State, like: ast.Like):
+def compile_to_inst(state: State, like: ast.Like):
     s = evaluate(state, like.str)
     p = evaluate(state, like.pattern)
     if s.type != types.String:
@@ -241,12 +257,17 @@ def compile_remote(state: State, like: ast.Like):
     return objects.Instance.make(code, types.Bool, [s, p])
 
 
+
+
+
 @dy
-def compile_remote(state: State, cmp: ast.Compare):
+def compile_to_inst(state: State, cmp: ast.Compare):
     insts = evaluate(state, cmp.args)
-    assert all(isinstance(i, objects.AbsInstance) for i in insts), (cmp.args, state.access_level)
 
     if cmp.op == 'in' or cmp.op == '!in':
+        if not all(isinstance(i, objects.AbsInstance) for i in insts):
+            raise pql_TypeError(cmp.meta, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
+
         sql_cls = sql.Contains
         if isinstance(insts[0].type, types._String) and isinstance(insts[1].type, types._String):
             code = sql.Compare('>', [sql.FuncCall(types.Bool, 'INSTR', [i.code for i in reversed(insts)]), sql.value(0)])
@@ -262,6 +283,28 @@ def compile_remote(state: State, cmp: ast.Compare):
                 raise pql_TypeError(cmp.meta, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
     else:
+        if not all(isinstance(i, objects.AbsInstance) for i in insts):
+            if all(isinstance(i, types.PqlType) for i in insts):
+                if cmp.op == '==':
+                    return objects.new_value_instance(insts[0] is insts[1])
+                elif cmp.op == '!=':
+                    return objects.new_value_instance(insts[0] is not insts[1])
+
+            raise pql_TypeError(cmp.meta, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
+            # try compare
+
+        if settings.optimize:
+            if all(isinstance(i, objects.ValueInstance) for i in insts):
+                op = {
+                    '==': operator.eq,
+                    '!=': operator.ne,
+                    '<>': operator.ne,
+                    '>': operator.gt,
+                    '<': operator.lt,
+                    '>=': operator.ge,
+                    '<=': operator.le,
+                }[cmp.op]
+                return objects.new_value_instance(op(insts[0].local_value, insts[1].local_value))
 
         sql_cls = sql.Compare
         # TODO should be able to coalesce, int->float, id->int, etc.
@@ -270,7 +313,7 @@ def compile_remote(state: State, cmp: ast.Compare):
         # if len(type_set) > 1:
         #     raise pql_TypeError(cmp.meta, "Cannot compare two different types: %s" % type_set)
         for i, inst in enumerate(insts):
-            if not isinstance(inst.type.actual_type(), types.AtomicType):
+            if not inst.type.composed_of(types.AtomicType):
                 raise pql_TypeError(cmp.args[i].meta.replace(parent=cmp.meta), f"Compare not implemented for type {inst.type}")
 
 
@@ -286,12 +329,13 @@ def compile_remote(state: State, cmp: ast.Compare):
 
 
 @dy
-def compile_remote(state: State, arith: ast.Arith):
+def compile_to_inst(state: State, arith: ast.Arith):
     args = evaluate(state, arith.args)
 
-    for i, a in enumerate(args):
-        if a.type.actual_type() is types.null:
-            raise pql_TypeError(arith.args[i].meta.replace(parent=arith.meta), "Cannot perform arithmetic on null values")
+    # TODO assert by value, not type
+    # for i, a in enumerate(args):
+    #     if a.type.actual_type() is types.null:
+    #         raise pql_TypeError(arith.args[i].meta.replace(parent=arith.meta), "Cannot perform arithmetic on null values")
 
     return _compile_arith(state, arith, *args)
 
@@ -321,7 +365,7 @@ def _compile_arith(state, arith, a: objects.TableInstance, b: objects.TableInsta
 @dy
 def _compile_arith(state, arith, a, b):
     args = [a, b]
-    arg_types = [a.type.actual_type() for a in args]
+    arg_types = [a.type for a in args]
     arg_types_set = set(arg_types) - {types.ListType(types.any_t)}  # XXX hacky
 
     if settings.optimize:
@@ -354,36 +398,36 @@ def _compile_arith(state, arith, a, b):
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
-    if not all(isinstance(a.type.actual_type(), (types.Primitive, types.Aggregated)) for a in args):
+    if not all(isinstance(a.type, (types.Primitive, types.Aggregated)) for a in args):
         meta = arith.op.meta.replace(parent=arith.meta)
         raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
-    res_type ,= {a.type.actual_type() for a in args}
+    res_type ,= {a.type for a in args}
     code = sql.arith(res_type, arith.op, [a.code for a in args], arith.meta)
     return objects.make_instance(code, res_type, args)
 
 
 @dy
-def compile_remote(state: State, x: ast.Ellipsis):
+def compile_to_inst(state: State, x: ast.Ellipsis):
     raise pql_SyntaxError(x.meta, "Ellipsis not allowed here")
 
 
 @dy
-def compile_remote(state: State, c: ast.Const):
+def compile_to_inst(state: State, c: ast.Const):
     if c.type == types.null:
         assert c.value is None
         return objects.null
     return new_value_instance(c.value, c.type)
 
 @dy
-def compile_remote(state: State, d: ast.Dict_):
+def compile_to_inst(state: State, d: ast.Dict_):
     elems = {k:evaluate(state, objects.from_python(v)) for k,v in d.elems.items()}
     t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
     code = sql.RowDict({k:v.code for k,v in elems.items()})
     return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
 
 @dy
-def compile_remote(state: State, lst: ast.List_):
+def compile_to_inst(state: State, lst: ast.List_):
     # TODO generate (a,b,c) syntax for IN operations, with its own type
     # sql = "(" * join([e.code.text for e in objs], ",") * ")"
     # type = length(objs)>0 ? objs[1].type : nothing
@@ -404,9 +448,11 @@ def compile_remote(state: State, lst: ast.List_):
     else:
         elem_type = lst.type.elemtype
 
+    if not elem_type.composed_of(types.Primitive):
+        raise pql_TypeError(lst.meta, "Cannot create lists of type %s" % elem_type)
+
     # XXX should work with a better type system where isa(int, any) == true
     # assert isinstance(elem_type, type(lst.type.elemtype)), (elem_type, lst.type.elemtype)
-
 
     # code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
     list_type = types.ListType(elem_type)
@@ -419,7 +465,7 @@ def compile_remote(state: State, lst: ast.List_):
 
 
 @dy
-def compile_remote(state: State, s: ast.Slice):
+def compile_to_inst(state: State, s: ast.Slice):
     table = evaluate(state, s.table)
     # TODO if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
 
@@ -443,7 +489,7 @@ def compile_remote(state: State, s: ast.Slice):
     return objects.TableInstance.make(code, table.type, instances)
 
 @dy
-def compile_remote(state: State, sel: ast.Selection):
+def compile_to_inst(state: State, sel: ast.Selection):
     table = evaluate(state, sel.table)
     if isinstance(table, types.PqlType):
         return _apply_type_generics(state, table, sel.conds)
@@ -461,11 +507,17 @@ def compile_remote(state: State, sel: ast.Selection):
     return objects.TableInstance.make(code, table.type, [table] + conds)
 
 @dy
-def compile_remote(state: State, param: ast.Parameter):
+def compile_to_inst(state: State, param: ast.Parameter):
     if state.access_level == state.AccessLevels.COMPILE:
-        return objects.Instance.make(sql.Parameter(param.type, param.name), param.type, [])
+        return objects.make_instance(sql.Parameter(param.type, param.name), param.type, [])
     else:
         return state.get_var(param.name)
+
+@dy
+def compile_to_inst(state: State, attr: ast.Attr):
+    inst = evaluate(state, attr.expr)
+    return evaluate(state, inst.get_attr(attr.name))
+
 
 
 def _apply_type_generics(state, gen_type, type_names):

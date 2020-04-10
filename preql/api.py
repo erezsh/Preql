@@ -120,7 +120,7 @@ class Interface:
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
-        assert not isinstance(res, ast.Ast)
+        assert not isinstance(res, ast.Ast), res
         return promise(self.interp.state, res)  # TODO session, not state
 
 

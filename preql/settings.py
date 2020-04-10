@@ -6,6 +6,7 @@ logging.basicConfig(level=logging.INFO,
                     )#datefmt='%m-%d %H:%M')
 
 optimize = True
+cache = False
 
 debug = not sys.flags.optimize
 if debug:

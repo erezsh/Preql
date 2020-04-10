@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 
 from .utils import dataclass, listgen, concat_for, SafeDict
@@ -36,17 +36,21 @@ class PqlObject:    # XXX should be in a base module
 class PqlType(PqlObject):
     """PqlType annotates the type of all instances """
 
+    @property
+    def col_type(self):
+        return self
+
     def kernel_type(self):
         return self
 
-    def actual_type(self):
-        return self
+    def composed_of(self, t):
+        return isinstance(self, t)
 
     def effective_type(self):   # XXX what
         return self
 
     def flatten_type(self, path_base=[]):
-        return [(join_names(path), t) for path, t in self.flatten_path(path_base)]
+        return [(join_names(path), t.col_type) for path, t in self.flatten_path(path_base)]
 
     def flatten_path(self, *args):
         raise NotImplementedError(self)
@@ -169,7 +173,7 @@ object_t = PqlObject()
 class Collection(PqlType):
 
     def to_struct_type(self):
-        return StructType(self.name, {name: col.actual_type() for name, col in self.columns.items()})
+        return StructType(self.name, {name: col.col_type for name, col in self.columns.items()})
 
     def flatten_path(self, path=[]):
         return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
@@ -184,7 +188,7 @@ class Collection(PqlType):
 
     def get_attr(self, name):
         try:
-            return self.columns[name]
+            return self.columns[name].col_type
         except KeyError:
             return self.attrs[name]
 
@@ -227,8 +231,8 @@ class FunctionType(PqlType):
     name = "function"
 
     def __repr__(self):
-        # types_str = ', '.join(repr(t) for t in self.param_types)
-        return f'function(...)'
+        types_str = ', '.join(repr(t) for t in self.param_types)
+        return f'function({types_str})'
 
 
 @dataclass
@@ -244,9 +248,15 @@ class OptionalType(PqlType):
     def kernel_type(self):
         return self.type.kernel_type()
 
+    def composed_of(self, t):
+        return self.type.composed_of(t)
+
     @property
     def members(self):  # XXX this is just a hack
-        return self.type.members
+        return {n:OptionalType(t) for n,t in self.type.members.items()}
+
+    def get_column_type(self, name):
+        return OptionalType( self.type.get_column_type(name) )
 
 # Not supported by Postgres. Will require a trick (either alternating within a column tuple, or json type, etc)
 # @dataclass
@@ -274,10 +284,13 @@ class SetType(Collection):
     elemtype: PqlType
 
 
+class Column:
+    pass
+
 @dataclass
 class TableType(Collection):
     name: str
-    columns: Dict[str, PqlType]
+    columns: Dict[str, Union[PqlType, Column]]
     temporary: bool
     primary_keys: List[List[str]]
 
@@ -298,6 +311,9 @@ class TableType(Collection):
 
     def params(self):
         return [(name, c) for name, c in self.columns.items() if not c.hide_from_init]
+
+    def get_column_type(self, name):
+        return self.columns[name].col_type
 
     def flat_length(self):
         # Maybe memoize
@@ -333,23 +349,44 @@ class TableType(Collection):
             yield s
 
 @dataclass
-class RelationalColumn(AtomicType):
-    type: TableType
+class RelationalColumn(Column):
+    type: PqlType
     query: Optional[Any] = None # XXX what now?
+
+    def __post_init__(self):
+        assert self.type.composed_of(TableType)
+
+    def flatten_path(self, path):
+        return [(path, self)]
 
     def restructure_result(self, i):
         return self.type.restructure_result(i)
 
     def effective_type(self):   # XXX Yikes
-        pks = [join_names(pk) for pk in self.type.primary_keys]
-        return self.type.columns[pks[0]]    # TODO what if there's more than one? Struct relation.. ??
+        return self.get_pk()
+
+    def get_pk(self):   # XXX Yikes
+        t = self.type.kernel_type()
+        pks = [join_names(pk) for pk in t.primary_keys]
+        return self.type.get_column_type(pks[0])    # TODO what if there's more than one? Struct relation.. ??
+
+    def __hash__(self):
+        return id(self.type)    # TODO not good! XXX Hack to avoid infinite recursion
+
+    @property
+    def col_type(self):
+        return self.get_pk().col_type
+
+    hide_from_init = False
+    default = None
 
 @dataclass
-class DatumColumn(PqlType):
+class DataColumn(Column):
     type: PqlType
     default: Optional[PqlObject] = None
 
-    def actual_type(self):
+    @property
+    def col_type(self):
         return self.type
 
     def restructure_result(self, i):

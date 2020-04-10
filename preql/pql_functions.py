@@ -11,7 +11,7 @@ from . import sql
 
 from .compiler import compile_type_def
 from .interp_common import State, new_value_instance, dy, exclude_fields
-from .evaluate import simplify, evaluate, localize
+from .evaluate import evaluate, localize
 
 # def _pql_SQL_callback(state: State, var: str, instances):
 #     var = var.group()
@@ -120,7 +120,7 @@ def _pql_issubclass(a: types.Aggregated, b: types.Aggregated):
 
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     inst = evaluate(state, expr)
-    type_ = simplify(state, type_expr)
+    type_ = evaluate(state, type_expr)
     # res = isinstance(inst.type, type_)
     res = inst.isa(type_)
     # res = _pql_issubclass(inst.type, type_)
@@ -155,8 +155,6 @@ def pql_temptable(state: State, expr: ast.Expr):
 
     state.db.query(compile_type_def(state, table))
 
-    # if table.flat_length() != expr.type.flat_length():
-    #     assert False
     primary_keys, columns = table.flat_for_insert()
     expr = exclude_fields(state, expr, primary_keys)
     state.db.query(sql.Insert(table, columns, expr.code), expr.subqueries)
@@ -282,7 +280,7 @@ def _find_table_reference(t1, t2):
             rel = c.type
             if rel == t2.type:
                 # TODO depends on the query XXX
-                yield (objects.AttrInstance(t2, types.IdType(t2.type), 'id'), objects.AttrInstance(t1, c, name))
+                yield (objects.AttrInstance(t2, types.IdType(t2.type), 'id'), objects.AttrInstance(t1, c.col_type, name))
 
 def pql_type(state: State, obj: ast.Expr):
     """

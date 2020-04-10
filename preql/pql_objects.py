@@ -15,7 +15,7 @@ from . import sql
 @dataclass
 class Param(ast.Ast):
     name: str
-    type: Optional[types.PqlType] = None
+    type: Optional[types.PqlObject] = None
     default: Optional[types.PqlObject] = None
     orig: Any = None # XXX temporary and lazy, for TableConstructor
 
@@ -45,7 +45,7 @@ class Function(types.PqlObject):
 
     @property
     def type(self):
-        return types.FunctionType(tuple(p.type for p in self.params), self.param_collector is not None)
+        return types.FunctionType(tuple(p.type or types.any_t for p in self.params), self.param_collector is not None)
 
     def match_params_fast(self, args):
         for i, p in enumerate(self.params):
@@ -199,6 +199,8 @@ class MethodInstance(AbsInstance, Function):
     expr = property(X.func.expr)
 
     # type = types.FunctionType()
+    name = property(X.func.name)
+
 
 @dataclass
 class Instance(AbsInstance):
@@ -215,14 +217,10 @@ class Instance(AbsInstance):
         return f'<instance of {self.type.repr(state)}>'
 
     def __post_init__(self):
-        assert not isinstance(self.type.actual_type().kernel_type(), (types.StructType, types.Aggregated)), self.type
+        assert not self.type.composed_of((types.StructType, types.Aggregated, types.TableType)), self
 
     def flatten_code(self):
-        t = self.type.actual_type()
-        if isinstance(t, types.OptionalType):   # XXX what's this?
-            t = t.type
-
-        assert not isinstance(t.kernel_type(), types.StructType)
+        assert not self.type.composed_of(types.StructType)
         return [self.code]
 
     def primary_key(self):
@@ -270,6 +268,9 @@ class ValueInstance(Instance):
 
 @dataclass
 class TableInstance(Instance):
+    def __post_init__(self):
+        assert isinstance(self.type, types.Collection), self.type
+
     @property
     def __columns(self):
         return {n:self.get_column(n) for n in self.type.columns}
@@ -277,7 +278,7 @@ class TableInstance(Instance):
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
         t = self.type
-        return make_instance_from_name(t.columns[name], t.column_codename(name))
+        return make_instance_from_name(t.columns[name].col_type, t.column_codename(name))
 
     def all_attrs(self):
         # XXX hacky way to write it
@@ -286,15 +287,15 @@ class TableInstance(Instance):
 
 
 def make_instance_from_name(t, cn):
-    t = t.actual_type()
-    if isinstance(t.kernel_type(), types.StructType):
+    if t.composed_of(types.StructType):
         return StructInstance(t, {n: make_instance_from_name(mt, types.join_names((cn, n))) for n,mt in t.members.items()})
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
-    t = t.actual_type()
-    assert not isinstance(t.kernel_type(), types.StructType)
-    if isinstance(t, types.Aggregated):
+    assert not t.composed_of(types.StructType)
+    if isinstance(t, types.Collection):
+        return TableInstance.make(code, t, insts)
+    elif isinstance(t, types.Aggregated):
         return AggregatedInstance(t, make_instance(code, t.elemtype, insts))
     else:
         return Instance.make(code, t, insts)
@@ -329,7 +330,7 @@ class StructInstance(AbsInstance):
     members: dict
 
     def __post_init__(self):
-        assert isinstance(self.type.actual_type().kernel_type(), types.StructType), self.type
+        assert self.type.composed_of(types.StructType), self.type
 
     @property
     def subqueries(self):
