@@ -16,10 +16,6 @@ class Str(str):
 def token_value(self, meta, t):
     return Str(str(t), meta)
 
-@v_args(inline=False)
-def as_list(_, args):
-    return args
-
 def meta_d(text, meta):
     return Meta(
         text,
@@ -87,12 +83,11 @@ class T(Transformer):
 
     @v_args(inline=False, meta=True)
     def pql_list(self, items, meta):
-        return ast.List_(meta_d(self.code, meta), items)
+        return ast.List_(meta_d(self.code, meta), types.ListType(types.any_t), items)
 
-    any_list = as_list
-    arguments = as_list
-    func_params = as_list
-
+    @v_args(inline=False)
+    def as_list(_, args):
+        return args
 
     # types
     def typemod(self, meta, *args):
@@ -155,7 +150,6 @@ class T(Transformer):
     struct_def = ast.StructDef
     table_def = ast.TableDef
     col_def = ast.ColumnDef
-    member_def = as_list
     print = ast.Print
     return_stmt = ast.Return
     throw = ast.Throw

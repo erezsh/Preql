@@ -488,7 +488,31 @@ class Select(TableOperation):
     def __post_init__(self):
         assert self.fields, self
 
+    def _is_conds_only(self):
+        if self.group_by or self.order or self.offset or self.limit:
+            return False
+
+        if len(self.fields) == 1 and isinstance(self.fields[0], AllFields):
+            return True
+
+        return False
+
     def _compile(self, qb):
+        # XXX very primitive optimization. Be smarter.
+        #
+        # Simplify
+        #
+        if isinstance(self.table, Select):
+            s1 = self
+            s2 = self.table
+            if s2._is_conds_only():
+                s = s1.replace(conds=list(s1.conds) + list(s2.conds), table=s2.table)
+                return s._compile(qb)
+
+        #
+        # Compile
+        #
+
         fields_sql = [f.compile(qb) for f in self.fields]
         select_sql = ', '.join(f.text for f in fields_sql)
 

@@ -144,16 +144,9 @@ def compile_remote(state: State, proj: ast.Projection):
     if dup:
         raise pql_TypeError(dup.meta, f"Field '{dup.name}' was already used in this projection")
 
+    attrs = table.all_attrs()
 
-    if isinstance(table.type, types.StructType):
-        # XXX time to give it up?
-        columns = table.members
-    else:
-        assert isinstance(table.type, types.Collection), table
-        columns = table.columns
-    # columns = SafeDict(columns).update({'this': table.to_struct_column()}) # XXX Is this the right place to introduce `this` ?
-
-    with state.use_scope(columns):
+    with state.use_scope(attrs):
         fields = _process_fields(state, fields)
 
     if isinstance(table, objects.StructInstance):
@@ -162,7 +155,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
     agg_fields = []
     if proj.agg_fields:
-        with state.use_scope({n:objects.aggregated(c) for n,c in columns.items()}):
+        with state.use_scope({n:objects.aggregated(c) for n,c in attrs.items()}):
             agg_fields = _process_fields(state, proj.agg_fields)
 
     all_fields = fields + agg_fields
@@ -196,7 +189,7 @@ def compile_remote(state: State, proj: ast.Projection):
 
     groupby = []
     if proj.groupby and fields:
-        groupby = [new_table.columns[n].primary_key().code for n, rc in fields]
+        groupby = [new_table.get_column(n).primary_key().code for n, rc in fields]
 
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby)
 
@@ -208,7 +201,7 @@ def compile_remote(state: State, order: ast.Order):
     table = evaluate(state, order.table)
     assert_type(order.meta, table.type, types.TableType, "'order' expected an object of type '%s', instead got '%s'")
 
-    with state.use_scope(table.columns):
+    with state.use_scope(table.all_attrs()):
         fields = evaluate(state, order.fields)
 
     code = sql.table_order(table, [c.code for c in fields])
@@ -253,10 +246,10 @@ def compile_remote(state: State, cmp: ast.Compare):
         else:
             assert_type(cmp.meta, insts[0].type, types.AtomicType, "Expecting type %s, got %s")
             assert_type(cmp.meta, insts[1].type, types.Collection, "Expecting type %s, got %s")
-            cols = insts[1].columns
+            cols = insts[1].type.columns
             if len(cols) > 1:
                 raise pql_TypeError(cmp.meta, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
-            c_type = list(cols.values())[0].type
+            c_type = list(cols.values())[0]
             if c_type.effective_type() != insts[0].type.effective_type():
                 raise pql_TypeError(cmp.meta, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
@@ -382,25 +375,29 @@ def compile_remote(state: State, d: ast.Dict_):
     return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
 
 @dy
-def compile_remote(state: State, lst: ast.List_, elem_type=None):
+def compile_remote(state: State, lst: ast.List_):
     # TODO generate (a,b,c) syntax for IN operations, with its own type
     # sql = "(" * join([e.code.text for e in objs], ",") * ")"
     # type = length(objs)>0 ? objs[1].type : nothing
     # return Instance(Sql(sql), ArrayType(type, false))
     # Or just evaluate?
 
-    if not lst.elems and elem_type is None:
+    if not lst.elems and lst.type.elemtype is types.any_t:
+        # XXX a little awkward
         return objects.EmptyList
 
     elems = evaluate(state, lst.elems)
 
-    type_set = list({e.type for e in elems})
+    type_set = {e.type for e in elems}
     if len(type_set) > 1:
         raise pql_TypeError(lst.meta, "Cannot create a list of mixed types: (%s)" % ', '.join(repr(t) for t in type_set))
-    elif elem_type is not None:
-        assert not type_set
-    else:
+    elif type_set:
         elem_type ,= type_set
+    else:
+        elem_type = lst.type.elemtype
+
+    # XXX should work with a better type system where isa(int, any) == true
+    # assert isinstance(elem_type, type(lst.type.elemtype)), (elem_type, lst.type.elemtype)
 
 
     # code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
@@ -448,7 +445,7 @@ def compile_remote(state: State, sel: ast.Selection):
 
     assert_type(sel.meta, table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")
 
-    with state.use_scope(table.columns):
+    with state.use_scope(table.all_attrs()):
         conds = evaluate(state, sel.conds)
 
     code = sql.table_selection(table, [c.code for c in conds])

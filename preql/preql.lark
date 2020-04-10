@@ -1,4 +1,4 @@
-stmts: _NL? stmt+   -> any_list
+stmts: _NL? stmt+   -> as_list
 ?stmt: (table_def | struct_def | func_def | set_value | insert_rows | print | if_stmt | for_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
 
 _ml_seperated{item}: (item _ml_sep)* item _ml_sep?
@@ -6,14 +6,16 @@ _ml_sep: "," | "," _NL | _NL
 _separated{item, sep}: (item sep)* item
 
 pql_list: "[" _NL? _ml_seperated{expr}? "]"
-expr_list: "[" _NL? _ml_seperated{expr} "]" -> any_list
-proj_exprs: _ml_seperated{named_expr} -> any_list
+expr_list: "[" _NL? _ml_seperated{expr} "]" -> as_list
+proj_exprs: _ml_seperated{named_expr} -> as_list
 
-ml_list{item}: _ml_seperated{item} -> any_list   // multi-line list
+ml_list{item}: _ml_seperated{item} -> as_list   // multi-line list
 
 table_def: "table" name "{" _ml_sep? _table_contents "}" _NL
          | "table" name "=" expr _NL -> table_def_by_expr
-_table_contents: ml_list{col_def}? //func_def*
+
+func_defs: func_def* -> as_list
+_table_contents: ml_list{col_def}? func_defs
 
 col_def: name ":" coltype ["->" expr] ["=" expr]
 ?coltype: type
@@ -22,7 +24,7 @@ type: name [typemod]
 m2m: "[" type "]"
 
 struct_def: "struct" name "{" _ml_sep? ml_list{member_def} "}" _NL
-member_def: name ":" type
+member_def: name ":" type -> as_list
 
 
 typemod: PK | NULLABLE
@@ -35,7 +37,7 @@ codeblock: "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
 throw: "throw" expr _NL
 print: "print" expr _NL
-func_params: "(" _separated{param, ","}? ")"
+func_params: "(" _separated{param, ","}? ")" -> as_list
 param: name [":" expr] ["=" expr]   // TODO type? default value?
 insert_rows: atom "+=" expr _NL
 set_value: atom "=" expr _NL
@@ -106,7 +108,7 @@ _NEW_ARRAY.10: "new[]"
 
 func_call: molecule _func_args
 _func_args: "(" func_args ")"
-func_args: _separated{named_expr, ","}? -> any_list
+func_args: _separated{named_expr, ","}? -> as_list
 
 named_expr: [name ":"] expr
 

@@ -14,6 +14,8 @@ dataclass = dataclass(check_types=settings.debug)
 class SafeDict(dict):
     def __setitem__(self, key, value):
         if key in self:
+            if value is self[key]:
+                return  # Nothing to do
             raise KeyError("Attempted to override key '%s' in a SafeDict" % key)
         return dict.__setitem__(self, key, value)
 

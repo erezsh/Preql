@@ -183,7 +183,7 @@ class FuncDef(Statement, Definition):
 class TableDef(Statement, Definition):
     name: str
     columns: List[ColumnDef]
-    # methods: list = ()
+    methods: list
     # meta: object
 
 @dataclass
@@ -242,6 +242,7 @@ class For(Statement):
 
 @dataclass
 class List_(Expr):
+    type: types.ListType
     elems: list
 
 @dataclass

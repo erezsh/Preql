@@ -46,6 +46,10 @@ def resolve(state: State, struct_def: ast.StructDef):
 @dy
 def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     t = types.TableType(table_def.name, SafeDict(), False, [['id']])
+    if table_def.methods:
+        methods = evaluate(state, table_def.methods)
+        t.attrs.update({m.userfunc.name:m.userfunc for m in methods})
+
     state.set_var(t.name, t)   # TODO use an internal namespace
 
     t.columns['id'] = types.IdType(t)
@@ -60,8 +64,11 @@ def resolve(state: State, col_def: ast.ColumnDef):
     col = resolve(state, col_def.type)
 
     query = col_def.query
-    if isinstance(col.type, types.TableType):
-        return types.RelationalColumn(col.type, query)
+    if isinstance(col, objects.TableInstance):
+        col = col.type
+        assert isinstance(col, types.TableType)
+    if isinstance(col, types.TableType):
+        return types.RelationalColumn(col, query)
 
     assert not query
     return types.DatumColumn(col, col_def.default)
@@ -250,14 +257,27 @@ def simplify(state: State, funccall: ast.FuncCall):
 
 
 def eval_func_call(state, func, args, meta=None):
-
-    # XXX This is a big one!
+    assert isinstance(func, objects.Function)
 
     matched_args = func.match_params(args)
 
-    args = {p.name:evaluate(state, a) for p,a in matched_args}
 
-    if isinstance(func, objects.UserFunction):
+
+    if isinstance(func, objects.MethodInstance):
+        args = {'this': func.parent}
+        # args.update(func.parent.all_attrs())
+    else:
+        args = {}
+
+    args.update( {p.name:evaluate(state, a) for p,a in matched_args} )
+
+
+    # if isinstance(func, objects.UserFunction):
+    if isinstance(func, objects.InternalFunction):
+        # TODO ensure pure function?
+        # TODO Ensure correct types
+        return func.func(state, *args.values())
+    else:
         # TODO make tests to ensure caching was successful
         if False:
             params = {name: ast.Parameter(meta, name, value.type) for name, value in args.items()}
@@ -289,10 +309,6 @@ def eval_func_call(state, func, args, meta=None):
                 raise exc.InsufficientAccessLevel()
 
             return res
-    else:
-        # TODO ensure pure function?
-        # TODO Ensure correct types
-        return func.func(state, *args.values())
 
 
 def _call_expr(state, expr):
@@ -467,7 +483,7 @@ def apply_database_rw(state: State, u: ast.Update):
     #     meta = u.table.meta
     #     raise pql_TypeError(meta.replace(meta), "Update error: Got non-real table")
 
-    update_scope = {n:c.replace(code=sql.Name(c.type, n)) for n, c in table.columns.items()}
+    update_scope = {n:c.replace(code=sql.Name(c.type, n)) for n, c in table.all_attrs().items()}
     with state.use_scope(update_scope):
         proj = {f.name:evaluate(state, f.value) for f in u.fields}
 
@@ -531,6 +547,9 @@ def apply_database_rw(state: State, new: ast.NewRows):
 
     obj = state.get_var(new.type)
 
+    if isinstance(obj, objects.TableInstance):
+        # XXX Is it always TableInstance? Just sometimes? What's the transition here?
+        obj = obj.type
     assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
 
     if len(new.args) > 1:
@@ -554,7 +573,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
     # return ast.List_(new.meta, [new_value_instance(rowid, obj.columns['id'], force_type=True) for rowid in ids])
-    return ast.List_(new.meta, ids)
+    return ast.List_(new.meta, types.ListType(types.Int), ids)
 
 
 @listgen
@@ -636,6 +655,12 @@ def add_as_subquery(state: State, inst: objects.Instance):
 @dy
 def simplify(state: State, d: objects.ParamDict):
     return d.replace(params={name: evaluate(state, v) for name, v in d.params.items()})
+
+
+
+@dy
+def evaluate(state, obj: list):
+    return [evaluate(state, item) for item in obj]
 
 @dy
 def evaluate(state, obj):

@@ -277,12 +277,12 @@ def _auto_join(state, join, ta, tb):
 @listgen
 def _find_table_reference(t1, t2):
     # XXX TODO need to check TableType too (owner)?
-    for name, c in t1.columns.items():
-        if isinstance(c.type, types.RelationalColumn):
-            rel = c.type.type
+    for name, c in t1.type.columns.items():
+        if isinstance(c, types.RelationalColumn):
+            rel = c.type
             if rel == t2.type:
                 # TODO depends on the query XXX
-                yield (objects.AttrInstance(t2, types.IdType(t2.type), 'id'), objects.AttrInstance(t1, c.type, name))
+                yield (objects.AttrInstance(t2, types.IdType(t2.type), 'id'), objects.AttrInstance(t1, c, name))
 
 def pql_type(state: State, obj: ast.Expr):
     """
@@ -306,7 +306,8 @@ def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
         return inst
 
     if inst is objects.EmptyList:
-        return evaluate(state, ast.List_(None, []), target_type.elemtype)
+        # return inst.replace(type=target_type)
+        return evaluate(state, ast.List_( None, target_type, []), )
 
     raise pql_TypeError(None, "Cast not fully implemented yet")
 
@@ -317,7 +318,7 @@ def pql_cast_int(state: State, expr: ast.Expr):
     inst = evaluate(state, expr)
     type_ = inst.type
     if isinstance(type_, types.TableType):
-        assert len(inst.columns) == 1
+        assert len(inst.type.columns) == 1
         res = localize(state, inst)
         # res = types.Int.import_result(res)
         assert len(res) == 1
@@ -391,13 +392,13 @@ def pql_ls(state: State, obj: types.PqlObject = objects.null):
         inst = evaluate(state, obj)
         if not isinstance(inst.type, types.Collection): # XXX temp.
             raise pql_TypeError(obj.meta, "Argument to ls() must be a table")
-        all_vars = list(inst.columns)
+        all_vars = list(inst.all_attrs())
     else:
         all_vars = list(state.ns.get_all_vars())
 
     assert all(isinstance(s, str) for s in all_vars)
     names = [new_value_instance(str(s), types.String) for s in all_vars]
-    return evaluate(state, ast.List_(None, names))
+    return evaluate(state, ast.List_(None, types.ListType(types.String), names))
 
 
 

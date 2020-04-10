@@ -48,7 +48,16 @@ class Function(types.PqlObject):
         return types.FunctionType(tuple(p.type for p in self.params), self.param_collector is not None)
 
     def match_params_fast(self, args):
-        return [(p, a) for p, a in zip(self.params, args)]
+        for i, p in enumerate(self.params):
+            if i < len(args):
+                v = args[i]
+            else:
+                v = p.default
+                assert v is not None
+
+            yield p, v
+
+        # return [(p, a) for p, a in safezip(self.params, args)]
 
 
     def match_params(self, args):
@@ -174,7 +183,22 @@ class InternalFunction(Function):
 
 class AbsInstance(types.PqlObject):
     def get_attr(self, name):
-        return AttrInstance(self, self.type.get_attr(name), name)
+        v = self.type.get_attr(name)
+        if isinstance(v.type, types.FunctionType):
+            # method
+            return MethodInstance(self, v)
+        else:
+            return AttrInstance(self, v, name)
+
+@dataclass
+class MethodInstance(AbsInstance, Function):
+    parent: AbsInstance
+    func: Function
+
+    params = property(X.func.params)
+    expr = property(X.func.expr)
+
+    # type = types.FunctionType()
 
 @dataclass
 class Instance(AbsInstance):
@@ -212,7 +236,7 @@ def from_python(value):
     elif isinstance(value, int):
         return ast.Const(None, types.Int, value)
     elif isinstance(value, list):
-        return ast.List_(None, list(map(from_python, value)))
+        return ast.List_(None, types.ListType(types.any_t), list(map(from_python, value)))
     elif isinstance(value, dict):
         return ast.Dict_(None, value)
     assert False, value
@@ -247,8 +271,19 @@ class ValueInstance(Instance):
 @dataclass
 class TableInstance(Instance):
     @property
-    def columns(self):
-        return {n:make_instance_from_name(t, cn) for n, t, cn in self.type.columns_with_codenames()}
+    def __columns(self):
+        return {n:self.get_column(n) for n in self.type.columns}
+
+    def get_column(self, name):
+        # TODO memoize? columns shouldn't change
+        t = self.type
+        return make_instance_from_name(t.columns[name], t.column_codename(name))
+
+    def all_attrs(self):
+        # XXX hacky way to write it
+        attrs = {n:self.get_attr(n) for n,f in self.type.attrs.items()}
+        return SafeDict(attrs).update(self.__columns)
+
 
 def make_instance_from_name(t, cn):
     t = t.actual_type()
@@ -310,6 +345,11 @@ class StructInstance(AbsInstance):
         # XXX This is obviously wrong
         return list(self.members.values())[0]
 
+    def all_attrs(self):
+        # XXX hacky way to write it
+        attrs = {n:self.get_attr(n) for n,f in self.type.attrs.items()}
+        return SafeDict(attrs).update(self.members)
+
 @dataclass
 class AttrInstance(AbsInstance):
     parent: AbsInstance
@@ -332,7 +372,6 @@ class AttrInstance(AbsInstance):
 
     def _resolve_attr(self):
         return self.parent.get_attr(self.name)
-
 
 
 def merge_subqueries(instances):

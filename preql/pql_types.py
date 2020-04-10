@@ -3,9 +3,12 @@ from datetime import datetime
 
 from .utils import dataclass, listgen, concat_for, SafeDict
 from . import exceptions as exc
+from dataclasses import field, replace
 
+@dataclass
 class PqlObject:    # XXX should be in a base module
     "Any object that the user might interact with through the language, as so has to behave like an object inside Preql"
+    attrs: dict = field(default_factory=dict, init=False, compare=False)
 
     def repr(self, pql):
         return repr(self)
@@ -22,6 +25,12 @@ class PqlObject:    # XXX should be in a base module
         if not isinstance(t, PqlType):
             raise exc.pql_TypeError(None, f"'type' argument to isa() isn't a type. It is {t}")
         return self.type.issubclass(t)
+
+    def replace(self, **attrs):
+        if 'attrs' in attrs:
+            assert not attrs.pop('attrs')
+        return replace(self, **attrs)
+
 
 
 class PqlType(PqlObject):
@@ -40,7 +49,7 @@ class PqlType(PqlObject):
         return [(join_names(path), t) for path, t in self.flatten_path(path_base)]
 
     def flatten_path(self, *args):
-        raise NotImplementedError()
+        raise NotImplementedError(self)
 
     def apply_inner_type(self, t):
         raise TypeError("This type isn't a 'generic', and has no inner type")
@@ -66,6 +75,11 @@ class AnyType(PqlType):
 
     def __repr__(self):
         return self.name
+
+    def flatten_path(self, path):
+        # XXX Only works because for now it's only used for list
+        # TODO better type system
+        return [(path, self)]
 
 
 
@@ -167,7 +181,10 @@ class Collection(PqlType):
         return [(n,t,self.column_codename(n)) for n,t in self.columns.items()]
 
     def get_attr(self, name):
-        return self.columns[name]
+        try:
+            return self.columns[name]
+        except KeyError:
+            return self.attrs[name]
 
 
 
@@ -268,6 +285,7 @@ class TableType(Collection):
         return concat_for(col.flatten_path(path + [self.code_prefix + name]) for name, col in self.columns.items())
 
     def __post_init__(self):
+        # super().__post_init__()
         assert isinstance(self.columns, SafeDict), self.columns
 
     def flat_for_insert(self):

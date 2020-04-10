@@ -345,18 +345,41 @@ class BasicTests(TestCase):
         self.assertEqual( preql('"ba" in "kabab"'), True )
         self.assertEqual( preql('"bak" in "kabab"'), False )
 
-    # def test_methods(self):
-    #     preql = Preql()
-    #     preql('''
-    #         table Person {
-    #             name: string
-    #             born: datetime
+    def test_methods(self):
+        preql = Preql()
+        preql('''
+            table Square {
+                size: float
 
-    #             func age() = now() - born
-    #         }
+                func area() = size * size
+                func is_area_larger(num) = area() > num
+            }
 
-    #     ''')
-    #     self.assertEqual( preql('upper("ba")'), "BA" )
+            s = new Square(4)
+            size4 = Square[size==4]
+        ''')
+        # self.assertEqual( preql('s.area()'), 16 ) # TODO
+        # self.assertEqual( preql('Square[size==4].area()'), 16 )
+        self.assertEqual( preql('size4{ area() }').to_json(), [{'area': 16.0}] )
+        self.assertEqual( preql('count(Square[area() > 18.0])'), 0 )
+        self.assertEqual( preql('count(Square[area() < 18.0])'), 1 )
+        self.assertEqual( preql('count(Square[is_area_larger(18.0)])'), 0 )
+        self.assertEqual( preql('count(Square[is_area_larger(14.0)])'), 1 )
+
+        preql = Preql()
+        preql('''
+            table Node {
+                parent: Node?
+
+                func children() = join(s:this.id, n:Node.parent) {n}
+            }
+
+            a = new Node(null)
+            b = new Node(a)
+            c = new Node(a)
+
+        ''')
+        self.assertEqual( preql('count(Node[parent==null].children())'), 2 )
 
     def _test_groupby(self, preql):
         res = preql("Country {language => count(id)}")
