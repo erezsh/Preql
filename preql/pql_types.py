@@ -175,7 +175,9 @@ class Collection(PqlType):
         return concat_for(col.flatten_path(path + [name]) for name, col in self.columns.items())
 
     def column_codename(self, name):
-        return self.code_prefix + name
+        if self.codenames is None:
+            return name
+        return self.codenames[name]
 
     def columns_with_codenames(self):
         return [(n,t,self.column_codename(n)) for n,t in self.columns.items()]
@@ -192,7 +194,7 @@ class Collection(PqlType):
 class ListType(Collection, AtomicOrList):
     elemtype: PqlType
 
-    code_prefix: str = ''
+    codenames: object = None
 
     primary_keys = []
 
@@ -279,10 +281,10 @@ class TableType(Collection):
     temporary: bool
     primary_keys: List[List[str]]
 
-    code_prefix: str = ''
+    codenames: object = None
 
     def flatten_path(self, path=[]):
-        return concat_for(col.flatten_path(path + [self.code_prefix + name]) for name, col in self.columns.items())
+        return concat_for(col.flatten_path(path + [self.column_codename(name)]) for name, col in self.columns.items())
 
     def __post_init__(self):
         # super().__post_init__()

@@ -161,7 +161,9 @@ def compile_remote(state: State, proj: ast.Projection):
     all_fields = fields + agg_fields
 
     # Make new type
-    new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], code_prefix=state.unique_name('proj_')) # Maybe wrong
+    new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], codenames={})
+
+    codename = state.unique_name('proj')
     for name_, inst in all_fields:
         assert isinstance(inst, objects.AbsInstance)
 
@@ -172,6 +174,12 @@ def compile_remote(state: State, proj: ast.Projection):
             name = name_ + str(i)
             i += 1
         new_table_type.columns[name] = inst.type
+
+        # Designate a codename for the field
+        if isinstance(inst, objects.StructInstance) or isinstance(inst.code, sql.Name) and inst.code.name == name:     # Value hasn't changed
+            new_table_type.codenames[name] = name
+        else:
+            new_table_type.codenames[name] = codename+'_'+name
 
     # Make code
     flat_codes = [code
