@@ -156,6 +156,7 @@ def _execute(state: State, p: ast.Print):
 def _execute(state: State, cb: ast.CodeBlock):
     for stmt in cb.statements:
         execute(state, stmt)
+    return objects.null
 
 @dy
 def _execute(state: State, i: ast.If):
@@ -305,7 +306,7 @@ def eval_func_call(state, func, args, meta=None):
     else:
         args = {}
 
-    args.update( {p.name:evaluate(state, a) for p,a in matched_args} )
+    args.update( {p.name:simplify(state, a) for p,a in matched_args} )
 
 
     # if isinstance(func, objects.UserFunction):
@@ -645,9 +646,9 @@ def evaluate(state, obj: list):
     return [evaluate(state, item) for item in obj]
 
 @dy
-def evaluate(state, obj):
-    obj = simplify(state, obj)
-    assert obj, obj
+def evaluate(state, obj_):
+    obj = simplify(state, obj_)
+    assert obj, obj_
 
     if state.access_level < state.AccessLevels.COMPILE:
         return obj

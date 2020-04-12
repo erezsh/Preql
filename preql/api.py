@@ -97,7 +97,7 @@ class Interface:
         self.interp = Interpreter(self.engine)
         self.save_last = save_last
 
-        # self.interp.state._py_api = self # TODO proper api
+        self.interp.state._py_api = self # TODO proper api
 
     def exec(self, q, *args, **kw):
         "Deprecated"

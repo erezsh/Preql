@@ -26,7 +26,16 @@ def is_eq(a, b):
 class BasicTests(TestCase):
     def Preql(self):
         settings.optimize = self.optimized
-        return Preql(self.uri)
+        preql = Preql(self.uri)
+        self.preql = preql
+        return preql
+
+    def setUp(self):
+        self.preql = None
+
+    def tearDown(self):
+        if self.preql:
+            self.preql.engine.rollback()
 
     def test_basic1(self):
         preql = self.Preql()
@@ -453,7 +462,6 @@ class BasicTests(TestCase):
         self.assertRaises( pql_TypeError, preql, """ [1] in [2] """)
         self.assertRaises( pql_TypeError, preql, """ "a" in [2] """)
         self.assertRaises( pql_TypeError, preql, """ 4 in ["a", "B"] """)
-
 
 
 

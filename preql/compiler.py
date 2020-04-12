@@ -21,7 +21,7 @@ def compile_type_def(state: State, table: types.TableType) -> sql.Sql:
     pks = {types.join_names(pk) for pk in table.primary_keys}
     for name, c in table.flatten_type():
         type_ = compile_type(state, c)
-        columns.append( f"{name} {type_}" )
+        columns.append( f'"{name}" {type_}' )
         if isinstance(c, types.RelationalColumn):
             # TODO any column, using projection / get_attr
             if not table.temporary:
@@ -35,7 +35,7 @@ def compile_type_def(state: State, table: types.TableType) -> sql.Sql:
 
     # Consistent among SQL databases
     command = "CREATE TEMPORARY TABLE" if table.temporary else "CREATE TABLE IF NOT EXISTS"
-    return sql.RawSql(types.null, f"{command} {table.name} (" + ", ".join(columns + posts) + ")")
+    return sql.RawSql(types.null, f'{command} "{table.name}" (' + ', '.join(columns + posts) + ')')
 
 @dy
 def compile_type(state: State, type_: types.RelationalColumn):
@@ -68,7 +68,8 @@ def compile_type(state: State, type: types.OptionalType):
 
 @dy
 def compile_type(state: State, idtype: types.IdType, nullable=False):
-    if state.db.target == sql.postgres:
+    # XXX test if auto-id, not if nullable
+    if state.db.target == sql.postgres and not nullable:
         s = "SERIAL" # Postgres
     else:
         s = "INTEGER"
@@ -279,7 +280,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
             if len(cols) > 1:
                 raise pql_TypeError(cmp.meta, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
             c_type = list(cols.values())[0]
-            if c_type.effective_type() != insts[0].type.effective_type():
+            if c_type.effective_type().kernel_type() != insts[0].type.effective_type().kernel_type():
                 raise pql_TypeError(cmp.meta, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
     else:

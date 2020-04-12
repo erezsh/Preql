@@ -155,9 +155,9 @@ class TableName(Table):
 
     def compile(self, qb):
         if qb.is_root:
-            sql_code = f'SELECT * FROM {self.name}'
+            sql_code = f'SELECT * FROM {_safe_name(self.name)}'
         else:
-            sql_code = self.name
+            sql_code = _safe_name(self.name)
 
         return CompiledSQL(sql_code, self)
 
@@ -330,7 +330,7 @@ class Desc(Sql):
 
     type = property(X.expr.type)
 
-_reserved = {'index', 'create', 'unique', 'table', 'select', 'where', 'group', 'by', 'over'}
+_reserved = {'index', 'create', 'unique', 'table', 'select', 'where', 'group', 'by', 'over', 'user'}
 
 @dataclass
 class Name(Sql):
@@ -346,7 +346,7 @@ class Name(Sql):
 def _safe_name(base):
     "Return a name that is safe for use as variable. Must be consistent (pure func)"
     if base.lower() in _reserved:
-        return base + "_"
+        return '"%s"' % base
     return base
 
 @dataclass
@@ -378,7 +378,7 @@ class Insert(Sql):
     type = types.null
 
     def _compile(self, qb):
-        return f'INSERT INTO {self.table_type.name}({", ".join(self.columns)}) SELECT * FROM ' + self.query.compile(qb).text
+        return f'INSERT INTO "{self.table_type.name}"({", ".join(self.columns)}) SELECT * FROM ' + self.query.compile(qb).text
 
 @dataclass
 class InsertConsts(Sql):
@@ -390,7 +390,7 @@ class InsertConsts(Sql):
     def _compile(self, qb):
         assert self.values
 
-        q = ['INSERT INTO', self.table.name,
+        q = ['INSERT INTO', _safe_name(self.table.name),
              "(", ', '.join(self.cols), ")",
              "VALUES",
              "(", ', '.join(v.compile(qb).text for v in self.values), ")",

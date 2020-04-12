@@ -285,7 +285,8 @@ class SetType(Collection):
 
 
 class Column:
-    pass
+    def repr(self, pql):
+        return self.type.repr(pql)
 
 @dataclass
 class TableType(Collection):

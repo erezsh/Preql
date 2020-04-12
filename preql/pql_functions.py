@@ -2,7 +2,7 @@ from copy import copy
 from typing import Optional
 
 from .utils import safezip, listgen, SafeDict
-from .exceptions import pql_TypeError, pql_JoinError
+from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError
 
 from . import pql_objects as objects
 from . import pql_types as types
@@ -52,6 +52,32 @@ from .evaluate import evaluate, localize
 #     return '%s' % inst.code.compile(qb).text
 
 
+
+def _pql_PY_callback(state: State, var: str):
+    var = var.group()
+    assert var[0] == '$'
+    var_name = var[1:]
+    obj = state.get_var(var_name)
+    inst = evaluate(state, obj)
+
+    if not isinstance(inst, objects.ValueInstance):
+        raise pql_TypeError(None, f"Cannot convert {inst} to a Python value")
+
+    return '%s' % (inst.local_value)
+
+def pql_PY(state: State, code_expr: ast.Expr):
+    code_expr2 = evaluate(state, code_expr)
+    py_code = localize(state, code_expr2)
+
+    py_code = re.sub(r"\$\w+", lambda m: _pql_PY_callback(state, m), py_code)
+
+    try:
+        res = eval(py_code)
+    except Exception as e:
+        raise pql_ValueError(code_expr.meta, f"Python code provided returned an error: {e}")
+    return objects.new_value_instance(res)
+
+
 import re
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
@@ -94,6 +120,7 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
 
 def pql_breakpoint(state: State):
     state._py_api.start_repl()
+    return objects.null
 
 
 @dy
@@ -411,6 +438,7 @@ internal_funcs = {
     'union': pql_union,
     'substract': pql_substract,
     'SQL': pql_SQL,
+    'PY': pql_PY,
     'isa': pql_isa,
     'type': pql_type,
     'breakpoint': pql_breakpoint,

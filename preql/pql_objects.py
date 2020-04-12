@@ -177,6 +177,8 @@ class InternalFunction(Function):
         params = ", ".join(p.name for p in self.params)
         return f'<func {self.name}({params}) ...>'
 
+    meta = None     # Not defined in PQL code
+
 
 
 # Instances
@@ -363,7 +365,8 @@ class AttrInstance(AbsInstance):
 
     @property
     def code(self):
-        return self._resolve_attr().code
+        raise pql_TypeError(None, f"Operation not supported for {self.repr(None)}")
+    #     return self._resolve_attr().code
 
     def flatten_code(self):
         return self._resolve_attr().flatten_code()
@@ -373,6 +376,11 @@ class AttrInstance(AbsInstance):
 
     def _resolve_attr(self):
         return self.parent.get_attr(self.name)
+
+    def repr(self, state):
+        p = self.parent.repr(state)
+        return f'{p}.{self.name}'
+
 
 
 def merge_subqueries(instances):
