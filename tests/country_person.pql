@@ -5,7 +5,7 @@ table Country {
 
 table Person {
     name: string
-    country: Country #-> citizens
+    country: Country //-> citizens
 }
 
 isr = new Country("Israel", "he")

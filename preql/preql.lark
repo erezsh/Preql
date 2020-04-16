@@ -76,7 +76,7 @@ delete: molecule "delete" expr_list
 ?power: molecule ("**" factor)?
 
 !add_op: "+"|"-" | "&" | "|"
-!mul_op: "*"|"/"|"%"|"//"
+!mul_op: "*"|"/"|"%"|"/~"
 
 ?molecule: atom
      | func_call
@@ -133,7 +133,7 @@ var: name
 
 PK: "pk"
 NULLABLE: "?"
-COMMENT: /#[^\n]*/
+COMMENT: /#[^\n]*/ | /\/\/[^\n]*/
 _NL: ( /\r?\n[\t ]*/ | COMMENT )+
 
 DECIMAL: INT "." INT

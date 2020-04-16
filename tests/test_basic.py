@@ -57,11 +57,11 @@ class BasicTests(TestCase):
 
         assert preql("1") == 1
         assert preql("1 / 2") == 0.5
-        assert preql("10 // 3") == 3
+        assert preql("10 /~ 3") == 3
 
         # GroupBy will use the old value if TableTypes aren't versioned
-        self.assertEqual( preql("[1,2,3]{v: value//2 => sum(value)}").to_json(), [{'v':0, 'sum': 1}, {'v':1, 'sum':5}])
-        self.assertEqual( preql("[1,2,3]{value: value//2 => sum(value)}").to_json(), [{'value':0, 'sum': 1}, {'value':1, 'sum':5}])
+        self.assertEqual( preql("[1,2,3]{v: value/~2 => sum(value)}").to_json(), [{'v':0, 'sum': 1}, {'v':1, 'sum':5}])
+        self.assertEqual( preql("[1,2,3]{value: value/~2 => sum(value)}").to_json(), [{'value':0, 'sum': 1}, {'value':1, 'sum':5}])
 
 
         preql.exec("""func query1() = Country[language=="en"]{name}""")
@@ -112,7 +112,7 @@ class BasicTests(TestCase):
     def test_arith(self):
         preql = self.Preql()
         assert preql("1 + 2 / 4") == 1.5
-        assert preql("1 + 2 // 4 + 1") == 2
+        assert preql("1 + 2 /~ 4 + 1") == 2
         assert preql('"a" + "b"') == "ab"
         assert preql('"a" * 3') == "aaa" == preql('3 * "a"')
         assert preql('"ab" * 3') == "ababab" == preql('3 * "ab"')
@@ -272,7 +272,7 @@ class BasicTests(TestCase):
             x = 4
             func f1() = SQL(int, "$x+5")
             func f2() = SQL(Point, "SELECT * FROM $Point WHERE x > 2")
-            func f3() = SQL(Point, "SELECT * FROM $Point") { x: x // 2 => y}
+            func f3() = SQL(Point, "SELECT * FROM $Point") { x: x /~ 2 => y}
             zz = Point[x==2]
             func f4() = SQL(Point, "SELECT * FROM $zz") {y}
 

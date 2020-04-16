@@ -37,14 +37,14 @@ if (get_db_type() == "postgres") {
     }
 }
 
-# func sample_ratio(tbl, ratio) = SQL(type(tbl), "SELECT * FROM $tbl where abs(CAST(random() AS REAL))/9223372036854775808 < $ratio")
+// func sample_ratio(tbl, ratio) = SQL(type(tbl), "SELECT * FROM $tbl where abs(CAST(random() AS REAL))/9223372036854775808 < $ratio")
 func sample_ratio(tbl, ratio) {
     r = random()    # Will be re-evaluated for every row
     return SQL(type(tbl), "SELECT * FROM $tbl where $r < $ratio")
 }
 
 func sample_fast(tbl, size) {
-    # TODO Not working right now
+    // TODO Not working right now
     c = count(tbl)
     if (size >= c) {
         throw new ValueError("Asking for a sample size larger than the table")

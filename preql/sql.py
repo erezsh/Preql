@@ -345,9 +345,9 @@ class Name(Sql):
 
 def _safe_name(base):
     "Return a name that is safe for use as variable. Must be consistent (pure func)"
-    if base.lower() in _reserved:
-        return '"%s"' % base
-    return base
+    # if base.lower() in _reserved:
+    return '"%s"' % base
+    # return base
 
 @dataclass
 class ColumnAlias(Sql):
@@ -617,7 +617,7 @@ def arith(res_type, op, args, meta):
         op = '||'
     elif op == '/':
         arg_codes[0] = Cast(types.Float, 'float', arg_codes[0])
-    elif op == '//':
+    elif op == '/~':
         op = '/'
 
     return Arith(op, arg_codes)
