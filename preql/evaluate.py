@@ -53,7 +53,7 @@ def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
 
     state.set_var(t.name, t)   # TODO use an internal namespace
 
-    t.columns['id'] = types.IdType(t)
+    t.columns['id'] = types.IdType(t, autocount=True)
     for c in table_def.columns:
         t.columns[c.name] = resolve(state, c)
 
@@ -499,7 +499,12 @@ def apply_database_rw(state: State, u: ast.Update):
 
     # TODO Optimize: Update on condition, not id, when possible
     table = evaluate(state, u.table)
-    assert isinstance(table.type, types.TableType)
+
+    # if isinstance(table.type, types.RowType):
+    #     # XXX autocast
+    #     table = objects.TableInstance.make(table.code, table.type.table, [table])
+
+    assert isinstance(table.type, types.TableType), table.type
     assert all(f.name for f in u.fields)
 
     # TODO verify table is concrete (i.e. lvalue, not a transitory expression)

@@ -103,6 +103,7 @@ class AtomicType(AtomicOrList):
 
 
 class NullType(AtomicType):
+    name = 'null'
     # def import_result(self, res):
     #     assert res is None
     #     return None
@@ -328,6 +329,7 @@ class TableType(Collection):
         return f'{self.name}{{{", ".join(t.repr(pql) for t in self.columns.values())}}}'
 
     def _data_columns(self):
+        # XXX idtypes don't care about name?
         return [(name, c) if not isinstance(c, IdType) else "id" for name, c in self.columns.items()]
 
     def __hash__(self):
@@ -442,6 +444,7 @@ class StructType(PqlType):
 @dataclass
 class IdType(_Int):
     table: TableType
+    autocount: bool = False
 
     primary_key = True
     hide_from_init = True

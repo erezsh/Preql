@@ -397,10 +397,10 @@ null = ValueInstance.make(sql.null, types.null, [], None)
 class EmptyListInstance(TableInstance):
     """Special case, because it is untyped
     """
-    def get_attr(self, name):
-        return EmptyList
+    # def get_attr(self, name):
+    #     return EmptyList
 
-_empty_list_type = types.ListType(types.any_t)
+_empty_list_type = types.ListType(types.null)
 # from collections import defaultdict
 EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
 

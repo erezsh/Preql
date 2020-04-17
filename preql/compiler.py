@@ -63,6 +63,10 @@ def compile_type(state: State, type: types.Primitive, nullable=False):
     return _compile_type_primitive(type, nullable)
 
 @dy
+def compile_type(state: State, type: types.NullType):
+    return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
+
+@dy
 def compile_type(state: State, type: types.OptionalType):
     return compile_type(state, type.type, True)
 
@@ -203,7 +207,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     ]
 
     # Make Instance
-    new_table = objects.TableInstance.make(sql.null, new_table_type, [table])
+    new_table = objects.TableInstance.make(sql.null, new_table_type, [table] + [inst for _, inst in all_fields])
 
     groupby = []
     limit = None
@@ -313,6 +317,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
         # type_set = {i.type for i in insts}
         # if len(type_set) > 1:
         #     raise pql_TypeError(cmp.meta, "Cannot compare two different types: %s" % type_set)
+        insts = [i.primary_key() for i in insts]
         for i, inst in enumerate(insts):
             if not inst.type.composed_of(types.AtomicType):
                 raise pql_TypeError(cmp.args[i].meta.replace(parent=cmp.meta), f"Compare not implemented for type {inst.type}")

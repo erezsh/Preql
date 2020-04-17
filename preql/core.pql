@@ -22,13 +22,13 @@ func length(s) = SQL(string, "length($s)")
 
 if (get_db_type() == "postgres") {
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
-    func now() = SQL(datetime, "NOW()") # Postgres
-    func random() = SQL(datetime, "RANDOM()") # Postgres
+    func now() = SQL(datetime, "NOW()")         // Postgres
+    func random() = SQL(datetime, "RANDOM()")   // Postgres
     func pi() = SQL(float, "PI()")
 } else {
     if (get_db_type() == "sqlite") {
         func repeat(s, num) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
-        func now() = SQL(datetime, "datetime('now')") # Sqlite
+        func now() = SQL(datetime, "datetime('now')")   // Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
         func pi() = SQL(float, "3.141592653589793")
 

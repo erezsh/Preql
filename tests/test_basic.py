@@ -354,6 +354,14 @@ class BasicTests(TestCase):
         self.assertEqual( preql('"ba" in "kabab"'), True )
         self.assertEqual( preql('"bak" in "kabab"'), False )
 
+    def test_lists2(self):
+        preql = Preql()
+        preql('''
+            func in_list(x) = [1,2,3] {value in x{value}}
+            func test() = in_list([2, 3])
+        ''')
+        self.assertEqual( list(preql.test()), [{'_':x} for x in [0, 1, 1]])
+
     def test_methods(self):
         preql = Preql()
         preql('''
