@@ -5,7 +5,7 @@ from .pql_types import null
 
 
 class SqlInterface:
-    def __init__(self, debug=True):
+    def __init__(self, debug=False):
         self._debug = debug
 
     def query(self, sql, subqueries=None, qargs=(), quiet=False, state=None):

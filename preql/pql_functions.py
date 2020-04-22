@@ -156,7 +156,7 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
 def _count(state, obj: ast.Expr, table_func, name):
     obj = evaluate(state, obj)
 
-    if isinstance(obj.type, types.TableType):
+    if isinstance(obj.type, types.Collection):
         code = table_func(obj.code)
     else:
         if not isinstance(obj.type, types.Aggregated):
@@ -171,20 +171,30 @@ def pql_count(state: State, obj: ast.Expr):
     return _count(state, obj, sql.CountTable, 'count')
 
 
-def pql_temptable(state: State, expr: ast.Expr):
-    expr = evaluate(state, expr)
+def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.null):
+    # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
+    # 'const temptable' doesn't
+    expr = evaluate(state, expr_ast)
+    const = localize(state, const)
     assert isinstance(expr.type, types.Collection), expr
 
     name = state.unique_name("temp_" + expr.type.name)
-    table = types.TableType(name, copy(expr.type.columns), temporary=True, primary_keys=[['id']])
-    if 'id' not in table.columns:
-        table.columns['id'] = types.IdType(table, autocount=True)
+    columns = dict(expr.type.columns)
+
+
+    if 'id' in columns and not const:
+            raise pql_ValueError(None, "Field 'id' already exists. Rename it, or use 'const temptable' to copy it as-is.")
+
+    table = types.TableType(name, SafeDict(columns), temporary=True, primary_keys=[['id']] if 'id' in columns else [], autocount=[] if const else ['id'])
+
+    if not const:
+        table.columns['id'] = types.IdType(table)
 
     state.db.query(compile_type_def(state, table))
 
-    primary_keys, columns = table.flat_for_insert()
-    expr = exclude_fields(state, expr, primary_keys)
-    state.db.query(sql.Insert(table, columns, expr.code), expr.subqueries)
+    read_only, flat_columns = table.flat_for_insert()
+    expr = exclude_fields(state, expr, read_only)
+    state.db.query(sql.Insert(table, flat_columns, expr.code), expr.subqueries)
 
     return objects.new_table(table)
 

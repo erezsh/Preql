@@ -136,7 +136,7 @@ class BasicTests(TestCase):
         new Point(3,1)
         new Point(4,2)
 
-        backup = temptable(Point)
+        const table backup = Point
 
         func p() = Point[x==3] update{y: y + 13}
         """)
@@ -524,7 +524,7 @@ class BasicTests(TestCase):
             ("John Steinbeck", "United States"),
         ]
 
-        preql.exec("""english_countries = temptable(Country[language=="en"])""")
+        preql.exec("""english_countries = temptable(Country[language=="en"], true)""")
         res = preql("english_countries{name}")
         assert is_eq(res, [("England",), ("United States",)])
 
@@ -542,7 +542,7 @@ class BasicTests(TestCase):
         res = preql(""" temptable(join(c: Country[language=="en"], p: Person)) {person:p.name, country:c.name} """)
         assert is_eq(res, english_speakers)
 
-        res = preql(""" temptable(temptable(Person)[name=="Erez Shinan"]){name} """) # 2 temp tables
+        res = preql(""" temptable(temptable(Person, true)[name=="Erez Shinan"], true){name} """) # 2 temp tables
         assert is_eq(res, [("Erez Shinan",)])
 
     def test_copy_rows(self):
@@ -573,7 +573,7 @@ class BasicTests(TestCase):
         preql.load('country_person.pql', rel_to=__file__)
 
         preql('''
-            table p = Person
+            table p = Person {... !id}
             p += Person {name, country}
         ''')
         assert len(preql.p) == 2 * len(preql.Person)

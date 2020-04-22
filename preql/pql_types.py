@@ -62,13 +62,15 @@ class PqlType(PqlObject):
         assert type(self) is PqlType
         return 'type'
 
+    def repr_value(self, value):
+        return repr(value)
+
     def issubclass(self, t):
         # XXX this is incorrect. issubclass(int, type) returns true, when it shouldn't
         assert isinstance(t, PqlType)
         return isinstance(self, type(t))
 
     hide_from_init = False
-    primary_key = False
 
 PqlType.type = PqlType()
 
@@ -110,6 +112,10 @@ class NullType(AtomicType):
 
     def __repr__(self):
         return 'null'
+
+    def repr_value(self, value):
+        assert value is None, value
+        return repr(self)
 
 
 class Primitive(AtomicType):
@@ -154,7 +160,12 @@ class Number(Primitive):
 
 class _Int(Number):  pytype = int
 class _Float(Number):  pytype = float
-class _String(Primitive):  pytype = str
+class _String(Primitive):
+    pytype = str
+
+    def repr_value(self, value):
+        return f'"{value}"'
+
 class _Text(Primitive):  pytype = text
 class _Bool(Primitive):  pytype = bool
 
@@ -295,6 +306,7 @@ class TableType(Collection):
     columns: Dict[str, Union[PqlType, Column]]
     temporary: bool
     primary_keys: List[List[str]]
+    autocount: List[str] = field(default_factory=list)
 
     codenames: object = None
 
@@ -305,11 +317,24 @@ class TableType(Collection):
         # super().__post_init__()
         assert isinstance(self.columns, SafeDict), self.columns
 
+    # def flat_for_insert(self):
+    #     "XXX deprecated. Uses primary_keys instead of autocount"
+    #     columns = [name for name, _t in self.flatten_type()]
+    #     primary_keys = {join_names(pk) for pk in self.primary_keys}   # XXX
+    #     columns = [c for c in columns if c not in primary_keys]
+    #     return list(primary_keys), columns
+
     def flat_for_insert(self):
-        columns = [name for name, _t in self.flatten_type()]
-        primary_keys = {join_names(pk) for pk in self.primary_keys}   # XXX
-        columns = [c for c in columns if c not in primary_keys]
-        return list(primary_keys), columns
+        readonly = []
+        write = []
+        auto_count = join_names(self.autocount)
+
+        for name, t in self.flatten_type():
+            if name == auto_count:
+                readonly.append(name)
+            else:
+                write.append(name)
+        return readonly, write
 
     def params(self):
         return [(name, c) for name, c in self.columns.items() if not c.hide_from_init]
@@ -444,9 +469,7 @@ class StructType(PqlType):
 @dataclass
 class IdType(_Int):
     table: TableType
-    autocount: bool = False
 
-    primary_key = True
     hide_from_init = True
 
     def __repr__(self):

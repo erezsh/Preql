@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate
-from .interp_common import create_engine, call_pql_func
+from .interp_common import create_engine, call_pql_func, State
 
 
 def _make_const(value):
@@ -21,6 +21,43 @@ def _call_pql_func(state, name, args):
 
 TABLE_PREVIEW_SIZE = 10
 MAX_AUTO_COUNT = 10000
+
+
+
+def table_limit(self, state, limit):
+    return call_pql_func(state, 'limit', [self, _make_const(limit)])
+
+def table_repr(self, state):
+    assert isinstance(state, State)
+    count = _call_pql_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)])
+    if count == MAX_AUTO_COUNT:
+        count_str = f'count>={count}'
+    else:
+        count_str = f'count={count}'
+
+    rows = list(_call_pql_func(state, 'limit', [self, _make_const(TABLE_PREVIEW_SIZE)]))
+    if isinstance(self.type, types.ListType):
+        rows = [{'value': x} for x in rows]
+
+    post = '\n\t...' if len(rows) < count else ''
+
+    if state.fmt == 'html':
+        header = f"<pre>table {self.type.name}, {count_str}</pre>"
+        if rows:
+            cols = list(rows[0])
+            ths = '<tr>%s</tr>' % ' '.join([f"<th>{col}</th>" for col in cols])
+            trs = [
+                '<tr>%s</tr>' % ' '.join([f"<td>{v}</td>" for v in row.values()])
+                for row in rows
+            ]
+
+        return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs)) + post
+    else:
+        header = f"table {self.type.name}, {count_str}\n"
+        return header + tabulate.tabulate(rows, headers="keys", numalign="right") + post
+
+objects.TableInstance.repr = table_repr
+
 
 class TablePromise:
     def __init__(self, state, inst):
@@ -53,29 +90,7 @@ class TablePromise:
         return res
 
     def __repr__(self):
-        count = _call_pql_func(self._state, 'count', [self[:MAX_AUTO_COUNT]])
-        if count == MAX_AUTO_COUNT:
-            count_str = f'count>={count}'
-        else:
-            count_str = f'count={count}'
-
-        rows = list(_call_pql_func(self._state, 'limit', [self._inst, ast.Const(None, types.Int, TABLE_PREVIEW_SIZE)]))
-        post = '\n\t...' if len(rows) < count else ''
-
-        if self._state.fmt == 'html':
-            header = f"<pre>table {self._inst.type.name}, {count_str}</pre>"
-            if rows:
-                cols = list(rows[0])
-                ths = '<tr>%s</tr>' % ' '.join([f"<th>{col}</th>" for col in cols])
-                trs = [
-                    '<tr>%s</tr>' % ' '.join([f"<td>{v}</td>" for v in row.values()])
-                    for row in rows
-                ]
-
-            return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs)) + post
-        else:
-            header = f"table {self._inst.type.name}, {count_str}\n"
-            return header + tabulate.tabulate(rows, headers="keys", numalign="right") + post
+        return self._inst.repr(self._state)
 
 
 def promise(state, inst):
@@ -95,7 +110,6 @@ class Interface:
 
         self.engine = create_engine(db_uri, debug=debug)
         self.interp = Interpreter(self.engine)
-        self.save_last = save_last
 
         self.interp.state._py_api = self # TODO proper api
 
@@ -123,15 +137,13 @@ class Interface:
         assert not isinstance(res, ast.Ast), res
         return promise(self.interp.state, res)  # TODO session, not state
 
+    def run_code(self, pq, **args):
+        pql_args = {name: objects.from_python(value) for name, value in args.items()}
+        return self.interp.execute_code(pq + "\n", pql_args)
 
     def __call__(self, pq, **args):
-        pql_args = {name: objects.from_python(value) for name, value in args.items()}
-
-        res = self.interp.execute_code(pq + "\n", pql_args)
+        res = self.run_code(pq, **args)
         if res:
-            if self.save_last:
-                self.interp.set_var(self.save_last, res)
-
             return self._wrap_result(res)
 
     def load(self, fn, rel_to=None):

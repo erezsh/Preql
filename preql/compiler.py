@@ -19,8 +19,17 @@ def compile_type_def(state: State, table: types.TableType) -> sql.Sql:
     columns = []
 
     pks = {types.join_names(pk) for pk in table.primary_keys}
+    autocount = types.join_names(table.autocount)
     for name, c in table.flatten_type():
-        type_ = compile_type(state, c)
+        if name == autocount:
+            assert isinstance(c, types.IdType)  # Right now nothing else is supported
+            if state.db.target == sql.postgres:
+                type_ = "SERIAL" # Postgres
+            else:
+                type_ = "INTEGER"   # TODO non-int idtypes
+        else:
+            type_ = compile_type(state, c)
+
         columns.append( f'"{name}" {type_}' )
         if isinstance(c, types.RelationalColumn):
             # TODO any column, using projection / get_attr
@@ -72,11 +81,7 @@ def compile_type(state: State, type: types.OptionalType):
 
 @dy
 def compile_type(state: State, idtype: types.IdType, nullable=False):
-    # XXX test if auto-id, not if nullable
-    if state.db.target == sql.postgres and not nullable:
-        s = "SERIAL" # Postgres
-    else:
-        s = "INTEGER"
+    s = "INTEGER"   # TODO non-int idtypes
     if not nullable:
         s += " NOT NULL"
     return s
@@ -503,10 +508,15 @@ def compile_to_inst(state: State, sel: ast.Selection):
     if not isinstance(table, objects.Instance):
         return sel.replace(table=table)
 
-    assert_type(sel.meta, table.type, types.TableType, "Selection expected an object of type '%s', instead got '%s'")
+    assert_type(sel.meta, table.type, types.Collection, "Selection expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.all_attrs()):
         conds = evaluate(state, sel.conds)
+
+    for i, c in enumerate(conds):
+        if not isinstance(c.type, types._Bool):
+            meta = sel.conds[i].meta.replace(parent=sel.meta)
+            raise exc.pql_TypeError(meta, f"Selection expected boolean, got {c.type}")
 
     code = sql.table_selection(table, [c.code for c in conds])
 

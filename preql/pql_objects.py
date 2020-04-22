@@ -61,6 +61,7 @@ class Function(types.PqlObject):
 
 
     def match_params(self, args):
+
         # If no keyword arguments, matching is much simpler and faster
         if all(not isinstance(a, ast.NamedField) for a in args):
             return self.match_params_fast(args)
@@ -266,6 +267,9 @@ class ValueInstance(Instance):
             obj = self.local_value[name]
             return from_python(obj)   # XXX Maybe use 'code' to be more efficient?
         return super().get_attr(name)
+
+    def repr(self, state):
+        return self.type.repr_value(self.local_value)
 
 
 @dataclass

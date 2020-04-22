@@ -12,7 +12,9 @@ proj_exprs: _ml_seperated{named_expr} -> as_list
 ml_list{item}: _ml_seperated{item} -> as_list   // multi-line list
 
 table_def: "table" name "{" _ml_sep? _table_contents "}" _NL
-         | "table" name "=" expr _NL -> table_def_by_expr
+         | [CONST] "table" name "=" expr _NL -> table_def_by_expr
+
+CONST: "const"
 
 func_defs: func_def* -> as_list
 _table_contents: ml_list{col_def}? func_defs

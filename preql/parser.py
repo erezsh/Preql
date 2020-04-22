@@ -158,8 +158,8 @@ class T(Transformer):
     try_catch = ast.Try
     one = lambda self, meta, nullable, expr: ast.One(meta, expr, nullable is not None)
 
-    def table_def_by_expr(self, meta, name, table_expr):
-        return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr]))
+    def table_def_by_expr(self, meta, const, name, table_expr):
+        return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, const == 'const']))
 
     @v_args(inline=False)
     def exclude(self, names):

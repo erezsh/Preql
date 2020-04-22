@@ -46,14 +46,14 @@ def resolve(state: State, struct_def: ast.StructDef):
 
 @dy
 def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
-    t = types.TableType(table_def.name, SafeDict(), False, [['id']])
+    t = types.TableType(table_def.name, SafeDict(), False, [['id']], ['id'])
     if table_def.methods:
         methods = evaluate(state, table_def.methods)
         t.attrs.update({m.userfunc.name:m.userfunc for m in methods})
 
     state.set_var(t.name, t)   # TODO use an internal namespace
 
-    t.columns['id'] = types.IdType(t, autocount=True)
+    t.columns['id'] = types.IdType(t)
     for c in table_def.columns:
         t.columns[c.name] = resolve(state, c)
 
@@ -106,6 +106,7 @@ def _execute(state: State, var_def: ast.SetValue):
     res = evaluate(state, var_def.value)
     # res = apply_database_rw(state, res)
     _set_value(state, var_def.name, res)
+    return res
 
 
 @dy

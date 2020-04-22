@@ -630,6 +630,7 @@ def value(x):
         return null
 
     t = types.Primitive.by_pytype[type(x)]
+
     if t is types.DateTime:
         # TODO Better to pass the object instead of a string?
         return Primitive(t, repr(str(x)))

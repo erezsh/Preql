@@ -13,6 +13,7 @@ asyncio.set_event_loop(loop)
 from . import Preql
 from . import pql_types as types
 from . import pql_ast as ast
+from .api import TablePromise
 from .exceptions import PreqlError
 
 
@@ -67,7 +68,7 @@ from pygments.lexers.python import Python3Lexer
 from prompt_toolkit.lexers import PygmentsLexer
 
 def start_repl(p):
-    p.save_last = '_'   # XXX A little hacky
+    save_last = '_'   # XXX A little hacky
 
     try:
         session = PromptSession()
@@ -81,13 +82,17 @@ def start_repl(p):
             start_time = time()
             try:
                 # Evaluate (Really just compile)
-                res = p(code)
+                res = p.run_code(code)
 
                 # Print
                 if res is not None:
-                    if isinstance(res, types.PqlObject):
-                        res = res.repr(p.interp)
+                    assert isinstance(res, types.PqlObject)
 
+                    if save_last:
+                        p.interp.set_var(save_last, res)
+
+                    # res = p._wrap_result(res)
+                    res = res.repr(p.interp.state)
                     print(res)
 
             except PreqlError as e:
