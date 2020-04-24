@@ -97,7 +97,9 @@ class pql_JoinError(PreqlError):
 class pql_NotImplementedError(PreqlError):
     message: str
 
-
+@dataclass
+class pql_ExitInterp(Exception):
+    value: object
 
 @dataclass
 class ReturnSignal(Exception):

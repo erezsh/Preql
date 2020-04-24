@@ -217,7 +217,10 @@ class Instance(AbsInstance):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
     def repr(self, state):
-        return f'<instance of {self.type.repr(state)}>'
+        from .evaluate import localize
+        return repr(localize(state, self))
+        # breakpoint()
+        # return f'<instance of {self.type.repr(state)}>'
 
     def __post_init__(self):
         assert not self.type.composed_of((types.StructType, types.Aggregated, types.TableType)), self

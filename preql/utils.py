@@ -112,4 +112,17 @@ class Benchmark:
         for total, name in scores:
             print('%.4f\t%s' % (total, name))
 
+
+def classify_bool(seq, pred):
+    true_elems = []
+    false_elems = []
+
+    for elem in seq:
+        if pred(elem):
+            true_elems.append(elem)
+        else:
+            false_elems.append(elem)
+
+    return true_elems, false_elems
+
 benchmark = Benchmark()

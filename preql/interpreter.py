@@ -12,22 +12,10 @@ from .interp_common import new_value_instance
 
 from .pql_functions import internal_funcs, joins
 
-import inspect
-def _canonize_default(d):
-    return None if d is inspect._empty else d
-
-def _create_internal_func(fname, f):
-    sig = inspect.signature(f)
-    return objects.InternalFunction(fname, [
-        objects.Param(None, pname, types.any_t, _canonize_default(sig.parameters[pname].default))
-        for pname, type_ in list(f.__annotations__.items())[1:]
-    ], f)
 
 def initial_namespace():
     ns = SafeDict({p.name: p for p in types.Primitive.by_pytype.values()})
-    ns.update({
-        fname: _create_internal_func(fname, f) for fname, f in internal_funcs.items()
-    })
+    ns.update(internal_funcs)
     ns.update(joins)
     ns['list'] = types.ListType(types.any_t)
     ns['aggregate'] = types.Aggregated(types.any_t)

@@ -157,9 +157,9 @@ class Interface:
         finally:
             self.commit()
 
-    def start_repl(self):
+    def start_repl(self, *args):
         from .repl import start_repl
-        start_repl(self)
+        start_repl(self, *args)
 
     def commit(self):
         return self.engine.commit()

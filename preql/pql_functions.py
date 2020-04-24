@@ -1,8 +1,9 @@
+import inspect
 from copy import copy
 from typing import Optional
 
 from .utils import safezip, listgen, SafeDict
-from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError
+from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp
 
 from . import pql_objects as objects
 from . import pql_types as types
@@ -118,8 +119,27 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
 
     # return objects.Instance.make(code, type_, instances)
 
-def pql_breakpoint(state: State):
-    state._py_api.start_repl()
+import inspect
+def _canonize_default(d):
+    return None if d is inspect._empty else d
+
+def create_internal_func(fname, f):
+    sig = inspect.signature(f)
+    return objects.InternalFunction(fname, [
+        objects.Param(None, pname, types.any_t, _canonize_default(sig.parameters[pname].default))
+        for pname, type_ in list(f.__annotations__.items())[1:]
+    ], f)
+
+
+def pql_brk_continue(state):
+    "Continue the execution of the code (exit debug interpreter)"
+    pql_exit(state, objects.null)
+
+
+def pql_debug(state: State):
+    "Hop into a debug session with REPL"
+    with state.use_scope(breakpoint_funcs):
+        state._py_api.start_repl('debug> ')
     return objects.null
 
 
@@ -146,6 +166,7 @@ def _pql_issubclass(a: types.Aggregated, b: types.Aggregated):
 
 
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
+    "Returns whether the give object is an instance of the given type"
     inst = evaluate(state, expr)
     type_ = evaluate(state, type_expr)
     # res = isinstance(inst.type, type_)
@@ -168,10 +189,15 @@ def _count(state, obj: ast.Expr, table_func, name):
     return objects.Instance.make(code, types.Int, [obj])
 
 def pql_count(state: State, obj: ast.Expr):
+    "Count how many rows are in the given table, or in the projected column."
     return _count(state, obj, sql.CountTable, 'count')
 
 
 def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.null):
+    """Generate a temporary table with the contents of the given table
+
+    It will remain available until the db-session ends, unless manually removed.
+    """
     # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
     # 'const temptable' doesn't
     expr = evaluate(state, expr_ast)
@@ -200,7 +226,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
 
 def pql_get_db_type(state: State):
     """
-    Returns a string representing the db type that's currently connected.
+    Returns a string representing the type of the active database.
 
     Possible values are:
         - "sqlite"
@@ -225,15 +251,19 @@ def sql_bin_op(state, op, table1, table2, name):
     return objects.TableInstance.make(code, t1.type, [t1, t2])
 
 def pql_intersect(state, t1, t2):
+    "Intersect two tables"
     return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
 
 def pql_substract(state, t1, t2):
+    "Substract two tables (except)"
     return sql_bin_op(state, "EXCEPT", t1, t2, "substract")
 
 def pql_union(state, t1, t2):
+    "Union two tables"
     return sql_bin_op(state, "UNION", t1, t2, "union")
 
 def pql_concat(state, t1, t2):
+    "Concatenate two tables (union all)"
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
 
 
@@ -284,10 +314,13 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
     return objects.TableInstance.make(code, table_type, [a,b])
 
 def pql_join(state, tables):
+    "Inner join two tables into a new projection {t1, t2}"
     return _join(state, "JOIN", tables)
 def pql_leftjoin(state, tables):
+    "Left join two tables into a new projection {t1, t2}"
     return _join(state, "LEFT JOIN", tables, nullable=[False, True])
 def pql_joinall(state: State, tables):
+    "Cartesian product of two tables into a new projection {t1, t2}"
     return _join(state, "JOIN", tables, True)
 
 def _auto_join(state, join, ta, tb):
@@ -328,6 +361,7 @@ def pql_type(state: State, obj: ast.Expr):
     return t
 
 def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
+    "Attempt to cast an object to a specified type"
     inst = evaluate(state, obj)
     type_ = evaluate(state, type_)
     if not isinstance(type_, types.PqlType):
@@ -407,14 +441,14 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
         param_str = ', '.join(p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in inst.params)
         if inst.param_collector is not None:
             param_str += ", ...keyword_args"
-        lines = [f"func {inst.name}({param_str})"]
+        lines = ['', f"func {inst.name}({param_str})",'']
         if isinstance(inst, objects.InternalFunction) and inst.func.__doc__:
             lines += [inst.func.__doc__]
     else:
         raise pql_TypeError(None, "help() only accepts functions at the moment")
 
-    text = '\n'.join(lines)
-    return new_value_instance(text, types.String)
+    text = '\n'.join(lines) + '\n'
+    return new_value_instance(text).replace(type=types.Text)
 
 def pql_ls(state: State, obj: types.PqlObject = objects.null):
     """
@@ -437,7 +471,33 @@ def pql_ls(state: State, obj: types.PqlObject = objects.null):
 
 
 
-internal_funcs = {
+def create_internal_funcs(d):
+    new_d = {}
+    for names, f in d.items():
+        if isinstance(names, str):
+            names = (names,)
+        for name in names:
+            new_d[name] = create_internal_func(name, f)
+    return new_d
+
+breakpoint_funcs = create_internal_funcs({
+    ('c', 'continue'): pql_brk_continue
+})
+
+
+def pql_exit(state, value: types.object_t = None):
+    """Exit the current interpreter instance.
+
+    Can be used from running code, or the REPL.
+
+    If the current interpreter is nested within another Preql interpreter (e.g. by using debug()),
+    exit() will return to the parent interpreter.
+    """
+    raise pql_ExitInterp(value)
+
+
+internal_funcs = create_internal_funcs({
+    'exit': pql_exit,
     'help': pql_help,
     'ls': pql_ls,
     'connect': pql_connect,
@@ -451,11 +511,12 @@ internal_funcs = {
     'PY': pql_PY,
     'isa': pql_isa,
     'type': pql_type,
-    'breakpoint': pql_breakpoint,
+    'debug': pql_debug,
     'get_db_type': pql_get_db_type,
     '_cast_int': pql_cast_int,
     'cast': pql_cast,
-}
+})
+
 joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),
     'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param(None, 'tables')),

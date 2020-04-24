@@ -14,7 +14,7 @@ from . import Preql
 from . import pql_types as types
 from . import pql_ast as ast
 from .api import TablePromise
-from .exceptions import PreqlError
+from .exceptions import PreqlError, pql_ExitInterp
 
 
 
@@ -67,15 +67,14 @@ from prompt_toolkit import PromptSession
 from pygments.lexers.python import Python3Lexer
 from prompt_toolkit.lexers import PygmentsLexer
 
-def start_repl(p):
+def start_repl(p, prompt=' >> '):
     save_last = '_'   # XXX A little hacky
 
     try:
         session = PromptSession()
         while True:
             # Read
-            # code = session.prompt(' >> ', lexer=PygmentsLexer(Python3Lexer))
-            code = session.prompt(' >> ')
+            code = session.prompt(prompt, lexer=PygmentsLexer(Python3Lexer))
             if not code.strip():
                 continue
 
@@ -101,6 +100,8 @@ def start_repl(p):
                 # else:
                 print(e)
                 continue
+            except pql_ExitInterp as e:
+                return
             except Exception as e:
                 print("Error:")
                 logging.exception(e)

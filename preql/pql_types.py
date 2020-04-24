@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 
-from .utils import dataclass, listgen, concat_for, SafeDict
+from .utils import dataclass, listgen, concat_for, SafeDict, classify_bool
 from . import exceptions as exc
 from dataclasses import field, replace
 
@@ -166,7 +166,12 @@ class _String(Primitive):
     def repr_value(self, value):
         return f'"{value}"'
 
-class _Text(Primitive):  pytype = text
+class _Text(Primitive):
+    pytype = text
+
+    def repr_value(self, value):
+        return str(value)
+
 class _Bool(Primitive):  pytype = bool
 
 Int = _Int()
@@ -317,24 +322,10 @@ class TableType(Collection):
         # super().__post_init__()
         assert isinstance(self.columns, SafeDict), self.columns
 
-    # def flat_for_insert(self):
-    #     "XXX deprecated. Uses primary_keys instead of autocount"
-    #     columns = [name for name, _t in self.flatten_type()]
-    #     primary_keys = {join_names(pk) for pk in self.primary_keys}   # XXX
-    #     columns = [c for c in columns if c not in primary_keys]
-    #     return list(primary_keys), columns
-
     def flat_for_insert(self):
-        readonly = []
-        write = []
         auto_count = join_names(self.autocount)
-
-        for name, t in self.flatten_type():
-            if name == auto_count:
-                readonly.append(name)
-            else:
-                write.append(name)
-        return readonly, write
+        names = [name for name,t in self.flatten_type()]
+        return classify_bool(names, lambda name: name==auto_count)
 
     def params(self):
         return [(name, c) for name, c in self.columns.items() if not c.hide_from_init]
@@ -396,6 +387,7 @@ class RelationalColumn(Column):
     def get_pk(self):   # XXX Yikes
         t = self.type.kernel_type()
         pks = [join_names(pk) for pk in t.primary_keys]
+        assert len(pks) == 1
         return self.type.get_column_type(pks[0])    # TODO what if there's more than one? Struct relation.. ??
 
     def __hash__(self):
