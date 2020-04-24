@@ -362,6 +362,29 @@ class BasicTests(TestCase):
         ''')
         self.assertEqual( list(preql.test()), [{'_':x} for x in [0, 1, 1]])
 
+    def test_rowtype(self):
+        preql = Preql()
+        preql('''
+            table A { x: int }
+            a = new A(4)
+
+            table B { a: A }
+            b = new B(a)
+
+            eq1 = (a == a)
+            eq2 = (b == b)
+            eq3 = (a == b)
+
+        ''')
+
+        self.assertEqual(preql.a, {'id': 1, 'x': 4})
+        self.assertEqual(preql('a.x'), 4)
+        self.assertEqual(preql('b.a.x'), 4)
+
+        self.assertEqual(preql.eq1, True)
+        self.assertEqual(preql.eq2, True)
+        # self.assertEqual(preql.eq3, False)    # TODO check table type
+
     def test_methods(self):
         preql = Preql()
         preql('''
