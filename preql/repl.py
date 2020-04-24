@@ -12,6 +12,7 @@ asyncio.set_event_loop(loop)
 
 from . import Preql
 from . import pql_types as types
+from . import pql_objects as objects
 from . import pql_ast as ast
 from .api import TablePromise
 from .exceptions import PreqlError, pql_ExitInterp
@@ -65,6 +66,7 @@ class TableWrapper:
 from prompt_toolkit import prompt
 from prompt_toolkit import PromptSession
 from pygments.lexers.python import Python3Lexer
+from pygments.lexers.go import GoLexer
 from prompt_toolkit.lexers import PygmentsLexer
 
 def start_repl(p, prompt=' >> '):
@@ -74,7 +76,7 @@ def start_repl(p, prompt=' >> '):
         session = PromptSession()
         while True:
             # Read
-            code = session.prompt(prompt, lexer=PygmentsLexer(Python3Lexer))
+            code = session.prompt(prompt, lexer=PygmentsLexer(GoLexer))
             if not code.strip():
                 continue
 
@@ -84,13 +86,12 @@ def start_repl(p, prompt=' >> '):
                 res = p.run_code(code)
 
                 # Print
-                if res is not None:
+                if res is not None and res is not objects.null:
                     assert isinstance(res, types.PqlObject)
 
                     if save_last:
                         p.interp.set_var(save_last, res)
 
-                    # res = p._wrap_result(res)
                     res = res.repr(p.interp.state)
                     print(res)
 

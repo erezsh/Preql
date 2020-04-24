@@ -25,7 +25,7 @@ MAX_AUTO_COUNT = 10000
 
 
 def table_limit(self, state, limit):
-    return call_pql_func(state, 'limit', [self, _make_const(limit)])
+    return call_pql_func(state, '_core_limit', [self, _make_const(limit)])
 
 def table_repr(self, state):
     assert isinstance(state, State)
@@ -35,7 +35,8 @@ def table_repr(self, state):
     else:
         count_str = f'count={count}'
 
-    rows = list(_call_pql_func(state, 'limit', [self, _make_const(TABLE_PREVIEW_SIZE)]))
+    # rows = list(_call_pql_func(state, 'limit', [self, _make_const(TABLE_PREVIEW_SIZE)]))
+    rows = localize(state, table_limit(self, state, TABLE_PREVIEW_SIZE))
     if isinstance(self.type, types.ListType):
         rows = [{'value': x} for x in rows]
 
@@ -84,7 +85,7 @@ class TablePromise:
         if isinstance(index, slice):
             offset = index.start or 0
             limit = index.stop - offset
-            return call_pql_func(self._state, 'limit_offset', [self._inst, _make_const(limit), _make_const(offset)])
+            return call_pql_func(self._state, '_core_limit_offset', [self._inst, _make_const(limit), _make_const(offset)])
 
         res ,= localize(self._state, evaluate(self._state, self[index:1]))
         return res

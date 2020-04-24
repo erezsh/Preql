@@ -136,6 +136,10 @@ def pql_brk_continue(state):
     pql_exit(state, objects.null)
 
 
+def pql_breakpoint(state: State):
+    breakpoint()
+    return objects.null
+
 def pql_debug(state: State):
     "Hop into a debug session with REPL"
     with state.use_scope(breakpoint_funcs):
@@ -512,6 +516,7 @@ internal_funcs = create_internal_funcs({
     'isa': pql_isa,
     'type': pql_type,
     'debug': pql_debug,
+    '_breakpoint': pql_breakpoint,
     'get_db_type': pql_get_db_type,
     '_cast_int': pql_cast_int,
     'cast': pql_cast,

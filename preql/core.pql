@@ -20,6 +20,11 @@ func upper(s) = SQL(string, "upper($s)")
 func lower(s) = SQL(string, "lower($s)")
 func length(s) = SQL(string, "length($s)")
 
+// Builtins hack, so they won't collide with locals. Just put them in a module
+_core_limit = limit
+_core_limit_offset = limit_offset
+//
+
 if (get_db_type() == "postgres") {
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
     func now() = SQL(datetime, "NOW()")         // Postgres

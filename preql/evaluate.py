@@ -288,7 +288,8 @@ def simplify(state: State, funccall: ast.FuncCall):
 
     if not isinstance(func, objects.Function):
         meta = funccall.func.meta
-        meta = meta.replace(parent=meta)
+        if meta:
+            meta = meta.replace(parent=meta)
         raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
 
     return eval_func_call(state, func, funccall.args, funccall.meta)
