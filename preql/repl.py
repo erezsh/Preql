@@ -87,7 +87,7 @@ def start_repl(p, prompt=' >> '):
 
                 # Print
                 if res is not None and res is not objects.null:
-                    assert isinstance(res, types.PqlObject)
+                    assert isinstance(res, types.PqlObject), (res, type(res))
 
                     if save_last:
                         p.interp.set_var(save_last, res)

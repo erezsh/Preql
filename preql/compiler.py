@@ -434,8 +434,7 @@ def compile_to_inst(state: State, c: ast.Const):
 def compile_to_inst(state: State, d: ast.Dict_):
     elems = {k:evaluate(state, objects.from_python(v)) for k,v in d.elems.items()}
     t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
-    code = sql.RowDict({k:v.code for k,v in elems.items()})
-    return objects.ValueInstance.make(code, types.RowType(t), [], d.elems)
+    return objects.RowInstance(types.RowType(t), elems)
 
 @dy
 def compile_to_inst(state: State, lst: ast.List_):
@@ -450,6 +449,7 @@ def compile_to_inst(state: State, lst: ast.List_):
         return objects.EmptyList
 
     elems = evaluate(state, lst.elems)
+    elems = [e.primary_key() if isinstance(e,objects.RowInstance) else e for e in elems]    # XXX wat?
 
     type_set = {e.type for e in elems}
     if len(type_set) > 1:

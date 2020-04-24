@@ -49,7 +49,7 @@ def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
     t = types.TableType(table_def.name, SafeDict(), False, [['id']], ['id'])
     if table_def.methods:
         methods = evaluate(state, table_def.methods)
-        t.attrs.update({m.userfunc.name:m.userfunc for m in methods})
+        t.dyn_attrs.update({m.userfunc.name:m.userfunc for m in methods})
 
     state.set_var(t.name, t)   # TODO use an internal namespace
 
@@ -471,8 +471,16 @@ def apply_database_rw(state: State, o: ast.One):
 
     row ,= rows
     rowtype = types.RowType(table.type)
-    # XXX ValueInstance is the right object? Why not throw away 'code'? Reusing it is inefficient
-    return objects.ValueInstance.make(table.code, rowtype, [table], row)
+
+    # TODO turn idtype into RowType? Or maybe this isn't the place
+    if isinstance(table.type, types.TableType):
+        d = {k: new_value_instance(v, table.type.get_column_type(k), True) for k, v in row.items()}
+        return objects.RowInstance(rowtype, d)
+    else:
+        assert isinstance(table.type, types.ListType)
+        # Must be list
+        return new_value_instance(row)
+
 
 @dy
 def apply_database_rw(state: State, d: ast.Delete):
@@ -563,8 +571,8 @@ def apply_database_rw(state: State, new: ast.NewRows):
     ids = []
     for row in rows:
         matched = cons.match_params([objects.from_python(v) for v in row.values()])
-        destructured_pairs = _destructure_param_match(state, new.meta, matched)
-        ids += [_new_row(state, obj, destructured_pairs)]
+        # destructured_pairs = _destructure_param_match(state, new.meta, matched)
+        ids += [_new_row(state, new.meta, obj, matched)]
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
     # return ast.List_(new.meta, [new_value_instance(rowid, obj.columns['id'], force_type=True) for rowid in ids])
@@ -575,7 +583,10 @@ def apply_database_rw(state: State, new: ast.NewRows):
 def _destructure_param_match(state, meta, param_match):
     # TODO use cast rather than a ad-hoc hardwired destructure
     for k, v in param_match:
-        v = localize(state, evaluate(state, v))
+        if isinstance(v, objects.RowInstance):
+            v = v.primary_key()
+        v = localize(state, v)
+
         if isinstance(k.type, types.StructType):
             names = [name for name, t in k.orig.col_type.flatten_type([k.name])]
             if not isinstance(v, list):
@@ -586,14 +597,22 @@ def _destructure_param_match(state, meta, param_match):
         else:
             yield k.name, v
 
-def _new_row(state, table, destructured_pairs):
+def _new_row(state, meta, table, matched):
+    matched = [(k, evaluate(state, v)) for k, v in matched]
+    destructured_pairs = _destructure_param_match(state, meta, matched)
+
     keys = [name for (name, _) in destructured_pairs]
     values = [sql.value(v) for (_,v) in destructured_pairs]
+    assert keys and values
     # TODO use regular insert?
     q = sql.InsertConsts(sql.TableName(table, table.name), keys, values)
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
-    return new_value_instance(rowid, table.columns['id'], force_type=True)  # XXX find a nicer way
+
+    # return new_value_instance(rowid, types.RowType(table), force_type=True)  # XXX find a nicer way
+    d = SafeDict({'id': objects.new_value_instance(rowid)})
+    d.update({p.name:v for p, v in matched})
+    return objects.RowInstance(types.RowType(table), d)
 
 
 @dy
@@ -621,8 +640,7 @@ def apply_database_rw(state: State, new: ast.New):
     cons = TableConstructor.make(table.type)
     matched = cons.match_params(new.args)
 
-    destructured_pairs = _destructure_param_match(state, new.meta, matched)
-    rowid = _new_row(state, table.type, destructured_pairs)
+    rowid = _new_row(state, new.meta, table.type, matched)
     return rowid
     # return new_value_instance(rowid, table.type.columns['id'], force_type=True)  # XXX find a nicer way
     # expr = ast.One(None, ast.Selection(None, table, [ast.Compare(None, '==', [ast.Name(None, 'id'), new_value_instance(rowid)])]), False)
@@ -714,6 +732,14 @@ def _resolve_sql_parameters(state, node):
     # 2. Resolve parameters before compiling. Eqv to (1) but slower
     # return __resolve_sql_parameters(state.ns, node)
 
+
+@dy
+def localize(state, inst: objects.AbsInstance):
+    raise NotImplementedError()
+
+@dy
+def localize(state, inst: objects.RowInstance):
+    return {k: localize(state, v) for k, v in inst.attrs.items()}
 
 @dy
 def localize(state, inst: objects.Instance):

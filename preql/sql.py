@@ -388,7 +388,7 @@ class InsertConsts(Sql):
     type = types.null
 
     def _compile(self, qb):
-        assert self.values
+        assert self.values, self
 
         q = ['INSERT INTO', _safe_name(self.table.name),
              "(", ', '.join(self.cols), ")",

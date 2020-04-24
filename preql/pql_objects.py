@@ -4,7 +4,7 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
-from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for, X
+from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for, X, listgen
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import settings
 from . import pql_types as types
@@ -47,6 +47,7 @@ class Function(types.PqlObject):
     def type(self):
         return types.FunctionType(tuple(p.type or types.any_t for p in self.params), self.param_collector is not None)
 
+    @listgen
     def match_params_fast(self, args):
         for i, p in enumerate(self.params):
             if i < len(args):
@@ -266,9 +267,12 @@ class ValueInstance(Instance):
     local_value: object
 
     def get_attr(self, name):
-        if isinstance(self.type, types.RowType):
-            obj = self.local_value[name]
-            return from_python(obj)   # XXX Maybe use 'code' to be more efficient?
+        assert not isinstance(self.type, types.RowType)
+            # try:
+            #     obj = self.local_value[name]
+            # except KeyError:
+            #     raise pql_AttributeError(None, name)
+            # return from_python(obj)   # XXX Maybe use 'code' to be more efficient?
         return super().get_attr(name)
 
     def repr(self, state):
@@ -291,7 +295,7 @@ class TableInstance(Instance):
 
     def all_attrs(self):
         # XXX hacky way to write it
-        attrs = {n:self.get_attr(n) for n,f in self.type.attrs.items()}
+        attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
         return SafeDict(attrs).update(self.__columns)
 
 
@@ -336,29 +340,48 @@ class AggregatedInstance(AbsInstance):
 @dataclass
 class StructInstance(AbsInstance):
     type: types.PqlType
-    members: dict
+    attrs: Dict[str, types.PqlObject]
 
     def __post_init__(self):
-        assert self.type.composed_of(types.StructType), self.type
+        assert self.type.composed_of((types.StructType, types.RowType)), self.type
 
     @property
     def subqueries(self):
-        return merge_subqueries(self.members.values())
+        return merge_subqueries(self.attrs.values())
 
     def flatten_code(self):
-        return [c for m in self.members.values() for c in m.flatten_code()]
+        return [c for m in self.attrs.values() for c in m.flatten_code()]
 
     def get_attr(self, name):
-        return self.members[name]
+        return self.attrs[name]
 
     def primary_key(self):
         # XXX This is obviously wrong
-        return list(self.members.values())[0]
+        return list(self.attrs.values())[0]
 
     def all_attrs(self):
         # XXX hacky way to write it
-        attrs = {n:self.get_attr(n) for n,f in self.type.attrs.items()}
-        return SafeDict(attrs).update(self.members)
+        attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
+        return SafeDict(attrs).update(self.attrs)
+
+class RowInstance(StructInstance):
+    def primary_key(self):
+        return self.attrs['id']
+
+    def get_attr(self, name):
+        if name in self.attrs:
+            return self.attrs[name]
+        else:
+            raise pql_AttributeError(None, f"No such attribute: {name}")
+
+        #     tbl_t = self.type.table
+        #     col_t = tbl_t.columns[name].col_type
+        #     code = sql.Select(col_t, sql.TableName(tbl_t, tbl_t.name), [sql.Name(col_t, name)], conds=[sql.Compare('=', [sql.Name(types.Int, 'id'), sql.value(self.attrs['id'])])])
+        #     return make_instance(code, col_t, [])
+
+    def repr(self, state):
+        inner = [f'{name}: {v.repr(state)}' for name, v in self.attrs.items()]
+        return 'Row{%s}' % ', '.join(inner)
 
 @dataclass
 class AttrInstance(AbsInstance):

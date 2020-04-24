@@ -8,7 +8,7 @@ from dataclasses import field, replace
 @dataclass
 class PqlObject:    # XXX should be in a base module
     "Any object that the user might interact with through the language, as so has to behave like an object inside Preql"
-    attrs: dict = field(default_factory=dict, init=False, compare=False)
+    dyn_attrs: dict = field(default_factory=dict, init=False, compare=False)
 
     def repr(self, pql):
         return repr(self)
@@ -27,8 +27,8 @@ class PqlObject:    # XXX should be in a base module
         return self.type.issubclass(t)
 
     def replace(self, **attrs):
-        if 'attrs' in attrs:
-            assert not attrs.pop('attrs')
+        if 'dyn_attrs' in attrs:
+            assert not attrs.pop('dyn_attrs')
         return replace(self, **attrs)
 
 
@@ -207,7 +207,7 @@ class Collection(PqlType):
         try:
             return self.columns[name].col_type
         except KeyError:
-            return self.attrs[name]
+            return self.dyn_attrs[name]
 
 
 
@@ -420,14 +420,6 @@ class DataColumn(Column):
         return self.type.hide_from_init
 
 
-@dataclass
-class RowType(PqlType):
-    table: Collection
-
-    def import_result(self, arr):
-        r ,= self.table.import_result(arr)
-        return r
-
 
 @dataclass
 class StructType(PqlType):
@@ -470,4 +462,12 @@ class IdType(_Int):
 def join_names(names):
     return "_".join(names)
 
+@dataclass
+class RowType(PqlType):
+    table: Collection
+    # idtype: IdType
+
+    def import_result(self, arr):
+        r ,= self.table.import_result(arr)
+        return r
 
