@@ -434,20 +434,10 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
     lines = []
     inst = evaluate(state, obj)
     if isinstance(inst, objects.Function):
-        # lines += [
-        #     f"Function {inst.name}, accepts {len(inst.params)} parameters:"
-        # ]
-        # for p in inst.params:
-        #     if p.default is not None:
-        #         lines += [ f"    - {p.name}: {p.type} = {localize(state, evaluate(state, p.default))}" ]
-        #     else:
-        #         lines += [ f"    - {p.name}: {p.type}" ]
-        param_str = ', '.join(p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in inst.params)
-        if inst.param_collector is not None:
-            param_str += ", ...keyword_args"
-        lines = ['', f"func {inst.name}({param_str})",'']
-        if isinstance(inst, objects.InternalFunction) and inst.func.__doc__:
-            lines += [inst.func.__doc__]
+        lines = ['', inst.help_str(state),'']
+        doc = inst.docstring
+        if doc:
+            lines += [doc]
     else:
         raise pql_TypeError(None, "help() only accepts functions at the moment")
 
@@ -455,8 +445,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
     return new_value_instance(text).replace(type=types.Text)
 
 def pql_ls(state: State, obj: types.PqlObject = objects.null):
-    """
-    List all names in the namespace of the given object.
+    """List all names in the namespace of the given object.
 
     If no object is given, lists the names in the current namespace.
     """

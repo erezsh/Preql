@@ -49,6 +49,18 @@ class Function(types.PqlObject):
     def type(self):
         return types.FunctionType(tuple(p.type or types.any_t for p in self.params), self.param_collector is not None)
 
+    def help_str(self, state):
+        from .evaluate import evaluate, localize    # XXX refactor this
+        params = [p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in self.params]
+        if self.param_collector is not None:
+            params.append(f"...{self.param_collector.name}")
+        param_str = ', '.join(params)
+        return f"func {self.name}({param_str}) = ..."
+
+    def repr(self, state):
+        return '<%s>' % self.help_str(state)
+
+
     @listgen
     def match_params_fast(self, args):
         for i, p in enumerate(self.params):
@@ -129,7 +141,7 @@ class Function(types.PqlObject):
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values
         if collected:
-            matched.append((self.param_collector, VariadicInstance(collected)))
+            matched.append((self.param_collector, MapInstance(collected)))
         return matched
 
 
@@ -141,9 +153,12 @@ class UserFunction(Function):
     expr: (ast.Expr, ast.CodeBlock)
     param_collector: Optional[Param]
 
-    def repr(self, state):
-        params = ", ".join(p.name for p in self.params)
-        return f'<func {self.name}({params}) ...>'
+    @property
+    def docstring(self):
+        if isinstance(self.expr, ast.CodeBlock):
+            stmts = self.expr.statements
+            if stmts and isinstance(stmts[0], ast.Const) and stmts[0].type is types.String:
+                return stmts[0].value
 
 @dataclass
 class InternalFunction(Function):
@@ -152,12 +167,11 @@ class InternalFunction(Function):
     func: Callable
     param_collector: Optional[Param] = None
 
-    def __repr__(self):
-        params = ", ".join(p.name for p in self.params)
-        return f'<func {self.name}({params}) ...>'
-
     meta = None     # Not defined in PQL code
 
+    @property
+    def docstring(self):
+        return self.func.__doc__
 
 
 # Instances
@@ -352,7 +366,7 @@ class StructInstance(AbsStructInstance):
 
 
 @dataclass
-class VariadicInstance(AbsStructInstance):
+class MapInstance(AbsStructInstance):
     attrs: Dict[str, types.PqlObject]
 
     type = types.any_t
@@ -365,6 +379,14 @@ class VariadicInstance(AbsStructInstance):
 
     def primary_key(self):
         return self
+
+    # def repr(self, state):
+    #     from .evaluate import localize
+    #     return repr(localize(state, self))
+    def repr(self, state):
+        inner = [f'{name}: {v.repr(state)}' for name, v in self.attrs.items()]
+        return 'Map{%s}' % ', '.join(inner)
+
 
 class RowInstance(StructInstance):
     def primary_key(self):

@@ -413,7 +413,7 @@ def _compile_arith(state, arith, a, b):
         meta = arith.op.meta.replace(parent=arith.meta)
         raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
-    res_type ,= {a.type for a in args}
+    res_type ,= arg_types_set
     code = sql.arith(res_type, arith.op, [a.code for a in args], arith.meta)
     return objects.make_instance(code, res_type, args)
 

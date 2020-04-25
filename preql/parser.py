@@ -67,6 +67,9 @@ class T(Transformer):
 
     def string(self, meta, s):
         return ast.Const(meta, types.String, _fix_escaping( s.value[1:-1]) )
+    def long_string(self, meta, s):
+        return ast.Const(meta, types.String, _fix_escaping( s.value[3:-3]) )
+
 
     def int(self, meta, i):
         return ast.Const(meta, types.Int, int(i))

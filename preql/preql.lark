@@ -121,6 +121,7 @@ named_expr: [name ":"] expr
 ?const: SIGNED_INT -> int
       | SIGNED_FLOAT -> float
       | STRING -> string
+      | LONG_STRING -> long_string
       | "null" -> null
       | "false" -> false
       | "true" -> true
@@ -152,6 +153,8 @@ FLOAT: INT _EXP
 SIGNED_FLOAT: ["+"|"-"] FLOAT
 SIGNED_INT: ["+"|"-"] INT
 
+
+LONG_STRING: /""".*?(?<!\\)(\\\\)*?"""/s
 
 %import common.CNAME -> NAME
 %import common.WS_INLINE

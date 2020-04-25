@@ -56,6 +56,9 @@ class Const(Expr):
     type: types.PqlType
     value: Any
 
+    def repr(self, state):
+        return self.type.repr_value(self.value)
+
 @dataclass
 class Ellipsis(Expr):
     exclude: List[str]
