@@ -298,7 +298,7 @@ def simplify(state: State, funccall: ast.FuncCall):
 def eval_func_call(state, func, args, meta=None):
     assert isinstance(func, objects.Function)
 
-    matched_args = func.match_params(args)
+    matched_args = func.match_params(state, args)
 
 
 
@@ -570,7 +570,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     # TODO very inefficient, vectorize this
     ids = []
     for row in rows:
-        matched = cons.match_params([objects.from_python(v) for v in row.values()])
+        matched = cons.match_params(state, [objects.from_python(v) for v in row.values()])
         # destructured_pairs = _destructure_param_match(state, new.meta, matched)
         ids += [_new_row(state, new.meta, obj, matched)]
 
@@ -638,7 +638,7 @@ def apply_database_rw(state: State, new: ast.New):
     assert_type(new.meta, table.type, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
 
     cons = TableConstructor.make(table.type)
-    matched = cons.match_params(new.args)
+    matched = cons.match_params(state, new.args)
 
     rowid = _new_row(state, new.meta, table.type, matched)
     return rowid
@@ -738,8 +738,8 @@ def localize(state, inst: objects.AbsInstance):
     raise NotImplementedError()
 
 @dy
-def localize(state, inst: objects.RowInstance):
-    return {k: localize(state, v) for k, v in inst.attrs.items()}
+def localize(state, inst: objects.AbsStructInstance):
+    return {k: localize(state, evaluate(state, v)) for k, v in inst.attrs.items()}
 
 @dy
 def localize(state, inst: objects.Instance):

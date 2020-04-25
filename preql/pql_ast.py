@@ -93,6 +93,10 @@ class NamedField(Expr):
     name: Optional[str]
     value: PqlObject #(Expr, types.PqlType)
 
+@dataclass
+class InlineStruct(Expr):
+    struct: Expr
+
 
 class TableOperation(Expr): pass
 

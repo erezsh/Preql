@@ -120,13 +120,13 @@ class T(Transformer):
     var = ast.Name
     getattr = ast.Attr
     named_expr = ast.NamedField
+    inline_struct = ast.InlineStruct
     order = ast.Order
     update = ast.Update
     delete = ast.Delete
     desc = ast.DescOrder
     new = ast.New
     new_rows = ast.NewRows
-    func_call = ast.FuncCall
     range = ast.Range
 
     selection = ast.Selection
@@ -144,7 +144,29 @@ class T(Transformer):
 
     # Statements / Declarations
     param = objects.Param
-    func_def = lambda self, meta, *args: ast.FuncDef(meta, objects.UserFunction(*args))
+    param_variadic = objects.ParamVariadic
+
+    def func_def(self, meta, name, params, expr):
+        collector = None
+        for i, p in enumerate(params):
+            if isinstance(p, objects.ParamVariadic):
+                if i != len(params)-1:
+                    raise pql_SyntaxError(meta, f"A variadic parameter must appear at the end of the function ({p.name})")
+
+                collector = p
+                params = params[:-1]
+
+        return ast.FuncDef(meta, objects.UserFunction(name, params, expr, collector))
+
+    def func_call(self, meta, func, args):
+        for i, a in enumerate(args):
+            if isinstance(a, ast.InlineStruct):
+                if i != len(args)-1:
+                    raise pql_SyntaxError(meta, f"An inlined struct must appear at the end of the function call ({a})")
+
+
+        return ast.FuncCall(meta, func, args)
+
     set_value = ast.SetValue
     insert_rows = ast.InsertRows
     struct_def = ast.StructDef

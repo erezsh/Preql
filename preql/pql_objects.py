@@ -19,6 +19,9 @@ class Param(ast.Ast):
     default: Optional[types.PqlObject] = None
     orig: Any = None # XXX temporary and lazy, for TableConstructor
 
+class ParamVariadic(Param):
+    pass
+
 # @dataclass
 # class ParamDictType(types.PqlType):
 #     types: Dict[str, types.PqlType]
@@ -41,7 +44,6 @@ class ParamDict(types.PqlObject):
 
 
 class Function(types.PqlObject):
-    param_collector = None
 
     @property
     def type(self):
@@ -61,15 +63,30 @@ class Function(types.PqlObject):
         # return [(p, a) for p, a in safezip(self.params, args)]
 
 
-    def match_params(self, args):
+    def match_params(self, state, args):
 
         # If no keyword arguments, matching is much simpler and faster
-        if all(not isinstance(a, ast.NamedField) for a in args):
+        if all(not isinstance(a, (ast.NamedField, ast.InlineStruct)) for a in args):
             return self.match_params_fast(args)
 
         # Canonize args for the rest of the function
-        args = [a if isinstance(a, ast.NamedField) else ast.NamedField(None, None, a) for a in args]
+        inline_args = []
+        for i, a in enumerate(args):
+            if isinstance(a, ast.NamedField):
+                inline_args.append(a)
+            elif isinstance(a, ast.InlineStruct):
+                assert i == len(args)-1
+                # XXX we only want to localize the keys, not the values
+                from .evaluate import evaluate, localize    # XXX refactor this
+                d = localize(state, evaluate(state, a.struct))
+                if not isinstance(d, dict):
+                    raise pql_TypeError(f"Expression to inline is not a map: {d}")
+                for k, v in d.items():
+                    inline_args.append(ast.NamedField(None, k, new_value_instance(v)))
+            else:
+                inline_args.append(ast.NamedField(None, None, a))
 
+        args = inline_args
         named = [arg.name is not None for arg in args]
         try:
             first_named = named.index(True)
@@ -112,47 +129,7 @@ class Function(types.PqlObject):
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values
         if collected:
-            matched.append((self.param_collector, ParamDict(collected)))
-        return matched
-
-
-
-    def _match_params(self, args):
-        # TODO Default values (maybe just initialize match_params with them?)
-
-
-        for i, arg in enumerate(args):
-            if arg.name:  # First keyword argument
-                pos_args, named_args = split_at_index(args, i)
-                pos_params, named_params = split_at_index(self.params, i)
-                break
-        else:   # No keywords
-            pos_args = list(args)
-            pos_params = self.params
-            named_args = []
-            named_params = []
-
-        if len(pos_params) != len(pos_args):
-            # TODO meta
-            raise pql_TypeError(None, f"Function '{self.name}' takes {len(pos_params)} parameters but recieved {len(pos_args)} arguments.")
-
-        matched = [(p, arg.value) for (p,arg) in safezip(pos_params, pos_args)]
-
-        args_d = {na.name: na.value for na in named_args}
-
-        for np in named_params:
-            try:
-                matched.append((np, args_d.pop(np.name)))
-            except KeyError:
-                raise pql_TypeError("Parameter wasn't assigned: %s" % np.name)
-
-        assert len(matched) == len(self.params)
-        if args_d:  # Still left-over keywords?
-            if self.param_collector:
-                matched.append((self.param_collector, args_d))
-            else:
-                raise pql_TypeError(f"Function doesn't accept arguments named $(keys(args_d))")
-
+            matched.append((self.param_collector, VariadicInstance(collected)))
         return matched
 
 
@@ -162,7 +139,7 @@ class UserFunction(Function):
     name: str
     params: List[Param]
     expr: (ast.Expr, ast.CodeBlock)
-    param_collector: Optional[Param] = None
+    param_collector: Optional[Param]
 
     def repr(self, state):
         params = ", ".join(p.name for p in self.params)
@@ -337,8 +314,14 @@ class AggregatedInstance(AbsInstance):
     def primary_key(self):
         return self.elem.primary_key()
 
+
+class AbsStructInstance(AbsInstance):
+    def get_attr(self, name):
+        return self.attrs[name]
+
+
 @dataclass
-class StructInstance(AbsInstance):
+class StructInstance(AbsStructInstance):
     type: types.PqlType
     attrs: Dict[str, types.PqlObject]
 
@@ -352,9 +335,6 @@ class StructInstance(AbsInstance):
     def flatten_code(self):
         return [c for m in self.attrs.values() for c in m.flatten_code()]
 
-    def get_attr(self, name):
-        return self.attrs[name]
-
     def primary_key(self):
         # XXX This is obviously wrong
         return list(self.attrs.values())[0]
@@ -364,15 +344,31 @@ class StructInstance(AbsInstance):
         attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
         return SafeDict(attrs).update(self.attrs)
 
-class RowInstance(StructInstance):
-    def primary_key(self):
-        return self.attrs['id']
-
     def get_attr(self, name):
         if name in self.attrs:
             return self.attrs[name]
         else:
             raise pql_AttributeError(None, f"No such attribute: {name}")
+
+
+@dataclass
+class VariadicInstance(AbsStructInstance):
+    attrs: Dict[str, types.PqlObject]
+
+    type = types.any_t
+
+    def __len__(self):
+        return len(self.attrs)
+
+    def items(self):
+        return self.attrs.items()
+
+    def primary_key(self):
+        return self
+
+class RowInstance(StructInstance):
+    def primary_key(self):
+        return self.attrs['id']
 
         #     tbl_t = self.type.table
         #     col_t = tbl_t.columns[name].col_type

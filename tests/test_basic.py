@@ -385,6 +385,24 @@ class BasicTests(TestCase):
         self.assertEqual(preql.eq2, True)
         # self.assertEqual(preql.eq3, False)    # TODO check table type
 
+    def test_vararg(self):
+        preql = Preql()
+        preql('''
+            func f(...x) = x
+        ''')
+
+        self.assertEqual(preql('f(a:1, b:2)'), {'a':1, 'b':2})
+        self.assertEqual(preql('f(a:1, b:f(c:3, d:4)).b.c'), 3)
+
+        preql('''
+            x1 = f(a:1, b:2)
+            x2 = f(...x1)
+        ''')
+
+        self.assertEqual(preql.x1, preql.x2)
+        # self.assertEqual(preql('x1 == x2'), True) # TODO
+
+
     def test_methods(self):
         preql = Preql()
         preql('''
@@ -681,6 +699,7 @@ class BasicTests(TestCase):
         ''')
 
         assert preql('A{y}') == [{'y': 2}, {'y': 1}]
+        assert preql('a2.y') == 1
 
     def test_structs(self):
         preql = self.Preql()

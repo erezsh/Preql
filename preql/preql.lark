@@ -39,8 +39,10 @@ codeblock: "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
 throw: "throw" expr _NL
 print: "print" expr _NL
-func_params: "(" _separated{param, ","}? ")" -> as_list
+func_params: "(" _separated{param, ","}? ("," param_variadic)? ")" -> as_list
+           | "(" param_variadic ")" -> as_list
 param: name [":" expr] ["=" expr]   // TODO type? default value?
+param_variadic: "..." name
 insert_rows: atom "+=" expr _NL
 set_value: atom "=" expr _NL
 
@@ -101,16 +103,18 @@ delete: molecule "delete" expr_list
 
 one: "one" [NULLABLE] molecule
 
-new: "new" name _func_args
-     | _NEW_ARRAY name _func_args -> new_rows
-//    | _GET_OR_NEW name _func_args -> get_or_new
+new: "new" name func_args
+     | _NEW_ARRAY name func_args -> new_rows
+//    | _GET_OR_NEW name func_args -> get_or_new
 
 _GET_OR_NEW.10: "new?"
 _NEW_ARRAY.10: "new[]"
 
-func_call: molecule _func_args
-_func_args: "(" func_args ")"
-func_args: _separated{named_expr, ","}? -> as_list
+func_call: molecule func_args
+func_args: "(" _separated{named_expr, ","}? ("," inline_struct)? ")" -> as_list
+         | "(" inline_struct ")" -> as_list
+
+inline_struct: "..." expr
 
 named_expr: [name ":"] expr
 
