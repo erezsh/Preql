@@ -758,3 +758,25 @@ def localize(state, x):
     return x
 
 
+
+### Added functions
+
+def function_help_str(self, state):
+    from .evaluate import evaluate, localize    # XXX refactor this
+    params = [p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in self.params]
+    if self.param_collector is not None:
+        params.append(f"...{self.param_collector.name}")
+    param_str = ', '.join(params)
+    return f"func {self.name}({param_str}) = ..."
+
+def function_localize_keys(self, state, struct):
+    return localize(state, evaluate(state, struct))
+
+objects.Function.help_str = function_help_str
+objects.Function._localize_keys = function_localize_keys
+
+
+def instance_repr(self, state):
+    return repr(localize(state, self))
+
+objects.Instance.repr = instance_repr

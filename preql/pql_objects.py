@@ -50,12 +50,7 @@ class Function(types.PqlObject):
         return types.FunctionType(tuple(p.type or types.any_t for p in self.params), self.param_collector is not None)
 
     def help_str(self, state):
-        from .evaluate import evaluate, localize    # XXX refactor this
-        params = [p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in self.params]
-        if self.param_collector is not None:
-            params.append(f"...{self.param_collector.name}")
-        param_str = ', '.join(params)
-        return f"func {self.name}({param_str}) = ..."
+        raise NotImplementedError()
 
     def repr(self, state):
         return '<%s>' % self.help_str(state)
@@ -74,6 +69,8 @@ class Function(types.PqlObject):
 
         # return [(p, a) for p, a in safezip(self.params, args)]
 
+    def _localize_keys(self, state, struct):
+        raise NotImplementedError()
 
     def match_params(self, state, args):
 
@@ -89,8 +86,7 @@ class Function(types.PqlObject):
             elif isinstance(a, ast.InlineStruct):
                 assert i == len(args)-1
                 # XXX we only want to localize the keys, not the values
-                from .evaluate import evaluate, localize    # XXX refactor this
-                d = localize(state, evaluate(state, a.struct))
+                d = self._localize_keys(state, a.struct)
                 if not isinstance(d, dict):
                     raise pql_TypeError(f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
@@ -209,10 +205,7 @@ class Instance(AbsInstance):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
     def repr(self, state):
-        from .evaluate import localize
-        return repr(localize(state, self))
-        # breakpoint()
-        # return f'<instance of {self.type.repr(state)}>'
+        return f'<instance of {self.type.repr(state)}>'
 
     def __post_init__(self):
         assert not self.type.composed_of((types.StructType, types.Aggregated, types.TableType)), self
