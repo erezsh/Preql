@@ -15,7 +15,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from .api import TablePromise
-from .exceptions import PreqlError, pql_ExitInterp
+from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError_PrematureEnd, pql_SyntaxError
 
 
 
@@ -68,6 +68,11 @@ from prompt_toolkit import PromptSession
 from pygments.lexers.python import Python3Lexer
 from pygments.lexers.go import GoLexer
 from prompt_toolkit.lexers import PygmentsLexer
+from prompt_toolkit.filters import Condition
+from prompt_toolkit.application.current import get_app
+
+from .parser import parse_stmts, parse_expr
+
 
 
 def start_repl(p, prompt=' >> '):
@@ -75,9 +80,20 @@ def start_repl(p, prompt=' >> '):
 
     try:
         session = PromptSession()
+
+        @Condition
+        def multiline_filter():
+            text = get_app().layout.get_buffer_by_name('DEFAULT_BUFFER').text
+            if text:
+                try:
+                    s = parse_stmts(text)
+                except pql_SyntaxError as e:
+                    return True
+            return False
+
         while True:
             # Read
-            code = session.prompt(prompt, lexer=PygmentsLexer(GoLexer))
+            code = session.prompt(prompt, lexer=PygmentsLexer(GoLexer), multiline=multiline_filter)
             if not code.strip():
                 continue
 

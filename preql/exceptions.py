@@ -90,7 +90,7 @@ class pql_SyntaxError(PreqlError):
     message: str
 
 @dataclass
-class pql_SyntaxError_PrematureEnd(PreqlError):
+class pql_SyntaxError_PrematureEnd(pql_SyntaxError):
     message: str
 
 @dataclass
