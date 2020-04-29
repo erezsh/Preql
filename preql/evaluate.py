@@ -292,7 +292,9 @@ def simplify(state: State, funccall: ast.FuncCall):
             meta = meta.replace(parent=meta)
         raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
 
-    return eval_func_call(state, func, funccall.args, funccall.meta)
+    res = eval_func_call(state, func, funccall.args, funccall.meta)
+    # assert isinstance(res, types.PqlObject), (type(res), res) # TODO this should work
+    return res
 
 
 def eval_func_call(state, func, args, meta=None):
@@ -604,12 +606,11 @@ def _new_row(state, meta, table, matched):
     keys = [name for (name, _) in destructured_pairs]
     values = [sql.value(v) for (_,v) in destructured_pairs]
     assert keys and values
-    # TODO use regular insert?
+    # XXX use regular insert?
     q = sql.InsertConsts(sql.TableName(table, table.name), keys, values)
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
 
-    # return new_value_instance(rowid, types.RowType(table), force_type=True)  # XXX find a nicer way
     d = SafeDict({'id': objects.new_value_instance(rowid)})
     d.update({p.name:v for p, v in matched})
     return objects.RowInstance(types.RowType(table), d)
@@ -640,11 +641,7 @@ def apply_database_rw(state: State, new: ast.New):
     cons = TableConstructor.make(table.type)
     matched = cons.match_params(state, new.args)
 
-    rowid = _new_row(state, new.meta, table.type, matched)
-    return rowid
-    # return new_value_instance(rowid, table.type.columns['id'], force_type=True)  # XXX find a nicer way
-    # expr = ast.One(None, ast.Selection(None, table, [ast.Compare(None, '==', [ast.Name(None, 'id'), new_value_instance(rowid)])]), False)
-    # return evaluate(state, expr)
+    return _new_row(state, new.meta, table.type, matched)
 
 
 @dataclass

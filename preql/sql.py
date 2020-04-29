@@ -184,7 +184,6 @@ class CountTable(Scalar):
     def _compile(self, qb):
         return f'(SELECT COUNT(*) FROM {self.table.compile(qb).text})'
 
-
 @dataclass
 class FuncCall(Sql):
     type: PqlType

@@ -326,6 +326,11 @@ class AbsStructInstance(AbsInstance):
     def get_attr(self, name):
         return self.attrs[name]
 
+    @property
+    def code(self):
+        # XXX this shouldn't even be allowed to happen in the first place
+        raise pql_TypeError(None, "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
+
 
 @dataclass
 class StructInstance(AbsStructInstance):

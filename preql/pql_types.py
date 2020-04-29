@@ -14,9 +14,6 @@ class PqlObject:    # XXX should be in a base module
         return repr(self)
 
     def get_attr(self, attr):
-        if attr == '__name__':
-            from .pql_objects import new_value_instance    # XXX bad!!
-            return new_value_instance(type(self).__name__)
         raise exc.pql_AttributeError(None, f"{self} has no attribute: {attr}")
 
     # def is_equal(self, other):
@@ -40,6 +37,10 @@ class PqlType(PqlObject):
     def col_type(self):
         return self
 
+    @property
+    def code(self):
+        raise exc.pql_TypeError(None, "type objects are local and cannot be used in target code.")
+
     def kernel_type(self):
         return self
 
@@ -59,7 +60,7 @@ class PqlType(PqlObject):
         raise TypeError("This type isn't a 'generic', and has no inner type")
 
     def __repr__(self):
-        assert type(self) is PqlType
+        assert type(self) is PqlType, self
         return 'type'
 
     def repr_value(self, value):
@@ -67,8 +68,10 @@ class PqlType(PqlObject):
 
     def issubclass(self, t):
         # XXX this is incorrect. issubclass(int, type) returns true, when it shouldn't
+        # XXX sublassing should probably be explicit, not through python
         assert isinstance(t, PqlType)
         return isinstance(self, type(t))
+        # return self == t
 
     hide_from_init = False
 
@@ -207,7 +210,10 @@ class Collection(PqlType):
         try:
             return self.columns[name].col_type
         except KeyError:
-            return self.dyn_attrs[name]
+            try:
+                return self.dyn_attrs[name]
+            except KeyError:
+                raise exc.pql_AttributeError(None, name)
 
 
 

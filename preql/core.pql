@@ -6,8 +6,16 @@ func _sql_agg_func(name, obj) {
             return int( obj{ => value: _sql_agg_func(name, value) } )  # Recursive
         }
     }
-    throw new TypeError(name + "() doesn't support object of type '" + (type(field).__name__) + "'")
+    throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
 }
+
+// func count(field) {
+//     "Count a column, a list, or a table"
+//     if (isa(field, table)) {
+//         return SQL(int, "SELECT COUNT(*) FROM $field")
+//     }
+//     return _sql_agg_func("COUNT", field)
+// }
 
 func sum(field) {
     "Sum up a column or a list"
@@ -34,7 +42,7 @@ func limit(tbl, n) {
     return tbl[..n]
 }
 
-func limit_offset(table, lim, offset) = SQL(type(table), "SELECT * FROM $table LIMIT $lim OFFSET $offset")
+func limit_offset(tbl, lim, offset) = SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
 
 func enum(tbl) {
     "Return the table with a new index column"

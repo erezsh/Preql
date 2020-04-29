@@ -364,6 +364,13 @@ def pql_type(state: State, obj: ast.Expr):
     t = inst.type   # XXX concrete?
     return t
 
+def pql_repr(state: State, obj: ast.Expr):
+    """
+    Returns the type of the given object
+    """
+    inst = evaluate(state, obj)
+    return objects.new_value_instance(inst.repr(state))
+
 def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
     "Attempt to cast an object to a specified type"
     inst = evaluate(state, obj)
@@ -504,6 +511,7 @@ internal_funcs = create_internal_funcs({
     'PY': pql_PY,
     'isa': pql_isa,
     'type': pql_type,
+    'repr': pql_repr,
     'debug': pql_debug,
     '_breakpoint': pql_breakpoint,
     'get_db_type': pql_get_db_type,

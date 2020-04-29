@@ -18,6 +18,7 @@ def initial_namespace():
     ns.update(internal_funcs)
     ns.update(joins)
     ns['list'] = types.ListType(types.any_t)
+    ns['table'] = types.Collection()
     ns['aggregate'] = types.Aggregated(types.any_t)
     ns['TypeError'] = pql_TypeError
     ns['ValueError'] = pql_ValueError

@@ -10,4 +10,5 @@ cache = False
 
 debug = not sys.flags.optimize
 if debug:
-    print("DEBUG MODE")
+    print("# DEBUG MODE")
+
