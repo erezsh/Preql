@@ -7,7 +7,7 @@ from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
 from .interpreter import Interpreter
-from .evaluate import localize, evaluate
+from .evaluate import localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
 
 
@@ -71,6 +71,10 @@ class TablePromise:
             self._rows = localize(self._state, self._inst)
         assert self._rows is not None
         return self._rows
+
+    def to_pandas(self):
+        from pandas import DataFrame
+        return DataFrame(self)
 
     def __eq__(self, other):
         return self.to_json() == other
@@ -165,6 +169,19 @@ class Interface:
     def commit(self):
         return self.engine.commit()
 
+    def import_pandas(self, **dfs):
+        for name, df in dfs.items():
+            cols = list(df)
+            rows = [[i.item() if hasattr(i, 'item') else i for i in rec]
+                    for rec in df.to_records()]
+            new_table_from_rows(self.interp.state, name, cols, rows)
+
+
+
+
+
+
+
 #     def _functions(self):
 #         return {name:f for name,f in self.interp.state.namespace.items()
 #                 if isinstance(f, ast.FunctionDef)}
@@ -177,40 +194,3 @@ class Interface:
 
 #     def add(self, table, values):
 #         return self.add_many(table, [values])
-
-
-#     def start_repl(self):
-#         from prompt_toolkit import prompt
-#         from prompt_toolkit import PromptSession
-#         from pygments.lexers.python import Python3Lexer
-#         from prompt_toolkit.lexers import PygmentsLexer
-
-#         try:
-#             session = PromptSession()
-#             while True:
-#                 # Read
-#                 code = session.prompt(' >> ', lexer=PygmentsLexer(Python3Lexer))
-#                 if not code.strip():
-#                     continue
-
-#                 # Evaluate
-#                 try:
-#                     res = self(code)
-#                 except PreqlError as e:
-#                     print(e)
-#                     continue
-#                 except Exception as e:
-#                     print("Error:")
-#                     logging.exception(e)
-#                     continue
-
-
-#                 if isinstance(res, pql.Object):
-#                     res = res.repr(self.interp)
-
-#                 # Print
-#                 print(res)
-#         except (KeyboardInterrupt, EOFError):
-#             print('Exiting Preql interaction')
-
-

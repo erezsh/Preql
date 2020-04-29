@@ -61,3 +61,4 @@ class Interpreter:
                 value = new_value_instance(value)
 
         self.state.set_var(name, value)
+

@@ -381,18 +381,23 @@ class Insert(Sql):
 
 @dataclass
 class InsertConsts(Sql):
-    table: Sql
+    table: str
     cols: List[str]
-    values: List[Sql]
+    tuples: list #List[List[Sql]]
     type = types.null
 
     def _compile(self, qb):
-        assert self.values, self
+        assert self.tuples, self
 
-        q = ['INSERT INTO', _safe_name(self.table.name),
+        values = ', '.join(
+            '(%s)' % ', '.join([e.compile(qb).text for e in tpl])
+            for tpl in self.tuples
+        )
+
+        q = ['INSERT INTO', _safe_name(self.table),
              "(", ', '.join(self.cols), ")",
              "VALUES",
-             "(", ', '.join(v.compile(qb).text for v in self.values), ")",
+             values,
         ]
         return ' '.join(q) + ';'
 

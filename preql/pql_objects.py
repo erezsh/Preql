@@ -467,3 +467,4 @@ def aliased_table(t, name):
 
 def new_table(type_, name=None, instances=None):
     return TableInstance.make(sql.TableName(type_, name or type_.name), type_, instances or [])
+

@@ -69,6 +69,7 @@ from pygments.lexers.python import Python3Lexer
 from pygments.lexers.go import GoLexer
 from prompt_toolkit.lexers import PygmentsLexer
 
+
 def start_repl(p, prompt=' >> '):
     save_last = '_'   # XXX A little hacky
 

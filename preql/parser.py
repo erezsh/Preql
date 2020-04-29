@@ -2,7 +2,7 @@ from ast import literal_eval
 
 from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken, Token
 
-from .exceptions import pql_SyntaxError, Meta
+from .exceptions import pql_SyntaxError, Meta, pql_SyntaxError_PrematureEnd
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
@@ -248,7 +248,11 @@ def parse_stmts(s):
         # m = m.remake(parent=m)
         # raise pql_SyntaxError(m, str(e) + e.get_context(s)) from e
         if isinstance(e, UnexpectedToken):
-            msg = "Unexpected token: '%s'" % e.token
+            if e.token.type == '$END':
+                msg = "Code ended unexpectedly"
+                raise pql_SyntaxError_PrematureEnd(m, "Syntax error: " + msg)
+            else:
+                msg = "Unexpected token: '%s'" % e.token
         else:
             msg = "Unexpected character: '%s'" % s[e.pos_in_stream]
         raise pql_SyntaxError(m, "Syntax error: " + msg)

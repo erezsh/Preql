@@ -607,7 +607,7 @@ def _new_row(state, meta, table, matched):
     values = [sql.value(v) for (_,v) in destructured_pairs]
     assert keys and values
     # XXX use regular insert?
-    q = sql.InsertConsts(sql.TableName(table, table.name), keys, values)
+    q = sql.InsertConsts(table.name, keys, [values])
     state.db.query(q)
     rowid = state.db.query(sql.LastRowId())
 
@@ -777,3 +777,30 @@ def instance_repr(self, state):
     return repr(localize(state, self))
 
 objects.Instance.repr = instance_repr
+
+
+
+
+
+
+def new_table_from_rows(state, name, columns, rows):
+    # TODO check table doesn't exist
+
+    tuples = [
+        [sql.value(i) for i in row[1:]] # XXX Without index?
+        for row in rows
+    ]
+
+    # TODO refactor into function
+    table = types.TableType(name, SafeDict(), True, [['id']], ['id'])
+    table.columns['id'] = types.IdType(table)
+    for c,v in zip(columns, tuples[0]):
+        table.columns[c] = v.type
+
+    state.db.query(compile_type_def(state, table))
+
+    code = sql.InsertConsts(name, columns, tuples)
+    state.db.query(code)
+
+    x = objects.new_table(table)
+    state.set_var(table.name, x)
