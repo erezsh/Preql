@@ -22,6 +22,11 @@ func sum(field) {
     return _sql_agg_func("SUM", field)
 }
 
+func mean(field) {
+    "Mean of a column or a list"
+    return _sql_agg_func("AVG", field)
+}
+
 func min(field) {
     "Find the minimum of a column or a list"
     return _sql_agg_func("MIN", field)
@@ -85,6 +90,15 @@ if (get_db_type() == "postgres") {
         func now() = SQL(datetime, "datetime('now')")   // Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
         func pi() = SQL(float, "3.141592653589793")
+
+        func year(date) = SQL(int, "strftime('%Y', $date)")
+        func month(date) = SQL(int, "strftime('%m', $date)")
+        func day(date) = SQL(int, "strftime('%d', $date)")
+        func hour(date) = SQL(int, "strftime('%H', $date)")
+        func minute(date) = SQL(int, "strftime('%M', $date)")
+        func day_of_week(date) = SQL(int, "strftime('%w', $date)")
+        func week_of_year(date) = SQL(int, "strftime('%W', $date)")
+        func count_distinct(field) = SQL(int, "count(distinct $field)")
 
     } else {
         throw new TypeError("Unexpected")

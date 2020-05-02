@@ -14,7 +14,7 @@ class PqlObject:    # XXX should be in a base module
         return repr(self)
 
     def get_attr(self, attr):
-        raise exc.pql_AttributeError(None, f"{self} has no attribute: {attr}")
+        raise exc.pql_AttributeError(attr.meta, f"{self} has no attribute: {attr}")
 
     # def is_equal(self, other):
     #     raise exc.pql_NotImplementedError(f"Equality of {self} not implemented")
@@ -151,7 +151,13 @@ class _DateTime(Primitive):
 
     def import_result(self, res):
         s = super().import_result(res)
-        return datetime.fromisoformat(s)
+        if s:
+            if not isinstance(s, str):
+                raise exc.pql_TypeError(None, f"Expected a string. Instead got: {s}")
+            try:
+                return datetime.fromisoformat(s)
+            except ValueError as e:
+                raise exc.pql_ValueError(None, str(e))
 
     def restructure_result(self, i):
         s = super().restructure_result(i)

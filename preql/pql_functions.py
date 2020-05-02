@@ -378,12 +378,18 @@ def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
     if not isinstance(type_, types.PqlType):
         raise pql_TypeError(type_.meta, f"Cast expected a type, got {type_} instead.")
 
+    if inst.type is type_:
+        return inst
+
     return _cast(state, inst.type, type_, inst)
 
 @dy
+def _cast(state, inst_type, target_type, inst):
+    raise pql_TypeError(None, f"Cast not implemented for {inst_type}->{target_type}")
+
+@dy
 def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
-    if inst_type == target_type:
-        return inst
+    assert inst_type != target_type
 
     if inst is objects.EmptyList:
         # return inst.replace(type=target_type)
@@ -392,28 +398,36 @@ def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
     raise pql_TypeError(None, "Cast not fully implemented yet")
 
 
-def pql_cast_int(state: State, expr: ast.Expr):
-    "Temporary function, for internal use"
-    # TODO make this function less ugly and better for the user
-    inst = evaluate(state, expr)
-    type_ = inst.type
-    if isinstance(type_, types.TableType):
-        assert len(inst.type.columns) == 1
-        res = localize(state, inst)
-        # res = types.Int.import_result(res)
-        assert len(res) == 1
-        res = list(res[0].values())[0]
-        return new_value_instance(res, types.Int)
+@dy
+def _cast(state, inst_type: types.TableType, target_type: types._Int, inst):
+    assert len(inst.type.columns) == 1
+    res = localize(state, inst)
+    # res = types.Int.import_result(res)
+    assert len(res) == 1
+    res = list(res[0].values())[0]
+    return new_value_instance(res, types.Int)
 
-    elif type_ == types.Int:
-        return inst
-    elif isinstance(type_, types.IdType):
-        return inst.replace(type=types.Int)
-    elif type_ == types.Float:
-        value = localize(state, inst)
-        return new_value_instance(int(value), types.Int)
+@dy
+def _cast(state, inst_type: types.IdType, target_type: types._Int, inst):
+    return inst.replace(type=types.Int)
 
-    raise pql_TypeError(expr.meta, f"Cannot cast expr of type {inst.type} to int")
+@dy
+def _cast(state, inst_type: types._Float, target_type: types._Int, inst):
+    code = sql.Cast(types.Int, "int", inst.code)
+    return objects.Instance.make(code, types.Int, [inst])
+
+@dy
+def _cast(state, inst_type: types._String, target_type: types._Int, inst):
+    # TODO error on bad string?
+    code = sql.Cast(types.Int, "int", inst.code)
+    return objects.Instance.make(code, types.Int, [inst])
+
+@dy
+def _cast(state, inst_type: types.Primitive, target_type: types._String, inst):
+    code = sql.Cast(types.String, "varchar", inst.code)
+    return objects.Instance.make(code, types.String, [inst])
+
+
 
 def pql_connect(state: State, uri: ast.Expr):
     """
@@ -451,7 +465,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
     text = '\n'.join(lines) + '\n'
     return new_value_instance(text).replace(type=types.Text)
 
-def pql_ls(state: State, obj: types.PqlObject = objects.null):
+def pql_names(state: State, obj: types.PqlObject = objects.null):
     """List all names in the namespace of the given object.
 
     If no object is given, lists the names in the current namespace.
@@ -460,7 +474,7 @@ def pql_ls(state: State, obj: types.PqlObject = objects.null):
     if obj is not objects.null:
         inst = evaluate(state, obj)
         if not isinstance(inst.type, types.Collection): # XXX temp.
-            raise pql_TypeError(obj.meta, "Argument to ls() must be a table")
+            raise pql_TypeError(obj.meta, "Argument to names() must be a table")
         all_vars = list(inst.all_attrs())
     else:
         all_vars = list(state.ns.get_all_vars())
@@ -499,7 +513,7 @@ def pql_exit(state, value: types.object_t = None):
 internal_funcs = create_internal_funcs({
     'exit': pql_exit,
     'help': pql_help,
-    'ls': pql_ls,
+    'names': pql_names,
     'connect': pql_connect,
     'count': pql_count,
     'temptable': pql_temptable,
@@ -515,7 +529,6 @@ internal_funcs = create_internal_funcs({
     'debug': pql_debug,
     '_breakpoint': pql_breakpoint,
     'get_db_type': pql_get_db_type,
-    '_cast_int': pql_cast_int,
     'cast': pql_cast,
 })
 

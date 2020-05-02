@@ -66,8 +66,9 @@ def resolve(state: State, col_def: ast.ColumnDef):
 
     query = col_def.query
     if isinstance(col, objects.TableInstance):
-        col = col.type
-        assert isinstance(col, types.TableType)
+        assert False
+        # col = col.type
+        # assert isinstance(col, types.TableType)
     if col.composed_of(types.TableType):
         return types.RelationalColumn(col, query)
 
@@ -77,6 +78,10 @@ def resolve(state: State, col_def: ast.ColumnDef):
 @dy
 def resolve(state: State, type_: ast.Type) -> types.PqlType:
     t = state.get_var(type_.name)
+    if isinstance(t, objects.TableInstance):
+        t = t.type
+        assert isinstance(t, types.TableType)
+
     if type_.nullable:
         t = types.OptionalType(t)
     return t
@@ -281,10 +286,11 @@ def simplify(state: State, funccall: ast.FuncCall):
     # func = simplify(state, funccall.func)
     func = evaluate(state, funccall.func)
 
+    args = funccall.args
     if isinstance(func, types.Primitive):
         # Cast to primitive
-        assert func is types.Int
-        func = state.get_var('_cast_int')
+        args = args + [func]
+        func = state.get_var('cast')
 
     if not isinstance(func, objects.Function):
         meta = funccall.func.meta
@@ -292,7 +298,7 @@ def simplify(state: State, funccall: ast.FuncCall):
             meta = meta.replace(parent=meta)
         raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
 
-    res = eval_func_call(state, func, funccall.args, funccall.meta)
+    res = eval_func_call(state, func, args, funccall.meta)
     # assert isinstance(res, types.PqlObject), (type(res), res) # TODO this should work
     return res
 

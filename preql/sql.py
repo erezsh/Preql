@@ -27,6 +27,15 @@ class QueryBuilder:
             return self # Optimize
         return QueryBuilder(self.target, is_root, self.counter, self.parameters)
 
+    def safe_name(self, base):
+        "Return a name that is safe for use as variable. Must be consistent (pure func)"
+        # if base.lower() in _reserved:
+        if self.target == sqlite:
+            return '[%s]' % base
+        else:
+            return '"%s"' % base
+
+
 
 @dataclass
 class Sql:
@@ -155,9 +164,9 @@ class TableName(Table):
 
     def compile(self, qb):
         if qb.is_root:
-            sql_code = f'SELECT * FROM {_safe_name(self.name)}'
+            sql_code = f'SELECT * FROM {qb.safe_name(self.name)}'
         else:
-            sql_code = _safe_name(self.name)
+            sql_code = qb.safe_name(self.name)
 
         return CompiledSQL(sql_code, self)
 
@@ -340,12 +349,8 @@ class Name(Sql):
         assert self.name, self.type
 
     def _compile(self, qb):
-        return _safe_name(self.name)
+        return qb.safe_name(self.name)
 
-def _safe_name(base):
-    "Return a name that is safe for use as variable. Must be consistent (pure func)"
-    # if base.lower() in _reserved:
-    return '"%s"' % base
     # return base
 
 @dataclass
@@ -358,7 +363,7 @@ class ColumnAlias(Sql):
         return cls(value, alias)
 
     def _compile(self, qb):
-        alias = _safe_name(self.alias)
+        alias = qb.safe_name(self.alias)
         value = self.value.compile(qb).text
         assert alias and value, (alias, value)
         if value == alias:  # TODO disable when unoptimized?
@@ -394,7 +399,7 @@ class InsertConsts(Sql):
             for tpl in self.tuples
         )
 
-        q = ['INSERT INTO', _safe_name(self.table),
+        q = ['INSERT INTO', qb.safe_name(self.table),
              "(", ', '.join(self.cols), ")",
              "VALUES",
              values,

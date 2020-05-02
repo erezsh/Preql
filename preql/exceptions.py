@@ -54,10 +54,17 @@ class PreqlError(Exception):
                ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
         ])
 
+    @property
+    def exc_name(self):
+        n = type(self).__name__
+        if n.startswith('pql_'):
+            n = n[4:]
+        return n
+
     def __str__(self):
         if not self.meta:
             return self.message
-        s = "Error in line %d column %d: %s" % (self.meta.start_line, self.meta.start_column, self.message)
+        s = "%s in line %d column %d: %s" % (self.exc_name, self.meta.start_line, self.meta.start_column, self.message)
         s += "\n\n" + self._get_context(self.meta.text)
         return s
 
