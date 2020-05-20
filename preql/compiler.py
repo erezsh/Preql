@@ -1,7 +1,7 @@
 import operator
 
 from .utils import safezip, listgen, SafeDict, find_duplicate
-from .exceptions import pql_TypeError, PreqlError, pql_AttributeError, pql_SyntaxError, pql_CompileError
+from .exceptions import pql_TypeError, PreqlError, pql_SyntaxError, pql_CompileError
 from . import exceptions as exc
 
 from . import settings
@@ -294,7 +294,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 
     else:
         if not all(isinstance(i, objects.AbsInstance) for i in insts):
-            if all(isinstance(i, types.PqlType) for i in insts):
+            if any(isinstance(i, types.PqlType) for i in insts):
                 if cmp.op == '==':
                     return objects.new_value_instance(insts[0] is insts[1])
                 elif cmp.op == '!=':

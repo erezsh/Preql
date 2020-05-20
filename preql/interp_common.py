@@ -73,7 +73,7 @@ class State:
         self.db = create_engine(uri, self.db._debug)
 
     def get_var(self, name):
-        return self.ns.get_var(name)
+        return self.ns.get_var(self, name)
     def set_var(self, name, value):
         return self.ns.set_var(name, value)
     def use_scope(self, scope: dict):
@@ -93,12 +93,12 @@ class Namespace:
     def __copy__(self):
         return Namespace([dict(n) for n in self.ns])
 
-    def get_var(self, name):
+    def get_var(self, state, name):
         for scope in reversed(self.ns):
             if name in scope:
                 return scope[name]
 
-        raise pql_NameNotFound([], str(name))   # XXX TODO
+        raise pql_NameNotFound.make(state, name, str(name))
 
     def set_var(self, name, value):
         assert not isinstance(value, ast.Name)

@@ -1,10 +1,16 @@
 
-func _sql_agg_func(name, obj) {
+func _sql_agg_func(name, obj, t=null) {
     if (isa(obj, aggregate)) {
-        return SQL(int, name + "($obj)")
+        if (t == null) {
+            t = type(obj).elemtype
+        }
+        return SQL(t, name + "($obj)")
     } else {
         if (isa(obj, list)) {
-            return int( obj{ => value: _sql_agg_func(name, value) } )  # Recursive
+            if (t == null) {
+                t = type(obj).elemtype
+            }
+            return t( obj{ => value: _sql_agg_func(name, value) } )  # Recursive
         }
     }
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
@@ -25,7 +31,7 @@ func sum(field) {
 
 func mean(field) {
     "Mean of a column or a list"
-    return _sql_agg_func("AVG", field)
+    return _sql_agg_func("AVG", field, float)
 }
 
 func min(field) {

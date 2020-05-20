@@ -22,7 +22,7 @@ import re
 from .utils import benchmark
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields
-from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError, pql_CompileError
+from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, PreqlError, pql_SyntaxError, pql_CompileError
 from . import exceptions as exc
 from . import pql_types as types
 from . import pql_objects as objects
@@ -209,7 +209,7 @@ def execute(state, stmt):
             return _execute(state, stmt) or objects.null
         return evaluate(state, stmt)
     except PreqlError as e:
-        assert e.text_refs
+        # assert e.text_refs    # XXX ensure this
         raise
 
 

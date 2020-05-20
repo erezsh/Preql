@@ -251,6 +251,13 @@ class ListType(Collection, AtomicOrList):
     def apply_inner_type(self, t):
         return type(self)(t)
 
+    def get_attr(self, attr):
+        # XXX hacky
+        if attr == 'elemtype':
+            return self.elemtype
+
+        return super().get_attr(attr)
+
 
 @dataclass
 class FunctionType(PqlType):
@@ -306,6 +313,13 @@ class OptionalType(PqlType):
 @dataclass
 class Aggregated(AtomicOrList):
     elemtype: PqlType
+
+    def get_attr(self, attr):
+        # XXX hacky
+        if attr == 'elemtype':
+            return self.elemtype
+
+        raise exc.pql_AttributeError([], f"{self} has no attribute: {attr}")
 
 
 @dataclass

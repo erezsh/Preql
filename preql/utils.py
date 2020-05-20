@@ -177,3 +177,8 @@ class TextReference:
             text_before, text_after, '\n',
             ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
         ])
+
+    def __str__(self):
+        return '<text-reF>'
+    def __repr__(self):
+        return '<text-reF>'

@@ -402,10 +402,17 @@ def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
 def _cast(state, inst_type: types.TableType, target_type: types._Int, inst):
     assert len(inst.type.columns) == 1
     res = localize(state, inst)
-    # res = types.Int.import_result(res)
     assert len(res) == 1
     res = list(res[0].values())[0]
     return new_value_instance(res, types.Int)
+
+@dy
+def _cast(state, inst_type: types.TableType, target_type: types._Float, inst):
+    assert len(inst.type.columns) == 1
+    res = localize(state, inst)
+    assert len(res) == 1
+    res = list(res[0].values())[0]
+    return new_value_instance(res, types.Float)
 
 @dy
 def _cast(state, inst_type: types.IdType, target_type: types._Int, inst):
