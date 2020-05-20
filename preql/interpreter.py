@@ -32,7 +32,7 @@ class Interpreter:
 
     def call_func(self, fname, args):
         with benchmark.measure('call_func'):
-            return eval_func_call(self.state, self.state.get_var(fname), args, None)
+            return eval_func_call(self.state, self.state.get_var(fname), args)
 
     def eval_expr(self, code, args):
         expr_ast = parse_expr(code)

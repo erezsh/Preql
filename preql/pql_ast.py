@@ -1,15 +1,14 @@
 from typing import List, Any, Optional, Dict
 
-from .utils import dataclass
+from .utils import dataclass, TextReference
 from . import pql_types as types
-from .exceptions import Meta
 
 PqlObject = types.PqlObject
 
 
 @dataclass
 class Ast(PqlObject):
-    meta: Optional[Meta]
+    text_ref: Optional[TextReference]
 
 class Expr(Ast): pass
 
@@ -191,7 +190,6 @@ class TableDef(Statement, Definition):
     name: str
     columns: List[ColumnDef]
     methods: list
-    # meta: object
 
 @dataclass
 class StructDef(Statement, Definition):

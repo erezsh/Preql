@@ -5,7 +5,7 @@ import dsnparse
 
 from runtype import Dispatch
 
-from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, Meta
+from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -44,6 +44,7 @@ class State:
 
         self.access_level = AccessLevels.WRITE_DB
         self._cache = {}
+        self.stacktrace = []
 
     def __copy__(self):
         s = State(self.db, self.fmt)
@@ -51,6 +52,7 @@ class State:
         s.tick = self.tick
         s.access_level = self.access_level
         s._cache = self._cache
+        s.stacktrace = copy(self.stacktrace)
         return s
 
     def reduce_access(self, new_level):
@@ -96,7 +98,7 @@ class Namespace:
             if name in scope:
                 return scope[name]
 
-        raise pql_NameNotFound(getattr(name, 'meta', None), str(name))
+        raise pql_NameNotFound([], str(name))   # XXX TODO
 
     def set_var(self, name, value):
         assert not isinstance(value, ast.Name)
@@ -142,9 +144,9 @@ def create_engine(db_uri, debug):
 
 
 
-def assert_type(meta, t, type_, msg):
+def assert_type(t, type_, state, ast, msg):
     if not isinstance(t, type_):
-        raise pql_TypeError(meta, msg % (type_, t))
+        raise pql_TypeError.make(state, ast, msg % (type_, t))
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])

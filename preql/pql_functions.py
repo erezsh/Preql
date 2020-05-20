@@ -62,7 +62,7 @@ def _pql_PY_callback(state: State, var: str):
     inst = evaluate(state, obj)
 
     if not isinstance(inst, objects.ValueInstance):
-        raise pql_TypeError(None, f"Cannot convert {inst} to a Python value")
+        raise pql_TypeError.make(state, None, f"Cannot convert {inst} to a Python value")
 
     return '%s' % (inst.local_value)
 
@@ -75,7 +75,7 @@ def pql_PY(state: State, code_expr: ast.Expr):
     try:
         res = eval(py_code)
     except Exception as e:
-        raise pql_ValueError(code_expr.meta, f"Python code provided returned an error: {e}")
+        raise pql_ValueError.make(state, code_expr, f"Python code provided returned an error: {e}")
     return objects.new_value_instance(res)
 
 
@@ -185,7 +185,7 @@ def _count(state, obj: ast.Expr, table_func, name):
         code = table_func(obj.code)
     else:
         if not isinstance(obj.type, types.Aggregated):
-            raise pql_TypeError(None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
+            raise pql_TypeError.make(state, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
 
         obj = obj.primary_key()
         code = sql.FieldFunc(name, obj.code)
@@ -213,9 +213,9 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
 
 
     if 'id' in columns and not const:
-            raise pql_ValueError(None, "Field 'id' already exists. Rename it, or use 'const temptable' to copy it as-is.")
+            raise pql_ValueErro.make(state, None, "Field 'id' already exists. Rename it, or use 'const temptable' to copy it as-is.")
 
-    table = types.TableType(name, SafeDict(columns), temporary=True, primary_keys=[['id']] if 'id' in columns else [], autocount=[] if const else ['id'])
+    table = types.TableType(name, SafeDict(columns), temporary=True, primary_keys=[['id']] if not const else [])
 
     if not const:
         table.columns['id'] = types.IdType(table)
@@ -248,7 +248,7 @@ def sql_bin_op(state, op, table1, table2, name):
     l1 = len(t1.type.flatten_type())
     l2 = len(t2.type.flatten_type())
     if l1 != l2:
-        raise pql_TypeError(None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
+        raise pql_TypeError.make(state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
     code = sql.TableArith(op, [t1.code, t2.code])
     # TODO new type, so it won't look like the physical table
@@ -280,14 +280,14 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
     (a,b) = exprs.values()
 
     if a is objects.EmptyList or b is objects.EmptyList:
-        raise pql_TypeError(None, "Cannot join on an untyped empty list")
+        raise pql_TypeError.make(state, None, "Cannot join on an untyped empty list")
 
     if isinstance(a, objects.AttrInstance) and isinstance(b, objects.AttrInstance):
         cols = a, b
         tables = [a.parent, b.parent]
     else:
         if not (isinstance(a.type, types.Collection) and isinstance(b.type, types.Collection)):
-            raise pql_TypeError(None, f"join() got unexpected values:\n * {a}\n * {b}")
+            raise pql_TypeError.make(state, None, f"join() got unexpected values:\n * {a}\n * {b}")
         if joinall:
             tables = (a, b)
         else:
@@ -332,9 +332,9 @@ def _auto_join(state, join, ta, tb):
     refs2 = _find_table_reference(tb, ta)
     auto_join_count = len(refs1) + len(refs2)
     if auto_join_count < 1:
-        raise pql_JoinError("Cannot auto-join: No plausible relations found")
+        raise pql_JoinError.make(state, None, "Cannot auto-join: No plausible relations found")
     elif auto_join_count > 1:   # Ambiguity in auto join resolution
-        raise pql_JoinError("Cannot auto-join: Several plausible relations found")
+        raise pql_JoinError.make(state, None, "Cannot auto-join: Several plausible relations found")
 
     if len(refs1) == 1:
         dst, src = refs1[0]
@@ -376,7 +376,7 @@ def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
     inst = evaluate(state, obj)
     type_ = evaluate(state, type_)
     if not isinstance(type_, types.PqlType):
-        raise pql_TypeError(type_.meta, f"Cast expected a type, got {type_} instead.")
+        raise pql_TypeError.make(state, type_, f"Cast expected a type, got {type_} instead.")
 
     if inst.type is type_:
         return inst
@@ -385,7 +385,7 @@ def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
 
 @dy
 def _cast(state, inst_type, target_type, inst):
-    raise pql_TypeError(None, f"Cast not implemented for {inst_type}->{target_type}")
+    raise pql_TypeError.make(state, None, f"Cast not implemented for {inst_type}->{target_type}")
 
 @dy
 def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
@@ -395,7 +395,7 @@ def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
         # return inst.replace(type=target_type)
         return evaluate(state, ast.List_( None, target_type, []), )
 
-    raise pql_TypeError(None, "Cast not fully implemented yet")
+    raise pql_TypeError.make(state, None, "Cast not fully implemented yet")
 
 
 @dy
@@ -460,7 +460,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
         if doc:
             lines += [doc]
     else:
-        raise pql_TypeError(None, "help() only accepts functions at the moment")
+        raise pql_TypeError.make(state, None, "help() only accepts functions at the moment")
 
     text = '\n'.join(lines) + '\n'
     return new_value_instance(text).replace(type=types.Text)
@@ -474,7 +474,7 @@ def pql_names(state: State, obj: types.PqlObject = objects.null):
     if obj is not objects.null:
         inst = evaluate(state, obj)
         if not isinstance(inst.type, types.Collection): # XXX temp.
-            raise pql_TypeError(obj.meta, "Argument to names() must be a table")
+            raise pql_TypeError.make(state, obj, "Argument to names() must be a table")
         all_vars = list(inst.all_attrs())
     else:
         all_vars = list(state.ns.get_all_vars())
@@ -514,6 +514,7 @@ internal_funcs = create_internal_funcs({
     'exit': pql_exit,
     'help': pql_help,
     'names': pql_names,
+    'dir': pql_names,
     'connect': pql_connect,
     'count': pql_count,
     'temptable': pql_temptable,

@@ -1,3 +1,4 @@
+
 func _sql_agg_func(name, obj) {
     if (isa(obj, aggregate)) {
         return SQL(int, name + "($obj)")

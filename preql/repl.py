@@ -113,10 +113,8 @@ def start_repl(p, prompt=' >> '):
                     print(res)
 
             except PreqlError as e:
-                # if e.meta:
-                #     print(f"Error at line {e.meta.start_line, e.meta.start_column}: {e}")
-                # else:
                 print(e)
+                # p.interp.set_var('_e', objects.ExceptionInstance(e))
                 continue
             except pql_ExitInterp as e:
                 return

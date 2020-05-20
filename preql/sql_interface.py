@@ -34,7 +34,7 @@ class SqlInterface:
         except Exception as e:
             # print_sql(sql_code)
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
-            raise exceptions.pql_DatabaseQueryError(None, msg%(sql_code, e))
+            raise exceptions.pql_DatabaseQueryError([], msg%(sql_code, e))
 
         return c
 

@@ -2,34 +2,49 @@ from ast import literal_eval
 
 from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken, Token
 
-from .exceptions import pql_SyntaxError, Meta, pql_SyntaxError_PrematureEnd
+from .utils import TextPos, TextRange, TextReference
+from .exceptions import pql_SyntaxError, pql_SyntaxError_PrematureEnd
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
 
 class Str(str):
-    def __new__(cls, value, meta):
+    def __new__(cls, value, text_ref):
         obj = str.__new__(cls, value)
-        obj.meta = meta
+        obj.text_ref = text_ref
         return obj
 
-def token_value(self, meta, t):
-    return Str(str(t), meta)
+def token_value(self, text_ref, t):
+    return Str(str(t), text_ref)
 
-def meta_d(text, meta):
-    return Meta(
-        text,
-        meta.start_pos,
-        meta.line,
-        meta.column,
-        meta.end_pos,
-        meta.end_line,
-        meta.end_column,
-    )
+
+def make_text_reference(text, meta, children=()):
+    ref = TextRange(
+            TextPos(
+                meta.start_pos,
+                meta.line,
+                meta.column,
+            ),
+            TextPos(
+                meta.end_pos,
+                meta.end_line,
+                meta.end_column,
+            )
+        )
+
+    for c in children:
+        if hasattr(c, 'text_ref'):
+            assert c.text_ref.context is None
+            assert c.text_ref.text is text
+            c.text_ref.context = ref
+
+    return TextReference(text, ref)
+
+
 
 def _args_wrapper(f, data, children, meta):
     "Create meta with 'code' from transformer"
-    return f(meta_d(f.__self__.code, meta), *children)
+    return f(make_text_reference(f.__self__.code, meta, children), *children)
 
 
 # Taken from Lark (#TODO provide it in lark utils?)
@@ -86,7 +101,7 @@ class T(Transformer):
 
     @v_args(inline=False, meta=True)
     def pql_list(self, items, meta):
-        return ast.List_(meta_d(self.code, meta), types.ListType(types.any_t), items)
+        return ast.List_(make_text_reference(self.code, meta), types.ListType(types.any_t), items)
 
     @v_args(inline=False)
     def as_list(_, args):
@@ -154,7 +169,7 @@ class T(Transformer):
         for i, p in enumerate(params):
             if isinstance(p, objects.ParamVariadic):
                 if i != len(params)-1:
-                    raise pql_SyntaxError(meta, f"A variadic parameter must appear at the end of the function ({p.name})")
+                    raise pql_SyntaxError([], f"A variadic parameter must appear at the end of the function ({p.name})")
 
                 collector = p
                 params = params[:-1]
@@ -165,7 +180,7 @@ class T(Transformer):
         for i, a in enumerate(args):
             if isinstance(a, ast.InlineStruct):
                 if i != len(args)-1:
-                    raise pql_SyntaxError(meta, f"An inlined struct must appear at the end of the function call ({a})")
+                    raise pql_SyntaxError([], f"An inlined struct must appear at the end of the function call ({a})")
 
 
         return ast.FuncCall(meta, func, args)
@@ -188,7 +203,7 @@ class T(Transformer):
 
     @v_args(inline=False)
     def exclude(self, names):
-        return [Str(n.lstrip('!'), n.meta) for n in names]
+        return [Str(n.lstrip('!'), n.text_ref) for n in names]
 
     exclude_name = token_value
 
@@ -197,7 +212,7 @@ class T(Transformer):
 
     @v_args(inline=False, meta=True)
     def codeblock(self, stmts, meta):
-        return ast.CodeBlock(meta_d(self.code, meta), stmts)
+        return ast.CodeBlock(make_text_reference(self.code, meta), stmts)
 
     # @v_args(meta=True)
     # def table_def(self, args, meta):
@@ -242,20 +257,19 @@ def parse_stmts(s):
     try:
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
-        m = Meta(s,
-                 e.pos_in_stream, e.line, e.column,
-                 e.pos_in_stream, e.line, e.column)
+        pos =  TextPos(e.pos_in_stream, e.line, e.column)
+        ref = TextReference(s, TextRange(pos, pos))
         # m = m.remake(parent=m)
         # raise pql_SyntaxError(m, str(e) + e.get_context(s)) from e
         if isinstance(e, UnexpectedToken):
             if e.token.type == '$END':
                 msg = "Code ended unexpectedly"
-                raise pql_SyntaxError_PrematureEnd(m, "Syntax error: " + msg)
+                raise pql_SyntaxError_PrematureEnd([ref], "Syntax error: " + msg)
             else:
                 msg = "Unexpected token: '%s'" % e.token
         else:
             msg = "Unexpected character: '%s'" % s[e.pos_in_stream]
-        raise pql_SyntaxError(m, "Syntax error: " + msg)
+        raise pql_SyntaxError([ref], "Syntax error: " + msg)
 
     # print(tree)
 
@@ -265,3 +279,4 @@ d = {}
 def parse_expr(s):
     tree = parser.parse(s, start="expr")
     return T(code=s).transform(tree)
+

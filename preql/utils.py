@@ -1,14 +1,16 @@
 import time
 from contextlib import contextmanager
 
-from typing import _GenericAlias as TypeBase, Any, Union, Callable
+from typing import _GenericAlias as TypeBase, Any, Union, Callable, Optional
 from functools import wraps
 from operator import getitem
 
-from runtype import dataclass
+import runtype
 
 from . import settings
-dataclass = dataclass(check_types=settings.debug)
+
+mut_dataclass = runtype.dataclass(check_types=settings.debug, frozen=False)
+dataclass = runtype.dataclass(check_types=settings.debug)
 
 
 class SafeDict(dict):
@@ -126,3 +128,52 @@ def classify_bool(seq, pred):
     return true_elems, false_elems
 
 benchmark = Benchmark()
+
+
+
+
+@dataclass
+class TextPos:
+    char_index: int
+    line: int
+    column: int
+
+@dataclass
+class TextRange:
+    start: TextPos
+    end: TextPos
+
+
+def expand_tab(s):
+    return s.replace('\t', '    ')
+
+@mut_dataclass
+class TextReference:
+    text: str
+    ref: TextRange
+    context: Optional[TextRange] = None
+
+    def get_surrounding_line(self, span):
+        pos = self.ref.start.char_index
+        start = max(pos - span, 0)
+        end = pos + span
+        text_before = self.text[start:pos].rsplit('\n', 1)[-1]
+        text_after = self.text[pos:end].split('\n', 1)[0]
+        return expand_tab(text_before), expand_tab(text_after)
+
+    def get_pinpoint_text(self, span=80):
+        text_before, text_after = self.get_surrounding_line(span)
+
+        MARK_CHAR = '-'
+        mark_before = mark_after = 0
+        if self.context:
+            pos = self.ref.start.char_index
+            mark_before = max(0, min(len(text_before), pos - self.context.start.char_index))
+            mark_after = max(0, min(len(text_after), self.context.end.char_index - pos - 1))
+            assert mark_before >= 0 and mark_after >= 0
+
+        return ''.join([
+            "~~~ At line %d, column %d:\n" % (self.ref.start.line, self.ref.start.column),
+            text_before, text_after, '\n',
+            ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
+        ])

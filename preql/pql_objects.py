@@ -88,7 +88,7 @@ class Function(types.PqlObject):
                 # XXX we only want to localize the keys, not the values
                 d = self._localize_keys(state, a.struct)
                 if not isinstance(d, dict):
-                    raise pql_TypeError(f"Expression to inline is not a map: {d}")
+                    raise pql_TypeError.make(state, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
                     inline_args.append(ast.NamedField(None, k, new_value_instance(v)))
             else:
@@ -103,11 +103,11 @@ class Function(types.PqlObject):
         else:
             if not all(n for n in named[first_named:]):
                 # TODO meta
-                raise pql_TypeError(None, f"Function {self.name} recieved a non-named argument after a named one!")
+                raise pql_TypeError.make(state, None, f"Function {self.name} recieved a non-named argument after a named one!")
 
         if first_named > len(self.params):
             # TODO meta
-            raise pql_TypeError(None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
+            raise pql_TypeError.make(state, None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
 
         values = {p.name: p.default for p in self.params}
 
@@ -126,13 +126,13 @@ class Function(types.PqlObject):
                     collected[arg_name] = named_arg.value
                 else:
                     # TODO meta
-                    raise pql_TypeError(None, f"Function '{self.name}' has no parameter named '{arg_name}'")
+                    raise pql_TypeError.make(state, None, f"Function '{self.name}' has no parameter named '{arg_name}'")
 
 
         for name, value in values.items():
             if value is None:
                 # TODO meta
-                raise pql_TypeError(None, f"Error calling function '{self.name}': parameter '{name}' has no value")
+                raise pql_TypeError.make(state, None, f"Error calling function '{self.name}': parameter '{name}' has no value")
 
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values
@@ -191,6 +191,11 @@ class MethodInstance(AbsInstance, Function):
 
     # type = types.FunctionType()
     name = property(X.func.name)
+
+@dataclass
+class ExceptionInstance(AbsInstance):
+    exc: Exception
+
 
 
 @dataclass
@@ -329,7 +334,7 @@ class AbsStructInstance(AbsInstance):
     @property
     def code(self):
         # XXX this shouldn't even be allowed to happen in the first place
-        raise pql_TypeError(None, "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
+        raise pql_TypeError([], "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
 
 
 @dataclass
@@ -360,7 +365,7 @@ class StructInstance(AbsStructInstance):
         if name in self.attrs:
             return self.attrs[name]
         else:
-            raise pql_AttributeError(None, f"No such attribute: {name}")
+            raise pql_AttributeError([], f"No such attribute: {name}")
 
 
 @dataclass
@@ -411,7 +416,7 @@ class AttrInstance(AbsInstance):
 
     @property
     def code(self):
-        raise pql_TypeError(None, f"Operation not supported for {self.repr(None)}")
+        raise pql_TypeError([], f"Operation not supported for {self.repr(None)}")
     #     return self._resolve_attr().code
 
     def flatten_code(self):

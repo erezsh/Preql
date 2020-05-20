@@ -114,10 +114,11 @@ class ResolveParameters(Sql):
 
 @dataclass
 class Scalar(Sql):
-    def import_result(self, res):
-        row ,= res
-        item ,= row
-        return item
+    # def import_result(self, res):
+    #     row ,= res
+    #     item ,= row
+    #     return item
+    pass
 
 @dataclass
 class Atom(Scalar):
@@ -135,14 +136,15 @@ class Primitive(Atom):
 @dataclass
 class Table(Sql):
 
-    @listgen
-    def import_result(self, arr):
-        expected_length = self.type.flat_length()
-        for row in arr:
-            assert len(row) == expected_length, (expected_length, row)
-            i = iter(row)
-            s = ({str(name): col.type.restructure_result(i) for name, col in self.type.columns.items()})
-            yield s
+    # @listgen
+    # def import_result(self, arr):
+    #     expected_length = self.type.flat_length()
+    #     for row in arr:
+    #         assert len(row) == expected_length, (expected_length, row)
+    #         i = iter(row)
+    #         s = ({str(name): col.type.restructure_result(i) for name, col in self.type.columns.items()})
+    #         yield s
+    pass
 
 @dataclass
 class EmptyList(Table):
@@ -229,11 +231,11 @@ class MakeArray(Sql):
 
         assert False, qb.target
 
-    def import_result(self, value):
-        assert False
-        if value is None:
-            return []
-        return value.split(self._sp)
+    # def import_result(self, value):
+    #     assert False
+    #     if value is None:
+    #         return []
+    #     return value.split(self._sp)
 
 
 @dataclass
@@ -617,12 +619,11 @@ def table_selection(table, conds):
 def table_order(table, fields):
     return Select(table.type, table.code, [AllFields(table.type)], order=fields)
 
-def arith(res_type, op, args, meta):
+def arith(res_type, op, args, stacktrace):
     arg_codes = list(args)
     if res_type == types.String:
         if op != '+':
-            meta = op.meta.replace(parent=meta)
-            raise exc.pql_TypeError(meta, f"Operator '{op}' not supported for strings.")
+            raise exc.pql_TypeError(stacktrace + [op.text_ref], f"Operator '{op}' not supported for strings.")
         op = '||'
     elif op == '/':
         arg_codes[0] = Cast(types.Float, 'float', arg_codes[0])

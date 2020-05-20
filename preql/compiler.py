@@ -19,9 +19,9 @@ def compile_type_def(state: State, table: types.TableType) -> sql.Sql:
     columns = []
 
     pks = {types.join_names(pk) for pk in table.primary_keys}
-    autocount = types.join_names(table.autocount)
+    # autocount = types.join_names(table.autocount)
     for name, c in table.flatten_type():
-        if name == autocount:
+        if name in pks:
             assert isinstance(c, types.IdType)  # Right now nothing else is supported
             if state.db.target == sql.postgres:
                 type_ = "SERIAL" # Postgres
@@ -100,7 +100,7 @@ def _process_fields(state: State, fields):
             raise exc.InsufficientAccessLevel()
 
         if not isinstance(v, objects.AbsInstance):
-            raise pql_TypeError(None, f"Projection field is not an instance. Instead it is: {v}")
+            raise pql_TypeError.make(state, None, f"Projection field is not an instance. Instead it is: {v}")
 
         if isinstance(v.type, types.Aggregated):
             v = v.primary_key()
@@ -112,7 +112,7 @@ def _process_fields(state: State, fields):
 
 
 @listgen
-def _expand_ellipsis(table, fields):
+def _expand_ellipsis(state, table, fields):
     direct_names = {f.value.name for f in fields if isinstance(f.value, ast.Name)}
 
     for f in fields:
@@ -120,12 +120,12 @@ def _expand_ellipsis(table, fields):
 
         if isinstance(f.value, ast.Ellipsis):
             if f.name:
-                raise pql_SyntaxError(f.meta, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
+                raise pql_SyntaxError.make(state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
                 exclude = direct_names | set(f.value.exclude)
                 for name in table.type.columns:
                     if name not in exclude:
-                        yield ast.NamedField(f.meta, name, ast.Name(None, name))
+                        yield ast.NamedField(f.text_ref, name, ast.Name(None, name))
         else:
             yield f
 
@@ -140,7 +140,6 @@ def compile_to_inst(state: State, node: ast.Ast):
 @dy
 def compile_to_inst(state: State, proj: ast.Projection):
     table = evaluate(state, proj.table)
-    # assert_type(proj.meta, table.type, (types.TableType, types.ListType, types.StructType), "%s")
     if table is objects.EmptyList:
         return table   # Empty list projection is always an empty list.
 
@@ -150,14 +149,14 @@ def compile_to_inst(state: State, proj: ast.Projection):
     assert isinstance(table, objects.AbsInstance), table
 
     if not isinstance(table.type, (types.Collection, types.StructType)):
-        raise pql_TypeError(proj.meta, f"Cannot project objects of type {table.type}")
+        raise pql_TypeError.make(state, proj, f"Cannot project objects of type {table.type}")
 
-    fields = _expand_ellipsis(table, proj.fields)
+    fields = _expand_ellipsis(state, table, proj.fields)
 
     # Test duplicates in field names. If an automatic name is used, collision should be impossible
     dup = find_duplicate([f for f in list(proj.fields) + list(proj.agg_fields) if f.name], key=lambda f: f.name)
     if dup:
-        raise pql_TypeError(dup.meta, f"Field '{dup.name}' was already used in this projection")
+        raise pql_TypeError.make(state, dup, f"Field '{dup.name}' was already used in this projection")
 
     attrs = table.all_attrs()
 
@@ -166,7 +165,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     for name, f in fields:
         if not (f.type.composed_of(types.AtomicType) or f.type.composed_of(types.StructType)):
-            raise exc.pql_TypeError(proj.meta, f"Cannot project values of type: {f.type}")
+            raise exc.pql_TypeError.make(state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
         t = types.StructType(state.unique_name('_nested_proj'), {n:c.type for n,c in fields})
@@ -180,6 +179,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     all_fields = fields + agg_fields
 
     # Make new type
+    # TODO inherit primary key? indexes?
     new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], codenames={})
 
     codename = state.unique_name('proj')
@@ -233,7 +233,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 @dy
 def compile_to_inst(state: State, order: ast.Order):
     table = evaluate(state, order.table)
-    assert_type(order.meta, table.type, types.TableType, "'order' expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, types.TableType, state, order, "'order' expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.all_attrs()):
         fields = evaluate(state, order.fields)
@@ -259,9 +259,9 @@ def compile_to_inst(state: State, like: ast.Like):
     s = evaluate(state, like.str)
     p = evaluate(state, like.pattern)
     if s.type != types.String:
-        raise pql_TypeError(like.str.meta.replace(parent=like.meta), f"Like (~) operator expects two strings")
+        raise pql_TypeError.make(state, like.str, f"Like (~) operator expects two strings")
     if p.type != types.String:
-        raise pql_TypeError(like.pattern.meta.replace(parent=like.meta), f"Like (~) operator expects two strings")
+        raise pql_TypeError.make(state, like.pattern, f"Like (~) operator expects two strings")
 
     code = sql.Like(s.code, p.code)
     return objects.Instance.make(code, types.Bool, [s, p])
@@ -276,21 +276,21 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 
     if cmp.op == 'in' or cmp.op == '!in':
         if not all(isinstance(i, objects.AbsInstance) for i in insts):
-            raise pql_TypeError(cmp.meta, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
+            raise pql_TypeError.make(state, cmp.op, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
 
         sql_cls = sql.Contains
         if isinstance(insts[0].type, types._String) and isinstance(insts[1].type, types._String):
             code = sql.Compare('>', [sql.FuncCall(types.Bool, 'INSTR', [i.code for i in reversed(insts)]), sql.value(0)])
             return objects.make_instance(code, types.Bool, [])
         else:
-            assert_type(cmp.meta, insts[0].type, types.AtomicType, "Expecting type %s, got %s")
-            assert_type(cmp.meta, insts[1].type, types.Collection, "Expecting type %s, got %s")
+            assert_type(insts[0].type, types.AtomicType, state, cmp.op, "Expecting type %s, got %s")
+            assert_type(insts[1].type, types.Collection, state, cmp.op, "Expecting type %s, got %s")
             cols = insts[1].type.columns
             if len(cols) > 1:
-                raise pql_TypeError(cmp.meta, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
+                raise pql_TypeError.make(state, cmp.op, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
             c_type = list(cols.values())[0]
             if c_type.effective_type().kernel_type() != insts[0].type.effective_type().kernel_type():
-                raise pql_TypeError(cmp.meta, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
+                raise pql_TypeError.make(state, cmp.op, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
     else:
         if not all(isinstance(i, objects.AbsInstance) for i in insts):
@@ -300,7 +300,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
                 elif cmp.op == '!=':
                     return objects.new_value_instance(insts[0] is not insts[1])
 
-            raise pql_TypeError(cmp.meta, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
+            raise pql_TypeError.make(state, cmp.op, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
             # try compare
 
         if settings.optimize:
@@ -325,7 +325,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
         insts = [i.primary_key() for i in insts]
         for i, inst in enumerate(insts):
             if not inst.type.composed_of(types.AtomicType):
-                raise pql_TypeError(cmp.args[i].meta.replace(parent=cmp.meta), f"Compare not implemented for type {inst.type}")
+                raise pql_TypeError.make(state, cmp.args[i], f"Compare not implemented for type {inst.type}")
 
 
     op = {
@@ -363,14 +363,9 @@ def _compile_arith(state, arith, a: objects.TableInstance, b: objects.TableInsta
     try:
         op = ops[arith.op]
     except KeyError:
-        meta = arith.op.meta.replace(parent=arith.meta)
-        raise pql_TypeError(meta, f"Operation '{arith.op}' not supported for tables")
+        raise pql_TypeError.make(state, arith.op, f"Operation '{arith.op}' not supported for tables")
 
-    try:
-        return state.get_var(op).func(state, a, b)
-        # return call_pql_func(state, op, [a,b])
-    except PreqlError as e:
-        raise e.replace(meta=arith.meta) from e
+    return state.get_var(op).func(state, a, b)
 
 
 @dy
@@ -393,8 +388,7 @@ def _compile_arith(state, arith, a, b):
             arg_types_set = {types.Float}
         elif arg_types_set == {types.Int, types.String}:
             if arith.op != '*':
-                meta = arith.op.meta.replace(parent=arith.meta)
-                raise pql_TypeError(meta, f"Operator '{arith.op}' not supported between string and integer.")
+                raise pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
 
             # REPEAT(str, int) -> str
             ordered_args = {
@@ -404,23 +398,21 @@ def _compile_arith(state, arith, a, b):
 
             return call_pql_func(state, "repeat", ordered_args)
         else:
-            meta = arith.op.meta.replace(parent=arith.meta)
-            raise pql_TypeError(meta, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
+            raise pql_TypeError.make(state, arith.op, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
     if not all(isinstance(a.type, (types.Primitive, types.Aggregated)) for a in args):
-        meta = arith.op.meta.replace(parent=arith.meta)
-        raise pql_TypeError(meta, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
+        raise pql_TypeError.make(state, arith.op, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
     res_type ,= arg_types_set
-    code = sql.arith(res_type, arith.op, [a.code for a in args], arith.meta)
+    code = sql.arith(res_type, arith.op, [a.code for a in args], state.stacktrace)  # XXX
     return objects.make_instance(code, res_type, args)
 
 
 @dy
 def compile_to_inst(state: State, x: ast.Ellipsis):
-    raise pql_SyntaxError(x.meta, "Ellipsis not allowed here")
+    raise pql_SyntaxError.make(state, x, "Ellipsis not allowed here")
 
 
 @dy
@@ -453,14 +445,14 @@ def compile_to_inst(state: State, lst: ast.List_):
 
     type_set = {e.type for e in elems}
     if len(type_set) > 1:
-        raise pql_TypeError(lst.meta, "Cannot create a list of mixed types: (%s)" % ', '.join(repr(t) for t in type_set))
+        raise pql_TypeError.make(state, lst, "Cannot create a list of mixed types: (%s)" % ', '.join(repr(t) for t in type_set))
     elif type_set:
         elem_type ,= type_set
     else:
         elem_type = lst.type.elemtype
 
     if not elem_type.composed_of(types.Primitive):
-        raise pql_TypeError(lst.meta, "Cannot create lists of type %s" % elem_type)
+        raise pql_TypeError.make(state, lst, "Cannot create lists of type %s" % elem_type)
 
     # XXX should work with a better type system where isa(int, any) == true
     # assert isinstance(elem_type, type(lst.type.elemtype)), (elem_type, lst.type.elemtype)
@@ -480,7 +472,7 @@ def compile_to_inst(state: State, s: ast.Slice):
     table = evaluate(state, s.table)
     # TODO if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
 
-    assert_type(s.meta, table.type, types.Collection, "Slice expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, types.Collection, state, s, "Slice expected an object of type '%s', instead got '%s'")
 
     instances = [table]
     if s.range.start:
@@ -508,15 +500,14 @@ def compile_to_inst(state: State, sel: ast.Selection):
     if not isinstance(table, objects.Instance):
         return sel.replace(table=table)
 
-    assert_type(sel.meta, table.type, types.Collection, "Selection expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, types.Collection, state, sel, "Selection expected an object of type '%s', instead got '%s'")
 
     with state.use_scope(table.all_attrs()):
         conds = evaluate(state, sel.conds)
 
     for i, c in enumerate(conds):
         if not isinstance(c.type, types._Bool):
-            meta = sel.conds[i].meta.replace(parent=sel.meta)
-            raise exc.pql_TypeError(meta, f"Selection expected boolean, got {c.type}")
+            raise exc.pql_TypeError.make(state, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
     code = sql.table_selection(table, [c.code for c in conds])
 
@@ -539,21 +530,21 @@ def compile_to_inst(state: State, attr: ast.Attr):
 def _apply_type_generics(state, gen_type, type_names):
     type_objs = evaluate(state, type_names)
     if not type_objs:
-        raise pql_TypeError(None, f"Generics expression expected a type, got nothing.")
+        raise pql_TypeError.make(state, None, f"Generics expression expected a type, got nothing.")
     for o in type_objs:
         if not isinstance(o, types.PqlType):
-            raise pql_TypeError(None, f"Generics expression expected a type, got '{o}'.")
+            raise pql_TypeError.make(state, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:
         #t = types.Union
-        raise pql_TypeError("Union types not yet supported!")
+        raise pql_TypeError.make(state, None, "Union types not yet supported!")
     else:
         t ,= type_objs
 
     try:
         return gen_type.apply_inner_type(t)
     except TypeError:
-        raise pql_TypeError(None, f"Type {t} isn't a container!")
+        raise pql_TypeError.make(state, None, f"Type {t} isn't a container!")
 
 
 

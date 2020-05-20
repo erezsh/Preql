@@ -22,7 +22,7 @@ import re
 from .utils import benchmark
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields
-from .exceptions import pql_TypeError, pql_ValueError, pql_NameNotFound, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError, pql_CompileError
+from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, pql_AttributeError, PreqlError, pql_SyntaxError, pql_CompileError
 from . import exceptions as exc
 from . import pql_types as types
 from . import pql_objects as objects
@@ -46,7 +46,7 @@ def resolve(state: State, struct_def: ast.StructDef):
 
 @dy
 def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
-    t = types.TableType(table_def.name, SafeDict(), False, [['id']], ['id'])
+    t = types.TableType(table_def.name, SafeDict(), False, [['id']])
     if table_def.methods:
         methods = evaluate(state, table_def.methods)
         t.dyn_attrs.update({m.userfunc.name:m.userfunc for m in methods})
@@ -140,7 +140,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
 def _execute(state: State, insert_rows: ast.InsertRows):
     if not isinstance(insert_rows.name, ast.Name):
         # TODO support Attr
-        raise pql_SyntaxError(insert_rows.meta, "L-value must be table name")
+        raise pql_SyntaxError.make(state, insert_rows, "L-value must be table name")
 
     rval = evaluate(state, insert_rows.value)
     return _copy_rows(state, insert_rows.name, rval)
@@ -209,9 +209,8 @@ def execute(state, stmt):
             return _execute(state, stmt) or objects.null
         return evaluate(state, stmt)
     except PreqlError as e:
-        if e.meta is None:
-            raise e.replace(meta=stmt.meta)
-        raise #e.replace(meta=e.meta.replace(parent=stmt.meta))
+        assert e.text_refs
+        raise
 
 
 
@@ -293,17 +292,17 @@ def simplify(state: State, funccall: ast.FuncCall):
         func = state.get_var('cast')
 
     if not isinstance(func, objects.Function):
-        meta = funccall.func.meta
-        if meta:
-            meta = meta.replace(parent=meta)
-        raise pql_TypeError(meta, f"Error: Object of type '{func.type}' is not callable")
+        raise pql_TypeError.make(state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
 
-    res = eval_func_call(state, func, args, funccall.meta)
+    state.stacktrace.append(funccall.text_ref)
+    res = eval_func_call(state, func, args)
+    assert state.stacktrace[-1] is funccall.text_ref
+    state.stacktrace.pop()
     # assert isinstance(res, types.PqlObject), (type(res), res) # TODO this should work
     return res
 
 
-def eval_func_call(state, func, args, meta=None):
+def eval_func_call(state, func, args):
     assert isinstance(func, objects.Function)
 
     matched_args = func.match_params(state, args)
@@ -316,7 +315,10 @@ def eval_func_call(state, func, args, meta=None):
     else:
         args = {}
 
+    # XXX simplify destroys text_ref, so it harms error messages.
+    # TODO Can I get rid of it, or make it preserve the text_ref somehow?
     args.update( {p.name:simplify(state, a) for p,a in matched_args} )
+    # args.update( {p.name:a for p,a in matched_args} )
 
 
     # if isinstance(func, objects.UserFunction):
@@ -327,7 +329,7 @@ def eval_func_call(state, func, args, meta=None):
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:
-            params = {name: ast.Parameter(meta, name, value.type) for name, value in args.items()}
+            params = {name: ast.Parameter(func.text_ref, name, value.type) for name, value in args.items()}
             sig = (func.name,) + tuple(a.type for a in args.values())
 
             try:
@@ -341,7 +343,7 @@ def eval_func_call(state, func, args, meta=None):
                         logging.info("Compiled successfully")
                         state._cache[sig] = expr
 
-                expr = ast.ResolveParameters(meta, expr, args)
+                expr = ast.ResolveParameters(func.text_ref, expr, args)
             except exc.InsufficientAccessLevel:
                 # Don't cache
                 expr = func.expr
@@ -389,6 +391,7 @@ def resolve_parameters(state: State, res: ast.ResolveParameters):
 
     return obj.replace(code=code)
 
+# TODO fix these once we have proper types
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
     count = call_pql_func(state, "count", [table])
@@ -472,10 +475,10 @@ def apply_database_rw(state: State, o: ast.One):
     rows = localize(state, table) # Must be 1 row
     if len(rows) == 0:
         if not o.nullable:
-            raise pql_ValueError(o.meta, "'one' expected a single result, got an empty expression")
+            raise pql_ValueError.make(state, o, "'one' expected a single result, got an empty expression")
         return objects.null
     elif len(rows) > 1:
-        raise pql_ValueError(o.meta, "'one' expected a single result, got more")
+        raise pql_ValueError.make(state, o, "'one' expected a single result, got more")
 
     row ,= rows
     rowtype = types.RowType(table.type)
@@ -495,14 +498,14 @@ def apply_database_rw(state: State, d: ast.Delete):
     state.catch_access(state.AccessLevels.WRITE_DB)
     # TODO Optimize: Delete on condition, not id, when possible
 
-    cond_table = ast.Selection(d.meta, d.table, d.conds)
+    cond_table = ast.Selection(d.text_ref, d.table, d.conds)
     table = evaluate(state, cond_table)
     assert isinstance(table.type, types.TableType)
 
     rows = list(localize(state, table))
     if rows:
         if 'id' not in rows[0]:
-            raise pql_ValueError(d.meta, "Delete error: Table does not contain id")
+            raise pql_ValueError.make(state, d, "Delete error: Table does not contain id")
 
         ids = [row['id'] for row in rows]
 
@@ -526,11 +529,6 @@ def apply_database_rw(state: State, u: ast.Update):
     assert all(f.name for f in u.fields)
 
     # TODO verify table is concrete (i.e. lvalue, not a transitory expression)
-    # try:
-    #     state.get_var(table.type.name)
-    # except pql_NameNotFound:
-    #     meta = u.table.meta
-    #     raise pql_TypeError(meta.replace(meta), "Update error: Got non-real table")
 
     update_scope = {n:c.replace(code=sql.Name(c.type, n)) for n, c in table.all_attrs().items()}
     with state.use_scope(update_scope):
@@ -539,9 +537,9 @@ def apply_database_rw(state: State, u: ast.Update):
     rows = list(localize(state, table))
     if rows:
         if 'id' not in rows[0]:
-            raise pql_ValueError(u.meta, "Update error: Table does not contain id")
+            raise pql_ValueError.make(state, u, "Update error: Table does not contain id")
         if not set(proj) < set(rows[0]):
-            raise pql_ValueError(u.meta, "Update error: Not all keys exist in table")
+            raise pql_ValueError.make(state, u, "Update error: Not all keys exist in table")
 
         ids = [row['id'] for row in rows]
 
@@ -561,7 +559,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     if isinstance(obj, objects.TableInstance):
         # XXX Is it always TableInstance? Just sometimes? What's the transition here?
         obj = obj.type
-    assert_type(new.meta, obj, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(obj, types.TableType, state, new, "'new' expected an object of type '%s', instead got '%s'")
 
     if len(new.args) > 1:
         raise NotImplementedError("Not yet implemented. Requires column-wise table concat (use join and enum)")
@@ -579,16 +577,14 @@ def apply_database_rw(state: State, new: ast.NewRows):
     ids = []
     for row in rows:
         matched = cons.match_params(state, [objects.from_python(v) for v in row.values()])
-        # destructured_pairs = _destructure_param_match(state, new.meta, matched)
-        ids += [_new_row(state, new.meta, obj, matched)]
+        ids += [_new_row(state, new, obj, matched)]
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
-    # return ast.List_(new.meta, [new_value_instance(rowid, obj.columns['id'], force_type=True) for rowid in ids])
-    return ast.List_(new.meta, types.ListType(types.Int), ids)
+    return ast.List_(new.text_ref, types.ListType(types.Int), ids)
 
 
 @listgen
-def _destructure_param_match(state, meta, param_match):
+def _destructure_param_match(state, ast, param_match):
     # TODO use cast rather than a ad-hoc hardwired destructure
     for k, v in param_match:
         if isinstance(v, objects.RowInstance):
@@ -598,16 +594,16 @@ def _destructure_param_match(state, meta, param_match):
         if isinstance(k.type, types.StructType):
             names = [name for name, t in k.orig.col_type.flatten_type([k.name])]
             if not isinstance(v, list):
-                raise pql_TypeError(meta, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
+                raise pql_TypeError.make(state, ast, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
             if len(v) != len(names):
-                raise pql_TypeError(meta, f"Parameter {k.name} received a bad value (size of {len(names)})")
+                raise pql_TypeError.make(state, ast, f"Parameter {k.name} received a bad value (size of {len(names)})")
             yield from safezip(names, v)
         else:
             yield k.name, v
 
-def _new_row(state, meta, table, matched):
+def _new_row(state, ast, table, matched):
     matched = [(k, evaluate(state, v)) for k, v in matched]
-    destructured_pairs = _destructure_param_match(state, meta, matched)
+    destructured_pairs = _destructure_param_match(state, ast, matched)
 
     keys = [name for (name, _) in destructured_pairs]
     values = [sql.value(v) for (_,v) in destructured_pairs]
@@ -634,20 +630,21 @@ def apply_database_rw(state: State, new: ast.New):
     if isinstance(obj, type) and issubclass(obj, PreqlError):
         def create_exception(state, msg):
             msg = localize(state, evaluate(state, msg))
-            return obj(None, msg)
+            assert new.text_ref is state.stacktrace[-1]
+            return obj(list(state.stacktrace), msg)    # TODO move this to `throw`?
         f = objects.InternalFunction(obj.__name__, [objects.Param(None, 'message')], create_exception)
-        res = evaluate(state, ast.FuncCall(new.meta, f, new.args))
+        res = evaluate(state, ast.FuncCall(new.text_ref, f, new.args))
         return res
 
     assert isinstance(obj, objects.TableInstance)  # XXX always the case?
     table = obj
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
-    assert_type(new.meta, table.type, types.TableType, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, types.TableType, state, new, "'new' expected an object of type '%s', instead got '%s'")
 
     cons = TableConstructor.make(table.type)
     matched = cons.match_params(state, new.args)
 
-    return _new_row(state, new.meta, table.type, matched)
+    return _new_row(state, new, table.type, matched)
 
 
 @dataclass
@@ -660,7 +657,7 @@ class TableConstructor(objects.Function):
 
     @classmethod
     def make(cls, table):
-        return cls([objects.Param(name.meta, name, p.col_type, p.default, orig=p) for name, p in table.params()])
+        return cls([objects.Param(name.text_ref, name, p.col_type, p.default, orig=p) for name, p in table.params()])
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
@@ -798,7 +795,7 @@ def new_table_from_rows(state, name, columns, rows):
     ]
 
     # TODO refactor into function
-    table = types.TableType(name, SafeDict(), True, [['id']], ['id'])
+    table = types.TableType(name, SafeDict(), True, [['id']])
     table.columns['id'] = types.IdType(table)
     for c,v in zip(columns, tuples[0]):
         table.columns[c] = v.type

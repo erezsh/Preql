@@ -14,13 +14,13 @@ class PqlObject:    # XXX should be in a base module
         return repr(self)
 
     def get_attr(self, attr):
-        raise exc.pql_AttributeError(attr.meta, f"{self} has no attribute: {attr}")
+        raise exc.pql_AttributeError([], f"{self} has no attribute: {attr}")    # XXX TODO
 
     # def is_equal(self, other):
     #     raise exc.pql_NotImplementedError(f"Equality of {self} not implemented")
     def isa(self, t):
         if not isinstance(t, PqlType):
-            raise exc.pql_TypeError(None, f"'type' argument to isa() isn't a type. It is {t}")
+            raise exc.pql_TypeError([], f"'type' argument to isa() isn't a type. It is {t}")
         return self.type.issubclass(t)
 
     def replace(self, **attrs):
@@ -39,7 +39,7 @@ class PqlType(PqlObject):
 
     @property
     def code(self):
-        raise exc.pql_TypeError(None, "type objects are local and cannot be used in target code.")
+        raise exc.pql_TypeError([], "type objects are local and cannot be used in target code.")
 
     def kernel_type(self):
         return self
@@ -153,11 +153,11 @@ class _DateTime(Primitive):
         s = super().import_result(res)
         if s:
             if not isinstance(s, str):
-                raise exc.pql_TypeError(None, f"Expected a string. Instead got: {s}")
+                raise exc.pql_TypeError([], f"Expected a string. Instead got: {s}")
             try:
                 return datetime.fromisoformat(s)
             except ValueError as e:
-                raise exc.pql_ValueError(None, str(e))
+                raise exc.pql_ValueError([], str(e))
 
     def restructure_result(self, i):
         s = super().restructure_result(i)
@@ -219,7 +219,7 @@ class Collection(PqlType):
             try:
                 return self.dyn_attrs[name]
             except KeyError:
-                raise exc.pql_AttributeError(None, name)
+                raise exc.pql_AttributeError([], name)
 
 
 
@@ -323,9 +323,9 @@ class TableType(Collection):
     columns: Dict[str, Union[PqlType, Column]]
     temporary: bool
     primary_keys: List[List[str]]
-    autocount: List[str] = field(default_factory=list)
+    # autocount: List[str] = field(default_factory=list)
 
-    codenames: object = None
+    codenames: Optional[dict] = None
 
     def flatten_path(self, path=[]):
         return concat_for(col.flatten_path(path + [self.column_codename(name)]) for name, col in self.columns.items())
@@ -335,9 +335,10 @@ class TableType(Collection):
         assert isinstance(self.columns, SafeDict), self.columns
 
     def flat_for_insert(self):
-        auto_count = join_names(self.autocount)
+        # auto_count = join_names(self.primary_keys)
+        pks = {join_names(pk) for pk in self.primary_keys}
         names = [name for name,t in self.flatten_type()]
-        return classify_bool(names, lambda name: name==auto_count)
+        return classify_bool(names, lambda name: name in pks)
 
     def params(self):
         return [(name, c) for name, c in self.columns.items() if not c.hide_from_init]
@@ -368,7 +369,8 @@ class TableType(Collection):
 
     def restructure_result(self, i):
         "Called from import_result, to read the table's id (not actual structure)"
-        return next(i)
+        raise NotImplementedError()
+        # return next(i)
 
     @listgen
     def import_result(self, arr):
@@ -391,7 +393,8 @@ class RelationalColumn(Column):
         return [(path, self)]
 
     def restructure_result(self, i):
-        return self.type.restructure_result(i)
+        # return self.type.restructure_result(i)
+        return next(i)  # id of table
 
     def effective_type(self):   # XXX Yikes
         return self.get_pk()
