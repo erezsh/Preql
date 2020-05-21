@@ -10,6 +10,7 @@ expr_list: "[" _NL? _ml_seperated{expr} "]" -> as_list
 proj_exprs: _ml_seperated{named_expr} -> as_list
 
 ml_list{item}: _ml_seperated{item} -> as_list   // multi-line list
+ml_list0{item}: _ml_seperated{item}? -> as_list
 
 table_def: "table" name "{" _ml_sep? _table_contents "}" _NL
          | [CONST] "table" name "=" expr _NL -> table_def_by_expr
@@ -17,7 +18,7 @@ table_def: "table" name "{" _ml_sep? _table_contents "}" _NL
 CONST: "const"
 
 func_defs: func_def* -> as_list
-_table_contents: ml_list{col_def}? func_defs
+_table_contents: ml_list0{col_def} func_defs
 
 col_def: name ":" coltype ["->" expr] ["=" expr]
 ?coltype: type
@@ -70,7 +71,7 @@ delete: molecule "delete" expr_list
 
 ?or_test: and_test ("or" and_test)*
 ?and_test: not_test ("and" not_test)*
-?not_test: "not" not_test -> not
+?not_test: "not" not_test -> not_test
          | compare
 ?compare: (compare comp_op)? like
 ?like: (like "~")? add_expr

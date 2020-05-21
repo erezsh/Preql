@@ -12,7 +12,7 @@ from . import sql
 
 from .compiler import compile_type_def
 from .interp_common import State, new_value_instance, dy, exclude_fields
-from .evaluate import evaluate, localize
+from .evaluate import evaluate, localize, db_query
 
 # def _pql_SQL_callback(state: State, var: str, instances):
 #     var = var.group()
@@ -213,18 +213,18 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
 
 
     if 'id' in columns and not const:
-            raise pql_ValueErro.make(state, None, "Field 'id' already exists. Rename it, or use 'const temptable' to copy it as-is.")
+            raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const temptable' to copy it as-is.")
 
     table = types.TableType(name, SafeDict(columns), temporary=True, primary_keys=[['id']] if not const else [])
 
     if not const:
         table.columns['id'] = types.IdType(table)
 
-    state.db.query(compile_type_def(state, table))
+    db_query(state, compile_type_def(state, table))
 
     read_only, flat_columns = table.flat_for_insert()
     expr = exclude_fields(state, expr, read_only)
-    state.db.query(sql.Insert(table, flat_columns, expr.code), expr.subqueries)
+    db_query(state, sql.Insert(table, flat_columns, expr.code), expr.subqueries)
 
     return objects.new_table(table)
 
@@ -413,6 +413,14 @@ def _cast(state, inst_type: types.TableType, target_type: types._Float, inst):
     assert len(res) == 1
     res = list(res[0].values())[0]
     return new_value_instance(res, types.Float)
+
+@dy
+def _cast(state, inst_type: types.TableType, target_type: types._String, inst):
+    assert len(inst.type.columns) == 1
+    res = localize(state, inst)
+    assert len(res) == 1
+    res = list(res[0].values())[0]
+    return new_value_instance(res, types.String)
 
 @dy
 def _cast(state, inst_type: types.IdType, target_type: types._Int, inst):

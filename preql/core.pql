@@ -1,16 +1,15 @@
 
 func _sql_agg_func(name, obj, t=null) {
+    t = t or type(obj).elemtype
+    if (not (t==int or t==float)) {
+        throw new TypeError(name + "() expects numeric elements, instead got: '" + repr(t) + "'")
+    }
+
     if (isa(obj, aggregate)) {
-        if (t == null) {
-            t = type(obj).elemtype
-        }
         return SQL(t, name + "($obj)")
     } else {
         if (isa(obj, list)) {
-            if (t == null) {
-                t = type(obj).elemtype
-            }
-            return t( obj{ => value: _sql_agg_func(name, value) } )  # Recursive
+            return t( obj{ => value: _sql_agg_func(name, value) } )     // Recursive
         }
     }
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")

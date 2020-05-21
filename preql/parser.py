@@ -127,6 +127,11 @@ class T(Transformer):
     def or_test(self, meta, a, b):
         return ast.Or(meta, [a, b])
 
+    def and_test(self, meta, a, b):
+        return ast.And(meta, [a, b])
+
+    not_test = ast.Not
+
     add_expr = _arith_expr
     term = _arith_expr
     power = _arith_expr

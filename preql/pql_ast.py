@@ -77,6 +77,14 @@ class Or(Expr):
     args: List[PqlObject]
 
 @dataclass
+class And(Expr):
+    args: List[PqlObject]
+
+@dataclass
+class Not(Expr):
+    expr: PqlObject
+
+@dataclass
 class Contains(Expr):
     op: str
     args: List[PqlObject]

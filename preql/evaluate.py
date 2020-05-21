@@ -91,12 +91,20 @@ def resolve(state: State, type_: ast.Type) -> types.PqlType:
 def _execute(state: State, struct_def: ast.StructDef):
     resolve(state, struct_def)
 
+
+def db_query(state: State, sql, subqueries=None):
+    try:
+        return state.db.query(sql, subqueries, state=state)
+    except exc.DatabaseQueryError as e:
+        raise exc.pql_DatabaseQueryError.make(state, None, e.args[0])
+
+
 @dy
 def _execute(state: State, table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
     sql = compile_type_def(state, t)
-    state.db.query(sql)
+    db_query(state, sql)
 
 @dy
 def _set_value(state: State, name: ast.Name, value):
@@ -104,7 +112,7 @@ def _set_value(state: State, name: ast.Name, value):
 
 @dy
 def _set_value(state: State, attr: ast.Attr, value):
-    raise NotImplementedError("")
+    raise exc.pql_NotImplementedError.make(state, attr, f"Cannot set attribute for {attr.expr.repr(state)}")
 
 @dy
 def _execute(state: State, var_def: ast.SetValue):
@@ -133,7 +141,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
     source = exclude_fields(state, source, primary_keys)
 
     code = sql.Insert(target.type, columns, source.code)
-    state.db.query(code, source.subqueries)
+    db_query(state, code, source.subqueries)
     return objects.null
 
 @dy
@@ -258,6 +266,7 @@ def simplify(state: State, x):
 #     #     return simplify(state, cb.statements[0])
 #     return _simplify_ast(state, cb)
 
+# TODO isn't this needed somewhere??
 # @dy
 # def simplify(state: State, if_: ast.If):
 #     if_ = _simplify_ast(state, if_)
@@ -268,15 +277,32 @@ def simplify(state: State, x):
 #             return if_.else_
 #     return if_
 
-# TODO isn't this needed somewhere??
-# @dy
-# def simplify(state: State, obj: ast.Or):
-#     for expr in obj.args:
-#         inst = evaluate(state, expr)
-#         nz = test_nonzero(state, inst)
-#         if nz:
-#             return inst
-#     return inst
+@dy
+def simplify(state: State, obj: ast.Or):
+    # XXX is simplify the right place for this? It attempts to access the db (count table size)
+    for expr in obj.args:
+        inst = evaluate(state, expr)
+        nz = test_nonzero(state, inst)
+        if nz:
+            return inst
+    return inst
+
+@dy
+def simplify(state: State, obj: ast.And):
+    # XXX is simplify the right place for this? It attempts to access the db (count table size)
+    for expr in obj.args:
+        inst = evaluate(state, expr)
+        nz = test_nonzero(state, inst)
+        if not nz:
+            return inst
+    return inst
+
+@dy
+def simplify(state: State, obj: ast.Not):
+    # XXX is simplify the right place for this? It attempts to access the db (count table size)
+    inst = evaluate(state, obj.expr)
+    nz = test_nonzero(state, inst)
+    return objects.new_value_instance(not nz)
 
 
 
@@ -401,6 +427,14 @@ def test_nonzero(state: State, table: objects.TableInstance):
 def test_nonzero(state: State, inst: objects.ValueInstance):
     return bool(inst.local_value)
 
+@dy
+def test_nonzero(state: State, inst: objects.Instance):
+    return localize(state, inst)
+
+@dy
+def test_nonzero(state: State, inst: types.PqlType):
+    return True
+
 def _raw_sql_callback(state: State, var: str, instances):
     var = var.group()
     assert var[0] == '$'
@@ -510,7 +544,7 @@ def apply_database_rw(state: State, d: ast.Delete):
         ids = [row['id'] for row in rows]
 
         for code in sql.deletes_by_ids(table, ids):
-            state.db.query(code, table.subqueries)
+            db_query(state, code, table.subqueries)
 
     return evaluate(state, d.table)
 
@@ -544,7 +578,7 @@ def apply_database_rw(state: State, u: ast.Update):
         ids = [row['id'] for row in rows]
 
         for code in sql.updates_by_ids(table, proj, ids):
-            state.db.query(code, table.subqueries)
+            db_query(state, code, table.subqueries)
 
     # TODO return by ids to maintain consistency, and skip a possibly long query
     return table
@@ -610,8 +644,8 @@ def _new_row(state, ast, table, matched):
     assert keys and values
     # XXX use regular insert?
     q = sql.InsertConsts(table.name, keys, [values])
-    state.db.query(q)
-    rowid = state.db.query(sql.LastRowId())
+    db_query(state, q)
+    rowid = db_query(state, sql.LastRowId())
 
     d = SafeDict({'id': objects.new_value_instance(rowid)})
     d.update({p.name:v for p, v in matched})
@@ -735,7 +769,7 @@ def _resolve_sql_parameters(state, node):
 
 @dy
 def localize(state, inst: objects.AbsInstance):
-    raise NotImplementedError()
+    raise NotImplementedError(inst)
 
 @dy
 def localize(state, inst: objects.AbsStructInstance):
@@ -747,11 +781,17 @@ def localize(state, inst: objects.Instance):
 
     # code = _resolve_sql_parameters(state, inst.code)
 
-    return state.db.query(inst.code, inst.subqueries, state=state)
+    return db_query(state, inst.code, inst.subqueries)
 
 @dy
 def localize(state, inst: objects.ValueInstance):
     return inst.local_value
+
+@dy
+def localize(state, inst: objects.AttrInstance):
+    # XXX is this right?
+    p = evaluate(state, inst.parent)
+    return p.get_attr(inst.name)
 
 @dy
 def localize(state, x):
@@ -800,10 +840,10 @@ def new_table_from_rows(state, name, columns, rows):
     for c,v in zip(columns, tuples[0]):
         table.columns[c] = v.type
 
-    state.db.query(compile_type_def(state, table))
+    db_query(state, compile_type_def(state, table))
 
     code = sql.InsertConsts(name, columns, tuples)
-    state.db.query(code)
+    db_query(state, code)
 
     x = objects.new_table(table)
     state.set_var(table.name, x)

@@ -6,6 +6,9 @@ from .utils import dataclass, TextReference
 
 class InsufficientAccessLevel(Exception):
     pass
+class DatabaseQueryError(Exception):
+    pass
+
 
 @dataclass
 class PreqlError(Exception):
@@ -28,7 +31,8 @@ class PreqlError(Exception):
 
     @classmethod
     def make(cls, state, ast, *args):
-        return cls(state.stacktrace+([ast.text_ref] if ast else []), *args)
+        ast_ref = getattr(ast, 'text_ref', None)
+        return cls(state.stacktrace+([ast_ref] if ast_ref else []), *args)
 
 
 

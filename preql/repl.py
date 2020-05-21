@@ -89,44 +89,53 @@ def start_repl(p, prompt=' >> '):
                     s = parse_stmts(text)
                 except pql_SyntaxError as e:
                     return True
+                except Exception as e:
+                    print(e)
+                    return False
+
             return False
 
         while True:
             # Read
-            code = session.prompt(prompt, lexer=PygmentsLexer(GoLexer), multiline=multiline_filter)
-            if not code.strip():
-                continue
-
-            start_time = time()
             try:
-                # Evaluate (Really just compile)
-                res = p.run_code(code)
+                code = session.prompt(prompt, lexer=PygmentsLexer(GoLexer), multiline=multiline_filter)
+                if not code.strip():
+                    continue
 
-                # Print
-                if res is not None and res is not objects.null:
-                    assert isinstance(res, types.PqlObject), (res, type(res))
+                start_time = time()
+                try:
+                    # Evaluate (Really just compile)
+                    res = p.run_code(code)
 
-                    if save_last:
-                        p.interp.set_var(save_last, res)
+                    # Print
+                    if res is not None and res is not objects.null:
+                        assert isinstance(res, types.PqlObject), (res, type(res))
 
-                    res = res.repr(p.interp.state)
-                    print(res)
+                        if save_last:
+                            p.interp.set_var(save_last, res)
 
-            except PreqlError as e:
-                print(e)
-                # p.interp.set_var('_e', objects.ExceptionInstance(e))
-                continue
-            except pql_ExitInterp as e:
-                return
-            except Exception as e:
-                print("Error:")
-                logging.exception(e)
-                raise
-                # continue
+                        res = res.repr(p.interp.state)
+                        print(res)
 
-            duration = time() - start_time
-            if duration > 1:
-                print("(Query took %.2f seconds)" % duration)
+                except PreqlError as e:
+                    print(e)
+                    # p.interp.set_var('_e', objects.ExceptionInstance(e))
+                    continue
+                except pql_ExitInterp as e:
+                    return
+                except Exception as e:
+                    print("Error:")
+                    logging.exception(e)
+                    raise
+                    # continue
+
+                duration = time() - start_time
+                if duration > 1:
+                    print("(Query took %.2f seconds)" % duration)
+
+            except KeyboardInterrupt:
+                print("Interrupted (Ctrl+C)")
+
 
 
     except (KeyboardInterrupt, EOFError):

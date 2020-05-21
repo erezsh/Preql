@@ -135,15 +135,6 @@ class Primitive(Atom):
 
 @dataclass
 class Table(Sql):
-
-    # @listgen
-    # def import_result(self, arr):
-    #     expected_length = self.type.flat_length()
-    #     for row in arr:
-    #         assert len(row) == expected_length, (expected_length, row)
-    #         i = iter(row)
-    #         s = ({str(name): col.type.restructure_result(i) for name, col in self.type.columns.items()})
-    #         yield s
     pass
 
 @dataclass
@@ -153,16 +144,13 @@ class EmptyList(Table):
     _is_select = True
 
     def _compile(self, qb):
-        return 'SELECT NULL LIMIT 0'
+        return 'SELECT NULL AS VALUE LIMIT 0'
 
 
 @dataclass
 class TableName(Table):
     type: PqlType
     name: str
-
-    # def _compile(self, qb):
-    #     return self.name
 
     def compile(self, qb):
         if qb.is_root:
@@ -230,12 +218,6 @@ class MakeArray(Sql):
             return f'array_agg({field})'
 
         assert False, qb.target
-
-    # def import_result(self, value):
-    #     assert False
-    #     if value is None:
-    #         return []
-    #     return value.split(self._sp)
 
 
 @dataclass
@@ -552,7 +534,6 @@ class Select(TableOperation):
 
 @dataclass
 class Subquery(Sql):
-    # type: PqlType
     table_name: str
     fields: List[Name]
     query: Sql

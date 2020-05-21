@@ -57,13 +57,16 @@ class Function(types.PqlObject):
 
 
     @listgen
-    def match_params_fast(self, args):
+    def match_params_fast(self, state, args):
         for i, p in enumerate(self.params):
             if i < len(args):
                 v = args[i]
             else:
                 v = p.default
-                assert v is not None
+                # assert v is not None
+                if v is None:
+                    raise pql_TypeError.make(state, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
+
 
             yield p, v
 
@@ -76,7 +79,7 @@ class Function(types.PqlObject):
 
         # If no keyword arguments, matching is much simpler and faster
         if all(not isinstance(a, (ast.NamedField, ast.InlineStruct)) for a in args):
-            return self.match_params_fast(args)
+            return self.match_params_fast(state, args)
 
         # Canonize args for the rest of the function
         inline_args = []
