@@ -148,26 +148,33 @@ def pql_debug(state: State):
 
 
 @dy
-def _pql_issubclass(a, b):
-    return False
+# def _pql_issubclass(a, b):
+#     return False
 
-@dy
-def _pql_issubclass(a: types.Primitive, b: types.ListType):
-    return False
+# @dy
+# def _pql_issubclass(a: types.Primitive, b: types.ListType):
+#     return False
 
-@dy
-def _pql_issubclass(a, b: types.AnyType):
-    assert b is types.any_t
-    return True
+# @dy
+# def _pql_issubclass(a, b: types.AnyType):
+#     assert b is types.any_t
+#     return True
 
-@dy
-def _pql_issubclass(a: types.ListType, b: types.ListType):
-    return _pql_issubclass(a.elemtype, b.elemtype)
+# @dy
+# def _pql_issubclass(a: types.ListType, b: types.ListType):
+#     return _pql_issubclass(a.elemtype, b.elemtype)
 
-@dy
-def _pql_issubclass(a: types.Aggregated, b: types.Aggregated):
-    return _pql_issubclass(a.elemtype, b.elemtype)
+# @dy
+# def _pql_issubclass(a: types.Aggregated, b: types.Aggregated):
+#     return _pql_issubclass(a.elemtype, b.elemtype)
 
+
+def pql_issubclass(state: State, expr: ast.PqlObject, type_expr: ast.PqlObject):
+    "Returns whether the give object is an instance of the given type"
+    inst = evaluate(state, expr)
+    type_ = evaluate(state, type_expr)
+    res = inst.issubclass(type_)
+    return new_value_instance(res, types.Bool)
 
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     "Returns whether the give object is an instance of the given type"
@@ -540,6 +547,7 @@ internal_funcs = create_internal_funcs({
     'SQL': pql_SQL,
     'PY': pql_PY,
     'isa': pql_isa,
+    'issubclass': pql_issubclass,
     'type': pql_type,
     'repr': pql_repr,
     'debug': pql_debug,
