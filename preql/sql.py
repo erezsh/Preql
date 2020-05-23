@@ -261,8 +261,8 @@ class Compare(Scalar):
 
 @dataclass
 class Like(Scalar):
-    string: Scalar
-    pattern: Scalar
+    string: Sql
+    pattern: Sql
     type = types.Bool
 
     def _compile(self, qb):

@@ -76,6 +76,7 @@ from .parser import parse_stmts, parse_expr
 
 
 def start_repl(p, prompt=' >> '):
+    print("Welcome to the Preql REPL. Type help() for help")
     save_last = '_'   # XXX A little hacky
 
     try:

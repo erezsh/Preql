@@ -466,7 +466,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
     if obj is objects.null:
         text = (
             "Welcome to Preql!\n\n"
-            "To see the list of functions and objects available in the namespace, type 'ls()'\n\n"
+            "To see the list of functions and objects available in the namespace, type 'names()'\n\n"
             "To get help for a specific function, type 'help(func_object)'\n\n"
             "For example:\n"
             "    >> help(help)\n"

@@ -76,6 +76,12 @@ func length(s) {
     return SQL(string, "length($s)")
 }
 
+func round(n) {
+    "Return a rounded float"
+    return SQL(float, "round($n)")
+}
+
+
 func dict(...x) {
     "Construct a dictionary"
     return x
@@ -89,7 +95,7 @@ _core_limit_offset = limit_offset
 if (get_db_type() == "postgres") {
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
     func now() = SQL(datetime, "NOW()")         // Postgres
-    func random() = SQL(datetime, "RANDOM()")   // Postgres
+    func random() = SQL(float, "RANDOM()")   // Postgres
     func pi() = SQL(float, "PI()")
 } else {
     if (get_db_type() == "sqlite") {
@@ -112,11 +118,10 @@ if (get_db_type() == "postgres") {
     }
 }
 
-// func sample_ratio(tbl, ratio) = SQL(type(tbl), "SELECT * FROM $tbl where abs(CAST(random() AS REAL))/9223372036854775808 < $ratio")
-func sample_ratio(tbl, ratio) {
+
+func sample_ratio_fast(tbl, ratio) {
     "Return a random sample of rows from the table, at the approximate amount of (ratio*count(tbl))."
-    r = random()    // random() will be re-evaluated for every row
-    return SQL(type(tbl), "SELECT * FROM $tbl where $r < $ratio")
+    return tbl[random() < ratio]    // random() will be re-evaluated for every row
 }
 
 func sample_fast(tbl, n, bias=0.05) {
@@ -140,7 +145,7 @@ func sample_fast(tbl, n, bias=0.05) {
         return tbl
     }
 
-    const table results = limit(sample_ratio(tbl, (1+bias) * n / c), n)
+    const table results = sample_ratio_fast(tbl, (1+bias) * n / c)[..n]
     if (count(results) == n) {
         return results
     }

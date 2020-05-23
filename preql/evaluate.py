@@ -21,7 +21,7 @@ import re
 
 from .utils import benchmark
 from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type, exclude_fields
+from .interp_common import assert_type, exclude_fields, call_pql_func
 from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, PreqlError, pql_SyntaxError, pql_CompileError
 from . import exceptions as exc
 from . import pql_types as types
@@ -559,8 +559,12 @@ def apply_database_rw(state: State, u: ast.Update):
     #     # XXX autocast
     #     table = objects.TableInstance.make(table.code, table.type.table, [table])
 
-    assert isinstance(table.type, types.TableType), table.type
-    assert all(f.name for f in u.fields)
+    if not isinstance(table.type, types.TableType):
+        raise pql_TypeError.make(state, u.table, f"Expected a table. Got: {table.type}")
+
+    for f in u.fields:
+        if not f.name:
+            raise pql_SyntaxError.make(state, f, f"Update requires that all fields have a name")
 
     # TODO verify table is concrete (i.e. lvalue, not a transitory expression)
 
@@ -596,7 +600,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     assert_type(obj, types.TableType, state, new, "'new' expected an object of type '%s', instead got '%s'")
 
     if len(new.args) > 1:
-        raise NotImplementedError("Not yet implemented. Requires column-wise table concat (use join and enum)")
+        raise exc.pql_NotImplementedError.make(state, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
 
     arg ,= new.args
 
@@ -604,6 +608,8 @@ def apply_database_rw(state: State, new: ast.NewRows):
     field = arg.name
     table = evaluate(state, arg.value)
     rows = localize(state, table)
+
+    # TODO ensure rows are the right type
 
     cons = TableConstructor.make(obj)
 
