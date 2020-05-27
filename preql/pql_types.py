@@ -331,6 +331,7 @@ class Column:
     def repr(self, pql):
         return self.type.repr(pql)
 
+
 @dataclass
 class TableType(Collection):
     name: str
@@ -448,6 +449,10 @@ class DataColumn(Column):
     def hide_from_init(self):
         return self.type.hide_from_init
 
+    def __hash__(self):
+        return hash(self.type)
+    def __eq__(self, other):
+        return self.type == other.type
 
 
 @dataclass

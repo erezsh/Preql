@@ -32,7 +32,7 @@ from . import settings
 RawSql = sql.RawSql
 Sql = sql.Sql
 
-from .interp_common import State, dy, new_value_instance
+from .interp_common import State, dy, new_value_instance, from_python
 from .compiler import compile_to_inst, compile_type_def
 
 
@@ -184,7 +184,7 @@ def _execute(state: State, i: ast.If):
 def _execute(state: State, f: ast.For):
     expr = localize(state, evaluate(state, f.iterable))
     for i in expr:
-        with state.use_scope({f.var: objects.from_python(i)}):
+        with state.use_scope({f.var: from_python(i)}):
             execute(state, f.do)
 
 @dy
@@ -616,8 +616,8 @@ def apply_database_rw(state: State, new: ast.NewRows):
     # TODO very inefficient, vectorize this
     ids = []
     for row in rows:
-        matched = cons.match_params(state, [objects.from_python(v) for v in row.values()])
-        ids += [_new_row(state, new, obj, matched)]
+        matched = cons.match_params(state, [from_python(v) for v in row.values()])
+        ids += [_new_row(state, new, obj, matched).primary_key()]   # XXX return everything, not just pk?
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
     return ast.List_(new.text_ref, types.ListType(types.Int), ids)
@@ -853,3 +853,4 @@ def new_table_from_rows(state, name, columns, rows):
 
     x = objects.new_table(table)
     state.set_var(table.name, x)
+

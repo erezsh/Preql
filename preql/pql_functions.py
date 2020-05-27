@@ -3,7 +3,7 @@ from copy import copy
 from typing import Optional
 
 from .utils import safezip, listgen, SafeDict
-from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp
+from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp, pql_NotImplementedError
 
 from . import pql_objects as objects
 from . import pql_types as types
@@ -376,6 +376,8 @@ def pql_repr(state: State, obj: ast.Expr):
     Returns the type of the given object
     """
     inst = evaluate(state, obj)
+    if not isinstance(inst, objects.ValueInstance):
+        raise pql_NotImplementedError.make(state, obj, "Cannot repr() objects that aren't simple values")
     return objects.new_value_instance(inst.repr(state))
 
 def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):

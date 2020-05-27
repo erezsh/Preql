@@ -5,6 +5,9 @@ _ml_seperated{item}: (item _ml_sep)* item _ml_sep?
 _ml_sep: "," | "," _NL | _NL
 _separated{item, sep}: (item sep)* item
 
+pql_dict: "{" _NL? proj_exprs _NL? "}"
+key_value: name ":" expr
+
 pql_list: "[" _NL? _ml_seperated{expr}? "]"
 expr_list: "[" _NL? _ml_seperated{expr} "]" -> as_list
 proj_exprs: _ml_seperated{named_expr} -> as_list
@@ -86,6 +89,7 @@ delete: molecule "delete" expr_list
 ?molecule: atom
      | func_call
      | pql_list
+     | pql_dict
      | selection
      | projection
      | slice

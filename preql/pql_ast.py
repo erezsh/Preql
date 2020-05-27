@@ -82,7 +82,11 @@ class And(Expr):
 
 @dataclass
 class Not(Expr):
-    expr: PqlObject
+    expr: Expr
+
+@dataclass
+class Neg(Expr):
+    expr: Expr
 
 @dataclass
 class Contains(Expr):

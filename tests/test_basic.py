@@ -56,8 +56,10 @@ class BasicTests(TestCase):
         self.assertEqual(float(preql("3.14")), 3.14)    # cast to float, because postgres may return Decimal
 
         assert preql("1") == 1
+        assert preql("-(1)") == -1
         assert preql("1 / 2") == 0.5
         assert preql("10 /~ 3") == 3
+        assert preql("type(10/3) == float")
 
         # GroupBy will use the old value if TableTypes aren't versioned
         self.assertEqual( preql("[1,2,3]{v: value/~2 => sum(value)}").to_json(), [{'v':0, 'sum': 1}, {'v':1, 'sum':5}])

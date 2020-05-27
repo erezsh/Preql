@@ -225,19 +225,6 @@ class Instance(AbsInstance):
     def primary_key(self):
         return self
 
-def from_python(value):
-    if value is None:
-        return null
-    elif isinstance(value, str):
-        return ast.Const(None, types.String, value)
-    elif isinstance(value, int):
-        return ast.Const(None, types.Int, value)
-    elif isinstance(value, list):
-        return ast.List_(None, types.ListType(types.any_t), list(map(from_python, value)))
-    elif isinstance(value, dict):
-        return ast.Dict_(None, value)
-    assert False, value
-
 
 def new_value_instance(value, type_=None, force_type=False):
     r = sql.value(value)
@@ -260,11 +247,6 @@ class ValueInstance(Instance):
 
     def get_attr(self, name):
         assert not isinstance(self.type, types.RowType)
-            # try:
-            #     obj = self.local_value[name]
-            # except KeyError:
-            #     raise pql_AttributeError(None, name)
-            # return from_python(obj)   # XXX Maybe use 'code' to be more efficient?
         return super().get_attr(name)
 
     def repr(self, state):

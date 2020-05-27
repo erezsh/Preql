@@ -85,6 +85,9 @@ class T(Transformer):
     def long_string(self, meta, s):
         return ast.Const(meta, types.String, _fix_escaping( s.value[3:-3]) )
 
+    def pql_dict(self, meta, items):
+        d = {item.name: item.value for item in items}
+        return ast.Dict_(meta, d)
 
     def int(self, meta, i):
         return ast.Const(meta, types.Int, int(i))
@@ -139,6 +142,7 @@ class T(Transformer):
     # def contains(self, meta, a, op, b):
     #     return ast.Contains(meta, " ".join(op), [a,b])
 
+    neg = ast.Neg
     like = ast.Like
     var = ast.Name
     getattr = ast.Attr

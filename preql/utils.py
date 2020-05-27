@@ -179,6 +179,6 @@ class TextReference:
         ])
 
     def __str__(self):
-        return '<text-reF>'
+        return '<text-ref>'
     def __repr__(self):
-        return '<text-reF>'
+        return '<text-ref>'

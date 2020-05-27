@@ -144,9 +144,9 @@ def create_engine(db_uri, debug):
 
 
 
-def assert_type(t, type_, state, ast, msg):
+def assert_type(t, type_, state, ast, op, msg="%s expected an object of type '%s', instead got '%s'"):
     if not isinstance(t, type_):
-        raise pql_TypeError.make(state, ast, msg % (type_, t))
+        raise pql_TypeError.make(state, ast, msg % (op, type_, t))
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])
@@ -157,6 +157,20 @@ def call_pql_func(state, name, args):
     return evaluate(state, expr)
 
 
+def from_python(value):
+    if value is None:
+        return null
+    elif isinstance(value, str):
+        return ast.Const(None, types.String, value)
+    elif isinstance(value, int):
+        return ast.Const(None, types.Int, value)
+    elif isinstance(value, list):
+        return ast.List_(None, types.ListType(types.any_t), list(map(from_python, value)))
+    elif isinstance(value, dict):
+        #return ast.Dict_(None, value)
+        elems = {k:from_python(v) for k,v in value.items()}
+        return ast.Dict_(None, elems)
+    assert False, value
 
 
 new_value_instance = objects.new_value_instance

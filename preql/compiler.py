@@ -9,7 +9,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func
+from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func, from_python
 
 
 @dy
@@ -233,7 +233,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 @dy
 def compile_to_inst(state: State, order: ast.Order):
     table = evaluate(state, order.table)
-    assert_type(table.type, types.TableType, state, order, "'order' expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, types.TableType, state, order, "'order'")
 
     with state.use_scope(table.all_attrs()):
         fields = evaluate(state, order.fields)
@@ -283,8 +283,8 @@ def compile_to_inst(state: State, cmp: ast.Compare):
             code = sql.Compare('>', [sql.FuncCall(types.Bool, 'INSTR', [i.code for i in reversed(insts)]), sql.value(0)])
             return objects.make_instance(code, types.Bool, [])
         else:
-            assert_type(insts[0].type, types.AtomicType, state, cmp.op, "Expecting type %s, got %s")
-            assert_type(insts[1].type, types.Collection, state, cmp.op, "Expecting type %s, got %s")
+            assert_type(insts[0].type, types.AtomicType, state, cmp.op, repr(cmp.op))
+            assert_type(insts[1].type, types.Collection, state, cmp.op, repr(cmp.op))
             cols = insts[1].type.columns
             if len(cols) > 1:
                 raise pql_TypeError.make(state, cmp.op, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
@@ -339,6 +339,15 @@ def compile_to_inst(state: State, cmp: ast.Compare):
     return inst
 
 
+
+@dy
+def compile_to_inst(state: State, neg: ast.Neg):
+    expr = evaluate(state, neg.expr)
+    assert_type(expr.type, (types._Int, types._Float), state, neg, "Negation")
+
+    return objects.Instance.make(sql.Neg(expr.code), expr.type, [expr])
+
+
 @dy
 def compile_to_inst(state: State, arith: ast.Arith):
     args = evaluate(state, arith.args)
@@ -367,19 +376,11 @@ def _compile_arith(state, arith, a: objects.TableInstance, b: objects.TableInsta
 
     return state.get_var(op).func(state, a, b)
 
-
 @dy
 def _compile_arith(state, arith, a, b):
     args = [a, b]
     arg_types = [a.type for a in args]
     arg_types_set = set(arg_types) - {types.ListType(types.any_t)}  # XXX hacky
-
-    if settings.optimize:
-        if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
-            # Local folding for better performance (optional, for better performance)
-            v1, v2 = [a.local_value for a in args]
-            if arith.op == '+' and len(arg_types_set) == 1:
-                return new_value_instance(v1 + v2, args[0].type)
 
     if len(arg_types_set) > 1:
         # Auto-convert int+float into float
@@ -400,12 +401,23 @@ def _compile_arith(state, arith, a, b):
         else:
             raise pql_TypeError.make(state, arith.op, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
 
+    res_type ,= arg_types_set
+    if arith.op == '/': # XXX terrible
+        assert isinstance(res_type, types.Number)
+        res_type = types.Float
+
+    if settings.optimize:
+        if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
+            # Local folding for better performance (optional, for better performance)
+            v1, v2 = [a.local_value for a in args]
+            if arith.op == '+' and len(arg_types_set) == 1:
+                return new_value_instance(v1 + v2, res_type)
+
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
     if not all(isinstance(a.type, (types.Primitive, types.Aggregated)) for a in args):
         raise pql_TypeError.make(state, arith.op, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
-    res_type ,= arg_types_set
     code = sql.arith(res_type, arith.op, [a.code for a in args], state.stacktrace)  # XXX
     return objects.make_instance(code, res_type, args)
 
@@ -424,7 +436,7 @@ def compile_to_inst(state: State, c: ast.Const):
 
 @dy
 def compile_to_inst(state: State, d: ast.Dict_):
-    elems = {k:evaluate(state, objects.from_python(v)) for k,v in d.elems.items()}
+    elems = d.elems
     t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
     return objects.RowInstance(types.RowType(t), elems)
 
@@ -441,7 +453,6 @@ def compile_to_inst(state: State, lst: ast.List_):
         return objects.EmptyList
 
     elems = evaluate(state, lst.elems)
-    elems = [e.primary_key() if isinstance(e,objects.RowInstance) else e for e in elems]    # XXX wat?
 
     type_set = {e.type for e in elems}
     if len(type_set) > 1:
@@ -472,7 +483,7 @@ def compile_to_inst(state: State, s: ast.Slice):
     table = evaluate(state, s.table)
     # TODO if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
 
-    assert_type(table.type, types.Collection, state, s, "Slice expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, types.Collection, state, s, "Slice")
 
     instances = [table]
     if s.range.start:
@@ -500,7 +511,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     if not isinstance(table, objects.Instance):
         return sel.replace(table=table)
 
-    assert_type(table.type, types.Collection, state, sel, "Selection expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, types.Collection, state, sel, "Selection")
 
     with state.use_scope(table.all_attrs()):
         conds = evaluate(state, sel.conds)

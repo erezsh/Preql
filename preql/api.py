@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate, new_table_from_rows
-from .interp_common import create_engine, call_pql_func, State
+from .interp_common import create_engine, call_pql_func, State, from_python
 
 
 def _make_const(value):
@@ -20,6 +20,7 @@ def _call_pql_func(state, name, args):
     return localize(state, evaluate(state, count))
 
 TABLE_PREVIEW_SIZE = 10
+LIST_PREVIEW_SIZE = 100
 MAX_AUTO_COUNT = 10000
 
 
@@ -28,12 +29,19 @@ def table_limit(self, state, limit):
     return call_pql_func(state, '_core_limit', [self, _make_const(limit)])
 
 def table_repr(self, state):
+
     assert isinstance(state, State)
     count = _call_pql_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)])
     if count == MAX_AUTO_COUNT:
-        count_str = f'count>={count}'
+        count_str = f'>={count}'
     else:
-        count_str = f'count={count}'
+        count_str = f'={count}'
+
+    if len(self.type.columns) == 1:
+        rows = localize(state, table_limit(self, state, LIST_PREVIEW_SIZE))
+        post = f', ... ({count_str})' if len(rows) < count else ''
+        elems = ', '.join(repr(r) for r in rows)
+        return f'[{elems}{post}]'
 
     # rows = list(_call_pql_func(state, 'limit', [self, _make_const(TABLE_PREVIEW_SIZE)]))
     rows = localize(state, table_limit(self, state, TABLE_PREVIEW_SIZE))
@@ -130,7 +138,7 @@ class Interface:
         if isinstance(var, objects.Function):
             def delegate(*args, **kw):
                 assert not kw
-                pql_args = [objects.from_python(a) for a in args]
+                pql_args = [from_python(a) for a in args]
                 pql_res = self.interp.call_func(fname, pql_args)
                 return self._wrap_result( pql_res )
             return delegate
@@ -143,7 +151,7 @@ class Interface:
         return promise(self.interp.state, res)  # TODO session, not state
 
     def run_code(self, pq, **args):
-        pql_args = {name: objects.from_python(value) for name, value in args.items()}
+        pql_args = {name: from_python(value) for name, value in args.items()}
         return self.interp.execute_code(pq + "\n", pql_args)
 
     def __call__(self, pq, **args):
