@@ -436,7 +436,7 @@ def compile_to_inst(state: State, c: ast.Const):
 
 @dy
 def compile_to_inst(state: State, d: ast.Dict_):
-    elems = d.elems
+    elems = {k: evaluate(state, v) for k, v in d.elems.items()}
     t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
     return objects.RowInstance(types.RowType(t), elems)
 
@@ -534,7 +534,10 @@ def compile_to_inst(state: State, param: ast.Parameter):
 @dy
 def compile_to_inst(state: State, attr: ast.Attr):
     inst = evaluate(state, attr.expr)
-    return evaluate(state, inst.get_attr(attr.name))
+    try:
+        return evaluate(state, inst.get_attr(attr.name))
+    except exc.pql_AttributeError as e:
+        raise exc.pql_AttributeError.make(state, attr, e.message)
 
 
 

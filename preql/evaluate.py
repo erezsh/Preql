@@ -321,9 +321,11 @@ def simplify(state: State, funccall: ast.FuncCall):
         raise pql_TypeError.make(state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
 
     state.stacktrace.append(funccall.text_ref)
-    res = eval_func_call(state, func, args)
-    assert state.stacktrace[-1] is funccall.text_ref
-    state.stacktrace.pop()
+    try:
+        res = eval_func_call(state, func, args)
+    finally:
+        assert state.stacktrace[-1] is funccall.text_ref
+        state.stacktrace.pop()
     # assert isinstance(res, types.PqlObject), (type(res), res) # TODO this should work
     return res
 

@@ -190,6 +190,8 @@ def _count(state, obj: ast.Expr, table_func, name):
 
     if isinstance(obj.type, types.Collection):
         code = table_func(obj.code)
+    elif isinstance(obj, objects.RowInstance):
+        return objects.new_value_instance(len(obj.attrs))
     else:
         if not isinstance(obj.type, types.Aggregated):
             raise pql_TypeError.make(state, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
@@ -376,9 +378,17 @@ def pql_repr(state: State, obj: ast.Expr):
     Returns the type of the given object
     """
     inst = evaluate(state, obj)
-    if not isinstance(inst, objects.ValueInstance):
+    if not isinstance(inst, (objects.ValueInstance, types.PqlType)):
         raise pql_NotImplementedError.make(state, obj, "Cannot repr() objects that aren't simple values")
     return objects.new_value_instance(inst.repr(state))
+
+def pql_columns(state: State, table: ast.Expr):
+    """
+    Returns a dictionary of {column_name: column_type}
+    """
+    table = evaluate(state, table)
+    return ast.Dict_(None, table.type.columns)
+
 
 def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
     "Attempt to cast an object to a specified type"
@@ -556,6 +566,7 @@ internal_funcs = create_internal_funcs({
     '_breakpoint': pql_breakpoint,
     'get_db_type': pql_get_db_type,
     'cast': pql_cast,
+    'columns': pql_columns,
 })
 
 joins = {

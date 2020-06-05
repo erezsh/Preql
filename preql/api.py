@@ -30,7 +30,7 @@ def table_limit(self, state, limit):
 
 def table_repr(self, state):
 
-    assert isinstance(state, State)
+    assert isinstance(state, State), state
     count = _call_pql_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)])
     if count == MAX_AUTO_COUNT:
         count_str = f'>={count}'

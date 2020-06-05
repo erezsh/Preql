@@ -214,7 +214,7 @@ class Collection(PqlType):
 
     def get_attr(self, name):
         try:
-            return self.columns[name].col_type
+            return ListType(self.columns[name].col_type)
         except KeyError:
             try:
                 return self.dyn_attrs[name]

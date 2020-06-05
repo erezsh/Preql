@@ -401,7 +401,7 @@ class AttrInstance(AbsInstance):
 
     @property
     def code(self):
-        raise pql_TypeError([], f"Operation not supported for {self.repr(None)}")
+        raise pql_TypeError([], f"Operation not supported for {self}")
     #     return self._resolve_attr().code
 
     def flatten_code(self):
