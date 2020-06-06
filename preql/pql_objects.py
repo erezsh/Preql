@@ -179,10 +179,9 @@ class AbsInstance(types.PqlObject):
     def get_attr(self, name):
         v = self.type.get_attr(name)
         if isinstance(v.type, types.FunctionType):
-            # method
             return MethodInstance(self, v)
-        else:
-            return AttrInstance(self, v, name)
+
+        raise pql_AttributeError([], f"No such attribute: {name}")
 
 @dataclass
 class MethodInstance(AbsInstance, Function):
@@ -245,10 +244,6 @@ def new_value_instance(value, type_=None, force_type=False):
 class ValueInstance(Instance):
     local_value: object
 
-    def get_attr(self, name):
-        assert not isinstance(self.type, types.RowType)
-        return super().get_attr(name)
-
     def repr(self, state):
         return self.type.repr_value(self.local_value)
 
@@ -271,6 +266,13 @@ class TableInstance(Instance):
         # XXX hacky way to write it
         attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
         return SafeDict(attrs).update(self.__columns)
+
+    def get_attr(self, name):
+        v = self.type.get_attr(name)
+        if isinstance(v.type, types.FunctionType):
+            return MethodInstance(self, v)
+        else:
+            return SelectedColumnInstance(self, v, name)
 
 
 def make_instance_from_name(t, cn):
@@ -314,7 +316,10 @@ class AggregatedInstance(AbsInstance):
 
 class AbsStructInstance(AbsInstance):
     def get_attr(self, name):
-        return self.attrs[name]
+        if name in self.attrs:
+            return self.attrs[name]
+        else:
+            raise pql_AttributeError([], f"No such attribute: {name}")
 
     @property
     def code(self):
@@ -346,11 +351,6 @@ class StructInstance(AbsStructInstance):
         attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
         return SafeDict(attrs).update(self.attrs)
 
-    def get_attr(self, name):
-        if name in self.attrs:
-            return self.attrs[name]
-        else:
-            raise pql_AttributeError([], f"No such attribute: {name}")
 
 
 @dataclass
@@ -390,8 +390,8 @@ class RowInstance(StructInstance):
         return 'Row{%s}' % ', '.join(inner)
 
 @dataclass
-class AttrInstance(AbsInstance):
-    parent: AbsInstance
+class SelectedColumnInstance(AbsInstance):
+    parent: TableInstance
     type: types.PqlType
     name: str
 
@@ -411,7 +411,7 @@ class AttrInstance(AbsInstance):
         return self._resolve_attr().get_attr(name)
 
     def _resolve_attr(self):
-        return self.parent.get_attr(self.name)
+        return self.parent.get_column(self.name)
 
     def repr(self, state):
         p = self.parent.repr(state)

@@ -643,9 +643,9 @@ def _destructure_param_match(state, ast, param_match):
         else:
             yield k.name, v
 
-def _new_row(state, ast, table, matched):
+def _new_row(state, orig_ast, table, matched):
     matched = [(k, evaluate(state, v)) for k, v in matched]
-    destructured_pairs = _destructure_param_match(state, ast, matched)
+    destructured_pairs = _destructure_param_match(state, orig_ast, matched)
 
     keys = [name for (name, _) in destructured_pairs]
     values = [sql.value(v) for (_,v) in destructured_pairs]
@@ -658,6 +658,7 @@ def _new_row(state, ast, table, matched):
     d = SafeDict({'id': objects.new_value_instance(rowid)})
     d.update({p.name:v for p, v in matched})
     return objects.RowInstance(types.RowType(table), d)
+
 
 
 @dy
@@ -714,24 +715,29 @@ def evaluate(state, obj: list):
 
 @dy
 def evaluate(state, obj_):
+    # - Generic, non-db related operations
     obj = simplify(state, obj_)
     assert obj, obj_
 
     if state.access_level < state.AccessLevels.COMPILE:
         return obj
 
+    # - Compile to instances with db-specific code (sql)
+    # . Compilation may fail (e.g. due to lack of DB access)
+    # . Objects are generic within the same database, and can be cached
     # obj = compile_to_inst(state.reduce_access(state.AccessLevels.COMPILE), obj)
     obj = compile_to_inst(state, obj)
 
     if state.access_level < state.AccessLevels.EVALUATE:
         return obj
 
+    # - Resolve parameters to "instanciate" the cached code
     obj = resolve_parameters(state, obj)
 
     if state.access_level < state.AccessLevels.READ_DB:
         return obj
 
-    # Apply read-write operations XXX still needs rethinking. For example, can't 'One' be lazy?
+    # - Apply operations that read or write the database (delete, insert, update, one, etc.)
     obj = apply_database_rw(state, obj)
 
     assert not isinstance(obj, (ast.ResolveParameters, ast.ResolveParametersString))
@@ -796,7 +802,7 @@ def localize(state, inst: objects.ValueInstance):
     return inst.local_value
 
 @dy
-def localize(state, inst: objects.AttrInstance):
+def localize(state, inst: objects.SelectedColumnInstance):
     # XXX is this right?
     p = evaluate(state, inst.parent)
     return p.get_attr(inst.name)

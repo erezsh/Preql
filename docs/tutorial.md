@@ -34,7 +34,7 @@ From now on, we'll use `>>` to signify the Preql REPL
 
 Press Ctrl+C to interrupt an existing operation or prompt. Press Ctrl+D or run `exit()` to exit the interpreter.
 
-You can run the `names()` function to see what functions are available. It returns a table, which we'll soon learn how to use.
+You can run the `names()` function to see what functions are available.
 
 You can also run a preql file. Let's edit a file called `helloworld.pql`:
 
@@ -105,16 +105,19 @@ func sign(x) {
 There's also a shorthand for "one-liners":
 
 ```go
->> func strcat(s1, s2) = s1 + s2
->> strcat("foo", "bar")
+>> func str_concat(s1, s2) = s1 + s2
+>> str_concat("foo", "bar")
 "foobar"
->> strcat     // Functions are objects just like everything else
-<func strcat(s1, s2) = ...>
+>> str_concat     // Functions are objects just like everything else
+<func str_concat(s1, s2) = ...>
 ```
 
 ## Tables
 
 Tables are basically a set of columns, that can be instanciated into a list of rows.
+
+Preql's tables are stored in an SQL database, and most operations on them are done using SQL queries.
+
 
 Here is how we would define a table of points:
 
@@ -125,7 +128,7 @@ table Point {
 }
 ```
 
-This statement creates a permanent table in your database (if you are connected to one)
+This statement creates a permanent table in your database (if you are connected to one. The default database resides in memory and isn't persistent)
 
 For this tutorial, let's create a table that's little more meaningful, and populate it with values:
 
@@ -149,7 +152,7 @@ We can see that the `Country` table has three rows:
 3
 ```
 
-In the background, the `new` statements inserted our values into an SQL table, and calling count ran the following query: `SELECT COUNT(*) FROM Point`
+The `new` statements inserted our values into an SQL table, and `count()` ran the following query: `SELECT COUNT(*) FROM Country`
 
 (Note: You can see every SQL statement that's executed by starting the REPL with the `-d` switch.)
 
@@ -202,13 +205,14 @@ Notice that the row index and the value of the `id` column are not related in an
 We can also use functions inside table expressions, as long as they don't change the global state.
 
 ```javascript
->> func startswith_c(s) = (s ~ "c%")    // Pattern match the string (LIKE)
->> my_list = ["cat", "dog", "car"]      // Define a list
->> print my_list[startswith_c(value)]   // Apply selection in SQL
+>> func startswith(s, p) = s ~ (p + "%")    // Pattern match the string (LIKE)
+>> my_list = ["cat", "dog", "car"]          // Define a list
+>> new_list = my_list[startswith(value, "c")]  // Apply selection. `value` refers to the list's elements
+>> print new_list                           // Execute SQL query
 ["cat", "car"]
 ```
 
-Lists are basically tables with a single column.
+Lists are basically tables with a single column named `value`.
 
 **Projection** lets us create new tables, with columns of our own choice:
 
@@ -324,7 +328,7 @@ A temporary table is a table that's persistent in the database memory for as lon
 Here's another example:
 
 ```go
-// Create a temporary table the resides in database memory
+// Create a temporary table that resides in database memory
 >> table t_names = Country[population>100]{name}  // Evaluated here once
 >> count(t_names) + count(t_names)
 
@@ -339,7 +343,7 @@ The main disadvantage of using temporary tables is that they may fill up the dat
 
 We can **update** tables in-place.
 
-Updates are evaluated immediately. This is true for all other expressions that change the global state.
+Updates are evaluated immediately. This is true for all expressions that change the global state.
 
 Example:
 ```go
@@ -476,14 +480,79 @@ table Country_proj80, count=3
 
 Here is a partial list of functions provided by Preql:
 
-- `debug()` - call from your code to drop into the interpreter. Inside, you can use `c()` or `continue()` to resume running.
+- `debug()` - call this from your code to drop into the interpreter. Inside, you can use `c()` or `continue()` to resume running.
+- `import_csv(table, filename)` - import the contents of a csv file into an existing table
 - `random()` - return a random number
 - `now()` - return a `datetime` object for now
 - `sample_fast(tbl, n)` - return a sample of `n` rows from table `tbl` (O(n), maximum of two queries). May introduce a minor bias (See `help(sample_fast)`).
 - `count_distinct(field)` - count how many unique values are in the given field/column.
 
-## Loading CSVs
-
 ## Calling Preql from Python
 
+Preql is not only a standalone tool, but also a Python library. It can be used as an alternative to ORM libraries such as SQLAlchemy.
+
+It's as easy as:
+
+```python
+>>> import preql
+>>> p = preql.Preql()
+```
+
+You can also specify which database to work on, and other parameters.
+
+Then, just start working by calling the object with Preql code:
+
+```python
+# Use the result like in an ORM
+>>> len(p('[1,2,3][value>=2]'))
+2
+
+# Turn the result to JSON (lists and dicts)
+>>> p('[1,2]{type: "example", values: {v1: value, v2: value*2}}').to_json()
+[{'type': 'example', 'values': {'v1': 1, 'v2': 2}}, {'type': 'example', 'values': {'v1': 2, 'v2': 4}}]
+
+# Run Preql code file
+>>> p.load('some_file.pql')
+```
+
+You can also reach variables inside the Preql namespace using:
+
+```python
+>>> p('a = [1,2,3]')
+>>> sum(p.a)
+6
+>>> p.names()[:10]  # `names()` is a global function, like Python's `dir()`
+['int', 'float', 'string', 'text', 'bool', 'datetime', 'exit', 'help', 'names', 'dir']
+```
+
 ### Using Pandas
+
+You can easily import/export tables between Preql and Pandas, by using Python as a middleman:
+
+```python
+>>> from pandas import DataFrame
+>>> import preql
+>>> p = preql.Preql()
+>>> f = DataFrame([[1,2,"a"], [4,5,"b"], [7,8,"c"]], columns=['x', 'y', 'z'])
+
+>>> x = p.import_pandas(x=f)
+>>> p.x                         # Returns a Preql table
+table x, =3
+  id    x    y  z
+----  ---  ---  ---
+   1    1    2  a
+   2    4    5  b
+   3    7    8  c
+
+>>> p('x {y, z}').to_pandas()    # Returns a pandas table
+   y  z
+0  2  a
+1  5  b
+2  8  c
+
+>>> p('x{... !id}').to_pandas() == f  # Same as it ever was
+      x     y     z
+0  True  True  True
+1  True  True  True
+2  True  True  True
+```

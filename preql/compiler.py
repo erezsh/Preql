@@ -164,7 +164,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        if not (f.type.composed_of(types.AtomicType) or f.type.composed_of(types.StructType)):
+        if not (f.type.composed_of(types.AtomicType) or f.type.composed_of(types.StructType) or f.type.composed_of(types.RowType)):
             raise exc.pql_TypeError.make(state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
@@ -436,8 +436,9 @@ def compile_to_inst(state: State, c: ast.Const):
 
 @dy
 def compile_to_inst(state: State, d: ast.Dict_):
-    elems = {k: evaluate(state, v) for k, v in d.elems.items()}
-    t = types.TableType('_dict', SafeDict({k:v.type for k,v in elems.items()}), False, [])
+    # TODO handle duplicate key names
+    elems = {k or guess_field_name(v): evaluate(state, v) for k, v in d.elems.items()}
+    t = types.TableType('_dict', SafeDict({k: v.type for k,v in elems.items()}), False, [])
     return objects.RowInstance(types.RowType(t), elems)
 
 @dy
@@ -537,7 +538,7 @@ def compile_to_inst(state: State, attr: ast.Attr):
     try:
         return evaluate(state, inst.get_attr(attr.name))
     except exc.pql_AttributeError as e:
-        raise exc.pql_AttributeError.make(state, attr, e.message)
+        raise exc.pql_AttributeError.make(state, attr, e.message) from e
 
 
 

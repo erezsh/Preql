@@ -505,3 +505,9 @@ class RowType(PqlType):
         r ,= self.table.import_result(arr)
         return r
 
+    def flatten_path(self, path):
+        return self.table.flatten_path(path)
+
+    def restructure_result(self, i):
+        # TODO use StructType
+        return ({name: col.restructure_result(i) for name, col in self.table.columns.items()})

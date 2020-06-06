@@ -12,7 +12,7 @@ from . import sql
 
 from .compiler import compile_type_def
 from .interp_common import State, new_value_instance, dy, exclude_fields
-from .evaluate import evaluate, localize, db_query
+from .evaluate import evaluate, localize, db_query, TableConstructor, _destructure_param_match
 
 # def _pql_SQL_callback(state: State, var: str, instances):
 #     var = var.group()
@@ -291,7 +291,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
     if a is objects.EmptyList or b is objects.EmptyList:
         raise pql_TypeError.make(state, None, "Cannot join on an untyped empty list")
 
-    if isinstance(a, objects.AttrInstance) and isinstance(b, objects.AttrInstance):
+    if isinstance(a, objects.SelectedColumnInstance) and isinstance(b, objects.SelectedColumnInstance):
         cols = a, b
         tables = [a.parent, b.parent]
     else:
@@ -363,7 +363,7 @@ def _find_table_reference(t1, t2):
             rel = c.type
             if rel == t2.type:
                 # TODO depends on the query XXX
-                yield (objects.AttrInstance(t2, types.IdType(t2.type), 'id'), objects.AttrInstance(t1, c.col_type, name))
+                yield (objects.SelectedColumnInstance(t2, types.IdType(t2.type), 'id'), objects.SelectedColumnInstance(t1, c.col_type, name))
 
 def pql_type(state: State, obj: ast.Expr):
     """
@@ -544,6 +544,47 @@ def pql_exit(state, value: types.object_t = None):
     raise pql_ExitInterp(value)
 
 
+import csv
+def pql_import_csv(state: State, table: types.object_t, filename: types.object_t):
+    "Import a csv into an existing table"
+    # TODO optimize more (no need to match params for each row)
+    # TODO better error handling, validation
+    table = evaluate(state, table)
+    filename = localize(state, evaluate(state, filename))
+
+    ROWS_PER_QUERY = 1000
+
+    cons = TableConstructor.make(table.type)
+    keys = []
+    rows = []
+
+    def insert_values():
+        q = sql.InsertConsts(table.type.name, keys, rows)
+        db_query(state, q)
+
+    with open(filename, 'r') as f:
+        reader = csv.reader(f)
+        for i, row in enumerate(reader):
+            matched = cons.match_params(state, row)
+            destructured_pairs = _destructure_param_match(state, table, matched)
+
+            keys = [name for (name, _) in destructured_pairs]
+            values = [sql.value(v) for (_,v) in destructured_pairs]
+            assert keys and values
+
+            rows.append(values)
+
+            if (i+1) % ROWS_PER_QUERY == 0:
+                insert_values()
+                rows = []
+
+    if keys and rows:
+        insert_values()
+
+    return table
+
+
+
 internal_funcs = create_internal_funcs({
     'exit': pql_exit,
     'help': pql_help,
@@ -567,6 +608,7 @@ internal_funcs = create_internal_funcs({
     'get_db_type': pql_get_db_type,
     'cast': pql_cast,
     'columns': pql_columns,
+    'import_csv': pql_import_csv,
 })
 
 joins = {
