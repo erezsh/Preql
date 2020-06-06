@@ -65,6 +65,11 @@ Preql has integers, floats and strings. They behave as you would expect:
 "ab"
 >> "-" * 5
 "-----"
+
+>> (not 0) and 2 < 4
+True
+>> null == null     // Unlike SQL!
+True
 ```
 
 Notice that dividing two integers results in a float. To get an integer, use the `/~` operator:

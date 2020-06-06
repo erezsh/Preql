@@ -254,6 +254,12 @@ def sql_bin_op(state, op, table1, table2, name):
     t1 = evaluate(state, table1)
     t2 = evaluate(state, table2)
     # TODO make sure both table types are compatiable
+
+    if not isinstance(t1, objects.TableInstance):
+        raise pql_TypeError.make(state, table1, f"First argument isn't a table, it's a {t1.type}")
+    if not isinstance(t2, objects.TableInstance):
+        raise pql_TypeError.make(state, table2, f"Second argument isn't a table, it's a {t2.type}")
+
     l1 = len(t1.type.flatten_type())
     l2 = len(t2.type.flatten_type())
     if l1 != l2:
@@ -263,19 +269,19 @@ def sql_bin_op(state, op, table1, table2, name):
     # TODO new type, so it won't look like the physical table
     return objects.TableInstance.make(code, t1.type, [t1, t2])
 
-def pql_intersect(state, t1, t2):
+def pql_intersect(state: State, t1: ast.Expr, t2: ast.Expr):
     "Intersect two tables"
     return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
 
-def pql_substract(state, t1, t2):
+def pql_substract(state: State, t1: ast.Expr, t2: ast.Expr):
     "Substract two tables (except)"
     return sql_bin_op(state, "EXCEPT", t1, t2, "substract")
 
-def pql_union(state, t1, t2):
+def pql_union(state: State, t1: ast.Expr, t2: ast.Expr):
     "Union two tables"
     return sql_bin_op(state, "UNION", t1, t2, "union")
 
-def pql_concat(state, t1, t2):
+def pql_concat(state: State, t1: ast.Expr, t2: ast.Expr):
     "Concatenate two tables (union all)"
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
 
