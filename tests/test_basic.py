@@ -339,6 +339,9 @@ class BasicTests(TestCase):
 
     def test_agg_funcs(self):
         preql = self.Preql()
+        r = preql('[0, 2, 0, 0, 3, 4, 0] { => count_true(value), count_false(value) }')
+        assert r == [{'count_true': 3, 'count_false': 4}], r
+
         preql("""
             func sqsum(x) = sum(x*x)
         """)
@@ -348,6 +351,7 @@ class BasicTests(TestCase):
         self.assertEqual( preql('sum([2, 4])'), 6)
         self.assertEqual( preql.sum([2, 4]), 6 )
         # TODO sqsum([2,4])  -->  sum([2,4]*[2,4]) --> sum([4, 16])
+
 
     def test_strings(self):
         preql = Preql()

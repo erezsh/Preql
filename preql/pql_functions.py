@@ -253,13 +253,13 @@ def pql_get_db_type(state: State):
 def sql_bin_op(state, op, table1, table2, name):
     t1 = evaluate(state, table1)
     t2 = evaluate(state, table2)
-    # TODO make sure both table types are compatiable
 
     if not isinstance(t1, objects.TableInstance):
         raise pql_TypeError.make(state, table1, f"First argument isn't a table, it's a {t1.type}")
     if not isinstance(t2, objects.TableInstance):
         raise pql_TypeError.make(state, table2, f"Second argument isn't a table, it's a {t2.type}")
 
+    # TODO Smarter matching
     l1 = len(t1.type.flatten_type())
     l2 = len(t2.type.flatten_type())
     if l1 != l2:
@@ -420,7 +420,15 @@ def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
         # return inst.replace(type=target_type)
         return evaluate(state, ast.List_( None, target_type, []), )
 
+    # res = _cast(state, inst_type.elemtype, target_type.elemtype, inst.elem)
+    # return objects.aggregated(res)
+
     raise pql_TypeError.make(state, None, "Cast not fully implemented yet")
+
+@dy
+def _cast(state, inst_type: types.Aggregated, target_type: types.ListType, inst):
+    res = _cast(state, inst_type.elemtype, target_type.elemtype, inst.elem)
+    return objects.aggregated(res)
 
 
 @dy
@@ -446,6 +454,10 @@ def _cast(state, inst_type: types.TableType, target_type: types._String, inst):
     assert len(res) == 1
     res = list(res[0].values())[0]
     return new_value_instance(res, types.String)
+
+@dy
+def _cast(state, inst_type: types._Bool, target_type: types._Int, inst):
+    return inst.replace(type=types.Int, code=sql.Cast(types.Int, 'int', inst.code))
 
 @dy
 def _cast(state, inst_type: types.IdType, target_type: types._Int, inst):
@@ -551,12 +563,14 @@ def pql_exit(state, value: types.object_t = None):
 
 
 import csv
-def pql_import_csv(state: State, table: types.object_t, filename: types.object_t):
+from tqdm import tqdm
+def pql_import_csv(state: State, table: types.object_t, filename: types.object_t, header: types.object_t = ast.Const(None, types.Bool, False)):
     "Import a csv into an existing table"
-    # TODO optimize more (no need to match params for each row)
     # TODO better error handling, validation
     table = evaluate(state, table)
     filename = localize(state, evaluate(state, filename))
+    header = localize(state, evaluate(state, header))
+    print(f"Importing CSV file: '{filename}'")
 
     ROWS_PER_QUERY = 1000
 
@@ -565,19 +579,25 @@ def pql_import_csv(state: State, table: types.object_t, filename: types.object_t
     rows = []
 
     def insert_values():
-        q = sql.InsertConsts(table.type.name, keys, rows)
+        q = sql.InsertConsts2(table.type.name, keys, rows)
         db_query(state, q)
+
+
+    with open(filename, 'r') as f:
+        line_count = len(list(f))
 
     with open(filename, 'r') as f:
         reader = csv.reader(f)
-        for i, row in enumerate(reader):
-            matched = cons.match_params(state, row)
-            destructured_pairs = _destructure_param_match(state, table, matched)
+        for i, row in enumerate(tqdm(reader, total=line_count)):
+            if i == 0:
+                matched = cons.match_params(state, row)
+                keys = [p.name for (p, _) in matched]
 
-            keys = [name for (name, _) in destructured_pairs]
-            values = [sql.value(v) for (_,v) in destructured_pairs]
-            assert keys and values
+            if header and i == 0:
+                # Skip first line if header=True
+                continue
 
+            values = ["'%s'" % (v.replace("'", "''")) for v in row]
             rows.append(values)
 
             if (i+1) % ROWS_PER_QUERY == 0:

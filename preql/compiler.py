@@ -164,7 +164,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        if not (f.type.composed_of(types.AtomicType) or f.type.composed_of(types.StructType) or f.type.composed_of(types.RowType)):
+        if not (f.type.composed_of((types.AtomicType, types.StructType, types.RowType))):
             raise exc.pql_TypeError.make(state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
@@ -324,7 +324,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
         #     raise pql_TypeError(cmp.meta, "Cannot compare two different types: %s" % type_set)
         insts = [i.primary_key() for i in insts]
         for i, inst in enumerate(insts):
-            if not inst.type.composed_of(types.AtomicType):
+            if not inst.type.composed_of(types.AtomicType) and not inst.type.composed_of(types.Aggregated):
                 raise pql_TypeError.make(state, cmp.args[i], f"Compare not implemented for type {inst.type}")
 
 
@@ -335,7 +335,19 @@ def compile_to_inst(state: State, cmp: ast.Compare):
     }.get(cmp.op, cmp.op)
 
     code = sql_cls(op, [i.code for i in insts])
-    inst = objects.Instance.make(code, types.Bool, insts)
+
+    # TODO a cleaner way to write this
+    t = types.Bool
+    agg = False
+    if any(inst.type.composed_of(types.Aggregated) for inst in insts):
+        # t = types.Aggregated(t)
+        agg = True
+
+    inst = objects.Instance.make(code, t, insts)
+
+    if agg:
+        inst = objects.aggregated(inst)
+
     return inst
 
 

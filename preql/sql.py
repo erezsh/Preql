@@ -257,7 +257,7 @@ class Compare(Scalar):
             }.get(op, op)
 
         elems = [e.compile(qb).text for e in self.exprs]
-        return (f' {op} ').join(elems)
+        return '(%s)' % (f' {op} ').join(elems)
 
 @dataclass
 class Like(Scalar):
@@ -380,6 +380,28 @@ class InsertConsts(Sql):
 
         values = ', '.join(
             '(%s)' % ', '.join([e.compile(qb).text for e in tpl])
+            for tpl in self.tuples
+        )
+
+        q = ['INSERT INTO', qb.safe_name(self.table),
+             "(", ', '.join(self.cols), ")",
+             "VALUES",
+             values,
+        ]
+        return ' '.join(q) + ';'
+
+@dataclass
+class InsertConsts2(Sql):
+    table: str
+    cols: List[str]
+    tuples: list #List[List[Sql]]
+    type = types.null
+
+    def _compile(self, qb):
+        assert self.tuples, self
+
+        values = ', '.join(
+            '(%s)' % ', '.join(tpl)
             for tpl in self.tuples
         )
 

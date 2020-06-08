@@ -56,6 +56,16 @@ func first(field) {
     return _sql_agg_func("", field)
 }
 
+
+func count_false(field) {
+    "Count how many values in the field are false or zero"
+    return SQL(int, "sum(cast($field=0 as int))")
+}
+func count_true(field) {
+    "Count how many values in the field are true (non-zero)"
+    return SQL(int, "sum(cast($field!=0 as int))")
+}
+
 func limit(tbl, n) {
     "Return the first 'n' rows in table"
     return tbl[..n]

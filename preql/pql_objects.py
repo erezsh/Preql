@@ -311,7 +311,8 @@ class AggregatedInstance(AbsInstance):
         return self.elem.flatten_code()
 
     def primary_key(self):
-        return self.elem.primary_key()
+        # TODO should return aggregated key, no?
+        return (self.elem.primary_key())
 
 
 class AbsStructInstance(AbsInstance):
