@@ -1,7 +1,7 @@
 import re
 from setuptools import find_packages, setup
 
-from preql import __version__
+__version__ ,= re.findall('__version__ = "(.*)"', open('preql/__init__.py').read())
 
 setup(
     name = "preql",
@@ -9,7 +9,7 @@ setup(
     packages = ['preql'],
 
     requires = [],
-    install_requires = ['runtype', 'lark-parser>=0.8.5'],
+    install_requires = ['runtype', 'lark-parser>=0.8.5', 'tabulate'],
 
     package_data = {'': ['*.md', '*.lark', '*.pql']},
 
