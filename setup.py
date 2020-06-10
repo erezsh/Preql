@@ -1,0 +1,35 @@
+import re
+from setuptools import find_packages, setup
+
+from preql import __version__
+
+setup(
+    name = "preql",
+    version = __version__,
+    packages = ['preql'],
+
+    requires = [],
+    install_requires = ['runtype', 'lark-parser>=0.8.5'],
+
+    package_data = {'': ['*.md', '*.lark', '*.pql']},
+
+    test_suite = 'tests.__main__',
+
+    # metadata for upload to PyPI
+    author = "Erez Shinan",
+    author_email = "erezshin@gmail.com",
+    description = "Pretty Query Language",
+    license = "MIT",
+    keywords = "Preql SQL",
+    url = "https://github.com/erezsh/lark",
+    long_description='''
+    "Pretty Query Language",
+''',
+
+    classifiers=[
+        "Intended Audience :: Developers",
+        "Programming Language :: Python :: 3",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+    ],
+)
+
