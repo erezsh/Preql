@@ -273,9 +273,9 @@ def pql_intersect(state: State, t1: ast.Expr, t2: ast.Expr):
     "Intersect two tables"
     return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
 
-def pql_substract(state: State, t1: ast.Expr, t2: ast.Expr):
+def pql_subtract(state: State, t1: ast.Expr, t2: ast.Expr):
     "Substract two tables (except)"
-    return sql_bin_op(state, "EXCEPT", t1, t2, "substract")
+    return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
 def pql_union(state: State, t1: ast.Expr, t2: ast.Expr):
     "Union two tables"
@@ -622,7 +622,7 @@ internal_funcs = create_internal_funcs({
     'concat': pql_concat,
     'intersect': pql_intersect,
     'union': pql_union,
-    'substract': pql_substract,
+    'subtract': pql_subtract,
     'SQL': pql_SQL,
     'PY': pql_PY,
     'isa': pql_isa,

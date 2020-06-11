@@ -378,7 +378,7 @@ def _compile_arith(state, arith, a: objects.TableInstance, b: objects.TableInsta
         "+": 'concat',
         "&": 'intersect',
         "|": 'union',
-        "-": 'substract',
+        "-": 'subtract',
     }
     # TODO compile preql funccall?
     try:
