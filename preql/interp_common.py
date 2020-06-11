@@ -9,9 +9,9 @@ from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel
 
 from . import pql_ast as ast
 from . import pql_objects as objects
-from . import pql_types as types
 from . import sql
 from .sql_interface import SqliteInterface, PostgresInterface
+from .pql_types import T, Type
 
 dy = Dispatch()
 
@@ -145,7 +145,9 @@ def create_engine(db_uri, debug):
 
 
 def assert_type(t, type_, state, ast, op, msg="%s expected an object of type '%s', instead got '%s'"):
-    if not isinstance(t, type_):
+    assert isinstance(t, Type)
+    assert isinstance(type_, Type)
+    if not (t <= type_):
         raise pql_TypeError.make(state, ast, msg % (op, type_, t))
 
 def exclude_fields(state, table, fields):
@@ -161,11 +163,11 @@ def from_python(value):
     if value is None:
         return null
     elif isinstance(value, str):
-        return ast.Const(None, types.String, value)
+        return ast.Const(None, T.string, value)
     elif isinstance(value, int):
-        return ast.Const(None, types.Int, value)
+        return ast.Const(None, T.int, value)
     elif isinstance(value, list):
-        return ast.List_(None, types.ListType(types.any_t), list(map(from_python, value)))
+        return ast.List_(None, T.list[T.any], list(map(from_python, value)))
     elif isinstance(value, dict):
         #return ast.Dict_(None, value)
         elems = {k:from_python(v) for k,v in value.items()}

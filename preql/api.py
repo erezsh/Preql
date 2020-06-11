@@ -9,10 +9,12 @@ from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State, from_python
+from .pql_types import T
 
 
 def _make_const(value):
-    t = types.Primitive.by_pytype[type(value)]
+    # t = types.Primitive.by_pytype[type(value)]
+    t = types.from_python(type(value))
     return ast.Const(None, t, value)
 
 def _call_pql_func(state, name, args):
@@ -37,7 +39,7 @@ def table_repr(self, state):
     else:
         count_str = f'={count}'
 
-    if len(self.type.columns) == 1:
+    if len(self.type.elems) == 1:
         rows = localize(state, table_limit(self, state, LIST_PREVIEW_SIZE))
         post = f', ... ({count_str})' if len(rows) < count else ''
         elems = ', '.join(repr(r) for r in rows)
@@ -45,7 +47,7 @@ def table_repr(self, state):
 
     # rows = list(_call_pql_func(state, 'limit', [self, _make_const(TABLE_PREVIEW_SIZE)]))
     rows = localize(state, table_limit(self, state, TABLE_PREVIEW_SIZE))
-    if isinstance(self.type, types.ListType):
+    if (self.type <= T.list):
         rows = [{'value': x} for x in rows]
 
     post = '\n\t...' if len(rows) < count else ''
@@ -107,8 +109,8 @@ class TablePromise:
 
 
 def promise(state, inst):
-    if isinstance(inst.type, types.Collection):
-        if not isinstance(inst.type, types.ListType):
+    if (inst.type <= T.collection):
+        if not (inst.type <= T.list):
             return TablePromise(state, inst)
 
     return localize(state, inst)

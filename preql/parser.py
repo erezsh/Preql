@@ -5,8 +5,9 @@ from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken, To
 from .utils import TextPos, TextRange, TextReference
 from .exceptions import pql_SyntaxError, pql_SyntaxError_PrematureEnd
 from . import pql_ast as ast
-from . import pql_types as types
 from . import pql_objects as objects
+
+from .pql_types import T
 
 class Str(str):
     def __new__(cls, value, text_ref):
@@ -74,37 +75,38 @@ def _fix_escaping(s):
     return s
 
 @v_args(wrapper=_args_wrapper)
-class T(Transformer):
+class TreeToAst(Transformer):
     def __init__(self, code):
         self.code = code
 
     name = token_value
 
     def string(self, meta, s):
-        return ast.Const(meta, types.String, _fix_escaping( s.value[1:-1]) )
+        return ast.Const(meta, T.string, _fix_escaping( s.value[1:-1]) )
     def long_string(self, meta, s):
-        return ast.Const(meta, types.String, _fix_escaping( s.value[3:-3]) )
+        return ast.Const(meta, T.string, _fix_escaping( s.value[3:-3]) )
 
     def pql_dict(self, meta, items):
         d = {item.name: item.value for item in items}
         return ast.Dict_(meta, d)
 
     def int(self, meta, i):
-        return ast.Const(meta, types.Int, int(i))
+        return ast.Const(meta, T.int, int(i))
 
     def float(self, meta, f):
-        return ast.Const(meta, types.Float, float(f))
+        return ast.Const(meta, T.float, float(f))
 
     def null(self, meta):
-        return ast.Const(meta, types.null, None)
+        return ast.Const(meta, T.null, None)
     def false(self, meta):
-        return ast.Const(meta, types.Bool, False)
+        return ast.Const(meta, T.bool, False)
     def true(self, meta):
-        return ast.Const(meta, types.Bool, True)
+        return ast.Const(meta, T.bool, True)
 
     @v_args(inline=False, meta=True)
     def pql_list(self, items, meta):
-        return ast.List_(make_text_reference(self.code, meta), types.ListType(types.any_t), items)
+        # return ast.List_(make_text_reference(self.code, meta), types.ListType(types.any_t), items)
+        return ast.List_(make_text_reference(self.code, meta), T.list[T.any], items)
 
     @v_args(inline=False)
     def as_list(_, args):
@@ -282,10 +284,10 @@ def parse_stmts(s):
 
     # print(tree)
 
-    return T(code=s).transform(tree)
+    return TreeToAst(code=s).transform(tree)
 
 d = {}
 def parse_expr(s):
     tree = parser.parse(s, start="expr")
-    return T(code=s).transform(tree)
+    return TreeToAst(code=s).transform(tree)
 

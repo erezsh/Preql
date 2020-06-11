@@ -1,28 +1,34 @@
 import operator
 
-from .utils import safezip, listgen, SafeDict, find_duplicate
+from .utils import safezip, listgen, SafeDict, find_duplicate, dataclass
 from .exceptions import pql_TypeError, PreqlError, pql_SyntaxError, pql_CompileError
 from . import exceptions as exc
 
 from . import settings
-from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func, from_python
+from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp, table_to_struct
 
+@dataclass
+class Table(Object):
+    type: Type
+    name: str
 
-@dy
-def compile_type_def(state: State, table: types.TableType) -> sql.Sql:
+def compile_type_def(state, table_name, table) -> sql.Sql:
+    assert table <= T.table
+
     posts = []
     pks = []
     columns = []
 
-    pks = {types.join_names(pk) for pk in table.primary_keys}
+    pks = {join_names(pk) for pk in table.options['pk']}
     # autocount = types.join_names(table.autocount)
-    for name, c in table.flatten_type():
+    for name, c in flatten_type(table):
         if name in pks:
-            assert isinstance(c, types.IdType)  # Right now nothing else is supported
+            # assert isinstance(c, types.IdType)  # Right now nothing else is supported
+            assert c <= T.t_id
             if state.db.target == sql.postgres:
                 type_ = "SERIAL" # Postgres
             else:
@@ -31,11 +37,11 @@ def compile_type_def(state: State, table: types.TableType) -> sql.Sql:
             type_ = compile_type(state, c)
 
         columns.append( f'"{name}" {type_}' )
-        if isinstance(c, types.RelationalColumn):
+        if (c <= T.t_relation):
             # TODO any column, using projection / get_attr
-            if not table.temporary:
+            if not table.options.get('temporary', False):
                 # In postgres, constraints on temporary tables may reference only temporary tables
-                s = f"FOREIGN KEY({name}) REFERENCES {c.type.name}(id)"
+                s = f"FOREIGN KEY({name}) REFERENCES \"{c.options['name']}\"(id)"
                 posts.append(s)
 
     if pks:
@@ -43,46 +49,38 @@ def compile_type_def(state: State, table: types.TableType) -> sql.Sql:
         posts.append(f"PRIMARY KEY ({names})")
 
     # Consistent among SQL databases
-    command = "CREATE TEMPORARY TABLE" if table.temporary else "CREATE TABLE IF NOT EXISTS"
-    return sql.RawSql(types.null, f'{command} "{table.name}" (' + ', '.join(columns + posts) + ')')
+    command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
+    return sql.RawSql(T.null, f'{command} "{table_name}" (' + ', '.join(columns + posts) + ')')
 
-@dy
-def compile_type(state: State, type_: types.RelationalColumn):
+@combined_dp
+def compile_type(state: State, type_: T.t_relation):
     # TODO might have a different type
     return 'INTEGER'    # Foreign-key is integer
 
-@dy
-def compile_type(state: State, type_: types.DataColumn):
-    return compile_type(state, type_.col_type)
-
-def _compile_type_primitive(type, nullable):
+@combined_dp
+def compile_type(state: State, type: T.primitive):
+    assert type <= T.primitive
     s = {
         'int': "INTEGER",
         'string': "VARCHAR(4000)",
         'float': "FLOAT",
         'bool': "BOOLEAN",
         'text': "TEXT",
+        't_relation': "INTEGER",
         'datetime': "TIMESTAMP",
-    }[type.name]
-    if not nullable:
+    }[type.typename]
+    if not type.nullable:
         s += " NOT NULL"
     return s
-@dy
-def compile_type(state: State, type: types.Primitive, nullable=False):
-    return _compile_type_primitive(type, nullable)
 
-@dy
-def compile_type(state: State, type: types.NullType):
+@combined_dp
+def compile_type(state: State, type: T.null):
     return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
 
-@dy
-def compile_type(state: State, type: types.OptionalType):
-    return compile_type(state, type.type, True)
-
-@dy
-def compile_type(state: State, idtype: types.IdType, nullable=False):
+@combined_dp
+def compile_type(state: State, idtype: T.t_id):
     s = "INTEGER"   # TODO non-int idtypes
-    if not nullable:
+    if not idtype.nullable:
         s += " NOT NULL"
     return s
 
@@ -102,7 +100,7 @@ def _process_fields(state: State, fields):
         if not isinstance(v, objects.AbsInstance):
             raise pql_TypeError.make(state, None, f"Projection field is not an instance. Instead it is: {v}")
 
-        if isinstance(v.type, types.Aggregated):
+        if (v.type <= T.aggregate):
             v = v.primary_key()
             v = objects.make_instance(sql.MakeArray(v.type, v.code), v.type, [v])
 
@@ -123,7 +121,8 @@ def _expand_ellipsis(state, table, fields):
                 raise pql_SyntaxError.make(state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
                 exclude = direct_names | set(f.value.exclude)
-                for name in table.type.columns:
+                for name in table_to_struct(table.type).elems:
+                    assert isinstance(name, str)
                     if name not in exclude:
                         yield ast.NamedField(f.text_ref, name, ast.Name(None, name))
         else:
@@ -148,7 +147,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     assert isinstance(table, objects.AbsInstance), table
 
-    if not isinstance(table.type, (types.Collection, types.StructType)):
+    if not (table.type <= T.union[T.collection, T.struct]):
         raise pql_TypeError.make(state, proj, f"Cannot project objects of type {table.type}")
 
     fields = _expand_ellipsis(state, table, proj.fields)
@@ -164,23 +163,27 @@ def compile_to_inst(state: State, proj: ast.Projection):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        if not (f.type.composed_of((types.AtomicType, types.StructType, types.RowType))):
+        # if not (f.type.composed_of((types.AtomicType, types.StructType, types.RowType))):
+        if not (f.type <= T.union[T.primitive, T.struct, T.null]):
             raise exc.pql_TypeError.make(state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
-        t = types.StructType(state.unique_name('_nested_proj'), {n:c.type for n,c in fields})
+        # t = types.StructType(state.unique_name('_nested_proj'), {n:c.type for n,c in fields})
+        t = T.struct(**{n:c.type for n,c in fields})
         return objects.StructInstance(t, dict(fields))
 
     agg_fields = []
     if proj.agg_fields:
-        with state.use_scope({n:objects.aggregated(c) for n,c in attrs.items()}):
+        with state.use_scope({n:objects.aggregate(c) for n,c in attrs.items()}):
             agg_fields = _process_fields(state, proj.agg_fields)
 
     all_fields = fields + agg_fields
 
     # Make new type
     # TODO inherit primary key? indexes?
-    new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], codenames={})
+    # new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], codenames={})
+    # new_table_type = T.table().set_options(temporary=True)
+    elems = {}
 
     codename = state.unique_name('proj')
     for name_, inst in all_fields:
@@ -189,16 +192,19 @@ def compile_to_inst(state: State, proj: ast.Projection):
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
         i = 1
-        while name in new_table_type.columns:
+        while name in elems:
             name = name_ + str(i)
             i += 1
-        new_table_type.columns[name] = inst.type
+        elems[name] = inst.type
 
         # Designate a codename for the field
-        if isinstance(inst, objects.StructInstance) or isinstance(inst.code, sql.Name) and inst.code.name == name:     # Value hasn't changed
-            new_table_type.codenames[name] = name
-        else:
-            new_table_type.codenames[name] = codename+'_'+name
+        # TODO resolve !!! XXX Temporarily BROKEN
+        # if isinstance(inst, objects.StructInstance) or isinstance(inst.code, sql.Name) and inst.code.name == name:     # Value hasn't changed
+        #     new_table_type.codenames[name] = name
+        # else:
+        #     new_table_type.codenames[name] = codename+'_'+name
+
+    new_table_type = T.table(**elems).set_options(temporary=True)
 
     # Make code
     flat_codes = [code
@@ -208,7 +214,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     # TODO if nn != on
     sql_fields = [
         sql.ColumnAlias.make(code, nn)
-        for code, (nn, _nt) in safezip(flat_codes, new_table_type.flatten_type())
+        for code, (nn, _nt) in safezip(flat_codes, flatten_type(new_table_type))
     ]
 
     # Make Instance
@@ -218,9 +224,11 @@ def compile_to_inst(state: State, proj: ast.Projection):
     limit = None
     if proj.groupby:
         if fields:
-            groupby = [new_table.get_column(n).primary_key().code for n, rc in fields]
+            # breakpoint()
+            # groupby = [new_table.get_column(n).primary_key().code for n, rc in fields]
+            groupby = [sql.Primitive(T.int, str(i+1)) for i in range(len(fields))]
         else:
-            limit = sql.Primitive(types.Int, '1')
+            limit = sql.Primitive(T.int, '1')
             # Alternatively we could
             #   groupby = [sql.null]
             # But postgres doesn't support it
@@ -233,7 +241,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 @dy
 def compile_to_inst(state: State, order: ast.Order):
     table = evaluate(state, order.table)
-    assert_type(table.type, types.TableType, state, order, "'order'")
+    assert_type(table.type, T.table, state, order, "'order'")
 
     with state.use_scope(table.all_attrs()):
         fields = evaluate(state, order.fields)
@@ -258,13 +266,13 @@ def compile_to_inst(state: State, lst: list):
 def compile_to_inst(state: State, like: ast.Like):
     s = evaluate(state, like.str)
     p = evaluate(state, like.pattern)
-    if s.type != types.String:
+    if s.type != T.string:
         raise pql_TypeError.make(state, like.str, f"Like (~) operator expects two strings")
-    if p.type != types.String:
+    if p.type != T.string:
         raise pql_TypeError.make(state, like.pattern, f"Like (~) operator expects two strings")
 
     code = sql.Like(s.code, p.code)
-    return objects.Instance.make(code, types.Bool, [s, p])
+    return objects.Instance.make(code, T.bool, [s, p])
 
 
 
@@ -279,22 +287,25 @@ def compile_to_inst(state: State, cmp: ast.Compare):
             raise pql_TypeError.make(state, cmp.op, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
 
         sql_cls = sql.Contains
-        if isinstance(insts[0].type, types._String) and isinstance(insts[1].type, types._String):
-            code = sql.Compare('>', [sql.FuncCall(types.Bool, 'INSTR', [i.code for i in reversed(insts)]), sql.value(0)])
-            return objects.make_instance(code, types.Bool, [])
+        if (insts[0].type <= T.string) and (insts[1].type <= T.string):
+            code = sql.Compare('>', [sql.FuncCall(T.bool, 'INSTR', [i.code for i in reversed(insts)]), sql.value(0)])
+            return objects.make_instance(code, T.bool, [])
         else:
-            assert_type(insts[0].type, types.AtomicType, state, cmp.op, repr(cmp.op))
-            assert_type(insts[1].type, types.Collection, state, cmp.op, repr(cmp.op))
-            cols = insts[1].type.columns
+            # assert_type(insts[0].type, types.AtomicType, state, cmp.op, repr(cmp.op))
+            assert_type(insts[0].type, T.primitive, state, cmp.op, repr(cmp.op))
+            assert_type(insts[1].type, T.collection, state, cmp.op, repr(cmp.op))
+            cols = insts[1].type.elems
             if len(cols) > 1:
                 raise pql_TypeError.make(state, cmp.op, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
-            c_type = list(cols.values())[0]
-            if c_type.effective_type().kernel_type() != insts[0].type.effective_type().kernel_type():
+            # c_type = list(cols.values())[0]
+            c_type ,= table_to_struct(insts[1].type).elems.values()
+            # if c_type.effective_type().kernel_type() != insts[0].type.effective_type().kernel_type():
+            if c_type != insts[0].type:
                 raise pql_TypeError.make(state, cmp.op, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
     else:
         if not all(isinstance(i, objects.AbsInstance) for i in insts):
-            if any(isinstance(i, types.PqlType) for i in insts):
+            if any(isinstance(i, Type) for i in insts):
                 if cmp.op == '==':
                     return objects.new_value_instance(insts[0] is insts[1])
                 elif cmp.op == '!=':
@@ -324,7 +335,8 @@ def compile_to_inst(state: State, cmp: ast.Compare):
         #     raise pql_TypeError(cmp.meta, "Cannot compare two different types: %s" % type_set)
         insts = [i.primary_key() for i in insts]
         for i, inst in enumerate(insts):
-            if not inst.type.composed_of(types.AtomicType) and not inst.type.composed_of(types.Aggregated):
+            # if not inst.type.composed_of(types.AtomicType) and not inst.type.composed_of(types.aggregate):
+            if not inst.type <= T.union[T.primitive, T.aggregate, T.null]:
                 raise pql_TypeError.make(state, cmp.args[i], f"Compare not implemented for type {inst.type}")
 
 
@@ -337,16 +349,16 @@ def compile_to_inst(state: State, cmp: ast.Compare):
     code = sql_cls(op, [i.code for i in insts])
 
     # TODO a cleaner way to write this
-    t = types.Bool
+    t = T.bool
     agg = False
-    if any(inst.type.composed_of(types.Aggregated) for inst in insts):
-        # t = types.Aggregated(t)
+    if any(inst.type <= T.aggregate for inst in insts):
+        # t = types.aggregate(t)
         agg = True
 
     inst = objects.Instance.make(code, t, insts)
 
     if agg:
-        inst = objects.aggregated(inst)
+        inst = objects.aggregate(inst)
 
     return inst
 
@@ -355,7 +367,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 @dy
 def compile_to_inst(state: State, neg: ast.Neg):
     expr = evaluate(state, neg.expr)
-    assert_type(expr.type, (types._Int, types._Float), state, neg, "Negation")
+    assert_type(expr.type, T.number, state, neg, "Negation")
 
     return objects.Instance.make(sql.Neg(expr.code), expr.type, [expr])
 
@@ -372,7 +384,7 @@ def compile_to_inst(state: State, arith: ast.Arith):
     return _compile_arith(state, arith, *args)
 
 @dy
-def _compile_arith(state, arith, a: objects.TableInstance, b: objects.TableInstance):
+def _compile_arith(state, arith, a: objects.CollectionInstance, b: objects.CollectionInstance):
     # TODO validate types
     ops = {
         "+": 'concat',
@@ -392,21 +404,22 @@ def _compile_arith(state, arith, a: objects.TableInstance, b: objects.TableInsta
 def _compile_arith(state, arith, a, b):
     args = [a, b]
     arg_types = [a.type for a in args]
-    arg_types_set = set(arg_types) - {types.ListType(types.any_t)}  # XXX hacky
+    # arg_types_set = set(arg_types) - {types.ListType(types.any_t)}  # XXX hacky
+    arg_types_set = set(arg_types) - {T.list[T.any]}  # XXX hacky
 
     if len(arg_types_set) > 1:
         # Auto-convert int+float into float
         # TODO use dispatch+operator_overload+SQL() to do this in preql instead of here?
-        if arg_types_set == {types.Int, types.Float}:
-            arg_types_set = {types.Float}
-        elif arg_types_set == {types.Int, types.String}:
+        if arg_types_set == {T.int, T.float}:
+            arg_types_set = {T.float}
+        elif arg_types_set == {T.int, T.string}:
             if arith.op != '*':
                 raise pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
 
             # REPEAT(str, int) -> str
             ordered_args = {
-                (types.String, types.Int): args,
-                (types.Int, types.String): args[::-1],
+                (T.string, T.int): args,
+                (T.int, T.string): args[::-1],
             }[tuple(arg_types)]
 
             return call_pql_func(state, "repeat", ordered_args)
@@ -415,8 +428,8 @@ def _compile_arith(state, arith, a, b):
 
     res_type ,= arg_types_set
     if arith.op == '/': # XXX terrible
-        assert isinstance(res_type, types.Number)
-        res_type = types.Float
+        assert (res_type <= T.number)
+        res_type = T.float
 
     if settings.optimize:
         if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
@@ -427,7 +440,7 @@ def _compile_arith(state, arith, a, b):
 
     # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
 
-    if not all(isinstance(a.type, (types.Primitive, types.Aggregated)) for a in args):
+    if not all((a.type <= T.union[T.primitive, T.aggregate]) for a in args):
         raise pql_TypeError.make(state, arith.op, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
 
     code = sql.arith(res_type, arith.op, [a.code for a in args], state.stacktrace)  # XXX
@@ -441,7 +454,7 @@ def compile_to_inst(state: State, x: ast.Ellipsis):
 
 @dy
 def compile_to_inst(state: State, c: ast.Const):
-    if c.type == types.null:
+    if c.type == T.null:
         assert c.value is None
         return objects.null
     return new_value_instance(c.value, c.type)
@@ -450,8 +463,9 @@ def compile_to_inst(state: State, c: ast.Const):
 def compile_to_inst(state: State, d: ast.Dict_):
     # TODO handle duplicate key names
     elems = {k or guess_field_name(v): evaluate(state, v) for k, v in d.elems.items()}
-    t = types.TableType('_dict', SafeDict({k: v.type for k,v in elems.items()}), False, [])
-    return objects.RowInstance(types.RowType(t), elems)
+    # t = types.TableType('_dict', SafeDict({k: v.type for k,v in elems.items()}), False, [])
+    t = T.table(**{k: v.type for k,v in elems.items()})
+    return objects.RowInstance(T.row[t], elems)
 
 @dy
 def compile_to_inst(state: State, lst: ast.List_):
@@ -461,7 +475,7 @@ def compile_to_inst(state: State, lst: ast.List_):
     # return Instance(Sql(sql), ArrayType(type, false))
     # Or just evaluate?
 
-    if not lst.elems and lst.type.elemtype is types.any_t:
+    if not lst.elems and tuple(lst.type.elems) == (T.any,):
         # XXX a little awkward
         return objects.EmptyList
 
@@ -473,20 +487,21 @@ def compile_to_inst(state: State, lst: ast.List_):
     elif type_set:
         elem_type ,= type_set
     else:
-        elem_type = lst.type.elemtype
+        elem_type = lst.type.elem
 
-    if not elem_type.composed_of(types.Primitive):
+    if not (elem_type <= T.primitive):
         raise pql_TypeError.make(state, lst, "Cannot create lists of type %s" % elem_type)
 
     # XXX should work with a better type system where isa(int, any) == true
     # assert isinstance(elem_type, type(lst.type.elemtype)), (elem_type, lst.type.elemtype)
 
     # code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
-    list_type = types.ListType(elem_type)
+    # list_type = types.ListType(elem_type)
+    list_type = T.list[elem_type]
     name = state.unique_name("list_")
     table_code, subq = sql.create_list(list_type, name, [e.code for e in elems])
 
-    inst = objects.TableInstance.make(table_code, list_type, elems)
+    inst = objects.ListInstance.make(table_code, list_type, elems)
     inst.subqueries[name] = subq
     return inst
 
@@ -496,7 +511,7 @@ def compile_to_inst(state: State, s: ast.Slice):
     table = evaluate(state, s.table)
     # TODO if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
 
-    assert_type(table.type, types.Collection, state, s, "Slice")
+    assert_type(table.type, T.collection, state, s, "Slice")
 
     instances = [table]
     if s.range.start:
@@ -513,24 +528,25 @@ def compile_to_inst(state: State, s: ast.Slice):
 
     code = sql.table_slice(table, start.code, stop and stop.code)
     # return table.remake(code=code)
-    return objects.TableInstance.make(code, table.type, instances)
+    # return objects.TableInstance.make(code, table.type, instances)
+    return type(table).make(code, table.type, instances)
 
 @dy
 def compile_to_inst(state: State, sel: ast.Selection):
     table = evaluate(state, sel.table)
-    if isinstance(table, types.PqlType):
+    if isinstance(table, Type):
         return _apply_type_generics(state, table, sel.conds)
 
     if not isinstance(table, objects.Instance):
         return sel.replace(table=table)
 
-    assert_type(table.type, types.Collection, state, sel, "Selection")
+    assert_type(table.type, T.collection, state, sel, "Selection")
 
     with state.use_scope(table.all_attrs()):
         conds = evaluate(state, sel.conds)
 
     for i, c in enumerate(conds):
-        if not isinstance(c.type, types._Bool):
+        if not (c.type <= T.bool):
             raise exc.pql_TypeError.make(state, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
     code = sql.table_selection(table, [c.code for c in conds])
@@ -559,7 +575,7 @@ def _apply_type_generics(state, gen_type, type_names):
     if not type_objs:
         raise pql_TypeError.make(state, None, f"Generics expression expected a type, got nothing.")
     for o in type_objs:
-        if not isinstance(o, types.PqlType):
+        if not isinstance(o, Type):
             raise pql_TypeError.make(state, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:

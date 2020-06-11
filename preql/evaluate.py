@@ -24,7 +24,6 @@ from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func
 from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, PreqlError, pql_SyntaxError, pql_CompileError
 from . import exceptions as exc
-from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
@@ -34,30 +33,36 @@ Sql = sql.Sql
 
 from .interp_common import State, dy, new_value_instance, from_python
 from .compiler import compile_to_inst, compile_type_def
+from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type
 
 
 
 @dy
 def resolve(state: State, struct_def: ast.StructDef):
     members = {str(k):resolve(state, v) for k, v in struct_def.members}
-    struct = types.StructType(struct_def.name, members)
+    # struct = types.StructType(struct_def.name, members)
+    struct = T.struct(**members)
     state.set_var(struct_def.name, struct)
     return struct
 
 @dy
-def resolve(state: State, table_def: ast.TableDef) -> types.TableType:
-    t = types.TableType(table_def.name, SafeDict(), False, [['id']])
+def resolve(state: State, table_def: ast.TableDef):
+    # t = types.TableType(table_def.name, SafeDict(), False, [['id']])
+    t = T.table(id=T.t_id).set_options(name=table_def.name, pk=[['id']])
     if table_def.methods:
         methods = evaluate(state, table_def.methods)
-        t.dyn_attrs.update({m.userfunc.name:m.userfunc for m in methods})
+        # t.dyn_attrs.update({m.userfunc.name:m.userfunc for m in methods})
+        t.methods.update({m.userfunc.name:m.userfunc for m in methods})
 
-    state.set_var(t.name, t)   # TODO use an internal namespace
+    state.set_var(table_def.name, t)   # TODO use an internal namespace
 
-    t.columns['id'] = types.IdType(t)
     for c in table_def.columns:
-        t.columns[c.name] = resolve(state, c)
+        t.elems[c.name] = resolve(state, c)
 
-    state.set_var(t.name, objects.new_table(t))
+    # Fix this
+    # t.elems['id'] = T.t_id[t]
+
+    state.set_var(table_def.name, objects.new_table(t, name=table_def.name))
     return t
 
 @dy
@@ -65,25 +70,29 @@ def resolve(state: State, col_def: ast.ColumnDef):
     col = resolve(state, col_def.type)
 
     query = col_def.query
-    if isinstance(col, objects.TableInstance):
+    assert not query
+
+    if isinstance(col, objects.CollectionInstance):
         assert False
         # col = col.type
         # assert isinstance(col, types.TableType)
-    if col.composed_of(types.TableType):
-        return types.RelationalColumn(col, query)
 
-    assert not query
-    return types.DataColumn(col, col_def.default)
+    if col <= T.table:
+        return T.t_relation[col].set_options(name=col_def.type.name)
+
+    return col.set_options(default=col_def.default)
 
 @dy
-def resolve(state: State, type_: ast.Type) -> types.PqlType:
+def resolve(state: State, type_: ast.Type):
     t = state.get_var(type_.name)
     if isinstance(t, objects.TableInstance):
         t = t.type
-        assert isinstance(t, types.TableType)
+        # assert isinstance(t, types.TableType)
+        assert t.issubtype(T.table)
 
     if type_.nullable:
-        t = types.OptionalType(t)
+        t = t.replace(nullable=True)
+    #     t = types.OptionalType(t)
     return t
 
 
@@ -103,7 +112,7 @@ def db_query(state: State, sql, subqueries=None):
 def _execute(state: State, table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
-    sql = compile_type_def(state, t)
+    sql = compile_type_def(state, table_def.name, t)
     db_query(state, sql)
 
 @dy
@@ -130,17 +139,18 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
 
     target = evaluate(state, target_name)
 
-    params = dict(target.type.params())
+    params = dict(table_params(target.type))
     for p in params:
-        if p not in source.type.columns:
+        if p not in source.type.elems:
             raise TypeError(None, f"Missing column {p} in table {source}")
 
     # assert len(params) == len(source.type.columns), (params, source)
-    primary_keys, columns = target.type.flat_for_insert()
+    # primary_keys, columns = target.type.flat_for_insert()
+    primary_keys, columns = table_flat_for_insert(target.type)
 
     source = exclude_fields(state, source, primary_keys)
 
-    code = sql.Insert(target.type, columns, source.code)
+    code = sql.Insert(target.type.options['name'], columns, source.code)
     db_query(state, code, source.subqueries)
     return objects.null
 
@@ -312,7 +322,8 @@ def simplify(state: State, funccall: ast.FuncCall):
     func = evaluate(state, funccall.func)
 
     args = funccall.args
-    if isinstance(func, types.Primitive):
+    # if isinstance(func, types.Primitive):
+    if isinstance(func, Type):
         # Cast to primitive
         args = args + [func]
         func = state.get_var('cast')
@@ -434,7 +445,7 @@ def test_nonzero(state: State, inst: objects.Instance):
     return localize(state, inst)
 
 @dy
-def test_nonzero(state: State, inst: types.PqlType):
+def test_nonzero(state: State, inst: Type):
     return True
 
 def _raw_sql_callback(state: State, var: str, instances):
@@ -443,7 +454,8 @@ def _raw_sql_callback(state: State, var: str, instances):
     var_name = var[1:]
     obj = state.get_var(var_name)
 
-    if isinstance(obj, types.TableType):
+    # if isinstance(obj, types.TableType):
+    if isinstance(obj, Type) and obj.issubtype(T.table):
         # This branch isn't strictly necessary
         # It exists to create nicer SQL code output
         inst = objects.new_table(obj)
@@ -475,7 +487,7 @@ def apply_database_rw(state: State, rps: ast.ResolveParametersString):
     type_ = evaluate(state, rps.type)
     if isinstance(type_, objects.Instance):
         type_ = type_.type
-    assert isinstance(type_, types.PqlType), type_
+    assert isinstance(type_, Type), type_
 
     instances = []
     expanded = re.sub(r"\$\w+", lambda m: _raw_sql_callback(state, m, instances), sql_code)
@@ -483,11 +495,12 @@ def apply_database_rw(state: State, rps: ast.ResolveParametersString):
     # code = sql.ResolveParameters(sql_code)
 
     # TODO validation!!
-    if isinstance(type_, types.TableType):
+    # if isinstance(type_, types.TableType):
+    if type_ <= T.table:
         name = state.unique_name("subq_")
 
         # TODO this isn't in the tests!
-        fields = [sql.Name(c, path) for path, c in type_.flatten_type()]
+        fields = [sql.Name(c, path) for path, c in flatten_type(type_)]
 
         subq = sql.Subquery(name, fields, code)
 
@@ -501,13 +514,13 @@ def apply_database_rw(state: State, rps: ast.ResolveParametersString):
 @dy
 def apply_database_rw(state: State, o: ast.One):
     # TODO move these to the core/base module
-    table = evaluate(state, ast.Slice(None, o.expr, ast.Range(None, None, ast.Const(None, types.Int, 2))))
-    if isinstance(table, ast.Ast):
-        return table
-    if isinstance(table.type, types.NullType):
-        return table
+    table = evaluate(state, ast.Slice(None, o.expr, ast.Range(None, None, ast.Const(None, T.int, 2))))
+    # if isinstance(table, ast.Ast):
+    #     return table
+    # if isinstance(table.type, types.NullType):
+    #     return table
 
-    assert isinstance(table.type, types.Collection), table
+    assert (table.type <= T.collection), table
     rows = localize(state, table) # Must be 1 row
     if len(rows) == 0:
         if not o.nullable:
@@ -517,16 +530,16 @@ def apply_database_rw(state: State, o: ast.One):
         raise pql_ValueError.make(state, o, "'one' expected a single result, got more")
 
     row ,= rows
-    rowtype = types.RowType(table.type)
+    rowtype = T.row[table.type] #types.RowType(table.type)
 
     # TODO turn idtype into RowType? Or maybe this isn't the place
-    if isinstance(table.type, types.TableType):
-        d = {k: new_value_instance(v, table.type.get_column_type(k), True) for k, v in row.items()}
-        return objects.RowInstance(rowtype, d)
-    else:
-        assert isinstance(table.type, types.ListType)
-        # Must be list
+    if (table.type <= T.list):
         return new_value_instance(row)
+
+    assert (table.type <= T.table)
+    assert_type(table.type, T.table, state, o, 'one')
+    d = {k: new_value_instance(v, table.type.elems[k], True) for k, v in row.items()}
+    return objects.RowInstance(rowtype, d)
 
 
 @dy
@@ -536,7 +549,7 @@ def apply_database_rw(state: State, d: ast.Delete):
 
     cond_table = ast.Selection(d.text_ref, d.table, d.conds)
     table = evaluate(state, cond_table)
-    assert isinstance(table.type, types.TableType)
+    assert (table.type <= T.table)
 
     rows = list(localize(state, table))
     if rows:
@@ -561,7 +574,7 @@ def apply_database_rw(state: State, u: ast.Update):
     #     # XXX autocast
     #     table = objects.TableInstance.make(table.code, table.type.table, [table])
 
-    if not isinstance(table.type, types.TableType):
+    if not (table.type <= T.table):
         raise pql_TypeError.make(state, u.table, f"Expected a table. Got: {table.type}")
 
     for f in u.fields:
@@ -570,7 +583,8 @@ def apply_database_rw(state: State, u: ast.Update):
 
     # TODO verify table is concrete (i.e. lvalue, not a transitory expression)
 
-    update_scope = {n:c.replace(code=sql.Name(c.type, n)) for n, c in table.all_attrs().items()}
+    # update_scope = {n:c.replace(code=sql.Name(c.type, n)) for n, c in table.all_attrs().items()}
+    update_scope = {n:c for n, c in table.all_attrs().items()}
     with state.use_scope(update_scope):
         proj = {f.name:evaluate(state, f.value) for f in u.fields}
 
@@ -599,7 +613,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     if isinstance(obj, objects.TableInstance):
         # XXX Is it always TableInstance? Just sometimes? What's the transition here?
         obj = obj.type
-    assert_type(obj, types.TableType, state, new, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(obj, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
 
     if len(new.args) > 1:
         raise exc.pql_NotImplementedError.make(state, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
@@ -622,7 +636,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
         ids += [_new_row(state, new, obj, matched).primary_key()]   # XXX return everything, not just pk?
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
-    return ast.List_(new.text_ref, types.ListType(types.Int), ids)
+    return ast.List_(new.text_ref, gg[T.int], ids)
 
 
 @listgen
@@ -633,8 +647,8 @@ def _destructure_param_match(state, ast, param_match):
             v = v.primary_key()
         v = localize(state, v)
 
-        if isinstance(k.type, types.StructType):
-            names = [name for name, t in k.orig.col_type.flatten_type([k.name])]
+        if (k.type <= T.struct):
+            names = [name for name, t in flatten_type(k.orig, [k.name])]
             if not isinstance(v, list):
                 raise pql_TypeError.make(state, ast, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
             if len(v) != len(names):
@@ -643,21 +657,22 @@ def _destructure_param_match(state, ast, param_match):
         else:
             yield k.name, v
 
-def _new_row(state, orig_ast, table, matched):
+def _new_row(state, new_ast, table, matched):
     matched = [(k, evaluate(state, v)) for k, v in matched]
-    destructured_pairs = _destructure_param_match(state, orig_ast, matched)
+    destructured_pairs = _destructure_param_match(state, new_ast, matched)
 
     keys = [name for (name, _) in destructured_pairs]
     values = [sql.value(v) for (_,v) in destructured_pairs]
     assert keys and values
     # XXX use regular insert?
-    q = sql.InsertConsts(table.name, keys, [values])
+    q = sql.InsertConsts(new_ast.type, keys, [values])
     db_query(state, q)
     rowid = db_query(state, sql.LastRowId())
 
     d = SafeDict({'id': objects.new_value_instance(rowid)})
     d.update({p.name:v for p, v in matched})
-    return objects.RowInstance(types.RowType(table), d)
+    # return objects.RowInstance(types.RowType(table), d)
+    return objects.RowInstance(T.row[table], d)
 
 
 
@@ -679,10 +694,10 @@ def apply_database_rw(state: State, new: ast.New):
         res = evaluate(state, ast.FuncCall(new.text_ref, f, new.args))
         return res
 
-    assert isinstance(obj, objects.TableInstance)  # XXX always the case?
+    assert isinstance(obj, objects.TableInstance), obj  # XXX always the case?
     table = obj
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
-    assert_type(table.type, types.TableType, state, new, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
 
     cons = TableConstructor.make(table.type)
     matched = cons.match_params(state, new.args)
@@ -700,11 +715,12 @@ class TableConstructor(objects.Function):
 
     @classmethod
     def make(cls, table):
-        return cls([objects.Param(name.text_ref, name, p.col_type, p.default, orig=p) for name, p in table.params()])
+        # return cls([objects.Param(name.text_ref, name, p.col_type, p.default, orig=p) for name, p in table_params(table)])
+        return cls([objects.Param(name.text_ref, name, p, p.options.get('default'), orig=p) for name, p in table_params(table)])
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
-    code_cls = sql.TableName if isinstance(inst.type, types.Collection) else sql.Name
+    code_cls = sql.TableName if (inst.type <= T.collection) else sql.Name
     name = state.unique_name(inst)
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
@@ -849,8 +865,10 @@ def new_table_from_rows(state, name, columns, rows):
     ]
 
     # TODO refactor into function
-    table = types.TableType(name, SafeDict(), True, [['id']])
-    table.columns['id'] = types.IdType(table)
+    # table = types.TableType(name, SafeDict(), True, [['id']])
+    table = T.table.set_options(temporary=True)
+    # table.columns['id'] = types.IdType(table)
+    table.columns['id'] = T.t_id #[table]
     for c,v in zip(columns, tuples[0]):
         table.columns[c] = v.type
 

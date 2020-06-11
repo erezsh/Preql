@@ -6,13 +6,13 @@ from .utils import safezip, listgen, SafeDict
 from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp, pql_NotImplementedError
 
 from . import pql_objects as objects
-from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
 
 from .compiler import compile_type_def
 from .interp_common import State, new_value_instance, dy, exclude_fields
 from .evaluate import evaluate, localize, db_query, TableConstructor, _destructure_param_match
+from .pql_types import Object, T, table_flat_for_insert, Type, join_names, table_to_struct, combined_dp
 
 # def _pql_SQL_callback(state: State, var: str, instances):
 #     var = var.group()
@@ -126,7 +126,7 @@ def _canonize_default(d):
 def create_internal_func(fname, f):
     sig = inspect.signature(f)
     return objects.InternalFunction(fname, [
-        objects.Param(None, pname, types.any_t, _canonize_default(sig.parameters[pname].default))
+        objects.Param(None, pname, T.any, _canonize_default(sig.parameters[pname].default))
         for pname, type_ in list(f.__annotations__.items())[1:]
     ], f)
 
@@ -147,7 +147,7 @@ def pql_debug(state: State):
     return objects.null
 
 
-@dy
+# @dy
 # def _pql_issubclass(a, b):
 #     return False
 
@@ -166,15 +166,16 @@ def pql_debug(state: State):
 
 # @dy
 # def _pql_issubclass(a: types.Aggregated, b: types.Aggregated):
-#     return _pql_issubclass(a.elemtype, b.elemtype)
+#     return _pql_issubclass(aelemtype, b.elemtype)
 
 
-def pql_issubclass(state: State, expr: ast.PqlObject, type_expr: ast.PqlObject):
+def pql_issubclass(state: State, expr: Object, type_expr: Object):
     "Returns whether the give object is an instance of the given type"
     inst = evaluate(state, expr)
+    assert isinstance(inst, Type)
     type_ = evaluate(state, type_expr)
-    res = inst.issubclass(type_)
-    return new_value_instance(res, types.Bool)
+    res = inst <= type_
+    return new_value_instance(res, T.bool)
 
 def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     "Returns whether the give object is an instance of the given type"
@@ -183,23 +184,23 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     # res = isinstance(inst.type, type_)
     res = inst.isa(type_)
     # res = _pql_issubclass(inst.type, type_)
-    return new_value_instance(res, types.Bool)
+    return new_value_instance(res, T.bool)
 
 def _count(state, obj: ast.Expr, table_func, name):
     obj = evaluate(state, obj)
 
-    if isinstance(obj.type, types.Collection):
+    if obj.type <= T.table:
         code = table_func(obj.code)
     elif isinstance(obj, objects.RowInstance):
         return objects.new_value_instance(len(obj.attrs))
     else:
-        if not isinstance(obj.type, types.Aggregated):
+        if not (obj.type <= T.aggregate):
             raise pql_TypeError.make(state, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
 
         obj = obj.primary_key()
         code = sql.FieldFunc(name, obj.code)
 
-    return objects.Instance.make(code, types.Int, [obj])
+    return objects.Instance.make(code, T.int, [obj])
 
 def pql_count(state: State, obj: ast.Expr):
     "Count how many rows are in the given table, or in the projected column."
@@ -215,25 +216,26 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     # 'const temptable' doesn't
     expr = evaluate(state, expr_ast)
     const = localize(state, const)
-    assert isinstance(expr.type, types.Collection), expr
+    assert (expr.type <= T.collection), expr
 
-    name = state.unique_name("temp_" + expr.type.name)
-    columns = dict(expr.type.columns)
+    elems = dict(expr.type.elems)
 
+    name = state.unique_name("temp")    # TODO get name from table options
 
-    if 'id' in columns and not const:
+    if 'id' in elems and not const:
             raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const temptable' to copy it as-is.")
 
-    table = types.TableType(name, SafeDict(columns), temporary=True, primary_keys=[['id']] if not const else [])
+    # table = types.TableType(name, SafeDict(columns), temporary=True, primary_keys=[['id']] if not const else [])
+    table = T.table(**elems).set_options(name=name, pk=[['id']], temporary=True)
 
     if not const:
-        table.columns['id'] = types.IdType(table)
+        table.elems['id'] = T.t_id #[table] #types.IdType(table)
 
-    db_query(state, compile_type_def(state, table))
+    db_query(state, compile_type_def(state, name, table))
 
-    read_only, flat_columns = table.flat_for_insert()
+    read_only, flat_columns = table_flat_for_insert(table)
     expr = exclude_fields(state, expr, read_only)
-    db_query(state, sql.Insert(table, flat_columns, expr.code), expr.subqueries)
+    db_query(state, sql.Insert(name, flat_columns, expr.code), expr.subqueries)
 
     return objects.new_table(table)
 
@@ -246,7 +248,7 @@ def pql_get_db_type(state: State):
         - "postgres"
     """
     assert state.access_level >= state.AccessLevels.EVALUATE
-    return new_value_instance(state.db.target, types.String)
+    return new_value_instance(state.db.target, T.string)
 
 
 
@@ -254,20 +256,20 @@ def sql_bin_op(state, op, table1, table2, name):
     t1 = evaluate(state, table1)
     t2 = evaluate(state, table2)
 
-    if not isinstance(t1, objects.TableInstance):
+    if not isinstance(t1, objects.CollectionInstance):
         raise pql_TypeError.make(state, table1, f"First argument isn't a table, it's a {t1.type}")
-    if not isinstance(t2, objects.TableInstance):
+    if not isinstance(t2, objects.CollectionInstance):
         raise pql_TypeError.make(state, table2, f"Second argument isn't a table, it's a {t2.type}")
 
     # TODO Smarter matching
-    l1 = len(t1.type.flatten_type())
-    l2 = len(t2.type.flatten_type())
+    l1 = len(t1.type.elems)
+    l2 = len(t2.type.elems)
     if l1 != l2:
         raise pql_TypeError.make(state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
     code = sql.TableArith(op, [t1.code, t2.code])
     # TODO new type, so it won't look like the physical table
-    return objects.TableInstance.make(code, t1.type, [t1, t2])
+    return type(t1).make(code, t1.type, [t1, t2])
 
 def pql_intersect(state: State, t1: ast.Expr, t2: ast.Expr):
     "Intersect two tables"
@@ -287,6 +289,7 @@ def pql_concat(state: State, t1: ast.Expr, t2: ast.Expr):
 
 
 
+
 def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
     assert len(exprs) == 2
     exprs = {name: evaluate(state, value) for name,value in exprs.items()}
@@ -301,7 +304,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
         cols = a, b
         tables = [a.parent, b.parent]
     else:
-        if not (isinstance(a.type, types.Collection) and isinstance(b.type, types.Collection)):
+        if not ((a.type <= T.collection) and (b.type <= T.collection)):
             raise pql_TypeError.make(state, None, f"join() got unexpected values:\n * {a}\n * {b}")
         if joinall:
             tables = (a, b)
@@ -309,24 +312,28 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
             cols = _auto_join(state, join, a, b)
             tables = [c.parent for c in cols]
 
-    assert all(isinstance(t.type, types.Collection) for t in tables)
+    assert all((t.type <= T.collection) for t in tables)
 
-    structs = {name: table.type.to_struct_type() for name, table in safezip(exprs, tables)}
+    # structs = {name: table.type.to_struct_type() for name, table in safezip(exprs, tables)}
+    structs = {name: table_to_struct(table.type) for name, table in safezip(exprs, tables)}
 
     # Update nullable for left/right/outer joins
     if nullable:
-        structs = {name: types.OptionalType(t) if n else t
+        # TODO make this nullable and still work!
+        # structs = {name: T.union[T.null, t] if n else t
+        structs = {name: t.replace(nullable=True) if n else t
                     for (name, t), n in safezip(structs.items(), nullable)}
 
     tables = [objects.aliased_table(t, n) for n, t in safezip(exprs, tables)]
 
     primary_keys = [ [name] + pk
                         for name, t in safezip(exprs, tables)
-                        for pk in t.type.primary_keys
+                        for pk in t.type.options.get('pk', [])
                     ]
-    table_type = types.TableType(state.unique_name("joinall" if joinall else "join"), SafeDict(structs), False, primary_keys)
+    # table_type = types.TableType(state.unique_name("joinall" if joinall else "join"), SafeDict(structs), False, primary_keys)
+    table_type = T.table(**structs).set_options(name=state.unique_name("joinall" if joinall else "join"), pk=primary_keys)
 
-    conds = [] if joinall else [sql.Compare('=', [sql.Name(c.type, types.join_names((n, c.name))) for n, c in safezip(structs, cols)])]
+    conds = [] if joinall else [sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip(structs, cols)])]
 
     code = sql.Join(table_type, join, [t.code for t in tables], conds)
 
@@ -364,12 +371,11 @@ def _auto_join(state, join, ta, tb):
 @listgen
 def _find_table_reference(t1, t2):
     # XXX TODO need to check TableType too (owner)?
-    for name, c in t1.type.columns.items():
-        if isinstance(c, types.RelationalColumn):
-            rel = c.type
-            if rel == t2.type:
+    for name, c in t1.type.elems.items():
+        if (c <= T.t_relation):
+            if c.elem == t2.type:
                 # TODO depends on the query XXX
-                yield (objects.SelectedColumnInstance(t2, types.IdType(t2.type), 'id'), objects.SelectedColumnInstance(t1, c.col_type, name))
+                yield (objects.SelectedColumnInstance(t2, T.t_id, 'id'), objects.SelectedColumnInstance(t1, c, name))
 
 def pql_type(state: State, obj: ast.Expr):
     """
@@ -384,7 +390,7 @@ def pql_repr(state: State, obj: ast.Expr):
     Returns the type of the given object
     """
     inst = evaluate(state, obj)
-    if not isinstance(inst, (objects.ValueInstance, types.PqlType)):
+    if not isinstance(inst, (objects.ValueInstance, Type)):
         raise pql_NotImplementedError.make(state, obj, "Cannot repr() objects that aren't simple values")
     return objects.new_value_instance(inst.repr(state))
 
@@ -400,7 +406,7 @@ def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
     "Attempt to cast an object to a specified type"
     inst = evaluate(state, obj)
     type_ = evaluate(state, type_)
-    if not isinstance(type_, types.PqlType):
+    if not isinstance(type_, Type):
         raise pql_TypeError.make(state, type_, f"Cast expected a type, got {type_} instead.")
 
     if inst.type is type_:
@@ -408,12 +414,12 @@ def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
 
     return _cast(state, inst.type, type_, inst)
 
-@dy
+@combined_dp
 def _cast(state, inst_type, target_type, inst):
     raise pql_TypeError.make(state, None, f"Cast not implemented for {inst_type}->{target_type}")
 
-@dy
-def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
+@combined_dp
+def _cast(state, inst_type: T.list, target_type: T.list, inst):
     assert inst_type != target_type
 
     if inst is objects.EmptyList:
@@ -425,59 +431,59 @@ def _cast(state, inst_type: types.ListType, target_type: types.ListType, inst):
 
     raise pql_TypeError.make(state, None, "Cast not fully implemented yet")
 
-@dy
-def _cast(state, inst_type: types.Aggregated, target_type: types.ListType, inst):
-    res = _cast(state, inst_type.elemtype, target_type.elemtype, inst.elem)
-    return objects.aggregated(res)
+@combined_dp
+def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
+    res = _cast(state, inst_type.elem, target_type.elem, inst.elem)
+    return objects.aggregate(res)
 
 
-@dy
-def _cast(state, inst_type: types.TableType, target_type: types._Int, inst):
+@combined_dp
+def _cast(state, inst_type: T.table, target_type: T.int, inst):
+    assert len(inst.type.elems) == 1
+    res = localize(state, inst)
+    assert len(res) == 1
+    res = list(res[0].values())[0]
+    return new_value_instance(res, T.int)
+
+@combined_dp
+def _cast(state, inst_type: T.table, target_type: T.float, inst):
     assert len(inst.type.columns) == 1
     res = localize(state, inst)
     assert len(res) == 1
     res = list(res[0].values())[0]
-    return new_value_instance(res, types.Int)
+    return new_value_instance(res, T.float)
 
-@dy
-def _cast(state, inst_type: types.TableType, target_type: types._Float, inst):
+@combined_dp
+def _cast(state, inst_type: T.table, target_type: T.string, inst):
     assert len(inst.type.columns) == 1
     res = localize(state, inst)
     assert len(res) == 1
     res = list(res[0].values())[0]
-    return new_value_instance(res, types.Float)
+    return new_value_instance(res, T.string)
+
+@combined_dp
+def _cast(state, inst_type: T.bool, target_type: T.int, inst):
+    return inst.replace(type=T.int, code=sql.Cast(T.int, 'int', inst.code))
+
+@combined_dp
+def _cast(state, inst_type: T.t_id, target_type: T.int, inst):
+    return inst.replace(type=T.int)
+
+@combined_dp
+def _cast(state, inst_type: T.float, target_type: T.int, inst):
+    code = sql.Cast(T.int, "int", inst.code)
+    return objects.Instance.make(code, T.int, [inst])
 
 @dy
-def _cast(state, inst_type: types.TableType, target_type: types._String, inst):
-    assert len(inst.type.columns) == 1
-    res = localize(state, inst)
-    assert len(res) == 1
-    res = list(res[0].values())[0]
-    return new_value_instance(res, types.String)
-
-@dy
-def _cast(state, inst_type: types._Bool, target_type: types._Int, inst):
-    return inst.replace(type=types.Int, code=sql.Cast(types.Int, 'int', inst.code))
-
-@dy
-def _cast(state, inst_type: types.IdType, target_type: types._Int, inst):
-    return inst.replace(type=types.Int)
-
-@dy
-def _cast(state, inst_type: types._Float, target_type: types._Int, inst):
-    code = sql.Cast(types.Int, "int", inst.code)
-    return objects.Instance.make(code, types.Int, [inst])
-
-@dy
-def _cast(state, inst_type: types._String, target_type: types._Int, inst):
+def _cast(state, inst_type: T.string, target_type: T.int, inst):
     # TODO error on bad string?
-    code = sql.Cast(types.Int, "int", inst.code)
-    return objects.Instance.make(code, types.Int, [inst])
+    code = sql.Cast(T.int, "int", inst.code)
+    return objects.Instance.make(code, T.int, [inst])
 
-@dy
-def _cast(state, inst_type: types.Primitive, target_type: types._String, inst):
-    code = sql.Cast(types.String, "varchar", inst.code)
-    return objects.Instance.make(code, types.String, [inst])
+@combined_dp
+def _cast(state, inst_type: T.primitive, target_type: T.string, inst):
+    code = sql.Cast(T.string, "varchar", inst.code)
+    return objects.Instance.make(code, T.string, [inst])
 
 
 
@@ -489,7 +495,7 @@ def pql_connect(state: State, uri: ast.Expr):
     state.connect(uri)
     return objects.null
 
-def pql_help(state: State, obj: types.PqlObject = objects.null):
+def pql_help(state: State, obj: Object = objects.null):
     """
     Provides a brief summary for a given object
     """
@@ -501,7 +507,7 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
             "For example:\n"
             "    >> help(help)\n"
         )
-        return new_value_instance(text, types.String)
+        return new_value_instance(text, T.string)
 
 
     lines = []
@@ -515,9 +521,9 @@ def pql_help(state: State, obj: types.PqlObject = objects.null):
         raise pql_TypeError.make(state, None, "help() only accepts functions at the moment")
 
     text = '\n'.join(lines) + '\n'
-    return new_value_instance(text).replace(type=types.Text)
+    return new_value_instance(text).replace(type=T.text)
 
-def pql_names(state: State, obj: types.PqlObject = objects.null):
+def pql_names(state: State, obj: Object = objects.null):
     """List all names in the namespace of the given object.
 
     If no object is given, lists the names in the current namespace.
@@ -525,15 +531,15 @@ def pql_names(state: State, obj: types.PqlObject = objects.null):
     # TODO support all objects
     if obj is not objects.null:
         inst = evaluate(state, obj)
-        if not isinstance(inst.type, types.Collection): # XXX temp.
+        if not isinstance(inst.type, T.collection): # XXX temp.
             raise pql_TypeError.make(state, obj, "Argument to names() must be a table")
         all_vars = list(inst.all_attrs())
     else:
         all_vars = list(state.ns.get_all_vars())
 
     assert all(isinstance(s, str) for s in all_vars)
-    names = [new_value_instance(str(s), types.String) for s in all_vars]
-    return evaluate(state, ast.List_(None, types.ListType(types.String), names))
+    names = [new_value_instance(str(s), T.string) for s in all_vars]
+    return evaluate(state, ast.List_(None, T.list[T.string], names))
 
 
 
@@ -551,7 +557,7 @@ breakpoint_funcs = create_internal_funcs({
 })
 
 
-def pql_exit(state, value: types.object_t = None):
+def pql_exit(state, value: Object = None):
     """Exit the current interpreter instance.
 
     Can be used from running code, or the REPL.
@@ -564,7 +570,7 @@ def pql_exit(state, value: types.object_t = None):
 
 import csv
 from tqdm import tqdm
-def pql_import_csv(state: State, table: types.object_t, filename: types.object_t, header: types.object_t = ast.Const(None, types.Bool, False)):
+def pql_import_csv(state: State, table: Object, filename: Object, header: Object = ast.Const(None, T.bool, False)):
     "Import a csv into an existing table"
     # TODO better error handling, validation
     table = evaluate(state, table)

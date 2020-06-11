@@ -11,11 +11,11 @@ asyncio.set_event_loop(loop)
 ### XXX End of fix
 
 from . import Preql
-from . import pql_types as types
 from . import pql_objects as objects
 from . import pql_ast as ast
 from .api import TablePromise
 from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError_PrematureEnd, pql_SyntaxError
+from .pql_types import Object
 
 
 
@@ -110,7 +110,7 @@ def start_repl(p, prompt=' >> '):
 
                     # Print
                     if res is not None and res is not objects.null:
-                        assert isinstance(res, types.PqlObject), (res, type(res))
+                        assert isinstance(res, Object), (res, type(res))
 
                         if save_last:
                             p.interp.set_var(save_last, res)

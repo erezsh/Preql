@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO,
 optimize = True
 cache = False
 
-debug = False # not sys.flags.optimize
+debug = True # not sys.flags.optimize
 if debug:
     print("# DEBUG MODE")
 

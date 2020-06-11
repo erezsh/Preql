@@ -7,16 +7,17 @@ from typing import List, Optional, Callable, Any, Dict
 from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for, X, listgen
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import settings
-from . import pql_types as types
 from . import pql_ast as ast
 from . import sql
+
+from .pql_types import T, Type, Object, repr_value, flatten_type, join_names
 
 # Functions
 @dataclass
 class Param(ast.Ast):
     name: str
-    type: Optional[types.PqlObject] = None
-    default: Optional[types.PqlObject] = None
+    type: Optional[Object] = None
+    default: Optional[Object] = None
     orig: Any = None # XXX temporary and lazy, for TableConstructor
 
 class ParamVariadic(Param):
@@ -27,8 +28,8 @@ class ParamVariadic(Param):
 #     types: Dict[str, types.PqlType]
 
 @dataclass
-class ParamDict(types.PqlObject):
-    params: Dict[str, types.PqlObject]
+class ParamDict(Object):
+    params: Dict[str, Object]
 
     def __len__(self):
         return len(self.params)
@@ -43,11 +44,12 @@ class ParamDict(types.PqlObject):
         # return ParamDictType({n:p.type for n, p in self.params.items()})
 
 
-class Function(types.PqlObject):
+class Function(Object):
 
     @property
     def type(self):
-        return types.FunctionType(tuple(p.type or types.any_t for p in self.params), self.param_collector is not None)
+        # return types.FunctionType(tuple(p.type or types.any_t for p in self.params), self.param_collector is not None)
+        return T.function[tuple(p.type or T.any for p in self.params)].set_options(param_collector=self.param_collector is not None)
 
     def help_str(self, state):
         raise NotImplementedError()
@@ -156,7 +158,7 @@ class UserFunction(Function):
     def docstring(self):
         if isinstance(self.expr, ast.CodeBlock):
             stmts = self.expr.statements
-            if stmts and isinstance(stmts[0], ast.Const) and stmts[0].type is types.String:
+            if stmts and isinstance(stmts[0], ast.Const) and stmts[0].type is T.string:
                 return stmts[0].value
 
 @dataclass
@@ -175,10 +177,10 @@ class InternalFunction(Function):
 
 # Instances
 
-class AbsInstance(types.PqlObject):
+class AbsInstance(Object):
     def get_attr(self, name):
         v = self.type.get_attr(name)
-        if isinstance(v.type, types.FunctionType):
+        if isinstance(v, T.function):
             return MethodInstance(self, v)
 
         raise pql_AttributeError([], f"No such attribute: {name}")
@@ -191,7 +193,6 @@ class MethodInstance(AbsInstance, Function):
     params = property(X.func.params)
     expr = property(X.func.expr)
 
-    # type = types.FunctionType()
     name = property(X.func.name)
 
 @dataclass
@@ -203,7 +204,7 @@ class ExceptionInstance(AbsInstance):
 @dataclass
 class Instance(AbsInstance):
     code: sql.Sql
-    type: types.PqlType
+    type: Type
 
     subqueries: SafeDict
 
@@ -215,10 +216,12 @@ class Instance(AbsInstance):
         return f'<instance of {self.type.repr(state)}>'
 
     def __post_init__(self):
-        assert not self.type.composed_of((types.StructType, types.Aggregated, types.TableType)), self
+        # assert not self.type.composed_of((types.StructType, types.Aggregated, types.TableType)), self
+        assert not self.type.issubtype(T.union[T.struct, T.aggregate, T.table])
 
     def flatten_code(self):
-        assert not self.type.composed_of(types.StructType)
+        # assert not self.type.composed_of(types.StructType)
+        assert not self.type.issubtype(T.struct)
         return [self.code]
 
     def primary_key(self):
@@ -230,7 +233,8 @@ def new_value_instance(value, type_=None, force_type=False):
     if force_type:
         assert type_
     elif type_:
-        assert isinstance(type_, (types.Primitive, types.NullType, types.IdType)), type_
+        # assert isinstance(type_, (types.Primitive, types.NullType, types.IdType)), type_
+        assert type_.issubtype(T.union[T.primitive, T.null, T.t_id])
         assert r.type == type_, (r.type, type_)
     else:
         type_ = r.type
@@ -245,54 +249,100 @@ class ValueInstance(Instance):
     local_value: object
 
     def repr(self, state):
-        return self.type.repr_value(self.local_value)
+        return repr_value(self)
 
+    @property
+    def value(self):
+        return self.local_value
+
+
+class CollectionInstance(Instance):
+    pass
 
 @dataclass
-class TableInstance(Instance):
+class TableInstance(CollectionInstance):
     def __post_init__(self):
-        assert isinstance(self.type, types.Collection), self.type
+        assert self.type <= T.table and not self.type <= T.list, self.type
 
     @property
     def __columns(self):
-        return {n:self.get_column(n) for n in self.type.columns}
+        return {n:self.get_column(n) for n in self.type.elems}
 
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
         t = self.type
-        return make_instance_from_name(t.columns[name].col_type, t.column_codename(name))
+        return make_instance_from_name(t.elems[name], name) #t.column_codename(name))
 
     def all_attrs(self):
         # XXX hacky way to write it
-        attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
+        attrs = dict(self.type.methods)
         return SafeDict(attrs).update(self.__columns)
 
     def get_attr(self, name):
-        v = self.type.get_attr(name)
-        if isinstance(v.type, types.FunctionType):
-            return MethodInstance(self, v)
-        else:
+        try:
+            v = self.type.elems[name]
             return SelectedColumnInstance(self, v, name)
+        except KeyError:
+            try:
+                return MethodInstance(self, self.type.methods[name])
+            except KeyError:
+                raise pql_AttributeError([], f"No such attribute: {name}")
+        # if (v <= T.function):
+        # else:
+
+@dataclass
+class ListInstance(CollectionInstance):
+    def __post_init__(self):
+        assert self.type <= T.list, self.type
+
+    def get_column(self, name):
+        # TODO memoize? columns shouldn't change
+        assert name == 'value'
+        t = self.type
+        return make_instance_from_name(t.elem, name) #t.column_codename(name))
+
+    def all_attrs(self):
+        # XXX hacky way to write it
+        attrs = dict(self.type.methods)
+        attrs['value'] = self.get_column('value')
+        return attrs
+
+    def get_attr(self, name):
+        if name == 'value':
+            v = self.type.elem
+            return SelectedColumnInstance(self, v, name)
+        else:
+            try:
+                return MethodInstance(self, self.type.methods[name])
+            except KeyError:
+                raise pql_AttributeError([], f"No such attribute: {name}")
+
 
 
 def make_instance_from_name(t, cn):
-    if t.composed_of(types.StructType):
-        return StructInstance(t, {n: make_instance_from_name(mt, types.join_names((cn, n))) for n,mt in t.members.items()})
+    # if t.composed_of(types.StructType):
+    if t.issubtype(T.struct):
+        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elems.items()})
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
-    assert not t.composed_of(types.StructType)
-    if isinstance(t, types.Collection):
+    # assert not t.composed_of(types.StructType)
+    assert not t.issubtype(T.struct)
+    # if isinstance(t, types.Collection):
+    if t.issubtype(T.list):
+        return ListInstance.make(code, t, insts)
+    elif t.issubtype(T.table):
         return TableInstance.make(code, t, insts)
-    elif isinstance(t, types.Aggregated):
-        return AggregatedInstance(t, make_instance(code, t.elemtype, insts))
+    # elif isinstance(t, types.aggregate):
+    elif t.issubtype(T.aggregate):
+        return AggregateInstance(t, make_instance(code, t.elem, insts))
     else:
         return Instance.make(code, t, insts)
 
 
 @dataclass
-class AggregatedInstance(AbsInstance):
-    type: types.PqlType
+class AggregateInstance(AbsInstance):
+    type: Type
     elem: AbsInstance
 
     @property
@@ -305,13 +355,13 @@ class AggregatedInstance(AbsInstance):
 
     def get_attr(self, name):
         x = self.elem.get_attr(name)
-        return make_instance(x.code, types.Aggregated(x.type), [x])
+        return make_instance(x.code, T.aggregate[x.type], [x])
 
     def flatten_code(self):
         return self.elem.flatten_code()
 
     def primary_key(self):
-        # TODO should return aggregated key, no?
+        # TODO should return aggregate key, no?
         return (self.elem.primary_key())
 
 
@@ -330,11 +380,12 @@ class AbsStructInstance(AbsInstance):
 
 @dataclass
 class StructInstance(AbsStructInstance):
-    type: types.PqlType
-    attrs: Dict[str, types.PqlObject]
+    type: Type
+    attrs: Dict[str, Object]
 
     def __post_init__(self):
-        assert self.type.composed_of((types.StructType, types.RowType)), self.type
+        # assert self.type.composed_of((types.StructType, types.RowType)), self.type
+        assert self.type.issubtype(T.struct)
 
     @property
     def subqueries(self):
@@ -349,16 +400,17 @@ class StructInstance(AbsStructInstance):
 
     def all_attrs(self):
         # XXX hacky way to write it
-        attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
-        return SafeDict(attrs).update(self.attrs)
+        # attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
+        # return SafeDict(attrs).update(self.attrs)
+        return self.attrs
 
 
 
 @dataclass
 class MapInstance(AbsStructInstance):
-    attrs: Dict[str, types.PqlObject]
+    attrs: Dict[str, Object]
 
-    type = types.any_t
+    type = T.any
 
     def __len__(self):
         return len(self.attrs)
@@ -392,8 +444,8 @@ class RowInstance(StructInstance):
 
 @dataclass
 class SelectedColumnInstance(AbsInstance):
-    parent: TableInstance
-    type: types.PqlType
+    parent: CollectionInstance
+    type: Type
     name: str
 
     @property
@@ -424,32 +476,36 @@ def merge_subqueries(instances):
     return SafeDict().update(*[i.subqueries for i in instances])
 
 
-def aggregated(inst):
-    return AggregatedInstance(types.Aggregated(inst.type), inst)
+def aggregate(inst):
+    if isinstance(inst, AbsInstance):
+        return AggregateInstance(T.aggregate[inst.type], inst)
+
+    return inst
 
 
-null = ValueInstance.make(sql.null, types.null, [], None)
+null = ValueInstance.make(sql.null, T.null, [], None)
 
 @dataclass
-class EmptyListInstance(TableInstance):
+class EmptyListInstance(ListInstance):
     """Special case, because it is untyped
     """
     # def get_attr(self, name):
     #     return EmptyList
 
-_empty_list_type = types.ListType(types.null)
+_empty_list_type = T.list[T.null] # types.ListType(types.null)
 # from collections import defaultdict
 EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
 
 
 def aliased_table(t, name):
     assert isinstance(t, Instance)
-    assert isinstance(t.type, types.Collection), t.type
+    # assert isinstance(t.type, types.Collection), t.type
+    assert t.type.issubtype(T.collection)
 
     # Make code
     sql_fields = [
-        sql.ColumnAlias.make(sql.Name(t, n), types.join_names((name, n)))
-        for (n, t) in t.type.flatten_type()
+        sql.ColumnAlias.make(sql.Name(t, n), join_names((name, n)))
+        for (n, t) in flatten_type(t.type)
     ]
 
     code = sql.Select(t.type, t.code, sql_fields)
@@ -457,5 +513,5 @@ def aliased_table(t, name):
 
 
 def new_table(type_, name=None, instances=None):
-    return TableInstance.make(sql.TableName(type_, name or type_.name), type_, instances or [])
+    return TableInstance.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
 

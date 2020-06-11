@@ -4,12 +4,12 @@ func _sql_agg_func(name, obj, t=null) {
         if (isa(obj, table) and not isa(obj, list)) {
             throw new TypeError(name + "() doesn't accept a table as an argument. Use aggregated projection { => }")
         } else {
-            t = type(obj).elemtype
+            t = type(obj).elem
         }
     }
 
     // TODO replace with issubclass(t, number)
-    if (not (issubclass(t, int) or issubclass(t, float))) {
+    if (not (issubclass(t, number))) {
         throw new TypeError(name + "() expects numeric elements, instead got: '" + repr(t) + "'")
     }
 

@@ -1,13 +1,15 @@
 from typing import List, Any, Optional, Dict
 
 from .utils import dataclass, TextReference
-from . import pql_types as types
+from .pql_types import T, Type, Object, repr_value
 
-PqlObject = types.PqlObject
+# TODO We want Ast to typecheck, but sometimes types are still unknown (i.e. at parse time).
+# * Use incremental type checks?
+# * Use two tiers of Ast?
 
 
 @dataclass
-class Ast(PqlObject):
+class Ast(Object):
     text_ref: Optional[TextReference]
 
 class Expr(Ast): pass
@@ -27,36 +29,36 @@ class Name(Expr):
 class Parameter(Expr):
     "A typed object without a value"
     name: str
-    type: types.PqlType
+    type: Type
 
 @dataclass
 class ResolveParameters(Expr):
-    obj: PqlObject
-    values: Dict[str, PqlObject]
+    obj: Object
+    values: Dict[str, Object]
 
     type = Ast  # XXX Not the place!
 
 @dataclass
 class ResolveParametersString(Expr):
-    type: PqlObject
-    string: PqlObject
-    # values: Dict[str, PqlObject]
+    type: Object
+    string: Object
+    # values: Dict[str, Object]
     # state: Any
 
 
 @dataclass
 class Attr(Expr):
     "Reference to an attribute (usually a column)"
-    expr: Optional[PqlObject] #Expr
+    expr: Optional[Object] #Expr
     name: str
 
 @dataclass
 class Const(Expr):
-    type: types.PqlType
+    type: Type
     value: Any
 
     def repr(self, state):
-        return self.type.repr_value(self.value)
+        return repr_value(self.value)
 
 @dataclass
 class Ellipsis(Expr):
@@ -65,20 +67,20 @@ class Ellipsis(Expr):
 @dataclass
 class Compare(Expr):
     op: str
-    args: List[PqlObject]
+    args: List[Object]
 
 @dataclass
 class Arith(Expr):
     op: str
-    args: List[PqlObject]
+    args: List[Object]
 
 @dataclass
 class Or(Expr):
-    args: List[PqlObject]
+    args: List[Object]
 
 @dataclass
 class And(Expr):
-    args: List[PqlObject]
+    args: List[Object]
 
 @dataclass
 class Not(Expr):
@@ -91,7 +93,7 @@ class Neg(Expr):
 @dataclass
 class Contains(Expr):
     op: str
-    args: List[PqlObject]
+    args: List[Object]
 
 @dataclass
 class DescOrder(Expr):
@@ -105,7 +107,7 @@ class Like(Expr):
 @dataclass
 class NamedField(Expr):
     name: Optional[str]
-    value: PqlObject #(Expr, types.PqlType)
+    value: Object #(Expr, types.PqlType)
 
 @dataclass
 class InlineStruct(Expr):
@@ -116,12 +118,12 @@ class TableOperation(Expr): pass
 
 @dataclass
 class Selection(TableOperation):
-    table: PqlObject
+    table: Object
     conds: List[Expr]
 
 @dataclass
 class Projection(TableOperation):
-    table: PqlObject
+    table: Object
     fields: List[NamedField]
     groupby: bool = False
     agg_fields: List[NamedField] = ()
@@ -134,17 +136,17 @@ class Projection(TableOperation):
 
 @dataclass
 class Order(TableOperation):
-    table: PqlObject
+    table: Object
     fields: List[Expr]
 
 @dataclass
 class Update(TableOperation):
-    table: PqlObject
+    table: Object
     fields: List[NamedField]
 
 @dataclass
 class Delete(TableOperation):
-    table: PqlObject
+    table: Object
     conds: List[Expr]
 
 @dataclass
@@ -170,7 +172,7 @@ class Range(Expr):
 
 @dataclass
 class One(Expr):
-    expr: PqlObject
+    expr: Object
     nullable: bool
 
 @dataclass
@@ -195,7 +197,7 @@ class ColumnDef(Ast, Definition):
 
 @dataclass
 class FuncDef(Statement, Definition):
-    userfunc: types.PqlObject   # XXX Why not use UserFunction?
+    userfunc: Object   # XXX Why not use UserFunction?
 
 
 @dataclass
@@ -221,15 +223,15 @@ class InsertRows(Statement):
 
 @dataclass
 class Print(Statement):
-    value: PqlObject
+    value: Object
 
 @dataclass
 class Return(Statement):
-    value: PqlObject
+    value: Object
 
 @dataclass
 class Throw(Statement):
-    value: PqlObject
+    value: Object
 
 @dataclass
 class CodeBlock(Statement):
@@ -243,14 +245,14 @@ class Try(Statement):
 
 @dataclass
 class If(Statement):
-    cond: PqlObject
+    cond: Object
     then: Statement
     else_: Optional[CodeBlock] = None
 
 @dataclass
 class For(Statement):
     var: str
-    iterable: PqlObject
+    iterable: Object
     do: CodeBlock
 
 
@@ -260,7 +262,7 @@ class For(Statement):
 
 @dataclass
 class List_(Expr):
-    type: types.ListType
+    type: Object
     elems: list
 
 @dataclass

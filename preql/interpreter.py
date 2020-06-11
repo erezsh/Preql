@@ -7,19 +7,21 @@ from .evaluate import State, execute, evaluate, localize, eval_func_call
 from .parser import parse_stmts, parse_expr
 from . import pql_ast as ast
 from . import pql_objects as objects
-from . import pql_types as types
 from .interp_common import new_value_instance
 
 from .pql_functions import internal_funcs, joins
+from .pql_types import T, from_python, Object
 
 
 def initial_namespace():
-    ns = SafeDict({p.name: p for p in types.Primitive.by_pytype.values()})
+    # ns = SafeDict({p.name: p for p in })
+    # TODO localinstance / metainstance
+    ns = {k:v for k, v in T.items()}
     ns.update(internal_funcs)
     ns.update(joins)
-    ns['list'] = types.ListType(types.any_t)
-    ns['table'] = types.Collection()
-    ns['aggregate'] = types.Aggregated(types.any_t)
+    # ns['list'] = types.ListType(types.any_t)
+    # ns['table'] = types.Collection()
+    # ns['aggregate'] = types.Aggregated(types.any_t)
     ns['TypeError'] = pql_TypeError
     ns['ValueError'] = pql_ValueError
     return [dict(ns)]
@@ -54,7 +56,7 @@ class Interpreter:
             self.execute_code(f.read())
 
     def set_var(self, name, value):
-        if not isinstance(value, types.PqlObject):
+        if not isinstance(value, Object):
             try:
                 value = value._to_pql()
             except AttributeError:

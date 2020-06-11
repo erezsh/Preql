@@ -1,7 +1,14 @@
+from .utils import dataclass
+
 from .sql import Sql, QueryBuilder, sqlite, postgres
 from . import exceptions
 
-from .pql_types import null
+from .pql_types import T, Type, from_sql, Object
+
+@dataclass
+class Const(Object):
+    type: Type
+    value: object
 
 
 class SqlInterface:
@@ -20,10 +27,11 @@ class SqlInterface:
         return self._import_result(sql.type, cur)
 
     def _import_result(self, sql_type, c):
-        if sql_type is not null:
+        if sql_type is not T.null:
             res = c.fetchall()
-            imp = sql_type.import_result
-            return imp(res)
+            # imp = sql_type.import_result
+            # return imp(res)
+            return from_sql(Const(sql_type, res))
 
     def _execute_sql(self, sql_code):
         c = self._conn.cursor()

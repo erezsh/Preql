@@ -1,10 +1,10 @@
 from typing import List, Any, Optional, Dict
 
 from .utils import dataclass, listgen, X
-from . import pql_types as types
 from . import exceptions as exc
 
-PqlType = types.PqlType
+from . import pql_types
+from .pql_types import T, Type, Object
 
 
 sqlite = 'sqlite'
@@ -18,6 +18,8 @@ class QueryBuilder:
         self.counter = start_count
         self.parameters = parameters or []
 
+        self.table_name = []
+
     def unique_name(self):
         self.counter += 1
         return 't%d' % self.counter
@@ -26,6 +28,12 @@ class QueryBuilder:
         if is_root == self.is_root:
             return self # Optimize
         return QueryBuilder(self.target, is_root, self.counter, self.parameters)
+
+    def push_table(self, t):
+        self.table_name.append(t)
+    def pop_table(self, t):
+        t2 = self.table_name.pop()
+        assert t2 == t
 
     def safe_name(self, base):
         "Return a name that is safe for use as variable. Must be consistent (pure func)"
@@ -52,7 +60,8 @@ class Sql:
                 else:
                     sql_code = f'({sql_code})'
         else:
-            if qb.is_root and isinstance(self.type, types.Primitive):
+            # if qb.is_root and isinstance(self.type, types.Primitive):
+            if qb.is_root and self.type <= T.primitive:
                 sql_code = f'SELECT {sql_code}'
 
         return CompiledSQL(sql_code, self)
@@ -65,7 +74,7 @@ class CompiledSQL:
 
 @dataclass
 class RawSql(Sql):
-    type: PqlType
+    type: Type
     text: str
 
     def _compile(self, qb):
@@ -77,7 +86,7 @@ class RawSql(Sql):
 
 @dataclass
 class Null(Sql):
-    type = types.null
+    type = T.null
 
     def _compile(self, qb):
         return 'null'
@@ -86,7 +95,7 @@ null = Null()
 
 @dataclass
 class Parameter(Sql):
-    type: PqlType
+    type: Type
     name: str
 
     def _compile(self, qb):
@@ -126,7 +135,7 @@ class Atom(Scalar):
 
 @dataclass
 class Primitive(Atom):
-    type: PqlType
+    type: Type
     text: str
 
     def _compile(self, qb):
@@ -139,7 +148,7 @@ class Table(Sql):
 
 @dataclass
 class EmptyList(Table):
-    type: PqlType
+    type: Type
 
     _is_select = True
 
@@ -149,7 +158,7 @@ class EmptyList(Table):
 
 @dataclass
 class TableName(Table):
-    type: PqlType
+    type: Type
     name: str
 
     def compile(self, qb):
@@ -169,7 +178,7 @@ class TableOperation(Table):
 class FieldFunc(Sql):
     name: str
     field: Sql
-    type = types.Int
+    type = T.int
 
     def _compile(self, qb):
         return f'{self.name}({self.field.compile(qb).text})'
@@ -178,14 +187,14 @@ class FieldFunc(Sql):
 @dataclass
 class CountTable(Scalar):
     table: Sql
-    type = types.Int
+    type = T.int
 
     def _compile(self, qb):
         return f'(SELECT COUNT(*) FROM {self.table.compile(qb).text})'
 
 @dataclass
 class FuncCall(Sql):
-    type: PqlType
+    type: Type
     name: str
     fields: List[Sql]
 
@@ -195,7 +204,7 @@ class FuncCall(Sql):
 
 @dataclass
 class Cast(Sql):
-    type: PqlType
+    type: Type
     as_type: str
     value: Sql
 
@@ -205,7 +214,7 @@ class Cast(Sql):
 
 @dataclass
 class MakeArray(Sql):
-    type: PqlType
+    type: Type
     field: Sql
 
     _sp = "|"
@@ -224,7 +233,7 @@ class MakeArray(Sql):
 class Contains(Scalar):
     op: str
     exprs: List[Sql]
-    type = types.Bool
+    type = T.bool
 
     def _compile(self, qb):
         assert self.op
@@ -238,7 +247,7 @@ class Contains(Scalar):
 class Compare(Scalar):
     op: str
     exprs: List[Sql]
-    type = types.Bool
+    type = T.bool
 
     def __post_init__(self):
         assert self.op in ('=', '<=', '>=', '<', '>', '!='), self.op
@@ -263,7 +272,7 @@ class Compare(Scalar):
 class Like(Scalar):
     string: Sql
     pattern: Sql
-    type = types.Bool
+    type = T.bool
 
     def _compile(self, qb):
         s = self.string.compile(qb)
@@ -326,14 +335,17 @@ _reserved = {'index', 'create', 'unique', 'table', 'select', 'where', 'group', '
 
 @dataclass
 class Name(Sql):
-    type: PqlType
+    type: Type
     name: str
 
     def __post_init__(self):
         assert self.name, self.type
 
     def _compile(self, qb):
-        return qb.safe_name(self.name)
+        name = qb.safe_name(self.name)
+        if qb.table_name:
+            name = qb.table_name[-1] + '.' + name
+        return name
 
     # return base
 
@@ -360,20 +372,20 @@ class ColumnAlias(Sql):
 
 @dataclass
 class Insert(Sql):
-    table_type: types.TableType
+    table_name: str #types.TableType
     columns: List[str]
     query: Sql
-    type = types.null
+    type = T.null
 
     def _compile(self, qb):
-        return f'INSERT INTO "{self.table_type.name}"({", ".join(self.columns)}) SELECT * FROM ' + self.query.compile(qb).text
+        return f'INSERT INTO "{self.table_name}"({", ".join(self.columns)}) SELECT * FROM ' + self.query.compile(qb).text
 
 @dataclass
 class InsertConsts(Sql):
     table: str
     cols: List[str]
     tuples: list #List[List[Sql]]
-    type = types.null
+    type = T.null
 
     def _compile(self, qb):
         assert self.tuples, self
@@ -395,7 +407,7 @@ class InsertConsts2(Sql):
     table: str
     cols: List[str]
     tuples: list #List[List[Sql]]
-    type = types.null
+    type = T.null
 
     def _compile(self, qb):
         assert self.tuples, self
@@ -415,7 +427,7 @@ class InsertConsts2(Sql):
 
 @dataclass
 class LastRowId(Atom):
-    type = types.Int
+    type = T.int
 
     def _compile(self, qb):
         if qb.target == sqlite:
@@ -444,7 +456,7 @@ class RowDict(Sql):
 
 @dataclass
 class Values(Table):
-    type: PqlType
+    type: Type
     values: List[Sql]
 
     def _compile(self, qb):
@@ -456,7 +468,7 @@ class Values(Table):
 
 @dataclass
 class AllFields(Sql):
-    type: PqlType
+    type: Type
 
     def _compile(self, qb):
         return '*'
@@ -466,7 +478,7 @@ class Update(Sql):
     table: TableName
     fields: Dict[Sql, Sql]
     conds: List[Sql]
-    type = types.null
+    type = T.null
 
     def _compile(self, qb):
         fields_sql = ['%s = %s' % (k.compile(qb).text, v.compile(qb).text) for k, v in self.fields.items()]
@@ -483,7 +495,7 @@ class Update(Sql):
 class Delete(Sql):
     table: TableName
     conds: List[Sql]
-    type = types.null
+    type = T.null
 
     def _compile(self, qb):
         conds = ' AND '.join(c.compile(qb).text for c in self.conds)
@@ -491,7 +503,7 @@ class Delete(Sql):
 
 @dataclass
 class Select(TableOperation):
-    type: PqlType
+    type: Type
     table: Sql # XXX Table won't work with RawSQL
     fields: List[Sql]
     conds: List[Sql] = ()
@@ -527,6 +539,7 @@ class Select(TableOperation):
         #
         # Compile
         #
+        # table_alias = qb.unique_name()
 
         fields_sql = [f.compile(qb) for f in self.fields]
         select_sql = ', '.join(f.text for f in fields_sql)
@@ -535,6 +548,7 @@ class Select(TableOperation):
 
         if self.conds:
             sql += ' WHERE ' + ' AND '.join(c.compile(qb).text for c in self.conds)
+
 
         if self.group_by:
             sql += ' GROUP BY ' + ', '.join(e.compile(qb).text for e in self.group_by)
@@ -574,7 +588,7 @@ class Subquery(Sql):
 
 @dataclass
 class Join(TableOperation):
-    type: PqlType
+    type: Type
     join_op: str
     tables: List[Table]
     conds: List[Sql]
@@ -597,17 +611,17 @@ class Join(TableOperation):
 
 def deletes_by_ids(table, ids):
     for id_ in ids:
-        compare = Compare('=', [Name(types.Int, 'id'), Primitive(types.Int, str(id_))])
-        yield Delete(TableName(table.type, table.type.name), [compare])
+        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
+        yield Delete(TableName(table.type, table.type.options['name']), [compare])
 
 def updates_by_ids(table, proj, ids):
     sql_proj = {Name(value.type, name): value.code for name, value in proj.items()}
     for id_ in ids:
-        compare = Compare('=', [Name(types.Int, 'id'), Primitive(types.Int, str(id_))])
-        yield Update(TableName(table.type, table.type.name), sql_proj, [compare])
+        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
+        yield Update(TableName(table.type, table.type.options['name']), sql_proj, [compare])
 
 def create_list(list_type, name, elems):
-    fields = [Name(list_type.elemtype, 'value')]
+    fields = [Name(list_type.elem, 'value')]
     subq = Subquery(name, fields, Values(list_type, elems))
     table = TableName(list_type, name)
     return table, subq
@@ -624,12 +638,12 @@ def table_order(table, fields):
 
 def arith(res_type, op, args, stacktrace):
     arg_codes = list(args)
-    if res_type == types.String:
+    if res_type == T.string:
         if op != '+':
             raise exc.pql_TypeError(stacktrace + [op.text_ref], f"Operator '{op}' not supported for strings.")
         op = '||'
     elif op == '/':
-        arg_codes[0] = Cast(types.Float, 'float', arg_codes[0])
+        arg_codes[0] = Cast(T.float, 'float', arg_codes[0])
     elif op == '/~':
         op = '/'
 
@@ -642,13 +656,18 @@ def value(x):
     if x is None:
         return null
 
-    t = types.Primitive.by_pytype[type(x)]
+    # t = types.Primitive.by_pytype[type(x)]
+    t = pql_types.from_python(type(x))
 
-    if t is types.DateTime:
+    if t <= T.datetime:
         # TODO Better to pass the object instead of a string?
-        return Primitive(t, repr(str(x)))
+        r = repr(str(x))
 
-    if t is types.String or t is types.Text:
-        return Primitive(t, "'%s'" % str(x).replace("'", "''"))
+    # elif t <= T.union[T.string, T.text]:
+    elif t <= T.string:
+        r = "'%s'" % str(x).replace("'", "''")
 
-    return Primitive(t, repr(x))
+    else:
+        r = repr(x)
+
+    return Primitive(t, r)
