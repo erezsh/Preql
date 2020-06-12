@@ -57,8 +57,8 @@ range: [molecule] ".." molecule
 
 projection: molecule "{" _NL? proj_exprs _NL? "}"
           | molecule "{" _NL? proj_exprs _NL? "=>" _NL? proj_exprs _NL? "}" -> projection_grouped
-          | molecule "{" "=>" _NL? proj_exprs "}" -> projection_grouped_nokeys
-          | molecule "{" proj_exprs _NL? "=>" "}" -> projection_grouped_novalues
+          | molecule "{" _NL? "=>" _NL? proj_exprs "}" -> projection_grouped_nokeys
+          | molecule "{" proj_exprs _NL? "=>" _NL? "}" -> projection_grouped_novalues
 
 
 order: molecule "order" "{" _NL? ml_list{expr} _NL? "}"

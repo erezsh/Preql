@@ -47,7 +47,7 @@ class Type(Object, AbsType):
     supertypes: frozenset
     elems: Union[tuple, dict] = field(hash=False, default_factory=dict)
     options: dict = field(hash=False, compare=False, default_factory=dict)
-    methods: dict = field(hash=False, compare=False, default_factory=lambda: global_methods)
+    methods: dict = field(hash=False, compare=False, default_factory=lambda: dict(global_methods))
     nullable: bool = field(default_factory=bool)
 
     @property
@@ -119,7 +119,7 @@ class Type(Object, AbsType):
 
     def get_attr(self, attr):
         # XXX hacky
-        if attr == 'elem':
+        if attr == 'elem' and self.elems:
             return self.elem
 
         assert attr not in self.methods
@@ -163,10 +163,12 @@ T.bool = [T.primitive],    # number?
 
 T.datetime = [T.primitive],    # primitive? struct?
 
-T.struct = [T.object], {}
+T.container = [T.object], #(T.object,)
+
+T.struct = [T.container], {}
 T.row = [T.struct], {}
 
-T.collection = [T.object], (T.object,)
+T.collection = [T.container],
 T.table = [T.collection], {}
 T.list = [T.table], (T.object,)
 T.set = [T.table], (T.object,)
@@ -176,6 +178,7 @@ T.t_relation = [T.number], (T.table,)   # t_id?
 
 T.function = [T.object], {}
 
+T.exception = [T.object], {}
 #-----------
 
 def join_names(names):
@@ -336,14 +339,10 @@ def table_flat_for_insert(table):
     return classify_bool(names, lambda name: name in pks)
 
 def table_to_struct(t):
-    # TODO eliminate this function
-    if t <= T.list:
-        elems = {'value': t.elem}
-    elif t <= T.struct:
-        return t
-    else:
-        assert t <= T.table, t
-        elems = t.elems
+    elems = t.elems
+    if isinstance(elems, tuple):
+        assert len(elems) == 1
+        elems = {'value': elems[0]}
     return T.struct(**elems)
 
 

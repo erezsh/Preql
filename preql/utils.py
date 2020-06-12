@@ -1,5 +1,6 @@
 import time
 from contextlib import contextmanager
+from pathlib import Path
 
 from typing import _GenericAlias as TypeBase, Any, Union, Callable, Optional
 from functools import wraps
@@ -150,6 +151,7 @@ def expand_tab(s):
 @mut_dataclass
 class TextReference:
     text: str
+    source_file: str
     ref: TextRange
     context: Optional[TextRange] = None
 
@@ -172,8 +174,9 @@ class TextReference:
             mark_after = max(0, min(len(text_after), self.context.end.char_index - pos - 1))
             assert mark_before >= 0 and mark_after >= 0
 
+        source = Path(self.source_file)
         return ''.join([
-            "~~~ At line %d, column %d:\n" % (self.ref.start.line, self.ref.start.column),
+            "~~~ At '%s' line %d, column %d:\n" % (source.name, self.ref.start.line, self.ref.start.column),
             text_before, text_after, '\n',
             ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
         ])

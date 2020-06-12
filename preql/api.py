@@ -128,10 +128,6 @@ class Interface:
 
         self.interp.state._py_api = self # TODO proper api
 
-    def exec(self, q, *args, **kw):
-        "Deprecated"
-        return self.interp.execute_code(q, '<inline>', *args, **kw)
-
     def close(self):
         self.engine.close()
 
@@ -152,12 +148,12 @@ class Interface:
         assert not isinstance(res, ast.Ast), res
         return promise(self.interp.state, res)  # TODO session, not state
 
-    def run_code(self, pq, **args):
+    def run_code(self, pq, source_file, **args):
         pql_args = {name: from_python(value) for name, value in args.items()}
-        return self.interp.execute_code(pq + "\n", pql_args)
+        return self.interp.execute_code(pq + "\n", source_file, pql_args)
 
     def __call__(self, pq, **args):
-        res = self.run_code(pq, **args)
+        res = self.run_code(pq, '<inline>', **args)
         if res:
             return self._wrap_result(res)
 

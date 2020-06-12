@@ -15,7 +15,7 @@ def main():
 
     if args.script_path:
         with open(args.script_path) as f:
-            p.run_code(f.read())
+            p.run_code(f.read(), args.script_path)
     else:
         interactive = True
 

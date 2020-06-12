@@ -1,4 +1,5 @@
 from ast import literal_eval
+from pathlib import Path
 
 from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken, Token
 
@@ -19,7 +20,7 @@ def token_value(self, text_ref, t):
     return Str(str(t), text_ref)
 
 
-def make_text_reference(text, meta, children=()):
+def make_text_reference(text, source_file, meta, children=()):
     ref = TextRange(
             TextPos(
                 meta.start_pos,
@@ -39,13 +40,14 @@ def make_text_reference(text, meta, children=()):
             assert c.text_ref.text is text
             c.text_ref.context = ref
 
-    return TextReference(text, ref)
+    assert isinstance(source_file, (str, Path)), source_file
+    return TextReference(text, str(source_file), ref)
 
 
 
 def _args_wrapper(f, data, children, meta):
     "Create meta with 'code' from transformer"
-    return f(make_text_reference(f.__self__.code, meta, children), *children)
+    return f(make_text_reference(*f.__self__.code_ref, meta, children), *children)
 
 
 # Taken from Lark (#TODO provide it in lark utils?)
@@ -76,8 +78,8 @@ def _fix_escaping(s):
 
 @v_args(wrapper=_args_wrapper)
 class TreeToAst(Transformer):
-    def __init__(self, code):
-        self.code = code
+    def __init__(self, code_ref):
+        self.code_ref = code_ref
 
     name = token_value
 
@@ -105,7 +107,7 @@ class TreeToAst(Transformer):
 
     @v_args(inline=False, meta=True)
     def pql_list(self, items, meta):
-        return ast.List_(make_text_reference(self.code, meta), T.list[T.any], items)
+        return ast.List_(make_text_reference(*self.code_ref, meta), T.list[T.any], items)
 
     @v_args(inline=False)
     def as_list(_, args):
@@ -219,7 +221,7 @@ class TreeToAst(Transformer):
 
     @v_args(inline=False, meta=True)
     def codeblock(self, stmts, meta):
-        return ast.CodeBlock(make_text_reference(self.code, meta), stmts)
+        return ast.CodeBlock(make_text_reference(*self.code_ref, meta), stmts)
 
     def __default__(self, data, children, meta):
         raise Exception("Unknown rule:", data)
@@ -261,7 +263,8 @@ def parse_stmts(s, source_file):
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
         pos =  TextPos(e.pos_in_stream, e.line, e.column)
-        ref = TextReference(s, TextRange(pos, pos))
+        assert isinstance(source_file, (str, Path)), source_file
+        ref = TextReference(s, str(source_file), TextRange(pos, pos))
         if isinstance(e, UnexpectedToken):
             if e.token.type == '$END':
                 msg = "Code ended unexpectedly"
@@ -272,7 +275,7 @@ def parse_stmts(s, source_file):
             msg = "Unexpected character: '%s'" % s[e.pos_in_stream]
         raise pql_SyntaxError([ref], "Syntax error: " + msg)
 
-    return TreeToAst(code=s).transform(tree)
+    return TreeToAst(code_ref=(s, source_file)).transform(tree)
 
 # def parse_expr(s, source_file):
 #     tree = parser.parse(s, start="expr")

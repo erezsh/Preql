@@ -66,7 +66,7 @@ class BasicTests(TestCase):
         self.assertEqual( preql("[1,2,3]{value: value/~2 => sum(value)}").to_json(), [{'value':0, 'sum': 1}, {'value':1, 'sum':5}])
 
 
-        preql.exec("""func query1() = Country[language=="en"]{name}""")
+        preql("""func query1() = Country[language=="en"]{name}""")
 
         assert is_eq(preql.query1(), [("England",), ("United States",)]), preql.query1()
 
@@ -150,14 +150,14 @@ class BasicTests(TestCase):
         assert preql('backup[x==3]{y}') == [{'y': 4}]
 
     def _test_user_functions(self, preql):
-        preql.exec("""
+        preql("""
             func q1() = Person
             func q2() = q1
         """)
         res = preql("q2()()[id==me] {name}")
         assert is_eq(res, [("Erez Shinan",)])
 
-        preql.exec("""
+        preql("""
             func query3() = Person[id!=me]
             func query6(c) = query3()[country==c]
             func query7() = query6
@@ -175,7 +175,7 @@ class BasicTests(TestCase):
         res = preql("query8(isr) {name}")
         assert is_eq(res, [("Ephraim Kishon",)])
 
-        preql.exec("func languages() = Country{language}")
+        preql("func languages() = Country{language}")
         # res = preql("distinct(languages())")
         # assert is_eq(res, [("he",), ("en",)])
 
@@ -190,7 +190,7 @@ class BasicTests(TestCase):
             ("John Steinbeck", "United States"),
         ]
 
-        preql.exec("""func manual_join() = join(c: Country[language=="en"].id, p: Person.country) { p.name, country: c.name }""")
+        preql("""func manual_join() = join(c: Country[language=="en"].id, p: Person.country) { p.name, country: c.name }""")
         res = preql.manual_join()
         assert is_eq(res, english_speakers)
 
@@ -224,7 +224,7 @@ class BasicTests(TestCase):
         ]
         assert is_eq(res, expected)
 
-        preql.exec("""func j() = join(c: Country[language=="en"], p: Person)""")
+        preql("""func j() = join(c: Country[language=="en"], p: Person)""")
         res = preql("j() {person: p.name, country: c.name}")
         assert is_eq(res, english_speakers)
 
@@ -571,11 +571,11 @@ class BasicTests(TestCase):
             ("John Steinbeck", "United States"),
         ]
 
-        preql.exec("""english_countries = temptable(Country[language=="en"], true)""")
+        preql("""english_countries = temptable(Country[language=="en"], true)""")
         res = preql("english_countries{name}")
         assert is_eq(res, [("England",), ("United States",)])
 
-        preql.exec("""names = temptable(Person{name}) """)
+        preql("""names = temptable(Person{name}) """)
         res = preql('names{name}')
         assert is_eq(res, [
             ("Erez Shinan",),
@@ -800,7 +800,7 @@ class BasicTests(TestCase):
     def test_m2m(self):
         assert False, "Not ready yet"
         preql = self.Preql()
-        preql.exec('''
+        preql('''
             table A:
                 value: integer
 
@@ -848,7 +848,7 @@ class BasicTests(TestCase):
     def test_self_reference(self):
         assert False, "Not ready yet"
         preql = self.Preql()
-        preql.exec('''
+        preql('''
             table Person {
                 name: string
                 parent: Person? -> children
@@ -879,7 +879,7 @@ class BasicTests(TestCase):
     def test_m2m_with_self_reference(self):
         assert False, "Not ready yet"
         preql = self.Preql()
-        preql.exec('''
+        preql('''
             table A:
                 name: string
                 parent: A? -> children

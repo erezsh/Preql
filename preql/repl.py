@@ -106,7 +106,7 @@ def start_repl(p, prompt=' >> '):
                 start_time = time()
                 try:
                     # Evaluate (Really just compile)
-                    res = p.run_code(code)
+                    res = p.run_code(code, '<repl>')
 
                     # Print
                     if res is not None and res is not objects.null:

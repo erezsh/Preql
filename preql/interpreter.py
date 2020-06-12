@@ -14,14 +14,10 @@ from .pql_types import T, from_python, Object
 
 
 def initial_namespace():
-    # ns = SafeDict({p.name: p for p in })
     # TODO localinstance / metainstance
     ns = {k:v for k, v in T.items()}
     ns.update(internal_funcs)
     ns.update(joins)
-    # ns['list'] = types.ListType(types.any_t)
-    # ns['table'] = types.Collection()
-    # ns['aggregate'] = types.Aggregated(types.any_t)
     ns['TypeError'] = pql_TypeError
     ns['ValueError'] = pql_ValueError
     return [dict(ns)]
