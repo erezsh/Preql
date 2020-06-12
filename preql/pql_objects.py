@@ -23,9 +23,6 @@ class Param(ast.Ast):
 class ParamVariadic(Param):
     pass
 
-# @dataclass
-# class ParamDictType(types.PqlType):
-#     types: Dict[str, types.PqlType]
 
 @dataclass
 class ParamDict(Object):
@@ -39,16 +36,13 @@ class ParamDict(Object):
 
     @property
     def type(self):
-        # XXX is ParamDictType really necessary?
         return tuple((n,p.type) for p in self.params.values())
-        # return ParamDictType({n:p.type for n, p in self.params.items()})
 
 
 class Function(Object):
 
     @property
     def type(self):
-        # return types.FunctionType(tuple(p.type or types.any_t for p in self.params), self.param_collector is not None)
         return T.function[tuple(p.type or T.any for p in self.params)].set_options(param_collector=self.param_collector is not None)
 
     def help_str(self, state):
@@ -216,11 +210,9 @@ class Instance(AbsInstance):
         return f'<instance of {self.type.repr(state)}>'
 
     def __post_init__(self):
-        # assert not self.type.composed_of((types.StructType, types.Aggregated, types.TableType)), self
         assert not self.type.issubtype(T.union[T.struct, T.aggregate, T.table])
 
     def flatten_code(self):
-        # assert not self.type.composed_of(types.StructType)
         assert not self.type.issubtype(T.struct)
         return [self.code]
 
@@ -233,8 +225,7 @@ def new_value_instance(value, type_=None, force_type=False):
     if force_type:
         assert type_
     elif type_:
-        # assert isinstance(type_, (types.Primitive, types.NullType, types.IdType)), type_
-        assert type_.issubtype(T.union[T.primitive, T.null, T.t_id])
+        assert type_ <= T.union[T.primitive, T.null, T.t_id]
         assert r.type == type_, (r.type, type_)
     else:
         type_ = r.type
@@ -287,8 +278,6 @@ class TableInstance(CollectionInstance):
                 return MethodInstance(self, self.type.methods[name])
             except KeyError:
                 raise pql_AttributeError([], f"No such attribute: {name}")
-        # if (v <= T.function):
-        # else:
 
 @dataclass
 class ListInstance(CollectionInstance):
@@ -299,7 +288,7 @@ class ListInstance(CollectionInstance):
         # TODO memoize? columns shouldn't change
         assert name == 'value'
         t = self.type
-        return make_instance_from_name(t.elem, name) #t.column_codename(name))
+        return make_instance_from_name(t.elem, name)
 
     def all_attrs(self):
         # XXX hacky way to write it
@@ -320,21 +309,17 @@ class ListInstance(CollectionInstance):
 
 
 def make_instance_from_name(t, cn):
-    # if t.composed_of(types.StructType):
-    if t.issubtype(T.struct):
+    if t <= (T.struct):
         return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elems.items()})
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
-    # assert not t.composed_of(types.StructType)
     assert not t.issubtype(T.struct)
-    # if isinstance(t, types.Collection):
-    if t.issubtype(T.list):
+    if t <= T.list:
         return ListInstance.make(code, t, insts)
-    elif t.issubtype(T.table):
+    elif t <= T.table:
         return TableInstance.make(code, t, insts)
-    # elif isinstance(t, types.aggregate):
-    elif t.issubtype(T.aggregate):
+    elif t <= T.aggregate:
         return AggregateInstance(t, make_instance(code, t.elem, insts))
     else:
         return Instance.make(code, t, insts)
@@ -384,8 +369,7 @@ class StructInstance(AbsStructInstance):
     attrs: Dict[str, Object]
 
     def __post_init__(self):
-        # assert self.type.composed_of((types.StructType, types.RowType)), self.type
-        assert self.type.issubtype(T.struct)
+        assert self.type <= T.struct
 
     @property
     def subqueries(self):
@@ -399,9 +383,6 @@ class StructInstance(AbsStructInstance):
         return list(self.attrs.values())[0]
 
     def all_attrs(self):
-        # XXX hacky way to write it
-        # attrs = {n:self.get_attr(n) for n,f in self.type.dyn_attrs.items()}
-        # return SafeDict(attrs).update(self.attrs)
         return self.attrs
 
 
@@ -421,9 +402,6 @@ class MapInstance(AbsStructInstance):
     def primary_key(self):
         return self
 
-    # def repr(self, state):
-    #     from .evaluate import localize
-    #     return repr(localize(state, self))
     def repr(self, state):
         inner = [f'{name}: {v.repr(state)}' for name, v in self.attrs.items()]
         return 'Map{%s}' % ', '.join(inner)
@@ -432,11 +410,6 @@ class MapInstance(AbsStructInstance):
 class RowInstance(StructInstance):
     def primary_key(self):
         return self.attrs['id']
-
-        #     tbl_t = self.type.table
-        #     col_t = tbl_t.columns[name].col_type
-        #     code = sql.Select(col_t, sql.TableName(tbl_t, tbl_t.name), [sql.Name(col_t, name)], conds=[sql.Compare('=', [sql.Name(types.Int, 'id'), sql.value(self.attrs['id'])])])
-        #     return make_instance(code, col_t, [])
 
     def repr(self, state):
         inner = [f'{name}: {v.repr(state)}' for name, v in self.attrs.items()]
@@ -489,17 +462,13 @@ null = ValueInstance.make(sql.null, T.null, [], None)
 class EmptyListInstance(ListInstance):
     """Special case, because it is untyped
     """
-    # def get_attr(self, name):
-    #     return EmptyList
 
-_empty_list_type = T.list[T.null] # types.ListType(types.null)
-# from collections import defaultdict
+_empty_list_type = T.list[T.null]
 EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
 
 
 def aliased_table(t, name):
     assert isinstance(t, Instance)
-    # assert isinstance(t.type, types.Collection), t.type
     assert t.type.issubtype(T.collection)
 
     # Make code

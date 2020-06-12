@@ -28,7 +28,7 @@ class Object:    # XXX should be in a base module
     def isa(self, t):
         if not isinstance(t, Type):
             raise exc.pql_TypeError([], f"'type' argument to isa() isn't a type. It is {t}")
-        return self.type.issubtype(t)
+        return self.type <= t
 
     # def replace(self, **attrs):
     #     if 'dyn_attrs' in attrs:

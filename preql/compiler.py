@@ -27,7 +27,6 @@ def compile_type_def(state, table_name, table) -> sql.Sql:
     # autocount = types.join_names(table.autocount)
     for name, c in flatten_type(table):
         if name in pks:
-            # assert isinstance(c, types.IdType)  # Right now nothing else is supported
             assert c <= T.t_id
             if state.db.target == sql.postgres:
                 type_ = "SERIAL" # Postgres
@@ -163,12 +162,10 @@ def compile_to_inst(state: State, proj: ast.Projection):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        # if not (f.type.composed_of((types.AtomicType, types.StructType, types.RowType))):
         if not (f.type <= T.union[T.primitive, T.struct, T.null]):
             raise exc.pql_TypeError.make(state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
-        # t = types.StructType(state.unique_name('_nested_proj'), {n:c.type for n,c in fields})
         t = T.struct(**{n:c.type for n,c in fields})
         return objects.StructInstance(t, dict(fields))
 
@@ -180,9 +177,6 @@ def compile_to_inst(state: State, proj: ast.Projection):
     all_fields = fields + agg_fields
 
     # Make new type
-    # TODO inherit primary key? indexes?
-    # new_table_type = types.TableType(state.unique_name(table.type.name + "_proj"), SafeDict(), True, [], codenames={})
-    # new_table_type = T.table().set_options(temporary=True)
     elems = {}
 
     codename = state.unique_name('proj')
@@ -197,13 +191,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
             i += 1
         elems[name] = inst.type
 
-        # Designate a codename for the field
-        # TODO resolve !!! XXX Temporarily BROKEN
-        # if isinstance(inst, objects.StructInstance) or isinstance(inst.code, sql.Name) and inst.code.name == name:     # Value hasn't changed
-        #     new_table_type.codenames[name] = name
-        # else:
-        #     new_table_type.codenames[name] = codename+'_'+name
-
+    # TODO inherit primary key? indexes?
     new_table_type = T.table(**elems).set_options(temporary=True)
 
     # Make code
@@ -224,7 +212,6 @@ def compile_to_inst(state: State, proj: ast.Projection):
     limit = None
     if proj.groupby:
         if fields:
-            # breakpoint()
             # groupby = [new_table.get_column(n).primary_key().code for n, rc in fields]
             groupby = [sql.Primitive(T.int, str(i+1)) for i in range(len(fields))]
         else:
@@ -291,15 +278,13 @@ def compile_to_inst(state: State, cmp: ast.Compare):
             code = sql.Compare('>', [sql.FuncCall(T.bool, 'INSTR', [i.code for i in reversed(insts)]), sql.value(0)])
             return objects.make_instance(code, T.bool, [])
         else:
-            # assert_type(insts[0].type, types.AtomicType, state, cmp.op, repr(cmp.op))
             assert_type(insts[0].type, T.primitive, state, cmp.op, repr(cmp.op))
             assert_type(insts[1].type, T.collection, state, cmp.op, repr(cmp.op))
             cols = insts[1].type.elems
             if len(cols) > 1:
                 raise pql_TypeError.make(state, cmp.op, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
-            # c_type = list(cols.values())[0]
+
             c_type ,= table_to_struct(insts[1].type).elems.values()
-            # if c_type.effective_type().kernel_type() != insts[0].type.effective_type().kernel_type():
             if c_type != insts[0].type:
                 raise pql_TypeError.make(state, cmp.op, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
 
@@ -404,7 +389,6 @@ def _compile_arith(state, arith, a: objects.CollectionInstance, b: objects.Colle
 def _compile_arith(state, arith, a, b):
     args = [a, b]
     arg_types = [a.type for a in args]
-    # arg_types_set = set(arg_types) - {types.ListType(types.any_t)}  # XXX hacky
     arg_types_set = set(arg_types) - {T.list[T.any]}  # XXX hacky
 
     if len(arg_types_set) > 1:
@@ -496,7 +480,6 @@ def compile_to_inst(state: State, lst: ast.List_):
     # assert isinstance(elem_type, type(lst.type.elemtype)), (elem_type, lst.type.elemtype)
 
     # code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
-    # list_type = types.ListType(elem_type)
     list_type = T.list[elem_type]
     name = state.unique_name("list_")
     table_code, subq = sql.create_list(list_type, name, [e.code for e in elems])
@@ -527,8 +510,6 @@ def compile_to_inst(state: State, s: ast.Slice):
         stop = None
 
     code = sql.table_slice(table, start.code, stop and stop.code)
-    # return table.remake(code=code)
-    # return objects.TableInstance.make(code, table.type, instances)
     return type(table).make(code, table.type, instances)
 
 @dy
@@ -579,7 +560,6 @@ def _apply_type_generics(state, gen_type, type_names):
             raise pql_TypeError.make(state, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:
-        #t = types.Union
         raise pql_TypeError.make(state, None, "Union types not yet supported!")
     else:
         t ,= type_objs
@@ -607,12 +587,3 @@ def guess_field_name(f: ast.Projection):
 def guess_field_name(f: ast.FuncCall):
     return guess_field_name(f.func)
 
-
-
-
-# def rename_field(state, table, old, new):
-#     proj = ast.Projection(None, table, [
-#         ast.NamedField(None, None, ast.Ellipsis(None, [])),
-#         ast.NamedField(None, new, ast.Name(None, old))
-#         ])
-#     return evaluate(state, proj)

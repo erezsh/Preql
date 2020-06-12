@@ -147,27 +147,6 @@ def pql_debug(state: State):
     return objects.null
 
 
-# @dy
-# def _pql_issubclass(a, b):
-#     return False
-
-# @dy
-# def _pql_issubclass(a: types.Primitive, b: types.ListType):
-#     return False
-
-# @dy
-# def _pql_issubclass(a, b: types.AnyType):
-#     assert b is types.any_t
-#     return True
-
-# @dy
-# def _pql_issubclass(a: types.ListType, b: types.ListType):
-#     return _pql_issubclass(a.elemtype, b.elemtype)
-
-# @dy
-# def _pql_issubclass(a: types.Aggregated, b: types.Aggregated):
-#     return _pql_issubclass(aelemtype, b.elemtype)
-
 
 def pql_issubclass(state: State, expr: Object, type_expr: Object):
     "Returns whether the give object is an instance of the given type"
@@ -181,9 +160,7 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     "Returns whether the give object is an instance of the given type"
     inst = evaluate(state, expr)
     type_ = evaluate(state, type_expr)
-    # res = isinstance(inst.type, type_)
     res = inst.isa(type_)
-    # res = _pql_issubclass(inst.type, type_)
     return new_value_instance(res, T.bool)
 
 def _count(state, obj: ast.Expr, table_func, name):
@@ -225,11 +202,10 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     if 'id' in elems and not const:
             raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const temptable' to copy it as-is.")
 
-    # table = types.TableType(name, SafeDict(columns), temporary=True, primary_keys=[['id']] if not const else [])
-    table = T.table(**elems).set_options(name=name, pk=[['id']], temporary=True)
+    table = T.table(**elems).set_options(name=name, pk=[] if const else [['id']], temporary=True)
 
     if not const:
-        table.elems['id'] = T.t_id #[table] #types.IdType(table)
+        table.elems['id'] = T.t_id
 
     db_query(state, compile_type_def(state, name, table))
 
@@ -314,13 +290,10 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     assert all((t.type <= T.collection) for t in tables)
 
-    # structs = {name: table.type.to_struct_type() for name, table in safezip(exprs, tables)}
     structs = {name: table_to_struct(table.type) for name, table in safezip(exprs, tables)}
 
     # Update nullable for left/right/outer joins
     if nullable:
-        # TODO make this nullable and still work!
-        # structs = {name: T.union[T.null, t] if n else t
         structs = {name: t.replace(nullable=True) if n else t
                     for (name, t), n in safezip(structs.items(), nullable)}
 
@@ -330,7 +303,6 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
                         for name, t in safezip(exprs, tables)
                         for pk in t.type.options.get('pk', [])
                     ]
-    # table_type = types.TableType(state.unique_name("joinall" if joinall else "join"), SafeDict(structs), False, primary_keys)
     table_type = T.table(**structs).set_options(name=state.unique_name("joinall" if joinall else "join"), pk=primary_keys)
 
     conds = [] if joinall else [sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip(structs, cols)])]
@@ -382,8 +354,7 @@ def pql_type(state: State, obj: ast.Expr):
     Returns the type of the given object
     """
     inst = evaluate(state, obj)
-    t = inst.type   # XXX concrete?
-    return t
+    return inst.type
 
 def pql_repr(state: State, obj: ast.Expr):
     """
@@ -399,7 +370,7 @@ def pql_columns(state: State, table: ast.Expr):
     Returns a dictionary of {column_name: column_type}
     """
     table = evaluate(state, table)
-    return ast.Dict_(None, table.type.columns)
+    return ast.Dict_(None, table.type.elems)
 
 
 def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
@@ -434,43 +405,25 @@ def _cast(state, inst_type: T.list, target_type: T.list, inst):
 @combined_dp
 def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
     res = _cast(state, inst_type.elem, target_type.elem, inst.elem)
-    return objects.aggregate(res)
+    return objects.aggregate(res)   # ??
 
 
 @combined_dp
-def _cast(state, inst_type: T.table, target_type: T.int, inst):
-    assert len(inst.type.elems) == 1
+def _cast(state, inst_type: T.table, target_type: T.primitive, inst):
+    s = table_to_struct(inst.type)
+    assert len(s.elems) == 1
+    assert list(s.elems.values())[0] <= target_type
     res = localize(state, inst)
     assert len(res) == 1
     res = list(res[0].values())[0]
-    return new_value_instance(res, T.int)
-
-@combined_dp
-def _cast(state, inst_type: T.table, target_type: T.float, inst):
-    assert len(inst.type.columns) == 1
-    res = localize(state, inst)
-    assert len(res) == 1
-    res = list(res[0].values())[0]
-    return new_value_instance(res, T.float)
-
-@combined_dp
-def _cast(state, inst_type: T.table, target_type: T.string, inst):
-    assert len(inst.type.columns) == 1
-    res = localize(state, inst)
-    assert len(res) == 1
-    res = list(res[0].values())[0]
-    return new_value_instance(res, T.string)
-
-@combined_dp
-def _cast(state, inst_type: T.bool, target_type: T.int, inst):
-    return inst.replace(type=T.int, code=sql.Cast(T.int, 'int', inst.code))
+    return new_value_instance(res, target_type)
 
 @combined_dp
 def _cast(state, inst_type: T.t_id, target_type: T.int, inst):
     return inst.replace(type=T.int)
 
 @combined_dp
-def _cast(state, inst_type: T.float, target_type: T.int, inst):
+def _cast(state, inst_type: T.union[T.float, T.bool], target_type: T.int, inst):
     code = sql.Cast(T.int, "int", inst.code)
     return objects.Instance.make(code, T.int, [inst])
 
@@ -484,6 +437,7 @@ def _cast(state, inst_type: T.string, target_type: T.int, inst):
 def _cast(state, inst_type: T.primitive, target_type: T.string, inst):
     code = sql.Cast(T.string, "varchar", inst.code)
     return objects.Instance.make(code, T.string, [inst])
+
 
 
 

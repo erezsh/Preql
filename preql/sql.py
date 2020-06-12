@@ -60,7 +60,6 @@ class Sql:
                 else:
                     sql_code = f'({sql_code})'
         else:
-            # if qb.is_root and isinstance(self.type, types.Primitive):
             if qb.is_root and self.type <= T.primitive:
                 sql_code = f'SELECT {sql_code}'
 
@@ -123,10 +122,6 @@ class ResolveParameters(Sql):
 
 @dataclass
 class Scalar(Sql):
-    # def import_result(self, res):
-    #     row ,= res
-    #     item ,= row
-    #     return item
     pass
 
 @dataclass
@@ -372,7 +367,7 @@ class ColumnAlias(Sql):
 
 @dataclass
 class Insert(Sql):
-    table_name: str #types.TableType
+    table_name: str
     columns: List[str]
     query: Sql
     type = T.null
@@ -539,8 +534,6 @@ class Select(TableOperation):
         #
         # Compile
         #
-        # table_alias = qb.unique_name()
-
         fields_sql = [f.compile(qb) for f in self.fields]
         select_sql = ', '.join(f.text for f in fields_sql)
 
@@ -656,7 +649,6 @@ def value(x):
     if x is None:
         return null
 
-    # t = types.Primitive.by_pytype[type(x)]
     t = pql_types.from_python(type(x))
 
     if t <= T.datetime:

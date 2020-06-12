@@ -130,7 +130,7 @@ class Interface:
 
     def exec(self, q, *args, **kw):
         "Deprecated"
-        return self.interp.execute_code(q, *args, **kw)
+        return self.interp.execute_code(q, '<inline>', *args, **kw)
 
     def close(self):
         self.engine.close()

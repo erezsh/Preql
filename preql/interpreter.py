@@ -4,7 +4,7 @@ from .utils import SafeDict, benchmark
 from .exceptions import PreqlError, pql_TypeError, pql_ValueError
 
 from .evaluate import State, execute, evaluate, localize, eval_func_call
-from .parser import parse_stmts, parse_expr
+from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interp_common import new_value_instance
@@ -36,16 +36,16 @@ class Interpreter:
         with benchmark.measure('call_func'):
             return eval_func_call(self.state, self.state.get_var(fname), args)
 
-    def eval_expr(self, code, args):
-        expr_ast = parse_expr(code)
-        with self.state.use_scope(args):
-            obj = evaluate(self.state, expr_ast)
-        return obj
+    # def eval_expr(self, code, args):
+    #     expr_ast = parse_expr(code)
+    #     with self.state.use_scope(args):
+    #         obj = evaluate(self.state, expr_ast)
+    #     return obj
 
-    def execute_code(self, code, args=None):
+    def execute_code(self, code, source_file, args=None):
         assert not args, "Not implemented yet: %s" % args
         last = None
-        for stmt in parse_stmts(code):
+        for stmt in parse_stmts(code, source_file):
             last = execute(self.state, stmt)
         return last
 
@@ -53,7 +53,7 @@ class Interpreter:
         if rel_to:
             fn = Path(rel_to).parent / fn
         with open(fn, encoding='utf8') as f:
-            self.execute_code(f.read())
+            self.execute_code(f.read(), fn)
 
     def set_var(self, name, value):
         if not isinstance(value, Object):

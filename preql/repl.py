@@ -71,7 +71,7 @@ from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.application.current import get_app
 
-from .parser import parse_stmts, parse_expr
+from .parser import parse_stmts
 
 
 
@@ -87,7 +87,7 @@ def start_repl(p, prompt=' >> '):
             text = get_app().layout.get_buffer_by_name('DEFAULT_BUFFER').text
             if text:
                 try:
-                    s = parse_stmts(text)
+                    s = parse_stmts(text, '<repl>')
                 except pql_SyntaxError as e:
                     return True
                 except Exception as e:

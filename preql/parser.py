@@ -105,7 +105,6 @@ class TreeToAst(Transformer):
 
     @v_args(inline=False, meta=True)
     def pql_list(self, items, meta):
-        # return ast.List_(make_text_reference(self.code, meta), types.ListType(types.any_t), items)
         return ast.List_(make_text_reference(self.code, meta), T.list[T.any], items)
 
     @v_args(inline=False)
@@ -140,9 +139,6 @@ class TreeToAst(Transformer):
     add_expr = _arith_expr
     term = _arith_expr
     power = _arith_expr
-
-    # def contains(self, meta, a, op, b):
-    #     return ast.Contains(meta, " ".join(op), [a,b])
 
     neg = ast.Neg
     like = ast.Like
@@ -225,10 +221,6 @@ class TreeToAst(Transformer):
     def codeblock(self, stmts, meta):
         return ast.CodeBlock(make_text_reference(self.code, meta), stmts)
 
-    # @v_args(meta=True)
-    # def table_def(self, args, meta):
-    #     return ast.TableDef(*args, meta)
-
     def __default__(self, data, children, meta):
         raise Exception("Unknown rule:", data)
 
@@ -264,14 +256,12 @@ parser = Lark.open(
     # transformer=T()
 )
 
-def parse_stmts(s):
+def parse_stmts(s, source_file):
     try:
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
         pos =  TextPos(e.pos_in_stream, e.line, e.column)
         ref = TextReference(s, TextRange(pos, pos))
-        # m = m.remake(parent=m)
-        # raise pql_SyntaxError(m, str(e) + e.get_context(s)) from e
         if isinstance(e, UnexpectedToken):
             if e.token.type == '$END':
                 msg = "Code ended unexpectedly"
@@ -282,12 +272,9 @@ def parse_stmts(s):
             msg = "Unexpected character: '%s'" % s[e.pos_in_stream]
         raise pql_SyntaxError([ref], "Syntax error: " + msg)
 
-    # print(tree)
-
     return TreeToAst(code=s).transform(tree)
 
-d = {}
-def parse_expr(s):
-    tree = parser.parse(s, start="expr")
-    return TreeToAst(code=s).transform(tree)
+# def parse_expr(s, source_file):
+#     tree = parser.parse(s, start="expr")
+#     return TreeToAst(code=s).transform(tree)
 
