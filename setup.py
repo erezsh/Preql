@@ -22,7 +22,8 @@ setup(
     license = "MIT",
     keywords = "Preql SQL",
     url = "https://github.com/erezsh/lark",
-    long_description='''
+    scripts=['bin/preql'],
+    long_description=''',
     "Pretty Query Language",
 ''',
 
