@@ -64,7 +64,7 @@ def table_repr(self, state):
 
         return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs)) + post
     else:
-        header = f"table {self.type.name}, {count_str}\n"
+        header = f"table {self.type.typename}, {count_str}\n"
         return header + tabulate.tabulate(rows, headers="keys", numalign="right") + post
 
 objects.TableInstance.repr = table_repr

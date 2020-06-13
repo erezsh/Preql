@@ -8,7 +8,7 @@ from runtype.typesystem import TypeSystem
 from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 
-from .utils import dataclass, listgen, concat_for, SafeDict, classify_bool
+from .utils import dataclass, listgen, concat_for, SafeDict, classify_bool, safezip
 from . import exceptions as exc
 from dataclasses import field, replace
 
@@ -69,6 +69,31 @@ class Type(Object, AbsType):
 
         assert self not in res
         return res | {self}
+
+    def __eq__(self, other, memo=None):
+        "Repetitive nested equalities are assumed to be true"
+
+        if not isinstance(other, Type):
+            return False
+
+        if memo is None:
+            memo = set()
+
+        a, b = id(self), id(other)
+        if (a,b) in memo or (b,a) in memo:
+            return True
+
+        memo.add((a, b))
+
+        l1 = self.elems if isinstance(self.elems, tuple) else list(self.elems.values())
+        l2 = other.elems if isinstance(other.elems, tuple) else list(other.elems.values())
+        if len(l1) != len(l2):
+            return False
+
+        return self.typename == other.typename and all(
+            i1.__eq__(i2, memo) for i1, i2 in zip(l1, l2)
+        )
+
 
     @property
     def elem_types(self):
