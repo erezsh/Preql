@@ -629,11 +629,10 @@ def table_selection(table, conds):
 def table_order(table, fields):
     return Select(table.type, table.code, [AllFields(table.type)], order=fields)
 
-def arith(res_type, op, args, stacktrace):
+def arith(res_type, op, args):
     arg_codes = list(args)
     if res_type == T.string:
-        if op != '+':
-            raise exc.pql_TypeError(stacktrace + [op.text_ref], f"Operator '{op}' not supported for strings.")
+        assert op == '+'
         op = '||'
     elif op == '/':
         arg_codes[0] = Cast(T.float, 'float', arg_codes[0])

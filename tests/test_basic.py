@@ -117,8 +117,8 @@ class BasicTests(TestCase):
         assert preql("1 + 2 / 4") == 1.5
         assert preql("1 + 2 /~ 4 + 1") == 2
         assert preql('"a" + "b"') == "ab"
-        assert preql('"a" * 3') == "aaa" == preql('3 * "a"')
-        assert preql('"ab" * 3') == "ababab" == preql('3 * "ab"')
+        assert preql('"a" * 3') == "aaa"
+        assert preql('"ab" * 3') == "ababab"
         assert preql('"a" + "b"*2 + "c"') == 'abbc'
         assert preql('"a" ~ "a%"')
         assert preql('"abc" ~ "a%"')

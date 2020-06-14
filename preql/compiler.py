@@ -368,15 +368,14 @@ def compile_to_inst(state: State, neg: ast.Neg):
 def compile_to_inst(state: State, arith: ast.Arith):
     args = evaluate(state, arith.args)
 
-    # TODO assert by value, not type
-    # for i, a in enumerate(args):
-    #     if a.type.actual_type() is types.null:
-    #         raise pql_TypeError(arith.args[i].meta.replace(parent=arith.meta), "Cannot perform arithmetic on null values")
-
     return _compile_arith(state, arith, *args)
 
-@dy
-def _compile_arith(state, arith, a: objects.CollectionInstance, b: objects.CollectionInstance):
+@pql_dp
+def _compile_arith(state, arith, a: T.any, b: T.any):
+    raise pql_TypeError.make(state, op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
+
+@pql_dp
+def _compile_arith(state, arith, a: T.collection, b: T.collection):
     # TODO validate types
     ops = {
         "+": 'concat',
@@ -392,50 +391,51 @@ def _compile_arith(state, arith, a: objects.CollectionInstance, b: objects.Colle
 
     return state.get_var(op).func(state, a, b)
 
-@dy
-def _compile_arith(state, arith, a, b):
-    args = [a, b]
-    arg_types = [a.type for a in args]
-    arg_types_set = set(arg_types) - {T.list[T.any]}  # XXX hacky
 
-    if len(arg_types_set) > 1:
-        # Auto-convert int+float into float
-        # TODO use dispatch+operator_overload+SQL() to do this in preql instead of here?
-        if arg_types_set == {T.int, T.float}:
-            arg_types_set = {T.float}
-        elif arg_types_set == {T.int, T.string}:
-            if arith.op != '*':
-                raise pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
+@pql_dp
+def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
+    res = _compile_arith(state, arith, a.elem, b.elem)
+    return objects.aggregate(res)
 
-            # REPEAT(str, int) -> str
-            ordered_args = {
-                (T.string, T.int): args,
-                (T.int, T.string): args[::-1],
-            }[tuple(arg_types)]
+@pql_dp
+def _compile_arith(state, arith, a: T.string, b: T.int):
+    if arith.op != '*':
+        raise pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
+    return call_pql_func(state, "repeat", [a, b])
 
-            return call_pql_func(state, "repeat", ordered_args)
-        else:
-            raise pql_TypeError.make(state, arith.op, f"All values provided to '{arith.op}' must be of the same type (got: {arg_types})")
-
-    res_type ,= arg_types_set
-    if arith.op == '/': # XXX terrible
-        assert (res_type <= T.number)
+@pql_dp
+def _compile_arith(state, arith, a: T.number, b: T.number):
+    if arith.op == '/' or a.type <= T.float or b.type <= T.float:
         res_type = T.float
+    else:
+        res_type = T.int
 
-    if settings.optimize:
-        if isinstance(args[0], objects.ValueInstance) and isinstance(args[1], objects.ValueInstance):
+    if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
             # Local folding for better performance (optional, for better performance)
-            v1, v2 = [a.local_value for a in args]
-            if arith.op == '+' and len(arg_types_set) == 1:
-                return new_value_instance(v1 + v2, res_type)
+        f = {
+            '+': operator.add,
+            '-': operator.sub,
+            '*': operator.mul,
+            '/': operator.truediv,
+            '/~': operator.floordiv,
+        }[arith.op]
+        return new_value_instance(f(a.local_value, b.local_value), res_type)
 
-    # TODO check instance type? Right now ColumnInstance & ColumnType make it awkward
+    code = sql.arith(res_type, arith.op, [a.code, b.code])
+    return objects.make_instance(code, res_type, [a, b])
 
-    if not all((a.type <= T.union[T.primitive, T.aggregate]) for a in args):
-        raise pql_TypeError.make(state, arith.op, f"Operation {arith.op} not supported for type: {args[0].type, args[1].type}")
+@pql_dp
+def _compile_arith(state, arith, a: T.string, b: T.string):
+    if arith.op != '+':
+        raise exc.pql_TypeError.make(state, arith, f"Operator '{op}' not supported for strings.")
 
-    code = sql.arith(res_type, arith.op, [a.code for a in args], state.stacktrace)  # XXX
-    return objects.make_instance(code, res_type, args)
+    if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
+        # Local folding for better performance (optional, for better performance)
+        return new_value_instance(a.local_value + b.local_value, T.string)
+
+    code = sql.arith(T.string, arith.op, [a.code, b.code])
+    return objects.make_instance(code, T.string, [a, b])
+
 
 
 @dy
