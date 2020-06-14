@@ -662,3 +662,73 @@ def value(x):
         r = repr(x)
 
     return Primitive(t, r)
+
+
+
+from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp, table_to_struct
+def compile_type_def(state, table_name, table) -> Sql:
+    assert table <= T.table
+
+    posts = []
+    pks = []
+    columns = []
+
+    pks = {join_names(pk) for pk in table.options['pk']}
+    # autocount = types.join_names(table.autocount)
+    for name, c in flatten_type(table):
+        if name in pks:
+            assert c <= T.t_id
+            if state.db.target == postgres:
+                type_ = "SERIAL" # Postgres
+            else:
+                type_ = "INTEGER"   # TODO non-int idtypes
+        else:
+            type_ = compile_type(c)
+
+        columns.append( f'"{name}" {type_}' )
+        if (c <= T.t_relation):
+            # TODO any column, using projection / get_attr
+            if not table.options.get('temporary', False):
+                # In postgres, constraints on temporary tables may reference only temporary tables
+                s = f"FOREIGN KEY({name}) REFERENCES \"{c.options['name']}\"(id)"
+                posts.append(s)
+
+    if pks:
+        names = ", ".join(pks)
+        posts.append(f"PRIMARY KEY ({names})")
+
+    # Consistent among SQL databases
+    command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
+    return RawSql(T.null, f'{command} "{table_name}" (' + ', '.join(columns + posts) + ')')
+
+@combined_dp
+def compile_type(type_: T.t_relation):
+    # TODO might have a different type
+    return 'INTEGER'    # Foreign-key is integer
+
+@combined_dp
+def compile_type(type: T.primitive):
+    assert type <= T.primitive
+    s = {
+        'int': "INTEGER",
+        'string': "VARCHAR(4000)",
+        'float': "FLOAT",
+        'bool': "BOOLEAN",
+        'text': "TEXT",
+        't_relation': "INTEGER",
+        'datetime': "TIMESTAMP",
+    }[type.typename]
+    if not type.nullable:
+        s += " NOT NULL"
+    return s
+
+@combined_dp
+def compile_type(type: T.null):
+    return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
+
+@combined_dp
+def compile_type(idtype: T.t_id):
+    s = "INTEGER"   # TODO non-int idtypes
+    if not idtype.nullable:
+        s += " NOT NULL"
+    return s

@@ -32,7 +32,7 @@ RawSql = sql.RawSql
 Sql = sql.Sql
 
 from .interp_common import State, dy, new_value_instance, from_python
-from .compiler import compile_to_inst, compile_type_def
+from .compiler import compile_to_inst
 from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type
 
 
@@ -102,8 +102,8 @@ def db_query(state: State, sql, subqueries=None):
 def _execute(state: State, table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
-    sql = compile_type_def(state, table_def.name, t)
-    db_query(state, sql)
+    sql_code = sql.compile_type_def(state, table_def.name, t)
+    db_query(state, sql_code)
 
 @dy
 def _set_value(state: State, name: ast.Name, value):
@@ -843,7 +843,7 @@ def new_table_from_rows(state, name, columns, rows):
     for c,v in zip(columns, tuples[0]):
         table.columns[c] = v.type
 
-    db_query(state, compile_type_def(state, table))
+    db_query(state, sql.compile_type_def(state, table))
 
     code = sql.InsertConsts(name, columns, tuples)
     db_query(state, code)

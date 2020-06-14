@@ -9,7 +9,6 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 
-from .compiler import compile_type_def
 from .interp_common import State, new_value_instance, dy, exclude_fields
 from .evaluate import evaluate, localize, db_query, TableConstructor, _destructure_param_match
 from .pql_types import Object, T, table_flat_for_insert, Type, join_names, table_to_struct, combined_dp
@@ -207,7 +206,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     if not const:
         table.elems['id'] = T.t_id
 
-    db_query(state, compile_type_def(state, name, table))
+    db_query(state, sql.compile_type_def(state, name, table))
 
     read_only, flat_columns = table_flat_for_insert(table)
     expr = exclude_fields(state, expr, read_only)
