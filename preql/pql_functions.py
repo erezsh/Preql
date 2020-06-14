@@ -190,7 +190,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     It will remain available until the db-session ends, unless manually removed.
     """
     # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
-    # 'const temptable' doesn't
+    # 'const table' doesn't
     expr = evaluate(state, expr_ast)
     const = localize(state, const)
     assert (expr.type <= T.collection), expr
@@ -200,7 +200,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     name = state.unique_name("temp")    # TODO get name from table options
 
     if 'id' in elems and not const:
-            raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const temptable' to copy it as-is.")
+            raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
 
     table = T.table(**elems).set_options(name=name, pk=[] if const else [['id']], temporary=True)
 
@@ -399,19 +399,32 @@ def _cast(state, inst_type: T.list, target_type: T.list, inst):
 
     # res = _cast(state, inst_type.elemtype, target_type.elemtype, inst.elem)
     # return objects.aggregated(res)
+    if not (inst_type.elem <= target_type.elem):
+        raise pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
 
-    raise pql_TypeError.make(state, None, "Cast not fully implemented yet")
+    # raise pql_TypeError.make(state, None, "Cast not fully implemented yet")
+    return inst
 
 @combined_dp
 def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
     res = _cast(state, inst_type.elem, target_type.elem, inst.elem)
     return objects.aggregate(res)   # ??
 
+@combined_dp
+def _cast(state, inst_type: T.table, target_type: T.list, inst):
+    t = inst.type
+    if len(t.elems) != 1:
+        raise pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Too many columns")
+    if not (inst_type.elem <= target_type.elem):
+        raise pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
+
+    return objects.ListInstance.make(inst.code, target_type, [inst])
 
 @combined_dp
 def _cast(state, inst_type: T.table, target_type: T.primitive, inst):
     s = table_to_struct(inst.type)
-    assert len(s.elems) == 1
+    if len(s.elems) != 1:
+        raise pql_TypeError.make(state, None, "Cannot cast table to primitive, it has %d columns (we require 1 column)")
     assert list(s.elems.values())[0] <= target_type
     res = localize(state, inst)
     assert len(res) == 1
@@ -485,7 +498,7 @@ def pql_names(state: State, obj: Object = objects.null):
     # TODO support all objects
     if obj is not objects.null:
         inst = evaluate(state, obj)
-        if not isinstance(inst.type, T.collection): # XXX temp.
+        if not (inst.type <= T.collection): # XXX temp.
             raise pql_TypeError.make(state, obj, "Argument to names() must be a table")
         all_vars = list(inst.all_attrs())
     else:
@@ -524,6 +537,7 @@ def pql_exit(state, value: Object = None):
 
 import csv
 from tqdm import tqdm
+
 def pql_import_csv(state: State, table: Object, filename: Object, header: Object = ast.Const(None, T.bool, False)):
     "Import a csv into an existing table"
     # TODO better error handling, validation
@@ -532,14 +546,14 @@ def pql_import_csv(state: State, table: Object, filename: Object, header: Object
     header = localize(state, evaluate(state, header))
     print(f"Importing CSV file: '{filename}'")
 
-    ROWS_PER_QUERY = 1000
+    ROWS_PER_QUERY = 1024
 
     cons = TableConstructor.make(table.type)
     keys = []
     rows = []
 
     def insert_values():
-        q = sql.InsertConsts2(table.type.name, keys, rows)
+        q = sql.InsertConsts2(table.type.options['name'], keys, rows)
         db_query(state, q)
 
 

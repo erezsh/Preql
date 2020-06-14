@@ -245,7 +245,7 @@ class Compare(Scalar):
     type = T.bool
 
     def __post_init__(self):
-        assert self.op in ('=', '<=', '>=', '<', '>', '!='), self.op
+        assert self.op in ('=', '<=', '>=', '<', '>', '!=', 'IN'), self.op
 
     def _compile(self, qb):
         op = self.op

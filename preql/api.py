@@ -124,8 +124,9 @@ class Interface:
             db_uri = 'sqlite://:memory:'
 
         self.engine = create_engine(db_uri, debug=debug)
-        self.interp = Interpreter(self.engine)
+        # self.engine.ping()
 
+        self.interp = Interpreter(self.engine)
         self.interp.state._py_api = self # TODO proper api
 
     def close(self):

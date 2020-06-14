@@ -18,8 +18,8 @@ box2 = new Box([1, 1], [2, 2])
 circle1 = new Circle([3,3], 2)
 circl2 = new Circle([20,20], 2)
 
-print Box[start.x < 10.0]
-print Box[end.x < 10.0] {start, end}
+const table tmp1 = Box[start.x < 10.0]
+const table tmp2 = Box[end.x < 10.0] {start, end}
 
 func circles_contained1() = joinall(c:Circle, b:Box) [
         c.center.x - c.radius >= b.start.x,

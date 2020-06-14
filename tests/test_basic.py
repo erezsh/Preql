@@ -5,9 +5,10 @@ from parameterized import parameterized_class
 
 from preql import Preql
 from preql.pql_objects import UserFunction
-from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError
+from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError, pql_NameNotFound
 from preql.interp_common import pql_TypeError
 from preql import sql, settings
+from preql.pql_types import T
 
 SQLITE_URI = 'sqlite://:memory:'
 POSTGRES_URI = 'postgres://postgres:qweqwe123@localhost/postgres'
@@ -354,14 +355,16 @@ class BasicTests(TestCase):
 
 
     def test_strings(self):
-        preql = Preql()
+        preql = self.Preql()
         self.assertEqual( preql('upper("ba")'), "BA" )
         self.assertEqual( preql('lower("BA")'), "ba" )
         self.assertEqual( preql('"ba" in "kabab"'), True )
+        self.assertEqual( preql('"ba" !in "kabab"'), False )
         self.assertEqual( preql('"bak" in "kabab"'), False )
+        self.assertEqual( preql('"bak" !in "kabab"'), True )
 
     def test_lists2(self):
-        preql = Preql()
+        preql = self.Preql()
         preql('''
             func in_list(x) = [1,2,3] {value in x{value}}
             func test() = in_list([2, 3])
@@ -392,7 +395,7 @@ class BasicTests(TestCase):
         # self.assertEqual(preql.eq3, False)    # TODO check table type
 
     def test_vararg(self):
-        preql = Preql()
+        preql = self.Preql()
         preql('''
             func f(...x) = x
         ''')
@@ -410,7 +413,8 @@ class BasicTests(TestCase):
 
 
     def test_methods(self):
-        preql = Preql()
+        preql = self.Preql()
+        assert not T.table.methods
         preql('''
             table Square {
                 size: float
@@ -421,7 +425,15 @@ class BasicTests(TestCase):
 
             s = new Square(4)
             size4 = Square[size==4]
+
+            table a {
+                size: int
+            }
         ''')
+
+        assert not T.table.methods
+        self.assertRaises(pql_NameNotFound, preql, 'a{area()}')
+
         # self.assertEqual( preql('s.area()'), 16 ) # TODO
         # self.assertEqual( preql('Square[size==4].area()'), 16 )
         self.assertEqual( preql('size4{ area() }').to_json(), [{'area': 16.0}] )
@@ -430,7 +442,7 @@ class BasicTests(TestCase):
         self.assertEqual( preql('count(Square[is_area_larger(18.0)])'), 0 )
         self.assertEqual( preql('count(Square[is_area_larger(14.0)])'), 1 )
 
-        preql = Preql()
+        # preql = self.Preql()  # TODO why does this cause errors later on?
         preql('''
             table Node {
                 parent: Node?
@@ -719,6 +731,19 @@ class BasicTests(TestCase):
         assert res2 == res3, (list(res2), list(res3))
 
 
+    def test_names(self):
+        p = self.Preql()
+        try:
+            p.a
+        except PreqlError:
+            pass
+
+        p('''
+            table a {x: int}
+        ''')
+
+        self.assertEqual( p('names(a)'), ['id', 'x'] )
+        self.assertEqual( p('columns(a)'), {'id': p.t_id, 'x': p.int} )
 
 
     def test_simple1(self):

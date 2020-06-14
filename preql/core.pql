@@ -104,6 +104,7 @@ func dict(...x) {
     return x
 }
 
+
 // Builtins hack, so they won't collide with locals. Just put them in a module
 _core_limit = limit
 _core_limit_offset = limit_offset
@@ -114,6 +115,8 @@ if (get_db_type() == "postgres") {
     func now() = SQL(datetime, "NOW()")         // Postgres
     func random() = SQL(float, "RANDOM()")   // Postgres
     func pi() = SQL(float, "PI()")
+
+    func str_index(a, b) = SQL(int, "POSITION($a in $b)")
 } else {
     if (get_db_type() == "sqlite") {
         func repeat(s, num) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
@@ -130,11 +133,15 @@ if (get_db_type() == "postgres") {
         func week_of_year(date) = SQL(int, "strftime('%W', $date)")
         func count_distinct(field) = SQL(int, "count(distinct $field)")
 
+        func str_index(a, b) = SQL(int, "INSTR($b, $a)")
+
     } else {
         throw new TypeError("Unexpected")
     }
 }
 
+func str_contains(a, b) = str_index(a, b) > 0
+func str_notcontains(a, b) = str_index(a, b) == 0
 
 func sample_ratio_fast(tbl, ratio) {
     "Return a random sample of rows from the table, at the approximate amount of (ratio*count(tbl))."

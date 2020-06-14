@@ -23,17 +23,10 @@ class Object:    # XXX should be in a base module
     def get_attr(self, attr):
         raise exc.pql_AttributeError([], f"{self} has no attribute: {attr}")    # XXX TODO
 
-    # def is_equal(self, other):
-    #     raise exc.pql_NotImplementedError(f"Equality of {self} not implemented")
     def isa(self, t):
         if not isinstance(t, Type):
             raise exc.pql_TypeError([], f"'type' argument to isa() isn't a type. It is {t}")
         return self.type <= t
-
-    # def replace(self, **attrs):
-    #     if 'dyn_attrs' in attrs:
-    #         assert not attrs.pop('dyn_attrs')
-    #     return replace(self, **attrs)
 
 
 class AbsType:
@@ -57,7 +50,10 @@ class Type(Object, AbsType):
 
     @property
     def elem(self):
-        elem ,= self.elems
+        if isinstance(self.elems, dict):
+            elem ,= self.elems.values()
+        else:
+            elem ,= self.elems
         return elem
 
     def supertype_chain(self):
@@ -113,10 +109,6 @@ class Type(Object, AbsType):
 
     def __le__(self, other):
         return self.issubtype(other)
-    # def __eq__(self, other):
-    #     return id(self) == id(other)
-    # def __hash(self):
-    #     return id(self)
 
     def __getitem__(self, elems):
         if not isinstance(elems, tuple):
@@ -124,7 +116,7 @@ class Type(Object, AbsType):
         return self.replace(elems=tuple(elems))
 
     def __call__(self, **kw):
-        return self.replace(elems=kw)
+        return self.replace(elems=kw, methods=dict(self.methods))
 
     def set_options(self, **kw):
         options = dict(self.options)
@@ -173,6 +165,8 @@ T = TypeDict()
 T.any = ()
 
 T.union = [T.any],
+T.type = [T.any],
+Type.type = T.type
 
 T.object = [T.any],
 T.null = [T.object],
@@ -225,16 +219,31 @@ def from_python(t):
 
 class MyTypeSystem(TypeSystem):
         # Preql objects
+    # def issubclass(self, t1, t2):
+    #     if isinstance(t2, Type)
+    #     return t1.issubtype(t2)
     def issubclass(self, t1, t2):
-        return t1.issubtype(t2)
+        if t2 is object:
+            return True
+        is_t2 = isinstance(t2, Type)
+        if isinstance(t1, Type):
+            return is_t2 and t1 <= t2
+        elif is_t2:
+            return False
+
+        # Regular Python
+        return runtype.issubclass(t1, t2)
 
     def get_type(self, obj):
-        return obj.type
+        try:
+            return obj.type
+        except AttributeError:
+            return type(obj)
 
     def canonize_type(self, t):
         return t
 
-    default_type = T.any
+    default_type = object #T.any
 
 pql_dp = runtype.Dispatch(MyTypeSystem())
 

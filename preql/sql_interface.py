@@ -59,6 +59,12 @@ class SqlInterface:
         sql_code += compiled.text
         return sql_code
 
+    def ping(self):
+        c = self._conn.cursor()
+        c.execute('select 1')
+        row ,= c.fetchall()
+        n ,= row
+        assert n == 1
 
     def commit(self):
         self._conn.commit()

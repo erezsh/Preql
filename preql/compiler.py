@@ -263,6 +263,31 @@ def compile_to_inst(state: State, like: ast.Like):
 
 
 
+@pql_dp
+def _contains(state, op, a: T.string, b: T.string):
+    from .evaluate import simplify
+    f = {
+        'in': 'str_contains',
+        '!in': 'str_notcontains',
+    }[op]
+    f = ast.FuncCall(None, ast.Name(None, f), [a, b])
+    return simplify(state, f)
+
+@pql_dp
+def _contains(state, op, a: T.primitive, b: T.collection):
+    from .pql_functions import _cast
+    b_list = _cast(state, b.type, T.list, b)
+    if not (a.type <= b_list.type.elem):
+        raise pql_TypeError.make(state, op, f"Error in contains: Mismatch between {a.type} and {b.type}")
+
+    if op == '!in':
+        op = 'not in'
+    code = sql.Contains(op, [a.code, b_list.code])
+    return objects.Instance.make(code, T.bool, [a, b_list])
+
+@pql_dp
+def _contains(state, op, a: T.any, b: T.any):
+    raise pql_TypeError.make(state, op, f"Contains not implemented for {a.type} and {b.type}")
 
 
 @dy
@@ -273,20 +298,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
         if not all(isinstance(i, objects.AbsInstance) for i in insts):
             raise pql_TypeError.make(state, cmp.op, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
 
-        sql_cls = sql.Contains
-        if (insts[0].type <= T.string) and (insts[1].type <= T.string):
-            code = sql.Compare('>', [sql.FuncCall(T.bool, 'INSTR', [i.code for i in reversed(insts)]), sql.value(0)])
-            return objects.make_instance(code, T.bool, [])
-        else:
-            assert_type(insts[0].type, T.primitive, state, cmp.op, repr(cmp.op))
-            assert_type(insts[1].type, T.collection, state, cmp.op, repr(cmp.op))
-            cols = insts[1].type.elems
-            if len(cols) > 1:
-                raise pql_TypeError.make(state, cmp.op, "Contains operator expects a collection with only 1 column! (Got %d)" % len(cols))
-
-            c_type ,= table_to_struct(insts[1].type).elems.values()
-            if c_type != insts[0].type:
-                raise pql_TypeError.make(state, cmp.op, f"Contains operator expects all types to match: {c_type} -- {insts[0].type}")
+        return _contains(state, cmp.op, insts[0], insts[1])
 
     else:
         if not all(isinstance(i, objects.AbsInstance) for i in insts):
@@ -327,7 +339,6 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 
     op = {
         '==': '=',
-        '!in': 'not in',    # TODO !in
         '<>': '!=',
     }.get(cmp.op, cmp.op)
 
@@ -447,7 +458,6 @@ def compile_to_inst(state: State, c: ast.Const):
 def compile_to_inst(state: State, d: ast.Dict_):
     # TODO handle duplicate key names
     elems = {k or guess_field_name(v): evaluate(state, v) for k, v in d.elems.items()}
-    # t = types.TableType('_dict', SafeDict({k: v.type for k,v in elems.items()}), False, [])
     t = T.table(**{k: v.type for k,v in elems.items()})
     return objects.RowInstance(T.row[t], elems)
 
