@@ -642,6 +642,37 @@ def arith(res_type, op, args):
     return Arith(op, arg_codes)
 
 
+@dataclass
+class StringSlice(Sql):
+    string: Sql
+    start: Sql
+    stop: Sql
+
+    type = T.string
+
+    def _compile(self, qb):
+        string = self.string.compile(qb).text
+        start = self.start.compile(qb).text
+        if self.stop:
+            stop = self.stop.compile(qb).text
+            length = f'({stop}-{start})'
+        else:
+            length = None
+
+        if qb.target == sqlite:
+            f = 'substr'
+            params = [string, ',', start]
+            if length:
+                params += [',', length]
+        elif qb.target == postgres:
+            f = 'substring'
+            params = [string, 'from', start]
+            if length:
+                params += ['for', length]
+        else:
+            assert False
+
+        return f'{f}({" ".join(params)})'
 
 
 def value(x):

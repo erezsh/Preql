@@ -127,6 +127,9 @@ class BasicTests(TestCase):
 
         self.assertRaises(pql_TypeError, preql, '"a" + 3')
         self.assertRaises(pql_TypeError, preql, '"a" ~ 3')
+        self.assertRaises(pql_TypeError, preql, '"a" - "b"')
+        self.assertRaises(pql_TypeError, preql, '"a" % "b"')
+        self.assertRaises(pql_TypeError, preql, '3 ~ 3')
 
 
     def test_update_basic(self):
@@ -362,6 +365,10 @@ class BasicTests(TestCase):
         self.assertEqual( preql('"ba" !in "kabab"'), False )
         self.assertEqual( preql('"bak" in "kabab"'), False )
         self.assertEqual( preql('"bak" !in "kabab"'), True )
+
+        self.assertEqual( preql('"hello"[1..4]'), "hel" )
+        self.assertEqual( preql('"hello"[2..]'), "ello" )
+        self.assertEqual( preql('"hello"[..2]'), "h" )
 
     def test_lists2(self):
         preql = self.Preql()

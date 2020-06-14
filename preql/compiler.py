@@ -303,7 +303,7 @@ def compile_to_inst(state: State, arith: ast.Arith):
 
 @pql_dp
 def _compile_arith(state, arith, a: T.any, b: T.any):
-    raise pql_TypeError.make(state, op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
+    raise pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
 
 @pql_dp
 def _compile_arith(state, arith, a: T.collection, b: T.collection):
@@ -358,7 +358,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
 @pql_dp
 def _compile_arith(state, arith, a: T.string, b: T.string):
     if arith.op != '+':
-        raise exc.pql_TypeError.make(state, arith, f"Operator '{op}' not supported for strings.")
+        raise exc.pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not supported for strings.")
 
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
         # Local folding for better performance (optional, for better performance)
@@ -428,12 +428,12 @@ def compile_to_inst(state: State, lst: ast.List_):
 
 @dy
 def compile_to_inst(state: State, s: ast.Slice):
-    table = evaluate(state, s.table)
+    obj = evaluate(state, s.table)
     # TODO if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
 
-    assert_type(table.type, T.collection, state, s, "Slice")
+    assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
 
-    instances = [table]
+    instances = [obj]
     if s.range.start:
         start = evaluate(state, s.range.start)
         instances += [start]
@@ -446,8 +446,13 @@ def compile_to_inst(state: State, s: ast.Slice):
     else:
         stop = None
 
-    code = sql.table_slice(table, start.code, stop and stop.code)
-    return type(table).make(code, table.type, instances)
+    if obj.type <= T.string:
+        f = sql.StringSlice
+    else:
+        code = sql.table_slice
+
+    code = f(obj.code, start.code, stop and stop.code)
+    return objects.make_instance(code, obj.type, instances)
 
 @dy
 def compile_to_inst(state: State, sel: ast.Selection):
