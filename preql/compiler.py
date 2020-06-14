@@ -263,6 +263,7 @@ def compile_to_inst(state: State, like: ast.Like):
 
 
 
+## Contains
 @pql_dp
 def _contains(state, op, a: T.string, b: T.string):
     from .evaluate import simplify
@@ -290,75 +291,70 @@ def _contains(state, op, a: T.any, b: T.any):
     raise pql_TypeError.make(state, op, f"Contains not implemented for {a.type} and {b.type}")
 
 
-@dy
-def compile_to_inst(state: State, cmp: ast.Compare):
-    insts = evaluate(state, cmp.args)
+## Compare
+@pql_dp
+def _compare(state, op, a: T.any, b: T.any):
+    raise pql_TypeError.make(state, op, f"Compare not implemented for {a.type} and {b.type}")
 
-    if cmp.op == 'in' or cmp.op == '!in':
-        if not all(isinstance(i, objects.AbsInstance) for i in insts):
-            raise pql_TypeError.make(state, cmp.op, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
+@pql_dp
+def _compare(state, op, a: T.null, b: T.null):
+    return objects.new_value_instance(True)
+@pql_dp
+def _compare(state, op, a: T.null, b: T.any):
+    assert not b.type.nullable
+    code = sql.Compare(op, [a.code, b.code])
+    return objects.Instance.make(code, T.bool, [a, b])
+@pql_dp
+def _compare(state, op, a: T.any, b: T.null):
+    return _compare(state, op, b, a)
 
-        return _contains(state, cmp.op, insts[0], insts[1])
-
-    else:
-        if not all(isinstance(i, objects.AbsInstance) for i in insts):
-            if any(isinstance(i, Type) for i in insts):
-                if cmp.op == '==':
-                    return objects.new_value_instance(insts[0] is insts[1])
-                elif cmp.op == '!=':
-                    return objects.new_value_instance(insts[0] is not insts[1])
-
-            raise pql_TypeError.make(state, cmp.op, f"operator '{cmp.op}' does not apply to these types: {[i.type for i in insts]}")
-            # try compare
-
-        if settings.optimize:
-            if all(isinstance(i, objects.ValueInstance) for i in insts):
-                op = {
-                    '==': operator.eq,
+@pql_dp
+def _compare(state, op, a: T.primitive, b: T.primitive):
+    if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
+                f = {
+                    '=': operator.eq,
                     '!=': operator.ne,
                     '<>': operator.ne,
                     '>': operator.gt,
                     '<': operator.lt,
                     '>=': operator.ge,
                     '<=': operator.le,
-                }[cmp.op]
-                return objects.new_value_instance(op(insts[0].local_value, insts[1].local_value))
+                }[op]
+                return objects.new_value_instance(f(a.local_value, b.local_value))
 
-        sql_cls = sql.Compare
-        # TODO should be able to coalesce, int->float, id->int, etc.
-        #      also different types should still be comparable to some degree?
-        # type_set = {i.type for i in insts}
-        # if len(type_set) > 1:
-        #     raise pql_TypeError(cmp.meta, "Cannot compare two different types: %s" % type_set)
-        insts = [i.primary_key() for i in insts]
-        for i, inst in enumerate(insts):
-            # if not inst.type.composed_of(types.AtomicType) and not inst.type.composed_of(types.aggregate):
-            if not inst.type <= T.union[T.primitive, T.aggregate, T.null]:
-                raise pql_TypeError.make(state, cmp.args[i], f"Compare not implemented for type {inst.type}")
+    # TODO regular equality for primitives? (not 'is')
+    code = sql.Compare(op, [a.code, b.code])
+    return objects.Instance.make(code, T.bool, [a, b])
 
+@pql_dp
+def _compare(state, op, a: T.type, b: T.type):
+    return objects.new_value_instance(a == b)
 
-    op = {
-        '==': '=',
-        '<>': '!=',
-    }.get(cmp.op, cmp.op)
+@pql_dp
+def _compare(state, op, a: T.number, b: T.row):
+    return _compare(state, op, a, b.primary_key())
 
-    code = sql_cls(op, [i.code for i in insts])
+@pql_dp
+def _compare(state, op, a: T.row, b: T.number):
+    return _compare(state, op, b, a)
 
-    # TODO a cleaner way to write this
-    t = T.bool
-    agg = False
-    if any(inst.type <= T.aggregate for inst in insts):
-        # t = types.aggregate(t)
-        agg = True
-
-    inst = objects.Instance.make(code, t, insts)
-
-    if agg:
-        inst = objects.aggregate(inst)
-
-    return inst
+@pql_dp
+def _compare(state, op, a: T.row, b: T.row):
+    return _compare(state, op, a.primary_key(), b.primary_key())
 
 
+@dy
+def compile_to_inst(state: State, cmp: ast.Compare):
+    insts = evaluate(state, cmp.args)
+
+    if cmp.op == 'in' or cmp.op == '!in':
+        return _contains(state, cmp.op, insts[0], insts[1])
+    else:
+        op = {
+            '==': '=',
+            '<>': '!=',
+        }.get(cmp.op, cmp.op)
+        return _compare(state, op, insts[0], insts[1])
 
 @dy
 def compile_to_inst(state: State, neg: ast.Neg):
