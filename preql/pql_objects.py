@@ -484,3 +484,18 @@ def aliased_table(t, name):
 def new_table(type_, name=None, instances=None):
     return TableInstance.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
 
+
+def from_python(value):
+    if value is None:
+        return null
+    elif isinstance(value, str):
+        return ast.Const(None, T.string, value)
+    elif isinstance(value, int):
+        return ast.Const(None, T.int, value)
+    elif isinstance(value, list):
+        return ast.List_(None, T.list[T.any], list(map(from_python, value)))
+    elif isinstance(value, dict):
+        #return ast.Dict_(None, value)
+        elems = {k:from_python(v) for k,v in value.items()}
+        return ast.Dict_(None, elems)
+    assert False, value

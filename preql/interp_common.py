@@ -144,11 +144,15 @@ def create_engine(db_uri, debug):
 
 
 
-def assert_type(t, type_, state, ast, op, msg="%s expected an object of type '%s', instead got '%s'"):
+def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s, instead got '%s'"):
     assert isinstance(t, Type)
     assert isinstance(type_, Type)
     if not (t <= type_):
-        raise pql_TypeError.make(state, ast, msg % (op, type_, t))
+        if type_.typename == 'union':
+            type_str = ' or '.join("'%s'" % elem for elem in type_.elems)
+        else:
+            type_str = "'%s'" % type_
+        raise pql_TypeError.make(state, ast, msg % (op, type_str, t))
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])
@@ -158,21 +162,6 @@ def call_pql_func(state, name, args):
     expr = ast.FuncCall(None, ast.Name(None, name), args)
     return evaluate(state, expr)
 
-
-def from_python(value):
-    if value is None:
-        return null
-    elif isinstance(value, str):
-        return ast.Const(None, T.string, value)
-    elif isinstance(value, int):
-        return ast.Const(None, T.int, value)
-    elif isinstance(value, list):
-        return ast.List_(None, T.list[T.any], list(map(from_python, value)))
-    elif isinstance(value, dict):
-        #return ast.Dict_(None, value)
-        elems = {k:from_python(v) for k,v in value.items()}
-        return ast.Dict_(None, elems)
-    assert False, value
 
 
 new_value_instance = objects.new_value_instance

@@ -31,7 +31,7 @@ from . import settings
 RawSql = sql.RawSql
 Sql = sql.Sql
 
-from .interp_common import State, dy, new_value_instance, from_python
+from .interp_common import State, dy, new_value_instance
 from .compiler import compile_to_inst
 from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type
 
@@ -181,7 +181,7 @@ def _execute(state: State, i: ast.If):
 def _execute(state: State, f: ast.For):
     expr = localize(state, evaluate(state, f.iterable))
     for i in expr:
-        with state.use_scope({f.var: from_python(i)}):
+        with state.use_scope({f.var: objects.from_python(i)}):
             execute(state, f.do)
 
 @dy
@@ -214,19 +214,19 @@ def execute(state, stmt):
             return _execute(state, stmt) or objects.null
         return evaluate(state, stmt)
     except PreqlError as e:
-        # assert e.text_refs    # XXX ensure this
+        # assert e.text_refs    # TODO ensure?
         raise
 
 
 
 
-# TODO Is simplify even helpful? Why not just compile everything?
-#      evaluate() already compiles anyway, so what's the big deal?
-#      an "optimization" for local tree folding can be added later,
-#      and also prevent compiling lists (which simplify doesn't prevent)
-
+# Simplify performs local operations before any db-specific compilation occurs
+# Technically not super useful at the moment, but makes conceptual sense.
 @dy
 def simplify(state: State, cb: ast.CodeBlock):
+    if len(cb.statements) == 1:
+        s ,= cb.statements[0]
+        return simplify(state, s)
     return _execute(state, cb)
 
 @dy
@@ -257,12 +257,6 @@ def simplify(state: State, x):
 #                 if isinstance(v, types.PqlObject) or isinstance(v, list) and all(isinstance(i, types.PqlObject) for i in v)}
 #     return node.replace(**resolved)
 
-# @dy
-# def simplify(state: State, cb: ast.CodeBlock):
-#     # if len(cb.statements) == 1:
-#     #     return simplify(state, cb.statements[0])
-#     return _simplify_ast(state, cb)
-
 # TODO isn't this needed somewhere??
 # @dy
 # def simplify(state: State, if_: ast.If):
@@ -277,6 +271,7 @@ def simplify(state: State, x):
 @dy
 def simplify(state: State, obj: ast.Or):
     # XXX is simplify the right place for this? It attempts to access the db (count table size)
+    # TODO treat this differenty if in projection or outside of it.
     for expr in obj.args:
         inst = evaluate(state, expr)
         nz = test_nonzero(state, inst)
@@ -305,13 +300,11 @@ def simplify(state: State, obj: ast.Not):
 
 @dy
 def simplify(state: State, funccall: ast.FuncCall):
-    # func = simplify(state, funccall.func)
     func = evaluate(state, funccall.func)
 
     args = funccall.args
-    # if isinstance(func, types.Primitive):
     if isinstance(func, Type):
-        # Cast to primitive
+        # Cast to type
         args = args + [func]
         func = state.get_var('cast')
 
@@ -499,7 +492,14 @@ def apply_database_rw(state: State, rps: ast.ResolveParametersString):
 @dy
 def apply_database_rw(state: State, o: ast.One):
     # TODO move these to the core/base module
-    table = evaluate(state, ast.Slice(None, o.expr, ast.Range(None, None, ast.Const(None, T.int, 2))))
+    obj = evaluate(state, o.expr)
+    if obj.type <= T.struct:
+        if len(obj.attrs) != 1:
+            raise pql_ValueError.make(state, o, f"'one' expected a struct with a single attribute, got {len(obj.attrs)}")
+        x ,= obj.attrs.values()
+        return x
+
+    table = evaluate(state, ast.Slice(o.text_ref, obj, ast.Range(None, None, ast.Const(None, T.int, 2))))
 
     assert (table.type <= T.collection), table
     rows = localize(state, table) # Must be 1 row
@@ -607,7 +607,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     # TODO very inefficient, vectorize this
     ids = []
     for row in rows:
-        matched = cons.match_params(state, [from_python(v) for v in row.values()])
+        matched = cons.match_params(state, [objects.from_python(v) for v in row.values()])
         ids += [_new_row(state, new, obj, matched).primary_key()]   # XXX return everything, not just pk?
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int

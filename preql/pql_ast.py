@@ -173,7 +173,7 @@ class Range(Expr):
 @dataclass
 class One(Expr):
     expr: Object
-    nullable: bool
+    nullable: bool = False
 
 @dataclass
 class Slice(TableOperation):

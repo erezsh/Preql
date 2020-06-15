@@ -360,8 +360,8 @@ def pql_repr(state: State, obj: ast.Expr):
     Returns the type of the given object
     """
     inst = evaluate(state, obj)
-    if not isinstance(inst, (objects.ValueInstance, Type)):
-        raise pql_NotImplementedError.make(state, obj, "Cannot repr() objects that aren't simple values")
+    # if not isinstance(inst, (objects.ValueInstance, Type)):
+    #     raise pql_NotImplementedError.make(state, obj, "Cannot repr() objects that aren't simple values")
     return objects.new_value_instance(inst.repr(state))
 
 def pql_columns(state: State, table: ast.Expr):
@@ -369,7 +369,11 @@ def pql_columns(state: State, table: ast.Expr):
     Returns a dictionary of {column_name: column_type}
     """
     table = evaluate(state, table)
-    return ast.Dict_(None, table.type.elems)
+    elems = table.type.elems
+    if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
+        elems = {f't{i}':e for i, e in enumerate(elems)}
+
+    return ast.Dict_(None, elems)
 
 
 def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
@@ -390,19 +394,18 @@ def _cast(state, inst_type, target_type, inst):
 
 @combined_dp
 def _cast(state, inst_type: T.list, target_type: T.list, inst):
-    assert inst_type != target_type
-
     if inst is objects.EmptyList:
-        # return inst.replace(type=target_type)
-        return evaluate(state, ast.List_( None, target_type, []), )
+        return inst.replace(type=target_type)
+        # return evaluate(state, ast.List_( None, target_type, []), )
 
-    # res = _cast(state, inst_type.elemtype, target_type.elemtype, inst.elem)
-    # return objects.aggregated(res)
-    if not (inst_type.elem <= target_type.elem):
-        raise pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
+    if (inst_type.elem <= target_type.elem):
+        return inst
 
-    # raise pql_TypeError.make(state, None, "Cast not fully implemented yet")
-    return inst
+    value = inst.get_column('value')
+    elem = _cast(state, value.type, target_type.elem, value)
+    code = sql.Select(target_type, inst.code, [sql.ColumnAlias(elem.code, 'value')])
+    return inst.replace(code=code, type=T.list[elem.type])
+
 
 @combined_dp
 def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
@@ -417,18 +420,10 @@ def _cast(state, inst_type: T.table, target_type: T.list, inst):
     if not (inst_type.elem <= target_type.elem):
         raise pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
 
-    return objects.ListInstance.make(inst.code, target_type, [inst])
+    (elem_name, elem_type) ,= inst_type.elems.items()
+    code = sql.Select(T.list[elem_type], inst.code, [sql.ColumnAlias(sql.Name(elem_type, elem_name), 'value')])
 
-@combined_dp
-def _cast(state, inst_type: T.table, target_type: T.primitive, inst):
-    s = table_to_struct(inst.type)
-    if len(s.elems) != 1:
-        raise pql_TypeError.make(state, None, "Cannot cast table to primitive, it has %d columns (we require 1 column)")
-    assert list(s.elems.values())[0] <= target_type
-    res = localize(state, inst)
-    assert len(res) == 1
-    res = list(res[0].values())[0]
-    return new_value_instance(res, target_type)
+    return objects.ListInstance.make(code, T.list[elem_type], [inst])
 
 @combined_dp
 def _cast(state, inst_type: T.t_id, target_type: T.int, inst):
@@ -438,6 +433,11 @@ def _cast(state, inst_type: T.t_id, target_type: T.int, inst):
 def _cast(state, inst_type: T.union[T.float, T.bool], target_type: T.int, inst):
     code = sql.Cast(T.int, "int", inst.code)
     return objects.Instance.make(code, T.int, [inst])
+
+@combined_dp
+def _cast(state, inst_type: T.union[T.int, T.bool], target_type: T.float, inst):
+    code = sql.Cast(T.float, "float", inst.code)
+    return objects.Instance.make(code, T.float, [inst])
 
 @dy
 def _cast(state, inst_type: T.string, target_type: T.int, inst):

@@ -370,6 +370,16 @@ class BasicTests(TestCase):
         self.assertEqual( preql('"hello"[2..]'), "ello" )
         self.assertEqual( preql('"hello"[..2]'), "h" )
 
+    def test_casts(self):
+        preql = self.Preql()
+        self.assertEqual( preql('type(float(1))'), T.float )
+        self.assertEqual( preql('type(int(float(1)))'), T.int )
+        self.assertEqual( type(preql('list[float]([1,2])')[0]), float)
+        self.assertEqual( type(preql('list[int](list[float]([1,2]))')[0]), int)
+        self.assertEqual( preql('list[int]([1.2, 3.4])'), [1,3])
+        self.assertEqual( preql('type(list(list([1,2]{value+1}){value+1}))'), T.list[T.int])
+        self.assertEqual( preql('list(list([1,2]{value+1}){value+1})'), [3,4])
+
     def test_lists2(self):
         preql = self.Preql()
         preql('''

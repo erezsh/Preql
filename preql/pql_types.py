@@ -137,7 +137,10 @@ class Type(Object, AbsType):
     def get_attr(self, attr):
         # XXX hacky
         if attr == 'elem' and self.elems:
-            return self.elem
+            try:
+                return self.elem
+            except ValueError:
+                pass
 
         assert attr not in self.methods
 

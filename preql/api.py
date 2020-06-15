@@ -8,7 +8,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate, new_table_from_rows
-from .interp_common import create_engine, call_pql_func, State, from_python
+from .interp_common import create_engine, call_pql_func, State
 from .pql_types import T
 
 
@@ -137,7 +137,7 @@ class Interface:
         if isinstance(var, objects.Function):
             def delegate(*args, **kw):
                 assert not kw
-                pql_args = [from_python(a) for a in args]
+                pql_args = [objects.from_python(a) for a in args]
                 pql_res = self.interp.call_func(fname, pql_args)
                 return self._wrap_result( pql_res )
             return delegate
@@ -150,7 +150,7 @@ class Interface:
         return promise(self.interp.state, res)  # TODO session, not state
 
     def run_code(self, pq, source_file, **args):
-        pql_args = {name: from_python(value) for name, value in args.items()}
+        pql_args = {name: objects.from_python(value) for name, value in args.items()}
         return self.interp.execute_code(pq + "\n", source_file, pql_args)
 
     def __call__(self, pq, **args):

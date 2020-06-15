@@ -8,7 +8,7 @@ from . import settings
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func, from_python
+from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func
 from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp, table_to_struct
 
 @dataclass
@@ -230,13 +230,22 @@ def _compare(state, op, a: T.any, b: T.any):
 @pql_dp
 def _compare(state, op, a: T.null, b: T.null):
     return objects.new_value_instance(True)
+
 @pql_dp
-def _compare(state, op, a: T.null, b: T.any):
+def _compare(state, op, a: T.type, b: T.null):
+    assert not a.type.nullable
+    return objects.new_value_instance(False)
+@pql_dp
+def _compare(state, op, a: T.null, b: T.type):
+    return _compare(state, op, b, a)
+
+@pql_dp
+def _compare(state, op, a: T.null, b: T.primitive):
     assert not b.type.nullable
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 @pql_dp
-def _compare(state, op, a: T.any, b: T.null):
+def _compare(state, op, a: T.primitive, b: T.null):
     return _compare(state, op, b, a)
 
 @pql_dp
@@ -383,6 +392,8 @@ def compile_to_inst(state: State, c: ast.Const):
 
 @dy
 def compile_to_inst(state: State, d: ast.Dict_):
+    assert isinstance(d.elems, dict), d
+
     # TODO handle duplicate key names
     elems = {k or guess_field_name(v): evaluate(state, v) for k, v in d.elems.items()}
     t = T.table(**{k: v.type for k,v in elems.items()})
@@ -429,7 +440,6 @@ def compile_to_inst(state: State, lst: ast.List_):
 @dy
 def compile_to_inst(state: State, s: ast.Slice):
     obj = evaluate(state, s.table)
-    # TODO if isinstance(table, objects.Instance) and isinstance(table.type, types.String):
 
     assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
 
@@ -447,11 +457,10 @@ def compile_to_inst(state: State, s: ast.Slice):
         stop = None
 
     if obj.type <= T.string:
-        f = sql.StringSlice
+        code = sql.StringSlice(obj.code, start.code, stop and stop.code)
     else:
-        code = sql.table_slice
+        code = sql.table_slice(obj, start.code, stop and stop.code)
 
-    code = f(obj.code, start.code, stop and stop.code)
     return objects.make_instance(code, obj.type, instances)
 
 @dy
@@ -507,7 +516,7 @@ def _apply_type_generics(state, gen_type, type_names):
         t ,= type_objs
 
     try:
-        return gen_type.apply_inner_type(t)
+        return gen_type[t]
     except TypeError:
         raise pql_TypeError.make(state, None, f"Type {t} isn't a container!")
 

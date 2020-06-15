@@ -9,6 +9,13 @@ optimize = True
 cache = False
 
 debug = False # not sys.flags.optimize
+
+
+try:
+    from .local_settings import *
+except ImportError:
+    pass
+
 if debug:
     print("# DEBUG MODE")
 
