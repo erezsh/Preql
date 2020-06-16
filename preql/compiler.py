@@ -210,7 +210,8 @@ def _contains(state, op, a: T.primitive, b: T.collection):
     from .pql_functions import _cast
     b_list = _cast(state, b.type, T.list, b)
     if not (a.type <= b_list.type.elem):
-        raise pql_TypeError.make(state, op, f"Error in contains: Mismatch between {a.type} and {b.type}")
+        a = _cast(state, a.type, b_list.type.elem, a)
+        # raise pql_TypeError.make(state, op, f"Error in contains: Mismatch between {a.type} and {b.type}")
 
     if op == '!in':
         op = 'not in'

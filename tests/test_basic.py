@@ -545,7 +545,7 @@ class BasicTests(TestCase):
         # self.assertRaises( pql_TypeError, preql, """ 1 == [2] """)
         self.assertRaises( pql_TypeError, preql, """ [1] in [2] """)
         self.assertRaises( pql_TypeError, preql, """ "a" in [2] """)
-        self.assertRaises( pql_TypeError, preql, """ 4 in ["a", "B"] """)
+        # self.assertRaises( pql_TypeError, preql, """ 4 in ["a", "B"] """) # TODO good or bad?
 
 
 
