@@ -86,10 +86,10 @@ def print_sql(sql):
 class PostgresInterface(SqlInterface):
     target = postgres
 
-    def __init__(self, host, database, user, password, debug=True):
+    def __init__(self, host, port, database, user, password, debug=True):
         import psycopg2
         try:
-            self._conn = psycopg2.connect(host=host,database=database, user=user, password=password)
+            self._conn = psycopg2.connect(host=host, port=port, database=database, user=user, password=password)
         except psycopg2.OperationalError as e:
             raise ConnectError(*e.args) from e
 

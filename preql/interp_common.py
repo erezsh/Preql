@@ -143,7 +143,7 @@ def create_engine(db_uri, debug):
     if dsn.scheme == 'sqlite':
         return SqliteInterface(path, debug=debug)
     elif dsn.scheme == 'postgres':
-        return PostgresInterface(dsn.host, path, dsn.user, dsn.password, debug=debug)
+        return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, debug=debug)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
 
