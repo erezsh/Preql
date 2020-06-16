@@ -5,7 +5,7 @@ import dsnparse
 
 from runtype import Dispatch
 
-from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, pql_NotImplementedError, pql_DatabaseConnectError
+from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, pql_NotImplementedError, pql_DatabaseConnectError, pql_ValueError
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -76,6 +76,8 @@ class State:
             raise pql_NotImplementedError.make(self, None, *e.args) from e
         except ConnectError as e:
             raise pql_DatabaseConnectError.make(self, None, *e.args) from e
+        except ValueError as e:
+            raise pql_ValueError.make(self, None, *e.args) from e
 
     def get_var(self, name):
         return self.ns.get_var(self, name)
