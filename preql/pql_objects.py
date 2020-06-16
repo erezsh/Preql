@@ -10,7 +10,7 @@ from . import settings
 from . import pql_ast as ast
 from . import sql
 
-from .pql_types import T, Type, Object, repr_value, flatten_type, join_names
+from .pql_types import T, Type, Object, repr_value, flatten_type, join_names, table_to_struct
 
 # Functions
 @dataclass
@@ -207,7 +207,9 @@ class Instance(AbsInstance):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
     def repr(self, state):
-        return f'<instance of {self.type.repr(state)}>'
+        # Overwritten in evaluate.py
+        raise NotImplementedError()
+        #     return f'<instance of {self.type.repr(state)}>'
 
     def __post_init__(self):
         assert not self.type.issubtype(T.union[T.struct, T.aggregate, T.table])
@@ -310,7 +312,7 @@ class ListInstance(CollectionInstance):
 
 def make_instance_from_name(t, cn):
     if t <= (T.struct):
-        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elems.items()})
+        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in table_to_struct(t).elems.items()})
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
@@ -467,13 +469,13 @@ _empty_list_type = T.list[T.null]
 EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
 
 
-def aliased_table(t, name):
-    assert isinstance(t, Instance)
-    assert t.type.issubtype(T.collection)
+def alias_table_columns(t, prefix):
+    assert isinstance(t, CollectionInstance)
+    assert t.type <= T.table
 
     # Make code
     sql_fields = [
-        sql.ColumnAlias.make(sql.Name(t, n), join_names((name, n)))
+        sql.ColumnAlias.make(sql.Name(t, n), join_names((prefix, n)))
         for (n, t) in flatten_type(t.type)
     ]
 
@@ -482,7 +484,11 @@ def aliased_table(t, name):
 
 
 def new_table(type_, name=None, instances=None):
-    return TableInstance.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
+    if type_ <= T.list:
+        cls = ListInstance
+    else:
+        cls = TableInstance
+    return cls.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
 
 
 def from_python(value):

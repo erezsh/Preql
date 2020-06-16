@@ -21,7 +21,7 @@ def simplify():
     raise NotImplementedError()
 
 @dy
-def evaluate():
+def evaluate(state: type(None), any: type(None)):
     raise NotImplementedError()
 
 

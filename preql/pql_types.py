@@ -250,6 +250,7 @@ class MyTypeSystem(TypeSystem):
 
 pql_dp = runtype.Dispatch(MyTypeSystem())
 
+
 @pql_dp
 def repr_value(v):
     return repr(v.value)
@@ -262,6 +263,9 @@ def repr_value(v: T.string):
 def repr_value(v: T.text):
     return str(v.value)
 
+@pql_dp
+def repr_value(v: T.bool):
+    return 'true' if v.value else 'false'
 
 
 @pql_dp
@@ -336,7 +340,7 @@ def flatten_path(path, t):
 
 @combined_dp
 def flatten_path(path, t: T.union[T.table, T.struct]):
-    elems = t.elems
+    elems = table_to_struct(t).elems
     if t.nullable:
         elems = {k:v.replace(nullable=True) for k, v in elems.items()}
     return concat_for(flatten_path(path + [name], col) for name, col in elems.items())

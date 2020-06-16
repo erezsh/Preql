@@ -267,6 +267,20 @@ def _compare(state, op, a: T.primitive, b: T.primitive):
     return objects.Instance.make(code, T.bool, [a, b])
 
 @pql_dp
+def _compare(state, arith, a: T.aggregate, b: T.aggregate):
+    res = _compare(state, arith, a.elem, b.elem)
+    return objects.aggregate(res)
+
+@pql_dp
+def _compare(state, arith, a: T.aggregate, b: T.int):
+    res = _compare(state, arith, a.elem, b)
+    return objects.aggregate(res)
+
+@pql_dp
+def _compare(state, arith, a: T.int, b: T.aggregate):
+    return _compare(state, arith, b, a)
+
+@pql_dp
 def _compare(state, op, a: T.type, b: T.type):
     return objects.new_value_instance(a == b)
 
@@ -281,6 +295,7 @@ def _compare(state, op, a: T.row, b: T.number):
 @pql_dp
 def _compare(state, op, a: T.row, b: T.row):
     return _compare(state, op, a.primary_key(), b.primary_key())
+
 
 
 @dy
@@ -336,6 +351,14 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
 def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
     res = _compile_arith(state, arith, a.elem, b.elem)
     return objects.aggregate(res)
+
+@pql_dp
+def _compile_arith(state, arith, a: T.aggregate, b: T.primitive):
+    res = _compile_arith(state, arith, a.elem, b)
+    return objects.aggregate(res)
+@pql_dp
+def _compile_arith(state, arith, a: T.primitive, b: T.aggregate):
+    return _compile_arith(state, arith, b, a)
 
 @pql_dp
 def _compile_arith(state, arith, a: T.string, b: T.int):

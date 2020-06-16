@@ -296,7 +296,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
         structs = {name: t.replace(nullable=True) if n else t
                     for (name, t), n in safezip(structs.items(), nullable)}
 
-    tables = [objects.aliased_table(t, n) for n, t in safezip(exprs, tables)]
+    tables = [objects.alias_table_columns(t, n) for n, t in safezip(exprs, tables)]
 
     primary_keys = [ [name] + pk
                         for name, t in safezip(exprs, tables)

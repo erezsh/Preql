@@ -9,7 +9,7 @@ from . import pql_objects as objects
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
-from .pql_types import T
+from .pql_types import T, repr_value
 
 
 def _make_const(value):
@@ -21,8 +21,8 @@ def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)
     return localize(state, evaluate(state, count))
 
-TABLE_PREVIEW_SIZE = 10
-LIST_PREVIEW_SIZE = 100
+TABLE_PREVIEW_SIZE = 16
+LIST_PREVIEW_SIZE = 128
 MAX_AUTO_COUNT = 10000
 
 
@@ -42,12 +42,12 @@ def table_repr(self, state):
     if len(self.type.elems) == 1:
         rows = localize(state, table_limit(self, state, LIST_PREVIEW_SIZE))
         post = f', ... ({count_str})' if len(rows) < count else ''
-        elems = ', '.join(repr(r) for r in rows)
+        elems = ', '.join(repr_value(ast.Const(None, self.type.elem, r)) for r in rows)
         return f'[{elems}{post}]'
 
     # rows = list(_call_pql_func(state, 'limit', [self, _make_const(TABLE_PREVIEW_SIZE)]))
     rows = localize(state, table_limit(self, state, TABLE_PREVIEW_SIZE))
-    if (self.type <= T.list):
+    if self.type <= T.list:
         rows = [{'value': x} for x in rows]
 
     post = '\n\t...' if len(rows) < count else ''
@@ -67,7 +67,7 @@ def table_repr(self, state):
         header = f"table {self.type.typename}, {count_str}\n"
         return header + tabulate.tabulate(rows, headers="keys", numalign="right") + post
 
-objects.TableInstance.repr = table_repr
+objects.CollectionInstance.repr = table_repr
 
 
 class TablePromise:
@@ -109,9 +109,8 @@ class TablePromise:
 
 
 def promise(state, inst):
-    if (inst.type <= T.collection):
-        if not (inst.type <= T.list):
-            return TablePromise(state, inst)
+    if inst.type <= T.table:
+        return TablePromise(state, inst)
 
     return localize(state, inst)
 
