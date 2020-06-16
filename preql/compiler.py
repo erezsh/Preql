@@ -240,12 +240,16 @@ def _compare(state, op, a: T.null, b: T.type):
     return _compare(state, op, b, a)
 
 @pql_dp
-def _compare(state, op, a: T.null, b: T.primitive):
-    assert not b.type.nullable
+def _compare(state, op, a: T.null, b: T.object):
+    # TODO Enable this type-based optimization:
+    # if not b.type.nullable:
+    #     return objects.new_value_instance(False)
+    if b.type <= T.struct:
+        b = b.primary_key()
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 @pql_dp
-def _compare(state, op, a: T.primitive, b: T.null):
+def _compare(state, op, a: T.object, b: T.null):
     return _compare(state, op, b, a)
 
 @pql_dp

@@ -74,6 +74,9 @@ class pql_NotImplementedError(PreqlError_Message):
 class pql_DatabaseQueryError(PreqlError_Message):
     pass
 
+class pql_DatabaseConnectError(PreqlError_Message):
+    pass
+
 class pql_CompileError(PreqlError_Message):
     pass
 

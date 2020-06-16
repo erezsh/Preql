@@ -10,6 +10,8 @@ class Const(Object):
     type: Type
     value: object
 
+class ConnectError(Exception):
+    pass
 
 class SqlInterface:
     def __init__(self, debug=False):
@@ -86,7 +88,11 @@ class PostgresInterface(SqlInterface):
 
     def __init__(self, host, database, user, password, debug=True):
         import psycopg2
-        self._conn = psycopg2.connect(host=host,database=database, user=user, password=password)
+        try:
+            self._conn = psycopg2.connect(host=host,database=database, user=user, password=password)
+        except psycopg2.OperationalError as e:
+            raise ConnectError(*e.args) from e
+
         self._debug = debug
 
 

@@ -5,12 +5,12 @@ import dsnparse
 
 from runtype import Dispatch
 
-from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel
+from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, pql_NotImplementedError, pql_DatabaseConnectError
 
 from . import pql_ast as ast
 from . import pql_objects as objects
 from . import sql
-from .sql_interface import SqliteInterface, PostgresInterface
+from .sql_interface import SqliteInterface, PostgresInterface, ConnectError
 from .pql_types import T, Type
 
 dy = Dispatch()
@@ -70,7 +70,12 @@ class State:
 
     def connect(self, uri):
         print(f"[Preql] Connecting to {uri}")
-        self.db = create_engine(uri, self.db._debug)
+        try:
+            self.db = create_engine(uri, self.db._debug)
+        except NotImplementedError as e:
+            raise pql_NotImplementedError.make(self, None, *e.args) from e
+        except ConnectError as e:
+            raise pql_DatabaseConnectError.make(self, None, *e.args) from e
 
     def get_var(self, name):
         return self.ns.get_var(self, name)

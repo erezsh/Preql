@@ -69,7 +69,7 @@ def resolve(state: State, col_def: ast.ColumnDef):
     assert not isinstance(col, objects.CollectionInstance)
 
     if col <= T.table:
-        return T.t_relation[col].set_options(name=col_def.type.name)
+        return T.t_relation[col].set_options(name=col_def.type.name).replace(nullable=col.nullable)
 
     return col.set_options(default=col_def.default)
 
