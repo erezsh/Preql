@@ -275,13 +275,16 @@ def from_sql(state, res: T.primitive):
     return item
 
 def _from_datetime(s):
+    if s is None:
+        return None
+
     # Postgres
     if isinstance(s, datetime):
         return s
 
     # Sqlite
     if not isinstance(s, str):
-        raise exc.pql_TypeError([], f"Expected a string. Instead got: {s}")
+        raise exc.pql_TypeError([], f"datetime expected a string. Instead got: {s}")
     try:
         return datetime.fromisoformat(s)
     except ValueError as e:

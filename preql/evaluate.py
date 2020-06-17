@@ -99,14 +99,27 @@ def db_query(state: State, sql, subqueries=None):
 
 @dy
 def _execute(state: State, table_def: ast.TableDef):
+    if isinstance(table_def.columns[-1], ast.Ellipsis):
+        ellipsis = table_def.columns.pop()
+    else:
+        ellipsis = None
+
+    if any(isinstance(c, ast.Ellipsis) for c in table_def.columns):
+        # XXX why must it? just ensure it appears once
+        raise exc.pql_SyntaxError.make(state, table_def, "Ellipsis must appear at the end")
+
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
 
     exists = table_exists(state, table_def.name)
     if exists:
-        cur_type = import_table_type(state, table_def.name, set(t.elems))
+        cur_type = import_table_type(state, table_def.name, None if ellipsis else set(t.elems))
 
-        # Auto-add id only if it exists already
+        if ellipsis:
+            elems_to_add = {n: v for n, v in cur_type.elems.items() if n not in t.elems}
+            t = t(**t.elems, **elems_to_add)
+
+        # Auto-add id only if it exists already and not defined by user
         if 'id' in cur_type.elems and 'id' not in t.elems:
             t = t(id=T.t_id, **t.elems).set_options(pk=[['id']])
 
@@ -903,6 +916,30 @@ def table_exists(state, name):
 
     return db_query(state, sql.RawSql(T.int, "SELECT count(*) FROM information_schema.tables where table_name='%s'" % name)) > 0
 
+
+def _type_from_sql(type, nullable):
+    d = {
+        'integer': T.int,
+        'serial': T.t_id,
+        'bigserial': T.t_id,
+        'smallint': T.int,  # TODO smallint / bigint?
+        'bigint': T.int,
+        'character varying': T.string,
+        'character': T.string,  # TODO char?
+        'real': T.float,
+        'double precision': T.float,    # double on 32-bit?
+        'boolean': T.bool,
+        'timestamp': T.datetime,
+        'timestamp without time zone': T.datetime,
+        'text': T.text,
+    }
+    try:
+        v = d[type]
+    except KeyError:
+        return T.string.replace(nullable=True)
+
+    return v.replace(nullable=nullable)
+
 def import_table_type(state, name, columns_whitelist):
 
     columns_t = T.table(
@@ -923,23 +960,7 @@ def import_table_type(state, name, columns_whitelist):
         wl = set(columns_whitelist)
         sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-    type_from_sql = {
-        'integer': T.int,
-        'serial': T.t_id,
-        'bigserial': T.t_id,
-        'smallint': T.int,  # TODO smallint / bigint?
-        'bigint': T.int,
-        'character varying': T.string,
-        'character': T.string,  # TODO char?
-        'real': T.float,
-        'double precision': T.float,    # double on 32-bit?
-        'boolean': T.bool,
-        'timestamp': T.datetime,
-        'timestamp without time zone': T.datetime,
-        'text': T.text,
-    }
-
-    cols = [(c['pos'], c['name'], type_from_sql.get(c['type'], T.string)) for c in sql_columns]
+    cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
     cols.sort()
     cols = dict(c[1:] for c in cols)
 
