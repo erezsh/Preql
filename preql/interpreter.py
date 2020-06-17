@@ -26,6 +26,7 @@ class Interpreter:
     def __init__(self, sqlengine):
         self.sqlengine = sqlengine
         self.state = State(sqlengine, 'text', initial_namespace())
+        self.state.interp = self    # TODO hack for connect()
         self.include('core.pql', __file__) # TODO use an import mechanism instead
 
     def call_func(self, fname, args):

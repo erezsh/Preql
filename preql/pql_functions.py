@@ -457,6 +457,53 @@ def _cast(state, inst_type: T.t_relation, target_type: T.t_id, inst):
 
 
 
+def pql_import_table(state: State, name_ast: ast.Expr):
+    # XXX This is postgres specific!
+    if state.db.target != 'postgres':
+        raise pql_NotImplementedError.make(state, name_ast, "Only supported on 'postgres' so far")
+
+    # Get table type
+    name = localize(state, evaluate(state, name_ast))
+    if not isinstance(name, str):
+        raise exc.pql_TypeError.make(state, name_ast, "Expected string")
+
+    columns_t = T.table(
+        schema=T.string,
+        table=T.string,
+        name=T.string,
+        pos=T.int,
+        nullable=T.bool,
+        type=T.string,
+    )
+    columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
+           FROM information_schema.columns
+           WHERE table_name = '%s'
+        """ % name
+    columns = db_query(state, sql.RawSql(columns_t, columns_q))
+
+    cols = [None] * len(columns)
+    for c in columns:
+        cols[c['pos']-1] = c['name'], {
+            'integer': T.int,
+            'serial': T.t_id,
+            'bigserial': T.t_id,
+            'smallint': T.int,  # TODO smallint / bigint?
+            'bigint': T.int,
+            'character varying': T.string,
+            'character': T.string,  # TODO char?
+            'real': T.float,
+            'double precision': T.float,    # double on 32-bit?
+            'boolean': T.bool,
+            'timestamp': T.datetime,
+            'timestamp without time zone': T.datetime,
+            'text': T.text,
+        }[c['type']]
+
+    t = T.table(**dict(cols)).set_options(name=name)
+
+    # Get table contents
+    return objects.new_table(t)
+
 
 def pql_connect(state: State, uri: ast.Expr):
     """
@@ -595,6 +642,7 @@ internal_funcs = create_internal_funcs({
     'names': pql_names,
     'dir': pql_names,
     'connect': pql_connect,
+    'import_table': pql_import_table,
     'count': pql_count,
     'temptable': pql_temptable,
     'concat': pql_concat,

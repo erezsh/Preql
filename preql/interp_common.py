@@ -79,6 +79,9 @@ class State:
         except ValueError as e:
             raise pql_ValueError.make(self, None, *e.args) from e
 
+        self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
+
+
     def get_var(self, name):
         return self.ns.get_var(self, name)
     def set_var(self, name, value):

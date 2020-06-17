@@ -269,36 +269,46 @@ def repr_value(v: T.bool):
 
 
 @pql_dp
-def from_sql(res: T.primitive):
+def from_sql(state, res: T.primitive):
     row ,= res.value
     item ,= row
     return item
 
+def _from_datetime(s):
+    # Postgres
+    if isinstance(s, datetime):
+        return s
+
+    # Sqlite
+    if not isinstance(s, str):
+        raise exc.pql_TypeError([], f"Expected a string. Instead got: {s}")
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError as e:
+        raise exc.pql_ValueError([], str(e))
+
 @pql_dp
-def from_sql(res: T.datetime):
+def from_sql(state, res: T.datetime):
     # XXX doesn't belong here?
     row ,= res.value
     item ,= row
     s = item
-    if s:
-        if not isinstance(s, str):
-            raise exc.pql_TypeError([], f"Expected a string. Instead got: {s}")
-        try:
-            return datetime.fromisoformat(s)
-        except ValueError as e:
-            raise exc.pql_ValueError([], str(e))
+    return _from_datetime(s)
 
 @pql_dp
-def from_sql(arr: T.list):
-    assert all(len(e)==1 for e in arr.value)
+def from_sql(state, arr: T.list):
+    # TODO not assert
+    if not all(len(e)==1 for e in arr.value):
+        raise exc.pql_TypeError(state, None, f"Expected 1 column. Got {len(arr.value[0])}")
     return [e[0] for e in arr.value]
 
 @pql_dp
 @listgen
-def from_sql(arr: T.table):
+def from_sql(state, arr: T.table):
     expected_length = len(flatten_type(arr.type))   # TODO optimize?
     for row in arr.value:
-        assert len(row) == expected_length, (expected_length, row)
+        if len(row) != expected_length:
+            raise exc.pql_TypeError.make(state, None, f"Expected {expected_length} column. Got {len(row)}")
         i = iter(row)
         yield {name: restructure_result(col, i) for name, col in arr.type.elems.items()}
 
@@ -370,12 +380,15 @@ def restructure_result(t: T.union[T.primitive, T.null], i):
 @combined_dp
 def restructure_result(t: T.datetime, i):
     s = next(i)
-    return datetime.fromisoformat(s)
+    return _from_datetime(s)
 
 
 def table_flat_for_insert(table):
     # auto_count = join_names(self.primary_keys)
-    pks = {join_names(pk) for pk in table.options['pk']}
+    # if 'pk' not in table.options:
+    #     raise exc.pql_TypeError([], f"Cannot add to table. Primary key not defined")
+
+    pks = {join_names(pk) for pk in table.options.get('pk', [])}
     names = [name for name,t in flatten_type(table)]
     return classify_bool(names, lambda name: name in pks)
 

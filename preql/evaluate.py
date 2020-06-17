@@ -132,7 +132,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
     params = dict(table_params(target.type))
     for p in params:
         if p not in source.type.elems:
-            raise TypeError(None, f"Missing column {p} in table {source}")
+            raise exc.pql_TypeError.make(state, source, f"Missing column '{p}' in {source.type}")
 
     primary_keys, columns = table_flat_for_insert(target.type)
 

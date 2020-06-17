@@ -18,6 +18,7 @@ class SqlInterface:
         self._debug = debug
 
     def query(self, sql, subqueries=None, qargs=(), quiet=False, state=None):
+        assert state
         assert isinstance(sql, Sql), sql
         sql_code = self._compile_sql(sql, subqueries, qargs, state)
 
@@ -26,14 +27,14 @@ class SqlInterface:
 
         cur = self._execute_sql(sql_code)
 
-        return self._import_result(sql.type, cur)
+        return self._import_result(sql.type, cur, state)
 
-    def _import_result(self, sql_type, c):
+    def _import_result(self, sql_type, c, state):
         if sql_type is not T.null:
             res = c.fetchall()
             # imp = sql_type.import_result
             # return imp(res)
-            return from_sql(Const(sql_type, res))
+            return from_sql(state, Const(sql_type, res))
 
     def _execute_sql(self, sql_code):
         c = self._conn.cursor()
