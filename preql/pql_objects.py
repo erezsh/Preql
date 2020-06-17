@@ -483,12 +483,18 @@ def alias_table_columns(t, prefix):
     return t.replace(code=code)
 
 
-def new_table(type_, name=None, instances=None):
+def new_table(type_, name=None, instances=None, select_fields=False):
     if type_ <= T.list:
         cls = ListInstance
     else:
         cls = TableInstance
-    return cls.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
+    inst = cls.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
+
+    if select_fields:
+        code = sql.Select(type_, inst.code, [sql.Name(None, n) for n in type_.elems])
+        inst = inst.replace(code=code)
+
+    return inst
 
 
 def from_python(value):

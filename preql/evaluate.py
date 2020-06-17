@@ -51,12 +51,10 @@ def resolve(state: State, table_def: ast.TableDef):
         methods = evaluate(state, table_def.methods)
         t.methods.update({m.userfunc.name:m.userfunc for m in methods})
 
-    state.set_var(table_def.name, t)   # TODO use an internal namespace
+    with state.use_scope({table_def.name: t}):
+        for c in table_def.columns:
+            t.elems[c.name] = resolve(state, c)
 
-    for c in table_def.columns:
-        t.elems[c.name] = resolve(state, c)
-
-    state.set_var(table_def.name, objects.new_table(t, name=table_def.name))
     return t
 
 @dy
@@ -102,8 +100,25 @@ def db_query(state: State, sql, subqueries=None):
 def _execute(state: State, table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
-    sql_code = sql.compile_type_def(state, table_def.name, t)
-    db_query(state, sql_code)
+
+    exists = table_exists(state, table_def.name)
+    if exists:
+        cur_type = import_table_type(state, table_def.name, set(t.elems))
+        for e_name, e1_type in t.elems.items():
+            e2_type = cur_type.elems[e_name]
+            # XXX use can_cast() instead of hardcoding it
+            # if not (e1_type <= e2_type or (e1_type <= T.t_id and e2_type <= T.int)):
+            #     raise exc.pql_TypeError.make(state, table_def, f"Cannot cast column '{e_name}' from type '{e2_type}' to '{e1_type}'")
+
+        inst = objects.new_table(t, table_def.name, select_fields=True)
+    else:
+        inst = objects.new_table(t, table_def.name)
+
+    state.set_var(table_def.name, inst)
+
+    if not exists:
+        sql_code = sql.compile_type_def(state, table_def.name, t)
+        db_query(state, sql_code)
 
 @dy
 def _set_value(state: State, name: ast.Name, value):
@@ -851,3 +866,57 @@ def new_table_from_rows(state, name, columns, rows):
     x = objects.new_table(table)
     state.set_var(table.name, x)
 
+
+
+
+# XXX These don't belong in evaluate.py
+# =========================================
+
+def table_exists(state, name):
+    # XXX TODO sqlit
+    if state.db.target != 'postgres':
+        return False
+
+    return db_query(state, sql.RawSql(T.int, "SELECT count(*) FROM information_schema.tables where table_name='%s'" % name)) > 0
+
+def import_table_type(state, name, columns_whitelist):
+
+    columns_t = T.table(
+        schema=T.string,
+        table=T.string,
+        name=T.string,
+        pos=T.int,
+        nullable=T.bool,
+        type=T.string,
+    )
+    columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
+           FROM information_schema.columns
+           WHERE table_name = '%s'
+        """ % name
+    sql_columns = db_query(state, sql.RawSql(columns_t, columns_q))
+
+    if columns_whitelist:
+        wl = set(columns_whitelist)
+        sql_columns = [c for c in sql_columns if c['name'] in wl]
+
+    type_from_sql = {
+        'integer': T.int,
+        'serial': T.t_id,
+        'bigserial': T.t_id,
+        'smallint': T.int,  # TODO smallint / bigint?
+        'bigint': T.int,
+        'character varying': T.string,
+        'character': T.string,  # TODO char?
+        'real': T.float,
+        'double precision': T.float,    # double on 32-bit?
+        'boolean': T.bool,
+        'timestamp': T.datetime,
+        'timestamp without time zone': T.datetime,
+        'text': T.text,
+    }
+
+    cols = [(c['pos'], c['name'], type_from_sql.get(c['type'], T.string)) for c in sql_columns]
+    cols.sort()
+    cols = dict(c[1:] for c in cols)
+
+    return T.table(**cols).set_options(name=name)

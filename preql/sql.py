@@ -763,3 +763,5 @@ def compile_type(idtype: T.t_id):
     if not idtype.nullable:
         s += " NOT NULL"
     return s
+
+
