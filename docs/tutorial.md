@@ -187,11 +187,11 @@ There are many operations that you can perform on a table. Here we'll go through
 
 ```go
 // All countries that contain the letter 'l' and a population below 15000
->> Country[name ~ "%l%", population < 15000]
+>> Country[name ~ "%l%", population < 15000] {name, population}
 table Country, count=1
-  id  name      population
-----  ------  ------------
-   3  Tuvalu         10200
+name      population
+------  ------------
+Tuvalu         10200
 ```
 
 We can also filter the rows by index (zero-based), by providing it with a `range` instead.
@@ -230,6 +230,12 @@ Palau          1
 Nauru          0
 Tuvalu         0
 
+>> Country[name ~ "P%"]{name, is_big: population>15000}
+table table, =1
+name      is_big
+------  --------
+Palau          1
+
 >> func half(n) = n / 2
 >> Country{..., half(population)}   // Ellipsis fills in all columns
 table Country_proj58, count=3
@@ -241,6 +247,8 @@ table Country_proj58, count=3
 ```
 
 Notice that Preql creates a new table type for each projection.
+
+Therefor, the fields that aren't included in the projection, won't be available afterwards.
 
 **Aggregation** looks a lot like projection, and lets us aggregate information:
 
