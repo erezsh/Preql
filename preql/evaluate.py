@@ -46,14 +46,15 @@ def resolve(state: State, struct_def: ast.StructDef):
 
 @dy
 def resolve(state: State, table_def: ast.TableDef):
-    t = T.table(id=T.t_id).set_options(name=table_def.name, pk=[['id']])
+    t = T.table.set_options(name=table_def.name)
+
+    with state.use_scope({table_def.name: t}):  # For self-reference
+        elems = {c.name: resolve(state, c) for c in table_def.columns}
+        t = t(**elems)
+
     if table_def.methods:
         methods = evaluate(state, table_def.methods)
         t.methods.update({m.userfunc.name:m.userfunc for m in methods})
-
-    with state.use_scope({table_def.name: t}):
-        for c in table_def.columns:
-            t.elems[c.name] = resolve(state, c)
 
     return t
 
@@ -104,7 +105,16 @@ def _execute(state: State, table_def: ast.TableDef):
     exists = table_exists(state, table_def.name)
     if exists:
         cur_type = import_table_type(state, table_def.name, set(t.elems))
+
+        # Auto-add id only if it exists already
+        if 'id' in cur_type.elems:
+            t = t(id=T.t_id, **t.elems).set_options(pk=[['id']])
+
         for e_name, e1_type in t.elems.items():
+
+            if e_name not in cur_type.elems:
+                raise exc.pql_TypeError.make(state, table_def, f"Column '{e_name}' defined, but doesn't exist in database.")
+
             e2_type = cur_type.elems[e_name]
             # XXX use can_cast() instead of hardcoding it
             # if not (e1_type <= e2_type or (e1_type <= T.t_id and e2_type <= T.int)):
@@ -112,6 +122,8 @@ def _execute(state: State, table_def: ast.TableDef):
 
         inst = objects.new_table(t, table_def.name, select_fields=True)
     else:
+        # Auto-add id by default
+        t = t(id=T.t_id, **t.elems).set_options(pk=[['id']])
         inst = objects.new_table(t, table_def.name)
 
     state.set_var(table_def.name, inst)
