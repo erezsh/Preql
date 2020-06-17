@@ -107,7 +107,7 @@ def _execute(state: State, table_def: ast.TableDef):
         cur_type = import_table_type(state, table_def.name, set(t.elems))
 
         # Auto-add id only if it exists already
-        if 'id' in cur_type.elems:
+        if 'id' in cur_type.elems and 'id' not in t.elems:
             t = t(id=T.t_id, **t.elems).set_options(pk=[['id']])
 
         for e_name, e1_type in t.elems.items():

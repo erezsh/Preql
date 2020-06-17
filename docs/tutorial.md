@@ -402,7 +402,7 @@ o                       p
 {'value': 7, 'id': 4}   {'value': 7, 'id': 4}
 {'value': 11, 'id': 6}  {'value': 11, 'id': 5}
 
-// We can of course destructure it into a regular table
+// We can then destructure it into a regular table
 >> join(o: odds.value, p: primes.value) {o.value, o_id: o.id, p_id: p.id}
 table join33_proj34, count=4
   value    o_id    p_id
@@ -420,7 +420,7 @@ table join30_proj31, count=2
    1  Palau
    2  Nauru
 
-// But of course the best way to accomplish this is to use the `in` operator
+// But idiomatically, the best way to accomplish this is to use the `in` operator
 >> Country[name in ["Palau", "Nauru"]]
 table Country, count=2
   id  name      population
