@@ -457,14 +457,21 @@ def _cast(state, inst_type: T.t_relation, target_type: T.t_id, inst):
 
 
 
-def pql_import_table(state: State, name: ast.Expr):
-    "Import an existing table from SQL"
+def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] = objects.null):
+    """Import an existing table from SQL
+
+    If the columns argument is provided, only these columns will be imported.
+
+    Example:
+        >> import_table("my_sql_table", ["some_column", "another_column])
+    """
     # XXX This is postgres specific!
     if state.db.target != 'postgres':
         raise pql_NotImplementedError.make(state, name, "Only supported on 'postgres' so far")
 
     # Get table type
     name_str = localize(state, evaluate(state, name))
+    columns_whitelist = set(localize(state, evaluate(state, columns)) or [])
     if not isinstance(name_str, str):
         raise exc.pql_TypeError.make(state, name, "Expected string")
 
@@ -480,30 +487,42 @@ def pql_import_table(state: State, name: ast.Expr):
            FROM information_schema.columns
            WHERE table_name = '%s'
         """ % name_str
-    columns = db_query(state, sql.RawSql(columns_t, columns_q))
+    sql_columns = db_query(state, sql.RawSql(columns_t, columns_q))
 
-    cols = [None] * len(columns)
-    for c in columns:
-        cols[c['pos']-1] = c['name'], {
-            'integer': T.int,
-            'serial': T.t_id,
-            'bigserial': T.t_id,
-            'smallint': T.int,  # TODO smallint / bigint?
-            'bigint': T.int,
-            'character varying': T.string,
-            'character': T.string,  # TODO char?
-            'real': T.float,
-            'double precision': T.float,    # double on 32-bit?
-            'boolean': T.bool,
-            'timestamp': T.datetime,
-            'timestamp without time zone': T.datetime,
-            'text': T.text,
-        }[c['type']]
+    if columns_whitelist:
+        sql_columns = [c for c in sql_columns if c['name'] in columns_whitelist]
 
-    t = T.table(**dict(cols)).set_options(name=name_str)
+    type_from_sql = {
+        'integer': T.int,
+        'serial': T.t_id,
+        'bigserial': T.t_id,
+        'smallint': T.int,  # TODO smallint / bigint?
+        'bigint': T.int,
+        'character varying': T.string,
+        'character': T.string,  # TODO char?
+        'real': T.float,
+        'double precision': T.float,    # double on 32-bit?
+        'boolean': T.bool,
+        'timestamp': T.datetime,
+        'timestamp without time zone': T.datetime,
+        'text': T.text,
+    }
+
+    cols = [(c['pos'], c['name'], type_from_sql[c['type']]) for c in sql_columns]
+    cols.sort()
+    cols = dict(c[1:] for c in cols)
+
+    t = T.table(**cols).set_options(name=name_str)
 
     # Get table contents
-    return objects.new_table(t)
+    inst = objects.new_table(t)
+
+    # XXX kinda hacky
+    if columns_whitelist:
+        code = sql.Select(t, inst.code, [sql.Name(ast, n) for n in cols])
+        inst = inst.replace(code=code)
+
+    return inst
 
 
 def pql_connect(state: State, uri: ast.Expr):
