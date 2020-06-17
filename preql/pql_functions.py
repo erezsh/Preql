@@ -457,15 +457,16 @@ def _cast(state, inst_type: T.t_relation, target_type: T.t_id, inst):
 
 
 
-def pql_import_table(state: State, name_ast: ast.Expr):
+def pql_import_table(state: State, name: ast.Expr):
+    "Import an existing table from SQL"
     # XXX This is postgres specific!
     if state.db.target != 'postgres':
-        raise pql_NotImplementedError.make(state, name_ast, "Only supported on 'postgres' so far")
+        raise pql_NotImplementedError.make(state, name, "Only supported on 'postgres' so far")
 
     # Get table type
-    name = localize(state, evaluate(state, name_ast))
-    if not isinstance(name, str):
-        raise exc.pql_TypeError.make(state, name_ast, "Expected string")
+    name_str = localize(state, evaluate(state, name))
+    if not isinstance(name_str, str):
+        raise exc.pql_TypeError.make(state, name, "Expected string")
 
     columns_t = T.table(
         schema=T.string,
@@ -478,7 +479,7 @@ def pql_import_table(state: State, name_ast: ast.Expr):
     columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
            FROM information_schema.columns
            WHERE table_name = '%s'
-        """ % name
+        """ % name_str
     columns = db_query(state, sql.RawSql(columns_t, columns_q))
 
     cols = [None] * len(columns)
@@ -499,7 +500,7 @@ def pql_import_table(state: State, name_ast: ast.Expr):
             'text': T.text,
         }[c['type']]
 
-    t = T.table(**dict(cols)).set_options(name=name)
+    t = T.table(**dict(cols)).set_options(name=name_str)
 
     # Get table contents
     return objects.new_table(t)
