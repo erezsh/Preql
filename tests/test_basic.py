@@ -547,6 +547,10 @@ class BasicTests(TestCase):
         self.assertRaises( pql_TypeError, preql, """ "a" in [2] """)
         # self.assertRaises( pql_TypeError, preql, """ 4 in ["a", "B"] """) # TODO good or bad?
 
+        self.assertEqual( preql("""null == null"""), True )
+        self.assertEqual( preql("""null != null"""), False )
+        self.assertEqual( preql("""null != 1"""), True )
+        self.assertEqual( preql(""" "a" != null """), True )
 
 
     def test_list_ops(self):
@@ -885,6 +889,38 @@ class BasicTests(TestCase):
             {'a.value': 4, 'b.value': 8}]
         assert (preql('A_B {a.value, b.value}').json() ) == res
         assert (preql('A_B {a, b} {a.value, b.value}').json() ) == res
+
+
+    def test_partial_table(self):
+        p = self.Preql()
+        p("""
+            table A {
+                a: int
+                b: int?
+                c: string
+                d: float
+                e: bool
+                g: text
+            }
+
+            new A(1, null, "hello", 3.14, true, "world")
+
+            A = null
+            assert A == null
+        """)
+        assert p.A is None
+
+        p("""
+            table A {
+                d: float
+                c: string
+                e: bool
+            }
+
+            assert count(A[c ~ "hello"]) == 1
+            assert count(A[c ~ "hell"]) == 0
+            assert (one one A{d}) == 3.14
+        """)
 
     @skip("Not ready yet")
     def test_self_reference(self):

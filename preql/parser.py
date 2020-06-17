@@ -200,6 +200,7 @@ class TreeToAst(Transformer):
     table_def = ast.TableDef
     col_def = ast.ColumnDef
     print = ast.Print
+    assert_ = ast.Assert
     return_stmt = ast.Return
     throw = ast.Throw
     if_stmt = ast.If

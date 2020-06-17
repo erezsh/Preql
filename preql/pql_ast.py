@@ -226,6 +226,10 @@ class Print(Statement):
     value: Object
 
 @dataclass
+class Assert(Statement):
+    cond: Object
+
+@dataclass
 class Return(Statement):
     value: Object
 

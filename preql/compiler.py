@@ -230,7 +230,7 @@ def _compare(state, op, a: T.any, b: T.any):
 
 @pql_dp
 def _compare(state, op, a: T.null, b: T.null):
-    return objects.new_value_instance(True)
+    return objects.new_value_instance(op == '=')
 
 @pql_dp
 def _compare(state, op, a: T.type, b: T.null):

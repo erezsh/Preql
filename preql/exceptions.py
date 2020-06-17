@@ -80,6 +80,9 @@ class pql_DatabaseConnectError(PreqlError_Message):
 class pql_CompileError(PreqlError_Message):
     pass
 
+class pql_AssertionError(PreqlError_Message):
+    pass
+
 
 
 @dataclass

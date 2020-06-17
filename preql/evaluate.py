@@ -191,6 +191,18 @@ def _execute(state: State, p: ast.Print):
     print(res)
 
 @dy
+def _execute(state: State, p: ast.Assert):
+    inst = evaluate(state, p.cond)
+    res = localize(state, inst)
+    if not res:
+        # TODO pretty print values
+        if isinstance(p.cond, ast.Compare):
+            s = (' %s '%p.cond.op).join(evaluate(state, a).repr(state) for a in p.cond.args)
+        else:
+            s = str(p.cond)
+        raise exc.pql_AssertionError.make(state, p.cond, f"Assertion failed: {s}")
+
+@dy
 def _execute(state: State, cb: ast.CodeBlock):
     for stmt in cb.statements:
         execute(state, stmt)
