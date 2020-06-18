@@ -102,7 +102,7 @@ class MyCustomCompleter(Completer):
 
                 yield Completion(
                     b, start_position=0,
-                    display=HTML('<b>%s</b>%s - <blue>%s</blue>' % (a, b, html_escape(t))),
+                    display=HTML('<b>%s</b>%s: <blue>%s</blue>' % (a, b, html_escape(t))),
                     )
 
 class MyValidator(Validator):
@@ -116,10 +116,9 @@ class MyValidator(Validator):
         except pql_SyntaxError as e:
             text_ref, message = e.args
             if text_ref:
-                pos = text_ref[-1].ref.start.char_index
-            else:
-                pos = 0
-            raise ValidationError(message="Illegal syntax", cursor_position=pos)
+                pos = text_ref[-1].ref.end.char_index
+                if pos < len(text):
+                    raise ValidationError(message=message, cursor_position=pos)
         # except Exception as e:
             # raise ValidationError(message=e.args[0], cursor_position=0)
             # pass
@@ -145,7 +144,7 @@ def start_repl(p, prompt=' >> '):
             lexer=PygmentsLexer(GoLexer),
             completer=MyCustomCompleter(p.interp.state),
             # key_bindings=kb
-            #, validator=MyValidator())
+            validator=MyValidator(),
         )
 
         @Condition

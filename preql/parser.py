@@ -265,15 +265,17 @@ def parse_stmts(s, source_file):
     except UnexpectedInput as e:
         pos =  TextPos(e.pos_in_stream, e.line, e.column)
         assert isinstance(source_file, (str, Path)), source_file
-        ref = TextReference(s, str(source_file), TextRange(pos, pos))
         if isinstance(e, UnexpectedToken):
             if e.token.type == '$END':
                 msg = "Code ended unexpectedly"
+                ref = TextReference(s, str(source_file), TextRange(pos, TextPos(len(s), -1 ,-1)))
                 raise pql_SyntaxError_PrematureEnd([ref], "Syntax error: " + msg)
             else:
                 msg = "Unexpected token: '%s'" % e.token
         else:
             msg = "Unexpected character: '%s'" % s[e.pos_in_stream]
+
+        ref = TextReference(s, str(source_file), TextRange(pos, pos))
         raise pql_SyntaxError([ref], "Syntax error: " + msg)
 
     return TreeToAst(code_ref=(s, source_file)).transform(tree)
