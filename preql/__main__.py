@@ -8,18 +8,10 @@ parser.add_argument('-d', '--debug', action='store_true', help="Display debug in
 parser.add_argument('script_path', type=str, nargs='?', default=None, help='Path to a Preql script to run')
 
 def find_dot_preql():
-    current_dir = Path.cwd()
-    while True:
-        dot_preql = current_dir / ".preql"
+    for p in Path.cwd().parents:
+        dot_preql = p / ".preql"
         if dot_preql.exists():
             return dot_preql
-
-        if current_dir.is_mount():
-            return
-
-        current_dir = current_dir.parent
-
-
 
 def main():
     args = parser.parse_args()

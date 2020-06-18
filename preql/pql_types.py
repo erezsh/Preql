@@ -374,7 +374,7 @@ def table_params(t):
 
 @combined_dp
 def restructure_result(t: T.struct, i):
-    return ({name: restructure_result(col, i) for name, col in t.elems.items()})
+    return ({name: restructure_result(col, i) for name, col in table_to_struct(t).elems.items()})
 
 @combined_dp
 def restructure_result(t: T.union[T.primitive, T.null], i):
@@ -396,6 +396,7 @@ def table_flat_for_insert(table):
     return classify_bool(names, lambda name: name in pks)
 
 def table_to_struct(t):
+    "Misnamed.."
     elems = t.elems
     if isinstance(elems, tuple):
         assert len(elems) == 1
