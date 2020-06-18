@@ -924,7 +924,7 @@ class BasicTests(TestCase):
 
     @skip("Not ready yet")
     def test_self_reference(self):
-        assert False, "Not ready yet"
+        # assert False, "Not ready yet"
         preql = self.Preql()
         preql('''
             table Person {

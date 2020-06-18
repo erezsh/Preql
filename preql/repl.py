@@ -16,8 +16,7 @@ from . import pql_ast as ast
 from .api import TablePromise
 from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError_PrematureEnd, pql_SyntaxError
 from .pql_types import Object
-
-
+from .parser import parse_stmts
 
 
 class RowWrapper:
@@ -69,10 +68,72 @@ from pygments.lexers.python import Python3Lexer
 from pygments.lexers.go import GoLexer
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.filters import Condition
+from prompt_toolkit.validation import Validator, ValidationError
 from prompt_toolkit.application.current import get_app
 
-from .parser import parse_stmts
+from prompt_toolkit.completion import WordCompleter
 
+KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true'.split()
+# word_completer = WordCompleter(KEYWORDS)
+KEYWORDS = {k:None for k in KEYWORDS}
+
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.formatted_text.html import HTML, html_escape
+
+class MyCustomCompleter(Completer):
+    def __init__(self, state):
+        self.state = state
+
+    def get_completions(self, document, complete_event):
+        all_vars = self.state.ns.get_all_vars()
+        all_vars.update(KEYWORDS)
+        fragment = document.text[document.find_start_of_previous_word():]
+
+        for k,v in all_vars.items():
+            if k.startswith(fragment):
+                a, b = k[:len(fragment)], k[len(fragment):]
+                if v is None:
+                    t = "<keyword>"
+                else:
+                    try:
+                        t = v.type
+                    except AttributeError:
+                        t = type(v)
+
+                yield Completion(
+                    b, start_position=0,
+                    display=HTML('<b>%s</b>%s - <blue>%s</blue>' % (a, b, html_escape(t))),
+                    )
+
+class MyValidator(Validator):
+    def validate(self, document):
+        text = document.text
+        if not text.strip():
+            return
+
+        try:
+            s = parse_stmts(text, '<repl>')
+        except pql_SyntaxError as e:
+            text_ref, message = e.args
+            if text_ref:
+                pos = text_ref[-1].ref.start.char_index
+            else:
+                pos = 0
+            raise ValidationError(message="Illegal syntax", cursor_position=pos)
+        # except Exception as e:
+            # raise ValidationError(message=e.args[0], cursor_position=0)
+            # pass
+
+from prompt_toolkit.key_binding import KeyBindings
+kb = KeyBindings()
+@kb.add('c-space')
+def _(event):
+    " Initialize autocompletion, or select the next completion. "
+    buff = event.app.current_buffer
+    if buff.complete_state:
+        buff.complete_next()
+    else:
+        buff.start_completion(select_first=False)
 
 
 def start_repl(p, prompt=' >> '):
@@ -80,7 +141,12 @@ def start_repl(p, prompt=' >> '):
     save_last = '_'   # XXX A little hacky
 
     try:
-        session = PromptSession()
+        session = PromptSession(
+            lexer=PygmentsLexer(GoLexer),
+            completer=MyCustomCompleter(p.interp.state),
+            # key_bindings=kb
+            #, validator=MyValidator())
+        )
 
         @Condition
         def multiline_filter():
@@ -99,7 +165,7 @@ def start_repl(p, prompt=' >> '):
         while True:
             # Read
             try:
-                code = session.prompt(prompt, lexer=PygmentsLexer(GoLexer), multiline=multiline_filter)
+                code = session.prompt(prompt, multiline=multiline_filter)
                 if not code.strip():
                     continue
 
