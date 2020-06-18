@@ -98,7 +98,11 @@ class Parameter(Sql):
     name: str
 
     def _compile(self, qb):
-        obj = qb.parameters[-1].get_var(self.name)
+        # TODO messy
+        from .evaluate import evaluate
+        state, ns = qb.parameters[-1]
+        obj = ns.get_var(state, self.name)
+        obj = evaluate(state, obj)
         assert obj.type == self.type
         return obj.code.compile(qb).text
 
@@ -685,11 +689,14 @@ def value(x):
         # TODO Better to pass the object instead of a string?
         r = repr(str(x))
 
-    # elif t <= T.union[T.string, T.text]:
-    elif t <= T.string:
+    elif t <= T.union[T.string, T.text]:
         r = "'%s'" % str(x).replace("'", "''")
 
+    elif t <= T.decimal:
+        r = repr(float(x))  # TODO SQL decimal?
+
     else:
+        assert t <= T.union[T.number, T.bool], t
         r = repr(x)
 
     return Primitive(t, r)

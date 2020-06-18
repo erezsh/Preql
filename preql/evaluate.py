@@ -400,7 +400,7 @@ def eval_func_call(state, func, args):
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:
-            params = {name: ast.Parameter(func.text_ref, name, value.type) for name, value in args.items()}
+            params = {name: ast.Parameter(None, name, value.type) for name, value in args.items()}
             sig = (func.name,) + tuple(a.type for a in args.values())
 
             try:
@@ -413,7 +413,7 @@ def eval_func_call(state, func, args):
                         logging.info("Compiled successfully")
                         state._cache[sig] = expr
 
-                expr = ast.ResolveParameters(func.text_ref, expr, args)
+                expr = ast.ResolveParameters(None, expr, args)
             except exc.InsufficientAccessLevel:
                 # Don't cache
                 expr = func.expr
@@ -817,7 +817,7 @@ def __resolve_sql_parameters(ns, node):
 
 def _resolve_sql_parameters(state, node):
     # 1. Resolve parameters while compiling
-    return sql.ResolveParameters(node, copy(state.ns))
+    return sql.ResolveParameters(node, (state, copy(state.ns)))
     # 2. Resolve parameters before compiling. Eqv to (1) but slower
     # return __resolve_sql_parameters(state.ns, node)
 

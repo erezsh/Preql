@@ -182,6 +182,7 @@ T.number = [T.primitive],
 T.int = [T.number],
 T.float = [T.number],
 T.bool = [T.primitive],    # number?
+T.decimal = [T.number],
 
 T.datetime = [T.primitive],    # primitive? struct?
 
@@ -207,12 +208,14 @@ def join_names(names):
     return "_".join(names)
 
 
+from decimal import Decimal
 _t = {
     bool: T.bool,
     int: T.int,
     float: T.float,
     str: T.string,
     datetime: T.datetime,
+    Decimal: T.decimal,
 }
 def from_python(t):
     return _t[t]
@@ -254,6 +257,10 @@ pql_dp = runtype.Dispatch(MyTypeSystem())
 @pql_dp
 def repr_value(v):
     return repr(v.value)
+
+@pql_dp
+def repr_value(v: T.decimal):
+    raise exc.pql_NotImplementedError([], "Decimal not implemented")
 
 @pql_dp
 def repr_value(v: T.string):
