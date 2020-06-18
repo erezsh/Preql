@@ -1,6 +1,7 @@
 import argparse
 from . import Preql
 from pathlib import Path
+from itertools import chain
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', help="Enter interactive mode after running the script")
@@ -8,7 +9,8 @@ parser.add_argument('-d', '--debug', action='store_true', help="Display debug in
 parser.add_argument('script_path', type=str, nargs='?', default=None, help='Path to a Preql script to run')
 
 def find_dot_preql():
-    for p in Path.cwd().parents:
+    cwd = Path.cwd()
+    for p in chain([cwd], cwd.parents):
         dot_preql = p / ".preql"
         if dot_preql.exists():
             return dot_preql
