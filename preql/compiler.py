@@ -566,3 +566,10 @@ def guess_field_name(f: ast.Projection):
 def guess_field_name(f: ast.FuncCall):
     return guess_field_name(f.func)
 
+
+class Autocomplete(Exception):
+    pass
+@dy
+def compile_to_inst(state: State, marker: ast.Marker):
+    ns = state.ns.get_all_vars()
+    raise Autocomplete(ns)

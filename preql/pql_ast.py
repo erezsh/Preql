@@ -272,3 +272,7 @@ class List_(Expr):
 @dataclass
 class Dict_(Expr):
     elems: dict
+
+@dataclass
+class Marker(Expr):
+    pass

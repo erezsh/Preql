@@ -132,6 +132,7 @@ named_expr: [name ":"] expr
       | "null" -> null
       | "false" -> false
       | "true" -> true
+      | _MARKER -> marker
       | ellipsis
      //  | range
 
@@ -170,3 +171,5 @@ LONG_STRING: /""".*?(?<!\\)(\\\\)*?"""/s
 %ignore WS_INLINE
 %ignore /\\[\t \f]*\r?\n/   // LINE_CONT
 %ignore COMMENT
+
+%declare _MARKER

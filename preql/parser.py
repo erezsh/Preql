@@ -224,6 +224,8 @@ class TreeToAst(Transformer):
     def codeblock(self, stmts, meta):
         return ast.CodeBlock(make_text_reference(*self.code_ref, meta), stmts)
 
+    marker = ast.Marker
+
     def __default__(self, data, children, meta):
         raise Exception("Unknown rule:", data)
 
@@ -259,10 +261,13 @@ parser = Lark.open(
     # transformer=T()
 )
 
-def parse_stmts(s, source_file):
+def parse_stmts(s, source_file, puppet=False):
     try:
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
+        if puppet:
+            raise
+
         pos =  TextPos(e.pos_in_stream, e.line, e.column)
         assert isinstance(source_file, (str, Path)), source_file
         if isinstance(e, UnexpectedToken):

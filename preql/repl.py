@@ -80,14 +80,86 @@ KEYWORDS = {k:None for k in KEYWORDS}
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text.html import HTML, html_escape
 
+
+_closing_tokens = {
+    '$END': '<END>',
+    '_MARKER': '<MARKER>',
+    'RSQB': ']',
+    'RBRACE': '}',
+}
+
+from lark import Token, UnexpectedCharacters, UnexpectedToken
+from preql.parser import parse_stmts, TreeToAst
+from preql.evaluate import evaluate, execute
+from preql.compiler import Autocomplete
+from preql.exceptions import PreqlError
+
+def autocomplete_tree(puppet):
+    if not puppet:
+        return
+
+    res = None
+    while res is None:
+        choices = puppet.choices()
+        for t, v in _closing_tokens.items():
+            if t in choices:
+                t = Token(t, v)
+                break
+        else:
+            choices = [c for c in choices if c.isupper()]
+            if len(choices) == 1:
+                c ,= choices
+                t = Token(c, "<PLACEHOLDER>")
+            else:
+                return
+
+        res = puppet.feed_token(t)
+
+    return res
+
+def autocomplete(state, code, source='<autocomplete>'):
+    try:
+        parse_stmts(code, source, True)
+    except UnexpectedCharacters:
+        pass
+    except UnexpectedToken as e:
+            tree = autocomplete_tree(e.puppet)
+            if tree:
+                stmts = TreeToAst(code_ref=(code, source)).transform(tree)
+                stmt = stmts[-1]
+                try:
+                    execute(state, stmt)
+                except Autocomplete as e:
+                    ns = e.args[0]
+                    return ns
+                except PreqlError:
+                    pass
+
+    ns = state.ns.get_all_vars()
+    return ns
+
+def last_word(s):
+    if not s:
+        return '', ''
+    i = len(s)
+    while i and s[i-1].isalpha():
+        i -= 1
+    return s[:i], s[i:]
+
+
 class MyCustomCompleter(Completer):
     def __init__(self, state):
         self.state = state
 
     def get_completions(self, document, complete_event):
-        all_vars = self.state.ns.get_all_vars()
+        context, fragment = last_word(document.text)
+
+        if context: # and context[-1] in ("{", "["):
+            all_vars = autocomplete(self.state, context)
+        else:
+            all_vars = self.state.ns.get_all_vars()
+
         all_vars.update(KEYWORDS)
-        fragment = document.text[document.find_start_of_previous_word():]
 
         for k,v in all_vars.items():
             if k.startswith(fragment):

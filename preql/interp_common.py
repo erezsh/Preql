@@ -133,7 +133,7 @@ class Namespace:
 
     def get_all_vars(self):
         d = {}
-        for scope in self.ns:
+        for scope in reversed(self.ns):
             d.update(scope) # Overwrite upper scopes
         return d
 
