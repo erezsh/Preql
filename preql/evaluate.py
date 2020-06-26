@@ -99,7 +99,7 @@ def db_query(state: State, sql, subqueries=None):
 
 @dy
 def _execute(state: State, table_def: ast.TableDef):
-    if isinstance(table_def.columns[-1], ast.Ellipsis):
+    if table_def.columns and isinstance(table_def.columns[-1], ast.Ellipsis):
         ellipsis = table_def.columns.pop()
     else:
         ellipsis = None

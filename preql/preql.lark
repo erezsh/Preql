@@ -1,5 +1,17 @@
 stmts: _NL? stmt+   -> as_list
-?stmt: (table_def | struct_def | func_def | set_value | insert_rows | print | assert_ | if_stmt | for_stmt | return_stmt | throw | try_catch | expr _NL) //| add_row
+?stmt: table_def
+     | struct_def
+     | func_def
+     | set_value
+     | insert_rows
+     | print
+     | assert_
+     | if_stmt
+     | for_stmt
+     | return_stmt
+     | throw
+     | try_catch
+     | expr _NL
 
 _ml_seperated{item}: (item _ml_sep)* item _ml_sep?
 _ml_sep: "," | "," _NL | _NL

@@ -73,7 +73,7 @@ from prompt_toolkit.application.current import get_app
 
 from prompt_toolkit.completion import WordCompleter
 
-KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true'.split()
+KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true return !in'.split()
 # word_completer = WordCompleter(KEYWORDS)
 KEYWORDS = {k:None for k in KEYWORDS}
 
@@ -82,52 +82,90 @@ from prompt_toolkit.formatted_text.html import HTML, html_escape
 
 
 _closing_tokens = {
-    '$END': '<END>',
-    '_MARKER': '<MARKER>',
     'RSQB': ']',
     'RBRACE': '}',
+    'RPAR': ')',
+    '$END': '<END>',
+    '_NL': '\n',
+    # '_MARKER': '<MARKER>',
 }
 
-from lark import Token, UnexpectedCharacters, UnexpectedToken
+from lark import Token, UnexpectedCharacters, UnexpectedToken, Tree
 from preql.parser import parse_stmts, TreeToAst
 from preql.evaluate import evaluate, execute
 from preql.compiler import Autocomplete
 from preql.exceptions import PreqlError
 
+from collections import deque
+def bfs(initial, expand):
+    open_q = deque(list(initial))
+    visited = set(open_q)
+    while open_q:
+        node = open_q.popleft()
+        yield node
+        for next_node in expand(node):
+            if next_node not in visited:
+                visited.add(next_node)
+                open_q.append(next_node)
+
+def just_tree_data(l):
+    return [x.data for x in l if isinstance(x, Tree)]
+
+def _search_puppet(puppet):
+    def expand(p):
+        for choice in p.choices():
+            if choice in _closing_tokens:
+                t = Token(choice, _closing_tokens[choice])
+                new_p = p.copy()
+                try:
+                    res = new_p.feed_token(t)
+                except KeyError:    # Illegal
+                    pass
+                else:
+                    yield new_p
+
+
+    for p in bfs([puppet], expand):
+        if p.result:
+            # print(p.result.pretty())
+            # breakpoint()
+            return p.result
+
 def autocomplete_tree(puppet):
     if not puppet:
         return
 
-    res = None
-    while res is None:
-        choices = puppet.choices()
-        for t, v in _closing_tokens.items():
-            if t in choices:
-                t = Token(t, v)
-                break
-        else:
-            choices = [c for c in choices if c.isupper()]
-            if len(choices) == 1:
-                c ,= choices
-                t = Token(c, "<PLACEHOLDER>")
-            else:
-                return
+    # No marker, no autocomplete
+    choices = puppet.choices()
+    if '_MARKER' not in choices:
+        return
 
+    # Feed marker
+    t = Token('_MARKER', '<MARKER>')
+    try:
         res = puppet.feed_token(t)
+    except KeyError:    # Could still fail
+        return
 
-    return res
+    assert not res
+
+    # Search nearest solution
+    return _search_puppet(puppet)
+
+
 
 def autocomplete(state, code, source='<autocomplete>'):
     try:
-        parse_stmts(code, source, True)
+        parse_stmts(code, source, wrap_syntax_error=False)
     except UnexpectedCharacters:
-        pass
+        return []
     except UnexpectedToken as e:
             tree = autocomplete_tree(e.puppet)
             if tree:
                 stmts = TreeToAst(code_ref=(code, source)).transform(tree)
                 stmt = stmts[-1]
                 try:
+                    # TODO autocomplete_execute
                     execute(state, stmt)
                 except Autocomplete as e:
                     ns = e.args[0]
@@ -138,27 +176,31 @@ def autocomplete(state, code, source='<autocomplete>'):
     ns = state.ns.get_all_vars()
     return ns
 
+def is_name(s):
+    return s.isalnum() or s in ('_', '!')
+
 def last_word(s):
     if not s:
         return '', ''
     i = len(s)
-    while i and s[i-1].isalpha():
+    while i and is_name(s[i-1]):
         i -= 1
     return s[:i], s[i:]
 
 
-class MyCustomCompleter(Completer):
+class Autocompleter(Completer):
     def __init__(self, state):
         self.state = state
 
     def get_completions(self, document, complete_event):
         context, fragment = last_word(document.text)
 
-        if context: # and context[-1] in ("{", "["):
-            all_vars = autocomplete(self.state, context)
-        else:
-            all_vars = self.state.ns.get_all_vars()
+        if not fragment:
+            return
 
+        assert is_name(fragment[-1])
+
+        all_vars = autocomplete(self.state, context)
         all_vars.update(KEYWORDS)
 
         for k,v in all_vars.items():
@@ -214,7 +256,7 @@ def start_repl(p, prompt=' >> '):
     try:
         session = PromptSession(
             lexer=PygmentsLexer(GoLexer),
-            completer=MyCustomCompleter(p.interp.state),
+            completer=Autocompleter(p.interp.state),
             # key_bindings=kb
             validator=MyValidator(),
         )

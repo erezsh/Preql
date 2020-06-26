@@ -261,11 +261,11 @@ parser = Lark.open(
     # transformer=T()
 )
 
-def parse_stmts(s, source_file, puppet=False):
+def parse_stmts(s, source_file, wrap_syntax_error=True):
     try:
         tree = parser.parse(s+"\n", start="stmts")
     except UnexpectedInput as e:
-        if puppet:
+        if not wrap_syntax_error:
             raise
 
         pos =  TextPos(e.pos_in_stream, e.line, e.column)
