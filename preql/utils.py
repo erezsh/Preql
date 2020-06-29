@@ -10,8 +10,8 @@ import runtype
 
 from . import settings
 
-mut_dataclass = runtype.dataclass(check_types=settings.debug, frozen=False)
-dataclass = runtype.dataclass(check_types=settings.debug)
+mut_dataclass = runtype.dataclass(check_types=settings.typecheck, frozen=False)
+dataclass = runtype.dataclass(check_types=settings.typecheck)
 
 
 class SafeDict(dict):

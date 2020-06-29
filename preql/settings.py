@@ -1,20 +1,13 @@
-import sys
-import logging
 
-logging.basicConfig(level=logging.INFO,
-                    format="(%(levelname)s) %(name)s -- %(message)s",
-                    )#datefmt='%m-%d %H:%M')
+import sys
 
 optimize = True
 cache = False
 
-debug = False # not sys.flags.optimize
 print_sql = False
-
+typecheck = False # not sys.flags.optimize
 
 try:
     from .local_settings import *
 except ImportError:
     pass
-
-

@@ -1,9 +1,11 @@
 from .utils import dataclass
+from .loggers import sql_log
 
 from .sql import Sql, QueryBuilder, sqlite, postgres
 from . import exceptions
 
 from .pql_types import T, Type, from_sql, Object
+
 
 @dataclass
 class Const(Object):
@@ -23,7 +25,7 @@ class SqlInterface:
         sql_code = self._compile_sql(sql, subqueries, qargs, state)
 
         if self._print_sql and not quiet:
-            print_sql(sql_code)
+            log_sql(sql_code)
 
         cur = self._execute_sql(sql_code)
 
@@ -79,9 +81,10 @@ class SqlInterface:
         self._conn.close()
 
 
-def print_sql(sql):
+def log_sql(sql):
     for i, s in enumerate(sql.split('\n')):
-        print('/**/    ' if i else '/**/;;  ', s)
+        prefix = '/**/    ' if i else '/**/;;  '
+        sql_log.debug(prefix+s)
 
 
 class PostgresInterface(SqlInterface):

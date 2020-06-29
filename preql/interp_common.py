@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from copy import copy
+from logging import getLogger
 
 import dsnparse
 
@@ -14,6 +15,8 @@ from .sql_interface import SqliteInterface, PostgresInterface, ConnectError
 from .pql_types import T, Type
 
 dy = Dispatch()
+
+logger = getLogger('interp')
 
 # Define common dispatch functions
 @dy
@@ -74,7 +77,7 @@ class State:
             raise Exception("Bad access. Security risk.")
 
     def connect(self, uri):
-        print(f"[Preql] Connecting to {uri}")
+        logger.info(f"[Preql] Connecting to {uri}")
         try:
             self.db = create_engine(uri, self.db._debug)
         except NotImplementedError as e:
