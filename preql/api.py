@@ -119,11 +119,11 @@ def promise(state, inst):
 class Interface:
     __name__ = "Preql"
 
-    def __init__(self, db_uri=None, debug=settings.debug, save_last=None):
+    def __init__(self, db_uri=None, print_sql=settings.print_sql, save_last=None):
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
 
-        self.engine = create_engine(db_uri, debug=debug)
+        self.engine = create_engine(db_uri, print_sql=print_sql)
         # self.engine.ping()
 
         self.interp = Interpreter(self.engine)

@@ -9,6 +9,7 @@ optimize = True
 cache = False
 
 debug = False # not sys.flags.optimize
+print_sql = False
 
 
 try:
@@ -16,6 +17,4 @@ try:
 except ImportError:
     pass
 
-if debug:
-    print("# DEBUG MODE")
 

@@ -145,15 +145,15 @@ class Namespace:
 
 
 
-def create_engine(db_uri, debug):
+def create_engine(db_uri, print_sql):
     dsn = dsnparse.parse(db_uri)
     if len(dsn.paths) != 1:
         raise ValueError("Bad value for uri: %s" % db_uri)
     path ,= dsn.paths
     if dsn.scheme == 'sqlite':
-        return SqliteInterface(path, debug=debug)
+        return SqliteInterface(path, print_sql=print_sql)
     elif dsn.scheme == 'postgres':
-        return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, debug=debug)
+        return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
 

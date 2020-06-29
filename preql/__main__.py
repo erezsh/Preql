@@ -5,7 +5,7 @@ from itertools import chain
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', help="Enter interactive mode after running the script")
-parser.add_argument('-d', '--debug', action='store_true', help="Display debug information")
+parser.add_argument('--print-sql', action='store_true', help="Print the SQL code that's being executed")
 parser.add_argument('script_path', type=str, nargs='?', default=None, help='Path to a Preql script to run')
 
 def find_dot_preql():
@@ -18,7 +18,7 @@ def find_dot_preql():
 def main():
     args = parser.parse_args()
 
-    p = Preql(debug=args.debug)
+    p = Preql(print_sql=args.print_sql)
 
     interactive = args.interactive
 

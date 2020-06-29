@@ -14,15 +14,15 @@ class ConnectError(Exception):
     pass
 
 class SqlInterface:
-    def __init__(self, debug=False):
-        self._debug = debug
+    def __init__(self, print_sql=False):
+        self._print_sql = print_sql
 
     def query(self, sql, subqueries=None, qargs=(), quiet=False, state=None):
         assert state
         assert isinstance(sql, Sql), sql
         sql_code = self._compile_sql(sql, subqueries, qargs, state)
 
-        if self._debug and not quiet:
+        if self._print_sql and not quiet:
             print_sql(sql_code)
 
         cur = self._execute_sql(sql_code)
@@ -87,20 +87,20 @@ def print_sql(sql):
 class PostgresInterface(SqlInterface):
     target = postgres
 
-    def __init__(self, host, port, database, user, password, debug=True):
+    def __init__(self, host, port, database, user, password, print_sql=True):
         import psycopg2
         try:
             self._conn = psycopg2.connect(host=host, port=port, database=database, user=user, password=password)
         except psycopg2.OperationalError as e:
             raise ConnectError(*e.args) from e
 
-        self._debug = debug
+        self._print_sql = print_sql
 
 
 class SqliteInterface(SqlInterface):
     target = sqlite
 
-    def __init__(self, filename=None, debug=True):
+    def __init__(self, filename=None, print_sql=True):
         import sqlite3
         self._conn = sqlite3.connect(filename or ':memory:')
-        self._debug = debug
+        self._print_sql = print_sql
