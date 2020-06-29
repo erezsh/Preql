@@ -95,7 +95,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        if not (f.type <= T.union[T.primitive, T.struct, T.null]):
+        if not (f.type <= T.union[T.primitive, T.struct, T.null, T.unknown]):
             raise exc.pql_TypeError.make(state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
@@ -252,6 +252,15 @@ def _compare(state, op, a: T.null, b: T.object):
 @pql_dp
 def _compare(state, op, a: T.object, b: T.null):
     return _compare(state, op, b, a)
+
+
+@pql_dp
+def _compare(state, op, a: T.unknown, b: T.object):
+    return objects.UnknownInstance()
+@pql_dp
+def _compare(state, op, a: T.object, b: T.unknown):
+    return objects.UnknownInstance()
+
 
 @pql_dp
 def _compare(state, op, a: T.primitive, b: T.primitive):
@@ -505,13 +514,16 @@ def compile_to_inst(state: State, sel: ast.Selection):
     with state.use_scope(table.all_attrs()):
         conds = evaluate(state, sel.conds)
 
-    for i, c in enumerate(conds):
-        if not (c.type <= T.bool):
-            raise exc.pql_TypeError.make(state, sel.conds[i], f"Selection expected boolean, got {c.type}")
+    if any(t <= T.unknown for t in table.type.elems.values()):
+        code = sql.unknown
+    else:
+        for i, c in enumerate(conds):
+            if not (c.type <= T.bool):
+                raise exc.pql_TypeError.make(state, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
-    code = sql.table_selection(table, [c.code for c in conds])
+        code = sql.table_selection(table, [c.code for c in conds])
 
-    return objects.TableInstance.make(code, table.type, [table] + conds)
+    return type(table).make(code, table.type, [table] + conds)
 
 @dy
 def compile_to_inst(state: State, param: ast.Parameter):
@@ -567,9 +579,9 @@ def guess_field_name(f: ast.FuncCall):
     return guess_field_name(f.func)
 
 
-class Autocomplete(Exception):
+class AutocompleteSuggestions(Exception):
     pass
 @dy
 def compile_to_inst(state: State, marker: ast.Marker):
     ns = state.ns.get_all_vars()
-    raise Autocomplete(ns)
+    raise AutocompleteSuggestions(ns)

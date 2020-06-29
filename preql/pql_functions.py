@@ -9,7 +9,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 
-from .interp_common import State, new_value_instance, dy, exclude_fields
+from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
 from .evaluate import evaluate, localize, db_query, TableConstructor, _destructure_param_match, import_table_type
 from .pql_types import Object, T, table_flat_for_insert, Type, join_names, table_to_struct, combined_dp
 
@@ -192,9 +192,13 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     # 'const table' doesn't
     expr = evaluate(state, expr_ast)
     const = localize(state, const)
-    assert (expr.type <= T.collection), expr
+    assert_type(expr.type, T.collection, state, expr_ast, 'temptable')
 
-    elems = dict(expr.type.elems)
+    # elems = dict(expr.type.elems)
+    elems = table_to_struct(expr.type).elems
+
+    if any(t <= T.unknown for t in elems.values()):
+        return objects.TableInstance.make(sql.null, expr.type, [])
 
     name = state.unique_name("temp")    # TODO get name from table options
 
@@ -266,7 +270,9 @@ def pql_concat(state: State, t1: ast.Expr, t2: ast.Expr):
 
 
 def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
-    assert len(exprs) == 2
+    if len(exprs) != 2:
+        raise pql_TypeError.make(state, None, "join expected only 2 arguments")
+
     exprs = {name: evaluate(state, value) for name,value in exprs.items()}
     assert all(isinstance(x, objects.AbsInstance) for x in exprs.values())
 
@@ -274,6 +280,10 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     if a is objects.EmptyList or b is objects.EmptyList:
         raise pql_TypeError.make(state, None, "Cannot join on an untyped empty list")
+
+    if isinstance(a, objects.UnknownInstance) or isinstance(b, objects.UnknownInstance):
+        table_type = T.table(**{e: T.unknown for e in exprs})
+        return objects.TableInstance.make(sql.unknown, table_type, [])
 
     if isinstance(a, objects.SelectedColumnInstance) and isinstance(b, objects.SelectedColumnInstance):
         cols = a, b

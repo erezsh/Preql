@@ -277,7 +277,7 @@ def execute(state, stmt):
 @dy
 def simplify(state: State, cb: ast.CodeBlock):
     if len(cb.statements) == 1:
-        s ,= cb.statements[0]
+        s ,= cb.statements
         return simplify(state, s)
     return _execute(state, cb)
 
@@ -637,13 +637,20 @@ def apply_database_rw(state: State, new: ast.NewRows):
 
     obj = state.get_var(new.type)
 
+    if len(new.args) > 1:
+        raise exc.pql_NotImplementedError.make(state, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
+
+    if isinstance(obj, objects.UnknownInstance):
+        arg ,= new.args
+        table = evaluate(state, arg.value)
+        fakerows = [objects.RowInstance(T.row[table], {'id': T.t_id})]
+        return ast.List_(new.text_ref, T.list[T.int], fakerows)
+
     if isinstance(obj, objects.TableInstance):
         # XXX Is it always TableInstance? Just sometimes? What's the transition here?
         obj = obj.type
-    assert_type(obj, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
 
-    if len(new.args) > 1:
-        raise exc.pql_NotImplementedError.make(state, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
+    assert_type(obj, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
 
     arg ,= new.args
 
@@ -917,6 +924,12 @@ def table_exists(state, name):
     return db_query(state, sql.RawSql(T.int, "SELECT count(*) FROM information_schema.tables where table_name='%s'" % name)) > 0
 
 
+def _bool_from_sql(n):
+    if n == 'NO':
+        n = False
+    assert isinstance(n, bool)
+    return n
+
 def _type_from_sql(type, nullable):
     d = {
         'integer': T.int,
@@ -937,6 +950,8 @@ def _type_from_sql(type, nullable):
         v = d[type]
     except KeyError:
         return T.string.replace(nullable=True)
+
+    nullable = _bool_from_sql(nullable)
 
     return v.replace(nullable=nullable)
 

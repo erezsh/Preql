@@ -174,9 +174,10 @@ class InternalFunction(Function):
 class AbsInstance(Object):
     def get_attr(self, name):
         v = self.type.get_attr(name)
-        if isinstance(v, T.function):
+        if v <= T.function:
             return MethodInstance(self, v)
 
+        breakpoint()
         raise pql_AttributeError([], f"No such attribute: {name}")
 
 @dataclass
@@ -212,7 +213,7 @@ class Instance(AbsInstance):
         #     return f'<instance of {self.type.repr(state)}>'
 
     def __post_init__(self):
-        assert not self.type.issubtype(T.union[T.struct, T.aggregate, T.table])
+        assert not self.type.issubtype(T.union[T.struct, T.aggregate, T.table, T.unknown])
 
     def flatten_code(self):
         assert not self.type.issubtype(T.struct)
@@ -323,6 +324,8 @@ def make_instance(code, t, insts):
         return TableInstance.make(code, t, insts)
     elif t <= T.aggregate:
         return AggregateInstance(t, make_instance(code, t.elem, insts))
+    elif t <= T.unknown:
+        return unknown
     else:
         return Instance.make(code, t, insts)
 
@@ -417,6 +420,21 @@ class RowInstance(StructInstance):
         inner = [f'{name}: {v.repr(state)}' for name, v in self.attrs.items()]
         return 'Row{%s}' % ', '.join(inner)
 
+
+class UnknownInstance(AbsInstance):
+    type = T.unknown
+    subqueries = {}
+    code = sql.unknown
+
+    def get_attr(self, name):
+        return self # XXX use name?
+
+    def flatten_code(self):
+        return [self.code]
+
+
+unknown = UnknownInstance()
+
 @dataclass
 class SelectedColumnInstance(AbsInstance):
     parent: CollectionInstance
@@ -491,7 +509,7 @@ def new_table(type_, name=None, instances=None, select_fields=False):
     inst = cls.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
 
     if select_fields:
-        code = sql.Select(type_, inst.code, [sql.Name(None, n) for n in type_.elems])
+        code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in type_.elems.items()])
         inst = inst.replace(code=code)
 
     return inst

@@ -38,6 +38,7 @@ class State:
     def __init__(self, db, fmt, ns=None):
         self.db = db
         self.fmt = fmt
+        # Add logger?
 
         self.ns = Namespace(ns)
         self.tick = [0]
@@ -46,14 +47,18 @@ class State:
         self._cache = {}
         self.stacktrace = []
 
-    def __copy__(self):
-        s = State(self.db, self.fmt)
-        s.ns = copy(self.ns)
-        s.tick = self.tick
-        s.access_level = self.access_level
-        s._cache = self._cache
-        s.stacktrace = copy(self.stacktrace)
+    @classmethod
+    def clone(cls, inst):
+        s = cls(inst.db, inst.fmt)
+        s.ns = copy(inst.ns)
+        s.tick = inst.tick
+        s.access_level = inst.access_level
+        s._cache = inst._cache
+        s.stacktrace = copy(inst.stacktrace)
         return s
+
+    def __copy__(self):
+        return self.clone(self)
 
     def reduce_access(self, new_level):
         assert new_level <= self.access_level
@@ -155,7 +160,7 @@ def create_engine(db_uri, debug):
 
 
 def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s, instead got '%s'"):
-    assert isinstance(t, Type)
+    assert isinstance(t, Type), t
     assert isinstance(type_, Type)
     if not (t <= type_):
         if type_.typename == 'union':

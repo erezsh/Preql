@@ -21,6 +21,7 @@ def token_value(self, text_ref, t):
 
 
 def make_text_reference(text, source_file, meta, children=()):
+
     ref = TextRange(
             TextPos(
                 meta.start_pos,
@@ -208,6 +209,8 @@ class TreeToAst(Transformer):
     try_catch = ast.Try
     one = lambda self, meta, nullable, expr: ast.One(meta, expr, nullable is not None)
 
+    marker = ast.Marker
+
     def table_def_by_expr(self, meta, const, name, table_expr):
         return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, const == 'const']))
 
@@ -224,7 +227,6 @@ class TreeToAst(Transformer):
     def codeblock(self, stmts, meta):
         return ast.CodeBlock(make_text_reference(*self.code_ref, meta), stmts)
 
-    marker = ast.Marker
 
     def __default__(self, data, children, meta):
         raise Exception("Unknown rule:", data)
@@ -235,6 +237,7 @@ class Postlexer:
         paren_level = 0
         for token in stream:
             if not (paren_level and token.type == '_NL'):
+                assert token.end_pos is not None
                 yield token
 
             if token.type == 'LPAR':

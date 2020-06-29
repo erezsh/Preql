@@ -101,6 +101,7 @@ class TablePromise:
             limit = index.stop - offset
             return call_pql_func(self._state, '_core_limit_offset', [self._inst, _make_const(limit), _make_const(offset)])
 
+        # TODO different debug log level / mode
         res ,= localize(self._state, evaluate(self._state, self[index:1]))
         return res
 

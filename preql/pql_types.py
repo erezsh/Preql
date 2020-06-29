@@ -127,14 +127,17 @@ class Type(Object, AbsType):
         # TODO fix. Move to pql_dp?
         if self.elems:
             if isinstance(self.elems, dict):
-                elems = '[%s]' % ', '.join(f'{k}: {v.typename_with_q}' for k,v in self.elems.items())
+                elems = '[%s]' % ', '.join(f'{k}: {v.typename_with_q if isinstance(v, Type) else repr(v)}' for k,v in self.elems.items())
             else:
-                elems = '[%s]' % ', '.join(e.typename for e in self.elems)
+                elems = '[%s]' % ', '.join(e.typename if isinstance(e, Type) else repr(e) for e in self.elems)
         else:
             elems = ''
         return f'{self.typename_with_q}{elems}'
 
     def get_attr(self, attr):
+        if self is T.unknown:
+            return self
+
         # XXX hacky
         if attr == 'elem' and self.elems:
             try:
@@ -166,6 +169,7 @@ class TypeDict(dict):
 T = TypeDict()
 
 T.any = ()
+T.unknown = [T.any],
 
 T.union = [T.any],
 T.type = [T.any],

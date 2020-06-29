@@ -177,7 +177,7 @@ class One(Expr):
 
 @dataclass
 class Slice(TableOperation):
-    table: Expr
+    table: Object
     range: Range
 
 @dataclass

@@ -90,7 +90,13 @@ class Null(Sql):
     def _compile(self, qb):
         return 'null'
 
+@dataclass
+class Unknown(Sql):
+    def _compile(self, qb):
+        raise NotImplementedError("Unknown")
+
 null = Null()
+unknown = Unknown()
 
 @dataclass
 class Parameter(Sql):
@@ -650,7 +656,7 @@ def arith(res_type, op, args):
 class StringSlice(Sql):
     string: Sql
     start: Sql
-    stop: Sql
+    stop: Optional[Sql]
 
     type = T.string
 
