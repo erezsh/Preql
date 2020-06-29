@@ -10,8 +10,8 @@ from preql.interp_common import pql_TypeError
 from preql import sql, settings
 from preql.pql_types import T
 
-SQLITE_URI = 'sqlite://:memory:'
-POSTGRES_URI = 'postgres://postgres:qweqwe123@localhost/postgres'
+from .common import PreqlTests, SQLITE_URI, POSTGRES_URI
+
 
 
 def is_eq(a, b):
@@ -24,7 +24,7 @@ def is_eq(a, b):
     ("Unoptimized_Lt", SQLITE_URI, False),
     ("Unoptimized_Pg", POSTGRES_URI, False),
 ])
-class BasicTests(TestCase):
+class BasicTests(PreqlTests):
     def Preql(self):
         settings.optimize = self.optimized
         preql = Preql(self.uri)

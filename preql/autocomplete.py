@@ -3,6 +3,7 @@ from collections import deque
 from lark import Token, UnexpectedCharacters, UnexpectedToken, Tree
 
 from .exceptions import ReturnSignal, pql_NameNotFound, PreqlError
+from .loggers import ac_log
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .utils import bfs
