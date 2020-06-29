@@ -13,55 +13,12 @@ from . import Preql
 from . import pql_objects as objects
 from . import pql_ast as ast
 from .api import TablePromise
-from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError_PrematureEnd, pql_SyntaxError, pql_NameNotFound
+from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError
 from .pql_types import Object
 from .parser import parse_stmts
 from .loggers import ac_log, repl_log
 from . import settings
-
-
-# class RowWrapper:
-#     def __init__(self, row):
-#         self._row = row
-
-#     def __repr__(self):
-#         return self._row.repr()
-
-#     def __getitem__(self, item):
-#         return self._row.getattr(item)
-
-#     def __getattr__(self, attr):
-#         return self[attr]
-
-#     def __iter__(self):
-#         return iter(self._row)
-
-#     def __getstate__(self):
-#         return self._row
-#     def __setstate__(self, x):
-#         self._row = x
-
-
-# class TableWrapper:
-#     def __init__(self, pql_table, interp):
-#         self._pql_table = pql_table
-#         self._interp = interp
-
-#     def __repr__(self):
-#         return self._pql_table.repr(self._interp)
-
-#     def json(self):
-#         return [row.attrs for row in self._query()]
-
-#     def _query(self):
-#         return self._pql_table.query(self._interp, None)
-
-#     def __iter__(self):
-#         return (RowWrapper(row) for row in self._query())
-
-#     def __len__(self):
-#         return self._pql_table.count(self._interp).value
-
+from preql.autocomplete import autocomplete
 
 from prompt_toolkit import prompt
 from prompt_toolkit import PromptSession
@@ -81,118 +38,6 @@ KEYWORDS = {k:None for k in KEYWORDS}
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text.html import HTML, html_escape
 
-
-_closing_tokens = {
-    'RSQB': ']',
-    'RBRACE': '}',
-    'RPAR': ')',
-    '$END': '<END>',
-    '_NL': '\n',
-}
-
-from lark import Token, UnexpectedCharacters, UnexpectedToken, Tree
-from preql.parser import parse_stmts, TreeToAst
-from preql.evaluate import evaluate, execute
-from preql.autocomplete import eval_autocomplete
-from preql.compiler import AutocompleteSuggestions
-from preql.exceptions import PreqlError
-
-from collections import deque
-def bfs(initial, expand):
-    open_q = deque(list(initial))
-    visited = set(open_q)
-    while open_q:
-        node = open_q.popleft()
-        yield node
-        for next_node in expand(node):
-            if next_node not in visited:
-                visited.add(next_node)
-                open_q.append(next_node)
-
-def just_tree_data(l):
-    return [x.data for x in l if isinstance(x, Tree)]
-
-def _search_puppet(puppet):
-    def expand(p):
-        for choice in p.choices():
-            if choice in _closing_tokens:
-                t = Token(choice, _closing_tokens[choice], 1, 1, 1, 1, 2, 2)
-                new_p = p.copy()
-                try:
-                    res = new_p.feed_token(t)
-                except KeyError:    # Illegal
-                    pass
-                else:
-                    yield new_p
-
-
-    for p in bfs([puppet], expand):
-        if p.result:
-            return p.result
-
-def autocomplete_tree(puppet):
-    if not puppet:
-        return
-
-    # No marker, no autocomplete
-    choices = puppet.choices()
-    if '_MARKER' not in choices:
-        return
-
-    # Feed marker
-    t = Token('_MARKER', '<MARKER>', 1, 1, 1, 1, 2, 2)
-    try:
-        res = puppet.feed_token(t)
-    except KeyError:    # Could still fail
-        return
-
-    assert not res
-
-    # Search nearest solution
-    return _search_puppet(puppet)
-
-
-from .interp_common import State
-class AcState(State):
-    def get_var(self, name):
-        try:
-            return self.ns.get_var(self, name)
-        except pql_NameNotFound:
-            return objects.UnknownInstance()
-
-    def replace(self, **kw):
-        assert False
-
-def autocomplete(state, code, source='<autocomplete>'):
-    try:
-        parse_stmts(code, source, wrap_syntax_error=False)
-    except UnexpectedCharacters:
-        return {}
-    except UnexpectedToken as e:
-            tree = autocomplete_tree(e.puppet)
-            if tree:
-                stmts = TreeToAst(code_ref=(code, source)).transform(tree)
-
-                ac_state = AcState.clone(state)
-
-                for stmt in stmts[:-1]:
-                    try:
-                        eval_autocomplete(ac_state, stmt, False)
-                    except PreqlError as e:
-                        ac_log.exception(e)
-
-                try:
-                    # TODO autocomplete_execute
-                    # execute(state, stmt)
-                    eval_autocomplete(ac_state, stmts[-1], True)
-                except AutocompleteSuggestions as e:
-                    ns = e.args[0]
-                    return ns
-                except PreqlError as e:
-                    ac_log.exception(e)
-
-    ns = state.ns.get_all_vars()
-    return ns
 
 def is_name(s):
     return s.isalnum() or s in ('_', '!')
