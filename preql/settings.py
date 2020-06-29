@@ -6,6 +6,7 @@ cache = False
 
 print_sql = False
 typecheck = False # not sys.flags.optimize
+autocomplete = True
 
 try:
     from .local_settings import *

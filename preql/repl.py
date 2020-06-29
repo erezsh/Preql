@@ -1,6 +1,5 @@
 from time import time
 import sys
-import logging
 
 ### XXX Fix for Python 3.8 bug (https://github.com/prompt-toolkit/python-prompt-toolkit/issues/1023)
 import asyncio
@@ -17,6 +16,8 @@ from .api import TablePromise
 from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError_PrematureEnd, pql_SyntaxError, pql_NameNotFound
 from .pql_types import Object
 from .parser import parse_stmts
+from .loggers import ac_log, repl_log
+from . import settings
 
 
 # class RowWrapper:
@@ -127,8 +128,6 @@ def _search_puppet(puppet):
 
     for p in bfs([puppet], expand):
         if p.result:
-            # print(p.result.pretty())
-            # breakpoint()
             return p.result
 
 def autocomplete_tree(puppet):
@@ -180,8 +179,7 @@ def autocomplete(state, code, source='<autocomplete>'):
                     try:
                         eval_autocomplete(ac_state, stmt, False)
                     except PreqlError as e:
-                        print("debug:", e)
-                        pass
+                        ac_log.exception(e)
 
                 try:
                     # TODO autocomplete_execute
@@ -191,8 +189,7 @@ def autocomplete(state, code, source='<autocomplete>'):
                     ns = e.args[0]
                     return ns
                 except PreqlError as e:
-                    # print("debug:", e)
-                    pass
+                    ac_log.exception(e)
 
     ns = state.ns.get_all_vars()
     return ns
@@ -214,7 +211,10 @@ class Autocompleter(Completer):
         self.state = state
 
     def get_completions(self, document, complete_event):
-        context, fragment = last_word(document.text)
+        context, fragment = last_word(document.text_before_cursor)
+
+        if not settings.autocomplete:
+            return
 
         if not fragment:
             return
@@ -271,7 +271,7 @@ def _(event):
 
 
 def start_repl(p, prompt=' >> '):
-    print("Welcome to the Preql REPL. Type help() for help")
+    repl_log.info("Welcome to the Preql REPL. Type help() for help")
     save_last = '_'   # XXX A little hacky
 
     try:
@@ -291,7 +291,7 @@ def start_repl(p, prompt=' >> '):
                 except pql_SyntaxError as e:
                     return True
                 except Exception as e:
-                    print(e)
+                    repl_log.warn(e)
                     return False
 
             return False
@@ -316,31 +316,30 @@ def start_repl(p, prompt=' >> '):
                             p.interp.set_var(save_last, res)
 
                         res = res.repr(p.interp.state)
-                        print(res)
+                        repl_log.info(res)
 
                 except PreqlError as e:
-                    print(e)
+                    repl_log.error(e)
                     # p.interp.set_var('_e', objects.ExceptionInstance(e))
                     continue
                 except pql_ExitInterp as e:
                     return
                 except Exception as e:
-                    print("Error:")
-                    logging.exception(e)
+                    repl_log.exception(e)
                     raise
                     # continue
 
                 duration = time() - start_time
                 if duration > 1:
-                    print("(Query took %.2f seconds)" % duration)
+                    repl_log.info("(Query took %.2f seconds)" % duration)
 
             except KeyboardInterrupt:
-                print("Interrupted (Ctrl+C)")
+                repl_log.info("Interrupted (Ctrl+C)")
 
 
 
     except (KeyboardInterrupt, EOFError):
-        print('Exiting Preql interaction')
+        repl_log.info('Exiting Preql interaction')
 
 
 def main(script=None):
