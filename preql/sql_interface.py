@@ -90,7 +90,7 @@ def log_sql(sql):
 class PostgresInterface(SqlInterface):
     target = postgres
 
-    def __init__(self, host, port, database, user, password, print_sql=True):
+    def __init__(self, host, port, database, user, password, print_sql=False):
         import psycopg2
         try:
             self._conn = psycopg2.connect(host=host, port=port, database=database, user=user, password=password)
@@ -103,7 +103,7 @@ class PostgresInterface(SqlInterface):
 class SqliteInterface(SqlInterface):
     target = sqlite
 
-    def __init__(self, filename=None, print_sql=True):
+    def __init__(self, filename=None, print_sql=False):
         import sqlite3
         self._conn = sqlite3.connect(filename or ':memory:')
         self._print_sql = print_sql
