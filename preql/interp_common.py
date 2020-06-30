@@ -79,7 +79,7 @@ class State:
     def connect(self, uri):
         logger.info(f"[Preql] Connecting to {uri}")
         try:
-            self.db = create_engine(uri, self.db._debug)
+            self.db = create_engine(uri, self.db._print_sql)
         except NotImplementedError as e:
             raise pql_NotImplementedError.make(self, None, *e.args) from e
         except ConnectError as e:

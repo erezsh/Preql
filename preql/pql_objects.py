@@ -347,6 +347,9 @@ class AggregateInstance(AbsInstance):
         x = self.elem.get_attr(name)
         return make_instance(x.code, T.aggregate[x.type], [x])
 
+    def all_attrs(self):
+        return self.elem.all_attrs()
+
     def flatten_code(self):
         return self.elem.flatten_code()
 

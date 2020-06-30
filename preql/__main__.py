@@ -7,7 +7,8 @@ parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', help="Enter interactive mode after running the script")
 parser.add_argument('-v', '--version', action='store_true', help="Print version")
 parser.add_argument('--print-sql', action='store_true', help="Print the SQL code that's being executed")
-parser.add_argument('script_path', type=str, nargs='?', default=None, help='Path to a Preql script to run')
+parser.add_argument('-f', '--file', type=str, help='Path to a Preql script to run')
+parser.add_argument('database', type=str, nargs='?', default=None, help="database url (postgres://user:password@host:port/db_name")
 
 def find_dot_preql():
     cwd = Path.cwd()
@@ -23,12 +24,14 @@ def main():
         print(__version__)
 
     p = Preql(print_sql=args.print_sql)
+    if args.database:
+        p.interp.state.connect(args.database)
 
     interactive = args.interactive
 
-    if args.script_path:
-        with open(args.script_path) as f:
-            p.run_code(f.read(), args.script_path)
+    if args.file:
+        with open(args.file) as f:
+            p.run_code(f.read(), args.file)
     elif not args.version:
         dot_preql = find_dot_preql()
         if dot_preql:

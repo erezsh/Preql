@@ -8,10 +8,12 @@ from . import pql_ast as ast
 from . import pql_objects as objects
 from .utils import bfs
 from .parser import parse_stmts, TreeToAst
+from .pql_types import T
 
 from .interp_common import State, dy, new_value_instance, evaluate
-from .evaluate import evaluate, execute
+from .evaluate import evaluate, execute, resolve
 from .compiler import AutocompleteSuggestions
+from . import sql
 
 
 @dy
@@ -22,6 +24,12 @@ def eval_autocomplete(state, x, go_inside):
 @dy
 def eval_autocomplete(state, cb: ast.Statement, go_inside):
     raise NotImplementedError(cb)
+
+@dy
+def eval_autocomplete(state, x: ast.If, go_inside):
+    eval_autocomplete(state, x.then, go_inside)
+    if x.else_:
+        eval_autocomplete(state, x.else_, go_inside)
 
 @dy
 def eval_autocomplete(state, x: ast.SetValue, go_inside):
@@ -38,14 +46,18 @@ def eval_autocomplete(state, cb: ast.CodeBlock, go_inside):
         eval_autocomplete(state, s, go_inside)
 
 @dy
+def eval_autocomplete(state, td: ast.TableDef, go_inside):
+    t = resolve(state, td)
+    state.set_var(t.options['name'], objects.TableInstance.make(sql.unknown, t, []))
+
+@dy
 def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
     f = fd.userfunc
     assert isinstance(f, objects.UserFunction)
 
     try:
         if go_inside:
-            params = {} # TODO f.params
-            with state.use_scope(params):
+            with state.use_scope({p.name:T.unknown for p in f.params}):
                 try:
                     eval_autocomplete(state, f.expr, go_inside)
                 except ReturnSignal:
@@ -93,11 +105,11 @@ def autocomplete_tree(puppet):
         return
 
     # No marker, no autocomplete
-    if '_MARKER' not in puppet.choices():
+    if 'MARKER' not in puppet.choices():
         return
 
     # Feed marker
-    t = Token('_MARKER', '<MARKER>', 1, 1, 1, 1, 2, 2)
+    t = Token('MARKER', '<MARKER>', 1, 1, 1, 1, 2, 2)
     try:
         res = puppet.feed_token(t)
     except KeyError:    # Could still fail
@@ -123,7 +135,7 @@ class AcState(State):
 def autocomplete(state, code, source='<autocomplete>'):
     try:
         parse_stmts(code, source, wrap_syntax_error=False)
-    except UnexpectedCharacters:
+    except UnexpectedCharacters as e:
         return {}
     except UnexpectedToken as e:
             tree = autocomplete_tree(e.puppet)

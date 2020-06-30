@@ -21,9 +21,6 @@ def _process_fields(state: State, fields):
     processed_fields = []
     for f in fields:
 
-        suggested_name = str(f.name) if f.name else guess_field_name(f.value)
-        name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
-
         v = evaluate(state, f.value)
 
         if isinstance(v, ast.ResolveParametersString):
@@ -35,6 +32,9 @@ def _process_fields(state: State, fields):
         if (v.type <= T.aggregate):
             v = v.primary_key()
             v = objects.make_instance(sql.MakeArray(v.type, v.code), v.type, [v])
+
+        suggested_name = str(f.name) if f.name else guess_field_name(f.value)
+        name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
 
         processed_fields.append( [name, v] )
 
@@ -514,7 +514,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     with state.use_scope(table.all_attrs()):
         conds = evaluate(state, sel.conds)
 
-    if any(t <= T.unknown for t in table.type.elems.values()):
+    if any(t <= T.unknown for t in table_to_struct(table.type).elems.values()):
         code = sql.unknown
     else:
         for i, c in enumerate(conds):
@@ -535,6 +535,10 @@ def compile_to_inst(state: State, param: ast.Parameter):
 @dy
 def compile_to_inst(state: State, attr: ast.Attr):
     inst = evaluate(state, attr.expr)
+
+    if isinstance(attr.name, ast.Marker):
+        raise AutocompleteSuggestions(inst.all_attrs())
+
     try:
         return evaluate(state, inst.get_attr(attr.name))
     except exc.pql_AttributeError as e:

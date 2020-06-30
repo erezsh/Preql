@@ -354,6 +354,10 @@ def simplify(state: State, obj: ast.Not):
 def simplify(state: State, funccall: ast.FuncCall):
     func = evaluate(state, funccall.func)
 
+    if isinstance(func, objects.UnknownInstance):
+        evaluate(state, [a.value for a in funccall.args])
+        raise pql_TypeError.make(state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
+
     args = funccall.args
     if isinstance(func, Type):
         # Cast to type

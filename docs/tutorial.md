@@ -23,7 +23,7 @@ Usually, you would connect Preql to a database, or load an existing module.
 But, you can also access the preql interpreter like this:
 
 ```sh
-$ python -m preql
+$ preql
 Welcome to the Preql REPL. Type help() for help
 >>
 ```
@@ -46,7 +46,7 @@ print "Hello World!"
 And then run it:
 
 ```go
-$ python -m preql helloworld.pql
+$ preql helloworld.pql
 Hello World!
 ```
 
@@ -569,3 +569,6 @@ table x, =3
 1  True  True  True
 2  True  True  True
 ```
+
+
+

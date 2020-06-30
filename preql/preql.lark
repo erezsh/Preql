@@ -144,17 +144,18 @@ named_expr: [name ":"] expr
       | "null" -> null
       | "false" -> false
       | "true" -> true
-      | _MARKER -> marker
+      | marker
       | ellipsis
      //  | range
 
 
+marker: MARKER
 ellipsis: "..." exclude?
 exclude: exclude_name+
 exclude_name: EXCLUDE_NAME
 EXCLUDE_NAME: "!" NAME
 
-getattr: [molecule] "." name
+getattr: [molecule] "." (name | marker)
 name: NAME
 var: name
 
@@ -184,4 +185,4 @@ LONG_STRING: /""".*?(?<!\\)(\\\\)*?"""/s
 %ignore /\\[\t \f]*\r?\n/   // LINE_CONT
 %ignore COMMENT
 
-%declare _MARKER
+%declare MARKER

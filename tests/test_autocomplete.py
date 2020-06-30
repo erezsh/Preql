@@ -66,6 +66,35 @@ class AutocompleteTests(PreqlTests):
         progressive_test(state, s1*2)
         progressive_test(state, s1, True)
 
+    def test_params(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        func enum2(tbl, whatever) = <<<tbl>>> + <<<whatever>>>
+        a = <<<enum2>>>
+        """
+        progressive_test(state, s)
+
+    def test_attr(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        table Country {name: string}
+
+        c = <<<Country>>>
+        c = f(<<<Country>>>)
+        a = join(c: <<<Country>>>.<<<name>>>, n:["Palau", "Nauru"].<<<value>>>) {c.<<<id>>>, c.<<<name>>>}
+        """
+        s ="""
+        table Country {name: string}
+        a = join(c: Country.<<<name>>>, n:["Palau", "Nauru"].<<<value>>>) {n.<<<value>>> => c.<<<name>>>}
+        """
+        progressive_test(state, s)
+
+
+
 
 
 
@@ -87,7 +116,7 @@ def _parse_autocomplete_requirements(s):
 
 
 def progressive_test(state, s, test_partial=False):
-    total = 0
+    total = 1
     start = time.time()
 
     s,d = _parse_autocomplete_requirements(s)

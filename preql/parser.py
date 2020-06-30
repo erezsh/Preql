@@ -209,7 +209,8 @@ class TreeToAst(Transformer):
     try_catch = ast.Try
     one = lambda self, meta, nullable, expr: ast.One(meta, expr, nullable is not None)
 
-    marker = ast.Marker
+    def marker(self, meta, _marker):
+        return ast.Marker(meta)
 
     def table_def_by_expr(self, meta, const, name, table_expr):
         return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, const == 'const']))

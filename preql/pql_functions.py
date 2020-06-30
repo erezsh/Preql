@@ -270,11 +270,13 @@ def pql_concat(state: State, t1: ast.Expr, t2: ast.Expr):
 
 
 def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
-    if len(exprs) != 2:
-        raise pql_TypeError.make(state, None, "join expected only 2 arguments")
 
     exprs = {name: evaluate(state, value) for name,value in exprs.items()}
-    assert all(isinstance(x, objects.AbsInstance) for x in exprs.values())
+    if not all(isinstance(x, objects.AbsInstance) for x in exprs.values()):
+        raise pql_TypeError.make(state, None, "Unexpected object type")
+
+    if len(exprs) != 2:
+        raise pql_TypeError.make(state, None, "join expected only 2 arguments")
 
     (a,b) = exprs.values()
 
