@@ -432,6 +432,9 @@ class UnknownInstance(AbsInstance):
     def get_attr(self, name):
         return self # XXX use name?
 
+    def all_attrs(self):
+        return {}
+
     def flatten_code(self):
         return [self.code]
 

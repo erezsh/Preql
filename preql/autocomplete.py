@@ -57,7 +57,7 @@ def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
 
     try:
         if go_inside:
-            with state.use_scope({p.name:T.unknown for p in f.params}):
+            with state.use_scope({p.name:objects.unknown for p in f.params}):
                 try:
                     eval_autocomplete(state, f.expr, go_inside)
                 except ReturnSignal:

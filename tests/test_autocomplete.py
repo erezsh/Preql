@@ -37,7 +37,7 @@ class AutocompleteTests(PreqlTests):
         """)
         assert "hello" in res, res.keys()
 
-    def test_progressive(self):
+    def test_progressive1(self):
         p = self.Preql()
         state = p.interp.state
 
@@ -48,6 +48,10 @@ class AutocompleteTests(PreqlTests):
         """
         progressive_test(state, s0)
         progressive_test(state, s0, True)
+
+    def test_progressive2(self):
+        p = self.Preql()
+        state = p.interp.state
 
         s1 = """
         func get_users(logins) {
