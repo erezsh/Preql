@@ -4,7 +4,7 @@ from pathlib import Path
 from itertools import chain
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
-parser.add_argument('-i', '--interactive', action='store_true', help="Enter interactive mode after running the script")
+parser.add_argument('-i', '--interactive', action='store_true', default=False, help="Enter interactive mode after running the script")
 parser.add_argument('-v', '--version', action='store_true', help="Print version")
 parser.add_argument('--print-sql', action='store_true', help="Print the SQL code that's being executed")
 parser.add_argument('-f', '--file', type=str, help='Path to a Preql script to run')
@@ -38,7 +38,7 @@ def main():
             print("Auto-running", dot_preql)
             p.run_code(dot_preql.read_text(), dot_preql)
 
-            interactive = True
+        interactive = True
 
     if interactive:
         p.start_repl()
