@@ -280,9 +280,9 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
                 ref = TextReference(s, str(source_file), TextRange(pos, TextPos(len(s), -1 ,-1)))
                 raise pql_SyntaxError_PrematureEnd([ref], "Syntax error: " + msg)
             else:
-                msg = "Unexpected token: '%s'" % e.token
+                msg = "Unexpected token: %r" % e.token.value
         else:
-            msg = "Unexpected character: '%s'" % s[e.pos_in_stream]
+            msg = "Unexpected character: %r" % s[e.pos_in_stream]
 
         ref = TextReference(s, str(source_file), TextRange(pos, pos))
         raise pql_SyntaxError([ref], "Syntax error: " + msg)
