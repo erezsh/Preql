@@ -25,9 +25,9 @@ def is_eq(a, b):
     ("Unoptimized_Pg", POSTGRES_URI, False),
 ])
 class BasicTests(PreqlTests):
-    def Preql(self):
+    def Preql(self, **kw):
         settings.optimize = self.optimized
-        preql = Preql(self.uri)
+        preql = Preql(self.uri, **kw)
         self.preql = preql
         return preql
 
@@ -1022,3 +1022,41 @@ class BasicTests(PreqlTests):
 
 
         # print( preql('new B:a_set', b1=b1) )
+
+    def test_import_table(self):
+        preql = self.Preql()
+        preql("""
+            table A {
+                a: int
+                b: int?
+                c: string
+                d: float
+                e: bool
+                f: datetime
+                g: text
+            }
+        """)
+        a_type = preql('type(A{...!id})')   # TODO convert 'id' to t_id
+        preql._reset_interpreter()
+        self.assertRaises(pql_NameNotFound, preql, 'A')
+
+        preql("""
+            table A {...}
+        """)
+        t = preql('type(A{...!id})')
+        assert a_type == t
+
+        preql._reset_interpreter()
+        preql("""
+            table A {c: int, ...}
+        """)
+        t = preql('type(A{...!id})')
+        assert a_type != t
+
+        preql._reset_interpreter()
+        preql("""
+            table A {c: string, ...}
+        """)
+        t = preql('type(A{...!id})')
+        assert a_type != t  # different order
+        assert a_type.elems == t.elems

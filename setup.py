@@ -9,7 +9,8 @@ setup(
     packages = ['preql'],
 
     requires = [],
-    install_requires = ['lark-parser>=0.9.0', 'runtype>=0.1.4', 'tabulate', 'dsnparse', 'tqdm', 'prompt-toolkit', 'pygments', 'psycopg2'],
+    install_requires = ['lark-parser>=0.9.0', 'runtype>=0.1.4', 'tabulate', 'dsnparse', 'tqdm', 'prompt-toolkit', 'pygments'],
+    extra_requires = ['psycopg2'],
 
     package_data = {'': ['*.md', '*.lark', '*.pql']},
 

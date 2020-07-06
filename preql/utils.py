@@ -197,3 +197,17 @@ def bfs(initial, expand):
             if next_node not in visited:
                 visited.add(next_node)
                 open_q.append(next_node)
+
+
+
+def memoize(f, memo=None):
+    if memo is None:
+        memo = {}
+
+    @wraps(f)
+    def inner(*args):
+        if args not in memo:
+            memo[args] = f(*args)
+        return memo[args]
+
+    return inner

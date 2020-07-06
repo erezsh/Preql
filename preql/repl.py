@@ -19,6 +19,7 @@ from .parser import parse_stmts
 from .loggers import ac_log, repl_log
 from . import settings
 from preql.autocomplete import autocomplete
+from .utils import memoize
 
 from prompt_toolkit import prompt
 from prompt_toolkit import PromptSession
@@ -115,6 +116,19 @@ def _(event):
         buff.start_completion(select_first=False)
 
 
+@memoize
+def _code_is_valid(code):
+    if code:
+        try:
+            s = parse_stmts(code, '<repl>')
+        except pql_SyntaxError as e:
+            return False
+        except Exception as e:
+            repl_log.warn(e)
+
+    return True
+
+
 def start_repl(p, prompt=' >> '):
     repl_log.info("Welcome to the Preql REPL. Type help() for help")
     save_last = '_'   # XXX A little hacky
@@ -130,16 +144,7 @@ def start_repl(p, prompt=' >> '):
         @Condition
         def multiline_filter():
             text = get_app().layout.get_buffer_by_name('DEFAULT_BUFFER').text
-            if text:
-                try:
-                    s = parse_stmts(text, '<repl>')
-                except pql_SyntaxError as e:
-                    return True
-                except Exception as e:
-                    repl_log.warn(e)
-                    return False
-
-            return False
+            return not _code_is_valid(text)
 
         while True:
             # Read

@@ -111,9 +111,10 @@ def _execute(state: State, table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
 
-    exists = table_exists(state, table_def.name)
+    # exists = table_exists(state, table_def.name)
+    exists = state.db.table_exists(table_def.name)
     if exists:
-        cur_type = import_table_type(state, table_def.name, None if ellipsis else set(t.elems))
+        cur_type = state.db.import_table_type(state, table_def.name, None if ellipsis else set(t.elems))
 
         if ellipsis:
             elems_to_add = {n: v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -920,67 +921,3 @@ def new_table_from_rows(state, name, columns, rows):
 # XXX These don't belong in evaluate.py
 # =========================================
 
-def table_exists(state, name):
-    # XXX TODO sqlit
-    if state.db.target != 'postgres':
-        return False
-
-    return db_query(state, sql.RawSql(T.int, "SELECT count(*) FROM information_schema.tables where table_name='%s'" % name)) > 0
-
-
-def _bool_from_sql(n):
-    if n == 'NO':
-        n = False
-    assert isinstance(n, bool)
-    return n
-
-def _type_from_sql(type, nullable):
-    d = {
-        'integer': T.int,
-        'serial': T.t_id,
-        'bigserial': T.t_id,
-        'smallint': T.int,  # TODO smallint / bigint?
-        'bigint': T.int,
-        'character varying': T.string,
-        'character': T.string,  # TODO char?
-        'real': T.float,
-        'double precision': T.float,    # double on 32-bit?
-        'boolean': T.bool,
-        'timestamp': T.datetime,
-        'timestamp without time zone': T.datetime,
-        'text': T.text,
-    }
-    try:
-        v = d[type]
-    except KeyError:
-        return T.string.replace(nullable=True)
-
-    nullable = _bool_from_sql(nullable)
-
-    return v.replace(nullable=nullable)
-
-def import_table_type(state, name, columns_whitelist):
-
-    columns_t = T.table(
-        schema=T.string,
-        table=T.string,
-        name=T.string,
-        pos=T.int,
-        nullable=T.bool,
-        type=T.string,
-    )
-    columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
-           FROM information_schema.columns
-           WHERE table_name = '%s'
-        """ % name
-    sql_columns = db_query(state, sql.RawSql(columns_t, columns_q))
-
-    if columns_whitelist:
-        wl = set(columns_whitelist)
-        sql_columns = [c for c in sql_columns if c['name'] in wl]
-
-    cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
-    cols.sort()
-    cols = dict(c[1:] for c in cols)
-
-    return T.table(**cols).set_options(name=name)

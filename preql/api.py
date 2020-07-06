@@ -126,6 +126,9 @@ class Interface:
         self.engine = create_engine(db_uri, print_sql=print_sql)
         # self.engine.ping()
 
+        self._reset_interpreter()
+
+    def _reset_interpreter(self):
         self.interp = Interpreter(self.engine)
         self.interp.state._py_api = self # TODO proper api
 

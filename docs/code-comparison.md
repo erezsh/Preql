@@ -77,5 +77,5 @@ Person { country => name }
 
 ```SQL
 -- postgreql
-SELECT country, array_agg(name, "|") AS name FROM Person GROUP BY country
+SELECT country, array_agg(name) AS name FROM Person GROUP BY country
 ```

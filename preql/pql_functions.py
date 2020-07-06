@@ -10,7 +10,7 @@ from . import pql_ast as ast
 from . import sql
 
 from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
-from .evaluate import evaluate, localize, db_query, TableConstructor, _destructure_param_match, import_table_type
+from .evaluate import evaluate, localize, db_query, TableConstructor, _destructure_param_match
 from .pql_types import Object, T, table_flat_for_insert, Type, join_names, table_to_struct, combined_dp
 
 # def _pql_SQL_callback(state: State, var: str, instances):
@@ -478,8 +478,8 @@ def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] =
         >> import_table("my_sql_table", ["some_column", "another_column])
     """
     # XXX This is postgres specific!
-    if state.db.target != 'postgres':
-        raise pql_NotImplementedError.make(state, name, "Only supported on 'postgres' so far")
+    # if state.db.target != 'postgres':
+    #     raise pql_NotImplementedError.make(state, name, "Only supported on 'postgres' so far")
 
     name_str = localize(state, evaluate(state, name))
     columns_whitelist = set(localize(state, evaluate(state, columns)) or [])
@@ -487,7 +487,8 @@ def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] =
         raise exc.pql_TypeError.make(state, name, "Expected string")
 
     # Get table type
-    t = import_table_type(state, name_str, columns_whitelist)
+    t = state.db.import_table_type(state, name_str, columns_whitelist)
+    assert t <= T.table
 
     # Get table contents
     return objects.new_table(t, select_fields=bool(columns_whitelist))
