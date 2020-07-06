@@ -28,6 +28,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from . import settings
+from .parser import Str
 RawSql = sql.RawSql
 Sql = sql.Sql
 
@@ -117,7 +118,7 @@ def _execute(state: State, table_def: ast.TableDef):
         cur_type = state.db.import_table_type(state, table_def.name, None if ellipsis else set(t.elems))
 
         if ellipsis:
-            elems_to_add = {n: v for n, v in cur_type.elems.items() if n not in t.elems}
+            elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
             t = t(**t.elems, **elems_to_add)
 
         # Auto-add id only if it exists already and not defined by user

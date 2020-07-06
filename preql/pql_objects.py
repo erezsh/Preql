@@ -407,6 +407,9 @@ class MapInstance(AbsStructInstance):
     def items(self):
         return self.attrs.items()
 
+    def all_attrs(self):
+        return dict(self.attrs)
+
     def primary_key(self):
         return self
 

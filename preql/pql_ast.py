@@ -1,4 +1,4 @@
-from typing import List, Any, Optional, Dict
+from typing import List, Any, Optional, Dict, Union
 
 from .utils import dataclass, TextReference
 from .pql_types import T, Type, Object, repr_value
@@ -13,6 +13,10 @@ class Ast(Object):
     text_ref: Optional[TextReference]
 
 class Expr(Ast): pass
+
+@dataclass
+class Marker(Expr):
+    pass
 
 class Statement(Ast): pass
 
@@ -50,7 +54,7 @@ class ResolveParametersString(Expr):
 class Attr(Expr):
     "Reference to an attribute (usually a column)"
     expr: Optional[Object] #Expr
-    name: str
+    name: Union[str, Marker]
 
 @dataclass
 class Const(Expr):
@@ -58,7 +62,7 @@ class Const(Expr):
     value: Any
 
     def repr(self, state):
-        return repr_value(self.value)
+        return repr_value(self)
 
 @dataclass
 class Ellipsis(Expr):
@@ -203,7 +207,7 @@ class FuncDef(Statement, Definition):
 @dataclass
 class TableDef(Statement, Definition):
     name: str
-    columns: List[ColumnDef]
+    columns: List[Union[ColumnDef, Ellipsis]]
     methods: list
 
 @dataclass
@@ -273,6 +277,3 @@ class List_(Expr):
 class Dict_(Expr):
     elems: dict
 
-@dataclass
-class Marker(Expr):
-    pass

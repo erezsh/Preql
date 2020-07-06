@@ -259,7 +259,7 @@ pql_dp = runtype.Dispatch(MyTypeSystem())
 
 
 @pql_dp
-def repr_value(v):
+def repr_value(v: T.object):
     return repr(v.value)
 
 @pql_dp

@@ -21,7 +21,6 @@ def token_value(self, text_ref, t):
 
 
 def make_text_reference(text, source_file, meta, children=()):
-
     ref = TextRange(
             TextPos(
                 meta.start_pos,
@@ -29,9 +28,9 @@ def make_text_reference(text, source_file, meta, children=()):
                 meta.column,
             ),
             TextPos(
-                meta.end_pos,
-                meta.end_line,
-                meta.end_column,
+                meta.end_pos or meta.start_pos,
+                meta.end_line or meta.line,
+                meta.end_column or meta.column,
             )
         )
 

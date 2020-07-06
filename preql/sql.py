@@ -352,6 +352,14 @@ class Name(Sql):
             name = qb.table_name[-1] + '.' + name
         return name
 
+@dataclass
+class Attr(Sql):
+    type: Type
+    obj: Sql
+    name: str
+
+
+
     # return base
 
 @dataclass

@@ -41,8 +41,6 @@ class BasicTests(PreqlTests):
     def test_basic1(self):
         preql = self.Preql()
         preql.load('country_person.pql', rel_to=__file__)
-        res = preql('[1,2,3]{=>sum(value*value)}')
-        assert res == [{'sum': 14}], list(res)
 
         self._test_basic(preql)
         self._test_ellipsis(preql)
@@ -475,6 +473,8 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql('count(Node[parent==null].children())'), 2 )
 
     def _test_groupby(self, preql):
+        assert preql('one one [1,2,3]{=>sum(value*value)}') == 14
+
         res = preql("Country {language => count(id)}")
         assert is_eq(res, [("en", 2), ("he", 1)])
 

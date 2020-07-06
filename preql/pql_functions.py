@@ -65,6 +65,7 @@ def _pql_PY_callback(state: State, var: str):
 
     return '%s' % (inst.local_value)
 
+import re
 def pql_PY(state: State, code_expr: ast.Expr):
     code_expr2 = evaluate(state, code_expr)
     py_code = localize(state, code_expr2)
@@ -78,7 +79,6 @@ def pql_PY(state: State, code_expr: ast.Expr):
     return objects.new_value_instance(res)
 
 
-import re
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     type_ = evaluate(state, type_expr)
@@ -86,37 +86,6 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
     return ast.ResolveParametersString(None, type_, code_expr2)
 
 
-    # return
-    # assert isinstance(code_expr, str), code_expr   # Otherwise requires to snapshot the namespace
-    # embedded_vars = re.findall(r"\$(\w+)", code_expr)
-    # return ast.ResolveParametersString(code_expr.meta, type_, code_expr, {name: state.get_var(name) for name in embedded_vars})
-    # return
-
-    # type_ = simplify(state, type_expr)
-    # sql_code = localize(state, evaluate(state, code_expr))
-    # assert isinstance(sql_code, str)
-
-    # # TODO escaping for security?
-    # instances = []
-
-    # expanded = re.sub(r"\$\w+", lambda m: _pql_SQL_callback(state, m, instances), sql_code)
-    # code = sql.RawSql(type_, expanded)
-    # # code = sql.ResolveParameters(sql_code)
-
-    # # TODO validation!!
-    # if isinstance(type_, types.TableType):
-    #     name = get_alias(state, "subq_")
-
-    #     inst = instanciate_table(state, type_, sql.TableName(type_, name), instances)
-    #     # TODO this isn't in the tests!
-    #     fields = [sql.Name(c, path) for path, c in inst.type.flatten_type()]
-
-    #     subq = sql.Subquery(name, fields, code)
-    #     inst.subqueries[name] = subq
-
-    #     return inst
-
-    # return objects.Instance.make(code, type_, instances)
 
 import inspect
 def _canonize_default(d):
@@ -492,6 +461,7 @@ def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] =
 
     # Get table contents
     return objects.new_table(t, select_fields=bool(columns_whitelist))
+
 
 
 def pql_connect(state: State, uri: ast.Expr):
