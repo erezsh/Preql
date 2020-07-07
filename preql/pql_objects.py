@@ -529,6 +529,8 @@ def from_python(value):
         return null
     elif isinstance(value, str):
         return ast.Const(None, T.string, value)
+    elif isinstance(value, bool):
+        return ast.Const(None, T.bool, value)
     elif isinstance(value, int):
         return ast.Const(None, T.int, value)
     elif isinstance(value, list):

@@ -212,7 +212,8 @@ class TreeToAst(Transformer):
         return ast.Marker(meta)
 
     def table_def_by_expr(self, meta, const, name, table_expr):
-        return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, const == 'const']))
+        c = objects.from_python(bool(const == 'const'))
+        return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, c]))
 
     def ellipsis(self, meta, *exclude):
         return ast.Ellipsis(meta, exclude or [])

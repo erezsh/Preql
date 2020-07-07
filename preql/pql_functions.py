@@ -120,8 +120,11 @@ def pql_debug(state: State):
 def pql_issubclass(state: State, expr: Object, type_expr: Object):
     "Returns whether the give object is an instance of the given type"
     inst = evaluate(state, expr)
-    assert isinstance(inst, Type)
     type_ = evaluate(state, type_expr)
+    assert_type(inst.type, T.type, state, expr, 'issubclass')
+    assert_type(type_.type, T.type, state, expr, 'issubclass')
+    assert isinstance(inst, Type)
+    assert isinstance(type_, Type)
     res = inst <= type_
     return new_value_instance(res, T.bool)
 
@@ -129,6 +132,7 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     "Returns whether the give object is an instance of the given type"
     inst = evaluate(state, expr)
     type_ = evaluate(state, type_expr)
+    assert_type(type_.type, T.type, state, expr, 'isa')
     res = inst.isa(type_)
     return new_value_instance(res, T.bool)
 
@@ -447,14 +451,14 @@ def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] =
     Example:
         >> import_table("my_sql_table", ["some_column", "another_column])
     """
-    # XXX This is postgres specific!
-    # if state.db.target != 'postgres':
-    #     raise pql_NotImplementedError.make(state, name, "Only supported on 'postgres' so far")
-
     name_str = localize(state, evaluate(state, name))
-    columns_whitelist = set(localize(state, evaluate(state, columns)) or [])
+    columns_whitelist = localize(state, evaluate(state, columns)) or []
+    if not isinstance(columns_whitelist, list):
+        raise pql_TypeError.make(state, columns, "Expected list")
     if not isinstance(name_str, str):
-        raise exc.pql_TypeError.make(state, name, "Expected string")
+        raise pql_TypeError.make(state, name, "Expected string")
+
+    columns_whitelist = set(columns_whitelist)
 
     # Get table type
     t = state.db.import_table_type(state, name_str, columns_whitelist)

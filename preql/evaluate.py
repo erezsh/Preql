@@ -1,5 +1,5 @@
 # Steps for evaluation
-#     expand
+#         expand
 #         expand names
 #         expand function calls
 #     resolve types
@@ -402,7 +402,9 @@ def eval_func_call(state, func, args):
     if isinstance(func, objects.InternalFunction):
         # TODO ensure pure function?
         # TODO Ensure correct types
-        return func.func(state, *args.values())
+        args = list(args.values())
+        # args = evaluate(state, args)
+        return func.func(state, *args)
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:
