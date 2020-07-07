@@ -322,7 +322,7 @@ def from_sql(state, arr: T.table):
     expected_length = len(flatten_type(arr.type))   # TODO optimize?
     for row in arr.value:
         if len(row) != expected_length:
-            raise exc.pql_TypeError.make(state, None, f"Expected {expected_length} column. Got {len(row)}")
+            raise exc.pql_TypeError.make(state, None, f"Expected {expected_length} columns, but got {len(row)}")
         i = iter(row)
         yield {name: restructure_result(col, i) for name, col in arr.type.elems.items()}
 

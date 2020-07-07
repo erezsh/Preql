@@ -183,7 +183,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     db_query(state, sql.compile_type_def(state, name, table))
 
     read_only, flat_columns = table_flat_for_insert(table)
-    expr = exclude_fields(state, expr, read_only)
+    expr = exclude_fields(state, expr, set(read_only) & set(elems))
     db_query(state, sql.Insert(name, flat_columns, expr.code), expr.subqueries)
 
     return objects.new_table(table)

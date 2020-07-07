@@ -52,6 +52,8 @@ def last_word(s):
     i = len(s)
     while i and is_name(s[i-1]):
         i -= 1
+    if i < len(s) and s[i] == '!' :
+        i += 1  # hack to support ... !var and !in
     return s[:i], s[i:]
 
 

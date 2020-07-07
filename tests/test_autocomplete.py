@@ -80,6 +80,34 @@ class AutocompleteTests(PreqlTests):
         """
         progressive_test(state, s)
 
+    def test_expr(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        table x {
+            a: int
+            two: int
+            three: int
+        }
+        <<<x>>>{<<<three>>>}
+        """
+        progressive_test(state, s)
+
+    def test_exclude_columns(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        table x {
+            a: int
+            two: int
+            three: int
+        }
+        a = <<<x>>>{... !<<<a>>> !<<<two>>>}{<<<three>>>}
+        """
+        progressive_test(state, s)
+
     def test_attr(self):
         p = self.Preql()
         state = p.interp.state

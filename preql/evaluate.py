@@ -178,7 +178,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
 
     primary_keys, columns = table_flat_for_insert(target.type)
 
-    source = exclude_fields(state, source, primary_keys)
+    source = exclude_fields(state, source, set(primary_keys) & set(source.type.elems))
 
     code = sql.Insert(target.type.options['name'], columns, source.code)
     db_query(state, code, source.subqueries)

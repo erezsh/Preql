@@ -52,8 +52,20 @@ def _expand_ellipsis(state, table, fields):
             if f.name:
                 raise pql_SyntaxError.make(state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
+                elems = table_to_struct(table.type).elems
+                for n in f.value.exclude:
+                    if isinstance(n, ast.Marker):
+                        raise AutocompleteSuggestions({k:v for k,v in elems.items()
+                                                      if k not in direct_names and k not in f.value.exclude})
+
+                    if n not in elems:
+                        raise exc.pql_NameNotFound.make(state, n, f"Field to exclude '{n}' not found")
+                    if n in direct_names:
+                        raise exc.pql_NameNotFound.make(state, n, f"Field to exclude '{n}' is explicitely included in projection")
+
                 exclude = direct_names | set(f.value.exclude)
-                for name in table_to_struct(table.type).elems:
+
+                for name in elems:
                     assert isinstance(name, str)
                     if name not in exclude:
                         yield ast.NamedField(f.text_ref, name, ast.Name(None, name))
@@ -137,6 +149,9 @@ def compile_to_inst(state: State, proj: ast.Projection):
         sql.ColumnAlias.make(code, nn)
         for code, (nn, _nt) in safezip(flat_codes, flatten_type(new_table_type))
     ]
+
+    if not sql_fields:
+        raise pql_TypeError.make(state, proj, "No column provided for projection (empty projection)")
 
     # Make Instance
     new_table = objects.TableInstance.make(sql.null, new_table_type, [table] + [inst for _, inst in all_fields])

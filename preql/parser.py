@@ -214,13 +214,7 @@ class TreeToAst(Transformer):
     def table_def_by_expr(self, meta, const, name, table_expr):
         return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, const == 'const']))
 
-    @v_args(inline=False)
-    def exclude(self, names):
-        return [Str(n.lstrip('!'), n.text_ref) for n in names]
-
-    exclude_name = token_value
-
-    def ellipsis(self, meta, exclude=None):
+    def ellipsis(self, meta, *exclude):
         return ast.Ellipsis(meta, exclude or [])
 
     @v_args(inline=False, meta=True)

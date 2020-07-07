@@ -108,6 +108,10 @@ class BasicTests(PreqlTests):
         assert list(preql('Person {... !name, id}')[0].keys()) == ['country', 'id']
         assert list(preql('Person {country, ... !name, id}')[0].keys()) == ['country', 'id']
 
+
+        self.assertRaises(pql_NameNotFound, preql, '[3]{... !hello}')
+        self.assertRaises(PreqlError, preql, '[3]{... !value}')
+
         # TODO exception when name doesn't exist
 
     def test_arith(self):
@@ -746,7 +750,7 @@ class BasicTests(PreqlTests):
 
         res1 = preql.circles_contained1()
         res2 = preql.circles_contained2()
-        res3 = preql("temptable(circles_contained2()) {... !id}")
+        res3 = preql("temptable(circles_contained2()) {...!id}")
 
         assert res1 == res2, (res1, res2)
         assert res2 == res3, (list(res2), list(res3))

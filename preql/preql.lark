@@ -115,10 +115,10 @@ delete: molecule "delete" expr_list
      | "^" molecule -> desc
      | new
      | one
-     | const
 
 ?atom: var
      | getattr
+     | const
 
 one: "one" [NULLABLE] molecule
 
@@ -150,10 +150,8 @@ named_expr: [name ":"] expr
 
 
 marker: MARKER
-ellipsis: "..." exclude?
-exclude: exclude_name+
-exclude_name: EXCLUDE_NAME
-EXCLUDE_NAME: "!" NAME
+ellipsis: "..." exclude*
+?exclude: "!" (name | marker)
 
 getattr: [molecule] "." (name | marker)
 name: NAME

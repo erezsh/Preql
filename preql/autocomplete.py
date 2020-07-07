@@ -132,22 +132,25 @@ class AcState(State):
     def replace(self, **kw):
         assert False
 
+def _eval_autocomplete(ac_state, stmts):
+    for stmt in stmts:
+        try:
+            eval_autocomplete(ac_state, stmt, False)
+        except PreqlError as e:
+            ac_log.exception(e)
+
 def autocomplete(state, code, source='<autocomplete>'):
+    ac_state = AcState.clone(state)
     try:
-        parse_stmts(code, source, wrap_syntax_error=False)
+        stmts = parse_stmts(code, source, wrap_syntax_error=False)
     except UnexpectedCharacters as e:
         return {}
     except UnexpectedToken as e:
             tree = autocomplete_tree(e.puppet)
             if tree:
                 stmts = TreeToAst(code_ref=(code, source)).transform(tree)
-                ac_state = AcState.clone(state)
 
-                for stmt in stmts[:-1]:
-                    try:
-                        eval_autocomplete(ac_state, stmt, False)
-                    except PreqlError as e:
-                        ac_log.exception(e)
+                _eval_autocomplete(ac_state, stmts[:-1])
 
                 try:
                     eval_autocomplete(ac_state, stmts[-1], True)
@@ -157,5 +160,7 @@ def autocomplete(state, code, source='<autocomplete>'):
                 except PreqlError as e:
                     ac_log.exception(e)
 
-    ns = state.ns.get_all_vars()
-    return ns
+    else:
+        _eval_autocomplete(ac_state, stmts)
+
+    return ac_state.ns.get_all_vars()
