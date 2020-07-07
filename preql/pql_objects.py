@@ -10,7 +10,7 @@ from . import settings
 from . import pql_ast as ast
 from . import sql
 
-from .pql_types import T, Type, Object, repr_value, flatten_type, join_names, table_to_struct
+from .pql_types import T, Type, Object, repr_value, flatten_type, join_names
 
 # Functions
 @dataclass
@@ -312,8 +312,8 @@ class ListInstance(CollectionInstance):
 
 
 def make_instance_from_name(t, cn):
-    if t <= (T.struct):
-        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in table_to_struct(t).elems.items()})
+    if t <= T.struct:
+        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elem_dict.items()})
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
@@ -355,7 +355,7 @@ class AggregateInstance(AbsInstance):
 
     def primary_key(self):
         # TODO should return aggregate key, no?
-        return (self.elem.primary_key())
+        return self.elem.primary_key()
 
 
 class AbsStructInstance(AbsInstance):

@@ -11,7 +11,7 @@ from . import sql
 
 from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
 from .evaluate import evaluate, localize, db_query, TableConstructor, _destructure_param_match
-from .pql_types import Object, T, table_flat_for_insert, Type, join_names, table_to_struct, combined_dp
+from .pql_types import Object, T, table_flat_for_insert, Type, join_names, combined_dp
 
 # def _pql_SQL_callback(state: State, var: str, instances):
 #     var = var.group()
@@ -165,7 +165,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     assert_type(expr.type, T.collection, state, expr_ast, 'temptable')
 
     # elems = dict(expr.type.elems)
-    elems = table_to_struct(expr.type).elems
+    elems = expr.type.elem_dict
 
     if any(t <= T.unknown for t in elems.values()):
         return objects.TableInstance.make(sql.null, expr.type, [])
@@ -272,7 +272,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     assert all((t.type <= T.collection) for t in tables)
 
-    structs = {name: table_to_struct(table.type) for name, table in safezip(exprs, tables)}
+    structs = {name: T.struct(**table.type.elem_dict) for name, table in safezip(exprs, tables)}
 
     # Update nullable for left/right/outer joins
     if nullable:

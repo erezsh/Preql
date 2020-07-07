@@ -717,7 +717,7 @@ def value(x):
 
 
 
-from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp, table_to_struct
+from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp
 def compile_type_def(state, table_name, table) -> Sql:
     assert table <= T.table
 

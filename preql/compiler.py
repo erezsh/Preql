@@ -9,7 +9,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func
-from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp, table_to_struct
+from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp
 
 @dataclass
 class Table(Object):
@@ -52,7 +52,7 @@ def _expand_ellipsis(state, table, fields):
             if f.name:
                 raise pql_SyntaxError.make(state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
-                elems = table_to_struct(table.type).elems
+                elems = table.type.elem_dict
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
                         raise AutocompleteSuggestions({k:v for k,v in elems.items()
@@ -529,7 +529,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     with state.use_scope(table.all_attrs()):
         conds = evaluate(state, sel.conds)
 
-    if any(t <= T.unknown for t in table_to_struct(table.type).elems.values()):
+    if any(t <= T.unknown for t in table.type.elem_types):
         code = sql.unknown
     else:
         for i, c in enumerate(conds):

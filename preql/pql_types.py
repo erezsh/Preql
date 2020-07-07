@@ -97,6 +97,14 @@ class Type(Object, AbsType):
             return self.elems.values()
         return self.elems
 
+    @property
+    def elem_dict(t):
+        elems = t.elems
+        if isinstance(elems, tuple):
+            assert len(elems) == 1
+            elems = {'value': elems[0]}
+        return elems
+
     def issubtype(self, t):
         assert isinstance(t, Type), t
         if t.typename == 'union':   # XXX a little hacky. Change to issupertype?
@@ -364,7 +372,7 @@ def flatten_path(path, t):
 
 @combined_dp
 def flatten_path(path, t: T.union[T.table, T.struct]):
-    elems = table_to_struct(t).elems
+    elems = t.elem_dict
     if t.nullable:
         elems = {k:v.replace(nullable=True) for k, v in elems.items()}
     return concat_for(flatten_path(path + [name], col) for name, col in elems.items())
@@ -385,7 +393,7 @@ def table_params(t):
 
 @combined_dp
 def restructure_result(t: T.struct, i):
-    return ({name: restructure_result(col, i) for name, col in table_to_struct(t).elems.items()})
+    return ({name: restructure_result(col, i) for name, col in t.elem_dict.items()})
 
 @combined_dp
 def restructure_result(t: T.union[T.primitive, T.null], i):
@@ -405,14 +413,5 @@ def table_flat_for_insert(table):
     pks = {join_names(pk) for pk in table.options.get('pk', [])}
     names = [name for name,t in flatten_type(table)]
     return classify_bool(names, lambda name: name in pks)
-
-def table_to_struct(t):
-    "Misnamed.."
-    elems = t.elems
-    if isinstance(elems, tuple):
-        assert len(elems) == 1
-        elems = {'value': elems[0]}
-    return T.struct(**elems)
-
 
 global_methods['zz'] = T.int
