@@ -81,6 +81,7 @@ def pql_PY(state: State, code_expr: ast.Expr):
 
 def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
+    # .. why not just compile with parameters? the types are already known
     type_ = evaluate(state, type_expr)
     code_expr2 = evaluate(state, code_expr)
     return ast.ResolveParametersString(None, type_, code_expr2)

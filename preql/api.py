@@ -1,7 +1,5 @@
 from contextlib import contextmanager
 
-import tabulate
-
 from . import settings
 from . import pql_ast as ast
 from . import pql_types as types
@@ -10,6 +8,9 @@ from .interpreter import Interpreter
 from .evaluate import localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
 from .pql_types import T, repr_value
+
+import rich.table
+import rich.markup
 
 
 def _make_const(value):
@@ -30,6 +31,40 @@ MAX_AUTO_COUNT = 10000
 def table_limit(self, state, limit):
     return call_pql_func(state, '_core_limit', [self, _make_const(limit)])
 
+
+def _rich_table(name, count_str, rows, colors=True, show_footer=False):
+    if name:
+        header = f"table {name} {count_str}"
+    else:
+        header = f"table {count_str}"
+
+    if not rows:
+        return header
+
+    table = rich.table.Table(title=header, show_footer=show_footer)
+
+    # TODO enable/disable styling
+    for k, v in rows[0].items():
+        kw = {}
+        if isinstance(v, (int, float)):
+            kw['justify']='right'
+
+        if colors:
+            if isinstance(v, int):
+                kw['style']='cyan'
+            elif isinstance(v, float):
+                kw['style']='yellow'
+            elif isinstance(v, str):
+                kw['style']='green'
+
+        table.add_column(k, footer=k, **kw)
+
+    for r in rows:
+        table.add_row(*[rich.markup.escape(str(x)) for x in r.values()])
+
+    return table
+
+
 def table_repr(self, state):
 
     assert isinstance(state, State), state
@@ -39,11 +74,11 @@ def table_repr(self, state):
     else:
         count_str = f'={count}'
 
-    if len(self.type.elems) == 1:
-        rows = localize(state, table_limit(self, state, LIST_PREVIEW_SIZE))
-        post = f', ... ({count_str})' if len(rows) < count else ''
-        elems = ', '.join(repr_value(ast.Const(None, self.type.elem, r)) for r in rows)
-        return f'[{elems}{post}]'
+    # if len(self.type.elems) == 1:
+    #     rows = localize(state, table_limit(self, state, LIST_PREVIEW_SIZE))
+    #     post = f', ... ({count_str})' if len(rows) < count else ''
+    #     elems = ', '.join(repr_value(ast.Const(None, self.type.elem, r)) for r in rows)
+    #     return f'[{elems}{post}]'
 
     # rows = list(_call_pql_func(state, 'limit', [self, _make_const(TABLE_PREVIEW_SIZE)]))
     rows = localize(state, table_limit(self, state, TABLE_PREVIEW_SIZE))
@@ -63,9 +98,13 @@ def table_repr(self, state):
             ]
 
         return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs)) + post
-    else:
-        header = f"table {self.type.typename}, {count_str}\n"
-        return header + tabulate.tabulate(rows, headers="keys", numalign="right") + post
+
+    elif state.fmt == 'rich':
+        return _rich_table(self.type.options.get('name', ''), count_str, rows)
+
+    return _rich_table(self.type.options.get('name', ''), count_str, rows, rich=False)
+
+    raise NotImplementedError(f"Unknown format: {state.fmt}")
 
 objects.CollectionInstance.repr = table_repr
 

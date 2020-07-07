@@ -1,3 +1,6 @@
+import rich.console
+import rich.markup
+
 from time import time
 import sys
 
@@ -133,6 +136,10 @@ def start_repl(p, prompt=' >> '):
     repl_log.info("Welcome to the Preql REPL. Type help() for help")
     save_last = '_'   # XXX A little hacky
 
+    p.interp.state.fmt = 'rich' # TODO proper api
+
+    console = rich.console.Console()
+
     try:
         session = PromptSession(
             lexer=PygmentsLexer(GoLexer),
@@ -166,7 +173,10 @@ def start_repl(p, prompt=' >> '):
                             p.interp.set_var(save_last, res)
 
                         res = res.repr(p.interp.state)
-                        repl_log.info(res)
+                        # repl_log.info(res)
+                        if isinstance(res, str):
+                            res = rich.markup.escape(res)
+                        console.print(res, overflow='ellipsis')
 
                 except PreqlError as e:
                     repl_log.error(e)
