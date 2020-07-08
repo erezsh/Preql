@@ -4,7 +4,7 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
-from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for, X, listgen
+from .utils import dataclass, SafeDict, safezip, X, listgen
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import settings
 from . import pql_ast as ast
@@ -36,7 +36,7 @@ class ParamDict(Object):
 
     @property
     def type(self):
-        return tuple((n,p.type) for p in self.params.values())
+        return tuple((n,p.type) for n,p in self.params.items())
 
 
 class Function(Object):
@@ -225,6 +225,7 @@ class Instance(AbsInstance):
 
 def new_value_instance(value, type_=None, force_type=False):
     r = sql.value(value)
+
     if force_type:
         assert type_
     elif type_:

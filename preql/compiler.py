@@ -1,7 +1,7 @@
 import operator
 
-from .utils import safezip, listgen, SafeDict, find_duplicate, dataclass
-from .exceptions import pql_TypeError, PreqlError, pql_SyntaxError, pql_CompileError
+from .utils import safezip, listgen, find_duplicate, dataclass
+from .exceptions import pql_TypeError, pql_SyntaxError
 from . import exceptions as exc
 
 from . import settings
@@ -9,7 +9,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func
-from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp
+from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object
 
 @dataclass
 class Table(Object):
@@ -56,7 +56,8 @@ def _expand_ellipsis(state, table, fields):
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
                         raise AutocompleteSuggestions({k:v for k,v in elems.items()
-                                                      if k not in direct_names and k not in f.value.exclude})
+                                                      if k not in direct_names
+                                                      and k not in f.value.exclude})
 
                     if n not in elems:
                         raise exc.pql_NameNotFound.make(state, n, f"Field to exclude '{n}' not found")
@@ -125,7 +126,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     # Make new type
     elems = {}
 
-    codename = state.unique_name('proj')
+    # codename = state.unique_name('proj')
     for name_, inst in all_fields:
         assert isinstance(inst, objects.AbsInstance)
 
@@ -142,8 +143,8 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     # Make code
     flat_codes = [code
-                    for _, inst in all_fields
-                    for code in inst.flatten_code()]
+                  for _, inst in all_fields
+                  for code in inst.flatten_code()]
 
     # TODO if nn != on
     sql_fields = [

@@ -1,7 +1,8 @@
 import argparse
-from . import Preql, __version__
 from pathlib import Path
 from itertools import chain
+
+from . import Preql, __version__
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', default=False, help="Enter interactive mode after running the script")

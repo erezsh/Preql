@@ -15,22 +15,19 @@
 #         simplify (compute) into the final result
 
 from copy import copy
-from typing import List, Optional, Any
+from typing import List, Optional
 import logging
 import re
 
-from .utils import benchmark
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func
-from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, PreqlError, pql_SyntaxError, pql_CompileError
+from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, PreqlError, pql_SyntaxError
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from . import settings
 from .parser import Str
-RawSql = sql.RawSql
-Sql = sql.Sql
 
 from .interp_common import State, dy, new_value_instance
 from .compiler import compile_to_inst
@@ -91,9 +88,9 @@ def _execute(state: State, struct_def: ast.StructDef):
     resolve(state, struct_def)
 
 
-def db_query(state: State, sql, subqueries=None):
+def db_query(state: State, sql_code, subqueries=None):
     try:
-        return state.db.query(sql, subqueries, state=state)
+        return state.db.query(sql_code, subqueries, state=state)
     except exc.DatabaseQueryError as e:
         raise exc.pql_DatabaseQueryError.make(state, None, e.args[0])
 
@@ -430,8 +427,7 @@ def eval_func_call(state, func, args):
             expr = func.expr
 
         with state.use_scope(args):
-            with benchmark.measure('call_expr'):
-                res = _call_expr(state, expr)
+            res = _call_expr(state, expr)
 
             if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
                 raise exc.InsufficientAccessLevel()
@@ -574,10 +570,10 @@ def apply_database_rw(state: State, o: ast.One):
     row ,= rows
     rowtype = T.row[table.type]
 
-    if (table.type <= T.list):
+    if table.type <= T.list:
         return new_value_instance(row)
 
-    assert (table.type <= T.table)
+    assert table.type <= T.table
     assert_type(table.type, T.table, state, o, 'one')
     d = {k: new_value_instance(v, table.type.elems[k], True) for k, v in row.items()}
     return objects.RowInstance(rowtype, d)
@@ -590,7 +586,7 @@ def apply_database_rw(state: State, d: ast.Delete):
 
     cond_table = ast.Selection(d.text_ref, d.table, d.conds)
     table = evaluate(state, cond_table)
-    assert (table.type <= T.table)
+    assert table.type <= T.table
 
     rows = list(localize(state, table))
     if rows:
@@ -664,7 +660,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     arg ,= new.args
 
     # TODO postgres can do it better!
-    field = arg.name
+    # field = arg.name
     table = evaluate(state, arg.value)
     rows = localize(state, table)
 
@@ -683,7 +679,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
 
 
 @listgen
-def _destructure_param_match(state, ast, param_match):
+def _destructure_param_match(state, ast_node, param_match):
     # TODO use cast rather than a ad-hoc hardwired destructure
     for k, v in param_match:
         if isinstance(v, objects.RowInstance):
@@ -693,9 +689,9 @@ def _destructure_param_match(state, ast, param_match):
         if (k.type <= T.struct):
             names = [name for name, t in flatten_type(k.orig, [k.name])]
             if not isinstance(v, list):
-                raise pql_TypeError.make(state, ast, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
+                raise pql_TypeError.make(state, ast_node, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
             if len(v) != len(names):
-                raise pql_TypeError.make(state, ast, f"Parameter {k.name} received a bad value (size of {len(names)})")
+                raise pql_TypeError.make(state, ast_node, f"Parameter {k.name} received a bad value (size of {len(names)})")
             yield from safezip(names, v)
         else:
             yield k.name, v
@@ -812,7 +808,6 @@ def apply_database_rw(state, x):
 #
 # Return the local value of the expression. Only requires computation if the value is an instance.
 #
-from copy import copy
 @dy
 def __resolve_sql_parameters(ns, param: sql.Parameter):
     inst = ns.get_var(param.name)
@@ -828,7 +823,7 @@ def __resolve_sql_parameters(ns, l: list):
 @dy
 def __resolve_sql_parameters(ns, node):
     resolved = {k:__resolve_sql_parameters(ns, v) for k, v in node
-                if isinstance(v, Sql) or isinstance(v, list) and all(isinstance(i, Sql) for i in v)}
+                if isinstance(v, sql.Sql) or isinstance(v, list) and all(isinstance(i, sql.Sql) for i in v)}
     return node.replace(**resolved)
 
 def _resolve_sql_parameters(state, node):
@@ -873,7 +868,6 @@ def localize(state, x):
 ### Added functions
 
 def function_help_str(self, state):
-    from .evaluate import evaluate, localize    # XXX refactor this
     params = [p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in self.params]
     if self.param_collector is not None:
         params.append(f"...{self.param_collector.name}")

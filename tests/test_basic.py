@@ -1,5 +1,4 @@
-from unittest import TestCase, skip
-from copy import copy
+from unittest import skip
 
 from parameterized import parameterized_class
 

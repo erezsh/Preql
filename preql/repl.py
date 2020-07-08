@@ -12,35 +12,30 @@ loop = asyncio.SelectorEventLoop(selector)
 asyncio.set_event_loop(loop)
 ### XXX End of fix
 
-from . import Preql
-from . import pql_objects as objects
-from . import pql_ast as ast
-from .api import table_more
-from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError
-from .pql_types import Object
-from .parser import parse_stmts
-from .loggers import ac_log, repl_log
-from . import settings
-from preql.autocomplete import autocomplete
-from .utils import memoize
-
-from prompt_toolkit import prompt
-from prompt_toolkit import PromptSession
-from pygments.lexers.python import Python3Lexer
 from pygments.lexers.go import GoLexer
+from prompt_toolkit import PromptSession
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.validation import Validator, ValidationError
 from prompt_toolkit.application.current import get_app
-
-from prompt_toolkit.completion import WordCompleter
-
-KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true return !in'.split()
-# word_completer = WordCompleter(KEYWORDS)
-KEYWORDS = {k:None for k in KEYWORDS}
-
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text.html import HTML, html_escape
+
+from . import Preql
+from . import pql_objects as objects
+from .api import table_more
+from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError
+from .pql_types import Object
+from .parser import parse_stmts
+from .loggers import repl_log
+from . import settings
+from preql.autocomplete import autocomplete
+from .utils import memoize
+
+
+KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true return !in'.split()
+KEYWORDS = {k:None for k in KEYWORDS}
+
 
 
 def is_name(s):
@@ -125,7 +120,7 @@ def _(event):
 def _code_is_valid(code):
     if code:
         try:
-            s = parse_stmts(code, '<repl>')
+            parse_stmts(code, '<repl>')
         except pql_SyntaxError as e:
             return False
         except Exception as e:

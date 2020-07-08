@@ -1,9 +1,8 @@
 from pathlib import Path
 
-from .utils import SafeDict, benchmark
-from .exceptions import PreqlError, pql_TypeError, pql_ValueError
 
-from .evaluate import State, execute, evaluate, eval_func_call
+from . import exceptions as exc
+from .evaluate import State, execute, eval_func_call
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -18,20 +17,19 @@ def initial_namespace():
     ns = {k:v for k, v in T.items()}
     ns.update(internal_funcs)
     ns.update(joins)
-    ns['TypeError'] = pql_TypeError
-    ns['ValueError'] = pql_ValueError
+    # TODO all exceptions
+    ns['TypeError'] = exc.pql_TypeError
+    ns['ValueError'] = exc.pql_ValueError
     return [dict(ns)]
 
 class Interpreter:
     def __init__(self, sqlengine):
         self.sqlengine = sqlengine
-        self.state = State(sqlengine, 'text', initial_namespace())
-        self.state.interp = self    # TODO hack for connect()
+        self.state = State(self, sqlengine, 'text', initial_namespace())
         self.include('core.pql', __file__) # TODO use an import mechanism instead
 
     def call_func(self, fname, args):
-        with benchmark.measure('call_func'):
-            return eval_func_call(self.state, self.state.get_var(fname), args)
+        return eval_func_call(self.state, self.state.get_var(fname), args)
 
     # def eval_expr(self, code, args):
     #     expr_ast = parse_expr(code)

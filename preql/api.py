@@ -1,5 +1,8 @@
 from contextlib import contextmanager
 
+import rich.table
+import rich.markup
+
 from . import settings
 from . import pql_ast as ast
 from . import pql_types as types
@@ -8,10 +11,8 @@ from . import exceptions as exc
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
-from .pql_types import T, repr_value
+from .pql_types import T
 
-import rich.table
-import rich.markup
 
 
 def _make_const(value):
@@ -118,7 +119,7 @@ def table_repr(self, state, offset=0):
 
     return _rich_table(self.type.options.get('name', ''), count_str, rows, offset, colors=False)
 
-    raise NotImplementedError(f"Unknown format: {state.fmt}")
+    # raise NotImplementedError(f"Unknown format: {state.fmt}")
 
 objects.CollectionInstance.repr = table_repr
 
@@ -172,7 +173,7 @@ def promise(state, inst):
 class Interface:
     __name__ = "Preql"
 
-    def __init__(self, db_uri=None, print_sql=settings.print_sql, save_last=None):
+    def __init__(self, db_uri=None, print_sql=settings.print_sql):
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
 

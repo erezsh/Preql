@@ -1,6 +1,4 @@
-from collections import deque
-
-from lark import Token, UnexpectedCharacters, UnexpectedToken, Tree
+from lark import Token, UnexpectedCharacters, UnexpectedToken
 
 from .exceptions import ReturnSignal, pql_NameNotFound, PreqlError
 from .loggers import ac_log
@@ -8,17 +6,15 @@ from . import pql_ast as ast
 from . import pql_objects as objects
 from .utils import bfs
 from .parser import parse_stmts, TreeToAst
-from .pql_types import T
-
-from .interp_common import State, dy, new_value_instance, evaluate
-from .evaluate import evaluate, execute, resolve
+from .interp_common import State, dy
+from .evaluate import evaluate, resolve
 from .compiler import AutocompleteSuggestions
 from . import sql
 
 
 @dy
 def eval_autocomplete(state, x, go_inside):
-    res = evaluate(state, x)
+    _res = evaluate(state, x)
     # assert isinstance(res, objects.Instance)
 
 @dy
@@ -121,7 +117,6 @@ def autocomplete_tree(puppet):
     return _search_puppet(puppet)
 
 
-from .interp_common import State
 class AcState(State):
     def get_var(self, name):
         try:
@@ -146,19 +141,19 @@ def autocomplete(state, code, source='<autocomplete>'):
     except UnexpectedCharacters as e:
         return {}
     except UnexpectedToken as e:
-            tree = autocomplete_tree(e.puppet)
-            if tree:
-                stmts = TreeToAst(code_ref=(code, source)).transform(tree)
+        tree = autocomplete_tree(e.puppet)
+        if tree:
+            stmts = TreeToAst(code_ref=(code, source)).transform(tree)
 
-                _eval_autocomplete(ac_state, stmts[:-1])
+            _eval_autocomplete(ac_state, stmts[:-1])
 
-                try:
-                    eval_autocomplete(ac_state, stmts[-1], True)
-                except AutocompleteSuggestions as e:
-                    ns ,= e.args
-                    return ns
-                except PreqlError as e:
-                    ac_log.exception(e)
+            try:
+                eval_autocomplete(ac_state, stmts[-1], True)
+            except AutocompleteSuggestions as e:
+                ns ,= e.args
+                return ns
+            except PreqlError as e:
+                ac_log.exception(e)
 
     else:
         _eval_autocomplete(ac_state, stmts)

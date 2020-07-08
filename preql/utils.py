@@ -3,7 +3,7 @@ from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 
-from typing import _GenericAlias as TypeBase, Any, Union, Callable, Optional
+from typing import Optional
 from functools import wraps
 from operator import getitem
 

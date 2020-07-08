@@ -1,10 +1,8 @@
-from typing import List, Any, Optional, Dict
+from typing import List, Optional, Dict
 
-from .utils import dataclass, listgen, X
-from . import exceptions as exc
-
+from .utils import dataclass, X
 from . import pql_types
-from .pql_types import T, Type, Object
+from .pql_types import T, join_names, flatten_type, Type, combined_dp
 
 
 sqlite = 'sqlite'
@@ -698,7 +696,10 @@ def value(x):
     if x is None:
         return null
 
-    t = pql_types.from_python(type(x))
+    try:
+        t = pql_types.from_python(type(x))
+    except KeyError:
+        raise ValueError(x)
 
     if t <= T.datetime:
         # TODO Better to pass the object instead of a string?
@@ -718,7 +719,6 @@ def value(x):
 
 
 
-from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object, combined_dp
 def compile_type_def(state, table_name, table) -> Sql:
     assert table <= T.table
 
@@ -739,7 +739,7 @@ def compile_type_def(state, table_name, table) -> Sql:
             type_ = compile_type(c)
 
         columns.append( f'"{name}" {type_}' )
-        if (c <= T.t_relation):
+        if c <= T.t_relation:
             # TODO any column, using projection / get_attr
             if not table.options.get('temporary', False):
                 # In postgres, constraints on temporary tables may reference only temporary tables
@@ -760,8 +760,8 @@ def compile_type(type_: T.t_relation):
     return 'INTEGER'    # Foreign-key is integer
 
 @combined_dp
-def compile_type(type: T.primitive):
-    assert type <= T.primitive
+def compile_type(type_: T.primitive):
+    assert type_ <= T.primitive
     s = {
         'int': "INTEGER",
         'string': "VARCHAR(4000)",
@@ -770,13 +770,13 @@ def compile_type(type: T.primitive):
         'text': "TEXT",
         't_relation': "INTEGER",
         'datetime': "TIMESTAMP",
-    }[type.typename]
-    if not type.nullable:
+    }[type_.typename]
+    if not type_.nullable:
         s += " NOT NULL"
     return s
 
 @combined_dp
-def compile_type(type: T.null):
+def compile_type(_type: T.null):
     return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
 
 @combined_dp

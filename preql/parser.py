@@ -22,17 +22,17 @@ def token_value(self, text_ref, t):
 
 def make_text_reference(text, source_file, meta, children=()):
     ref = TextRange(
-            TextPos(
-                meta.start_pos,
-                meta.line,
-                meta.column,
-            ),
-            TextPos(
-                meta.end_pos or meta.start_pos,
-                meta.end_line or meta.line,
-                meta.end_column or meta.column,
-            )
+        TextPos(
+            meta.start_pos,
+            meta.line,
+            meta.column,
+        ),
+        TextPos(
+            meta.end_pos or meta.start_pos,
+            meta.end_line or meta.line,
+            meta.end_column or meta.column,
         )
+    )
 
     for c in children:
         if hasattr(c, 'text_ref'):
@@ -110,7 +110,7 @@ class TreeToAst(Transformer):
         return ast.List_(make_text_reference(*self.code_ref, meta), T.list[T.any], items)
 
     @v_args(inline=False)
-    def as_list(_, args):
+    def as_list(self, args):
         return args
 
     # types

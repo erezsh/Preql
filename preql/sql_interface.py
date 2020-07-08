@@ -178,13 +178,13 @@ class SqliteInterface(SqlInterface):
         return cnt > 0
 
     table_schema_type = T.table(
-            pos=T.int,
-            name=T.string,
-            type=T.string,
-            notnull=T.bool,
-            default_value=T.string,
-            pk=T.bool,
-        )
+        pos=T.int,
+        name=T.string,
+        type=T.string,
+        notnull=T.bool,
+        default_value=T.string,
+        pk=T.bool,
+    )
 
     def import_table_type(self, state, name, columns_whitelist):
 
@@ -250,13 +250,13 @@ class GitqliteInterface(SqliteInterface):
 
 
     table_schema_type = T.table(
-            pos=T.int,
-            default_value=T.string,
-            name=T.string,
-            notnull=T.bool,
-            pk=T.bool,
-            type=T.string,
-        )
+        pos=T.int,
+        default_value=T.string,
+        name=T.string,
+        notnull=T.bool,
+        pk=T.bool,
+        type=T.string,
+    )
 
     def _execute_sql(self, sql_type, sql_code, state):
         try:

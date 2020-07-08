@@ -1,7 +1,7 @@
 from typing import List, Any, Optional, Dict, Union
 
 from .utils import dataclass, TextReference
-from .pql_types import T, Type, Object, repr_value
+from .pql_types import Type, Object, repr_value
 
 # TODO We want Ast to typecheck, but sometimes types are still unknown (i.e. at parse time).
 # * Use incremental type checks?

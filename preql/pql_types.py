@@ -1,16 +1,13 @@
-from typing import List, Tuple, Optional, Union
-from dataclasses import field
+from typing import Union
 from datetime import datetime
+from dataclasses import field
+from decimal import Decimal
 
 import runtype
 from runtype.typesystem import TypeSystem
 
-from typing import List, Dict, Optional, Any, Union
-from datetime import datetime
-
-from .utils import dataclass, listgen, concat_for, SafeDict, classify_bool, safezip
+from .utils import dataclass, listgen, concat_for, classify_bool
 from . import exceptions as exc
-from dataclasses import field, replace
 
 @dataclass
 class Object:    # XXX should be in a base module
@@ -98,8 +95,8 @@ class Type(Object, AbsType):
         return self.elems
 
     @property
-    def elem_dict(t):
-        elems = t.elems
+    def elem_dict(self):
+        elems = self.elems
         if isinstance(elems, tuple):
             assert len(elems) == 1
             elems = {'value': elems[0]}
@@ -220,7 +217,6 @@ def join_names(names):
     return "_".join(names)
 
 
-from decimal import Decimal
 _t = {
     bool: T.bool,
     int: T.int,

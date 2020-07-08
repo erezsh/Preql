@@ -10,9 +10,8 @@ from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel
 
 from . import pql_ast as ast
 from . import pql_objects as objects
-from . import sql
 from .sql_interface import SqliteInterface, PostgresInterface, GitqliteInterface, ConnectError
-from .pql_types import T, Type
+from .pql_types import Type
 
 dy = Dispatch()
 
@@ -24,7 +23,7 @@ def simplify():
     raise NotImplementedError()
 
 @dy
-def evaluate(state: type(None), any: type(None)):
+def evaluate(state: type(None), _any: type(None)):
     raise NotImplementedError()
 
 
@@ -38,8 +37,9 @@ class AccessLevels:
 class State:
     AccessLevels = AccessLevels
 
-    def __init__(self, db, fmt, ns=None):
+    def __init__(self, interp, db, fmt, ns=None):
         self.db = db
+        self.interp = interp
         self.fmt = fmt
         # Add logger?
 
@@ -52,7 +52,7 @@ class State:
 
     @classmethod
     def clone(cls, inst):
-        s = cls(inst.db, inst.fmt)
+        s = cls(inst.interp, inst.db, inst.fmt)
         s.ns = copy(inst.ns)
         s.tick = inst.tick
         s.access_level = inst.access_level

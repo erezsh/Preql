@@ -1,8 +1,6 @@
 import re
 import time
-import logging
 
-from preql import Preql
 from preql.autocomplete import autocomplete
 from preql.loggers import test_log
 
@@ -141,7 +139,7 @@ def _parse_autocomplete_requirements(s):
         offset -= 6
         return x
 
-    new_s = re.sub("<<<(\w+)>>>", g, s)
+    new_s = re.sub(r"<<<(\w+)>>>", g, s)
     for k, v in matches.items():
         assert new_s[k:k+len(v)] == v, (k, v)
     return new_s, matches

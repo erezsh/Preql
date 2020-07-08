@@ -1,16 +1,20 @@
 import inspect
-from copy import copy
+import re
+import csv
+import inspect
 from typing import Optional
 
-from .utils import safezip, listgen, SafeDict
-from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp, pql_NotImplementedError
+from tqdm import tqdm
+
+from .utils import safezip, listgen
+from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp
 
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 
 from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
-from .evaluate import evaluate, localize, db_query, TableConstructor, _destructure_param_match
+from .evaluate import evaluate, localize, db_query, TableConstructor
 from .pql_types import Object, T, table_flat_for_insert, Type, join_names, combined_dp
 
 # def _pql_SQL_callback(state: State, var: str, instances):
@@ -65,7 +69,6 @@ def _pql_PY_callback(state: State, var: str):
 
     return '%s' % (inst.local_value)
 
-import re
 def pql_PY(state: State, code_expr: ast.Expr):
     code_expr2 = evaluate(state, code_expr)
     py_code = localize(state, code_expr2)
@@ -88,7 +91,6 @@ def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
 
 
 
-import inspect
 def _canonize_default(d):
     return None if d is inspect._empty else d
 
@@ -177,7 +179,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     name = state.unique_name("temp")    # TODO get name from table options
 
     if 'id' in elems and not const:
-            raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
+        raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
 
     table = T.table(**elems).set_options(name=name, pk=[] if const else [['id']], temporary=True)
 
@@ -281,14 +283,14 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
     # Update nullable for left/right/outer joins
     if nullable:
         structs = {name: t.replace(nullable=True) if n else t
-                    for (name, t), n in safezip(structs.items(), nullable)}
+                   for (name, t), n in safezip(structs.items(), nullable)}
 
     tables = [objects.alias_table_columns(t, n) for n, t in safezip(exprs, tables)]
 
     primary_keys = [ [name] + pk
-                        for name, t in safezip(exprs, tables)
-                        for pk in t.type.options.get('pk', [])
-                    ]
+                    for name, t in safezip(exprs, tables)
+                    for pk in t.type.options.get('pk', [])
+                ]
     table_type = T.table(**structs).set_options(name=state.unique_name("joinall" if joinall else "join"), pk=primary_keys)
 
     conds = [] if joinall else [sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip(structs, cols)])]
@@ -347,9 +349,11 @@ def pql_repr(state: State, obj: ast.Expr):
     Returns the type of the given object
     """
     inst = evaluate(state, obj)
-    # if not isinstance(inst, (objects.ValueInstance, Type)):
-    #     raise pql_NotImplementedError.make(state, obj, "Cannot repr() objects that aren't simple values")
-    return objects.new_value_instance(inst.repr(state))
+    try:
+        return objects.new_value_instance(inst.repr(state))
+    except ValueError:
+        value = repr(localize(state, inst))
+        return objects.new_value_instance(value)
 
 def pql_columns(state: State, table: ast.Expr):
     """
@@ -550,8 +554,6 @@ def pql_exit(state, value: Object = None):
     raise pql_ExitInterp(value)
 
 
-import csv
-from tqdm import tqdm
 
 def pql_import_csv(state: State, table: Object, filename: Object, header: Object = ast.Const(None, T.bool, False)):
     "Import a csv into an existing table"
