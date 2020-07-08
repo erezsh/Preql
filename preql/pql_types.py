@@ -129,7 +129,7 @@ class Type(Object, AbsType):
         return self.replace(options=options)
 
     def __repr__(self):
-        # TODO fix. Move to pql_dp?
+        # TODO fix. Move to dp_inst?
         if self.elems:
             if isinstance(self.elems, dict):
                 elems = '[%s]' % ', '.join(f'{k}: {v.typename_with_q if isinstance(v, Type) else repr(v)}' for k,v in self.elems.items())
@@ -231,11 +231,7 @@ def from_python(t):
 
 #---------------------
 
-class MyTypeSystem(TypeSystem):
-        # Preql objects
-    # def issubclass(self, t1, t2):
-    #     if isinstance(t2, Type)
-    #     return t1.issubtype(t2)
+class ProtoTS(TypeSystem):
     def issubclass(self, t1, t2):
         if t2 is object:
             return True
@@ -245,45 +241,56 @@ class MyTypeSystem(TypeSystem):
         elif is_t2:
             return False
 
-        # Regular Python
+        # Regular Python types
         return runtype.issubclass(t1, t2)
 
+    default_type = object
+
+class TS_Preql(ProtoTS):
     def get_type(self, obj):
         try:
             return obj.type
         except AttributeError:
             return type(obj)
 
-    def canonize_type(self, t):
-        return t
-
-    default_type = object #T.any
-
-pql_dp = runtype.Dispatch(MyTypeSystem())
 
 
-@pql_dp
+class TS_Preql_subclass(ProtoTS):
+    def get_type(self, obj):
+        # Preql objects
+        if isinstance(obj, Type):
+            return obj
+
+        # Regular Python
+        return type(obj)
+
+dp_type = runtype.Dispatch(TS_Preql_subclass())
+dp_inst = runtype.Dispatch(TS_Preql())
+
+
+
+@dp_inst
 def repr_value(v: T.object):
     return repr(v.value)
 
-@pql_dp
+@dp_inst
 def repr_value(v: T.decimal):
     raise exc.pql_NotImplementedError([], "Decimal not implemented")
 
-@pql_dp
+@dp_inst
 def repr_value(v: T.string):
     return f'"{v.value}"'
 
-@pql_dp
+@dp_inst
 def repr_value(v: T.text):
     return str(v.value)
 
-@pql_dp
+@dp_inst
 def repr_value(v: T.bool):
     return 'true' if v.value else 'false'
 
 
-@pql_dp
+@dp_inst
 def from_sql(state, res: T.primitive):
     row ,= res.value
     item ,= row
@@ -305,7 +312,7 @@ def _from_datetime(s):
     except ValueError as e:
         raise exc.pql_ValueError([], str(e))
 
-@pql_dp
+@dp_inst
 def from_sql(state, res: T.datetime):
     # XXX doesn't belong here?
     row ,= res.value
@@ -313,14 +320,14 @@ def from_sql(state, res: T.datetime):
     s = item
     return _from_datetime(s)
 
-@pql_dp
+@dp_inst
 def from_sql(state, arr: T.list):
     # TODO not assert
     if not all(len(e)==1 for e in arr.value):
         raise exc.pql_TypeError(state, None, f"Expected 1 column. Got {len(arr.value[0])}")
     return [e[0] for e in arr.value]
 
-@pql_dp
+@dp_inst
 @listgen
 def from_sql(state, arr: T.table):
     expected_length = len(flatten_type(arr.type))   # TODO optimize?
@@ -335,44 +342,17 @@ def from_sql(state, arr: T.table):
 
 
 
-class TypeSystem2(MyTypeSystem):
-        # Preql objects
-    def issubclass(self, t1, t2):
-        if t2 is object:
-            return True
-        is_t2 = isinstance(t2, Type)
-        if isinstance(t1, Type):
-            return is_t2 and t1 <= t2
-        elif is_t2:
-            return False
-
-        # Regular Python
-        return runtype.issubclass(t1, t2)
-
-    def get_type(self, obj):
-        # Preql objects
-        if isinstance(obj, Type):
-            return obj
-
-        # Regular Python
-        return type(obj)
-
-    default_type = object
-
-
-combined_dp = runtype.Dispatch(TypeSystem2())
-
-@combined_dp
+@dp_type
 def flatten_path(path, t):
     return [(path, t)]
 
-@combined_dp
+@dp_type
 def flatten_path(path, t: T.union[T.table, T.struct]):
     elems = t.elem_dict
     if t.nullable:
         elems = {k:v.replace(nullable=True) for k, v in elems.items()}
     return concat_for(flatten_path(path + [name], col) for name, col in elems.items())
-@combined_dp
+@dp_type
 def flatten_path(path, t: T.list):
     return concat_for(flatten_path(path + [name], col) for name, col in [('value', t.elem)])
 
@@ -387,15 +367,15 @@ def table_params(t):
     return [(name, c) for name, c in t.elems.items() if not c <= T.t_id]
 
 
-@combined_dp
+@dp_type
 def restructure_result(t: T.struct, i):
     return ({name: restructure_result(col, i) for name, col in t.elem_dict.items()})
 
-@combined_dp
+@dp_type
 def restructure_result(t: T.union[T.primitive, T.null], i):
     return next(i)
 
-@combined_dp
+@dp_type
 def restructure_result(t: T.datetime, i):
     s = next(i)
     return _from_datetime(s)
@@ -410,4 +390,4 @@ def table_flat_for_insert(table):
     names = [name for name,t in flatten_type(table)]
     return classify_bool(names, lambda name: name in pks)
 
-global_methods['zz'] = T.int
+# global_methods['zz'] = T.int

@@ -2,7 +2,7 @@ from typing import List, Optional, Dict
 
 from .utils import dataclass, X
 from . import pql_types
-from .pql_types import T, join_names, flatten_type, Type, combined_dp
+from .pql_types import T, join_names, flatten_type, Type, dp_type
 
 
 sqlite = 'sqlite'
@@ -727,7 +727,6 @@ def compile_type_def(state, table_name, table) -> Sql:
     columns = []
 
     pks = {join_names(pk) for pk in table.options['pk']}
-    # autocount = types.join_names(table.autocount)
     for name, c in flatten_type(table):
         if name in pks:
             assert c <= T.t_id
@@ -754,12 +753,12 @@ def compile_type_def(state, table_name, table) -> Sql:
     command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
     return RawSql(T.null, f'{command} "{table_name}" (' + ', '.join(columns + posts) + ')')
 
-@combined_dp
+@dp_type
 def compile_type(type_: T.t_relation):
     # TODO might have a different type
     return 'INTEGER'    # Foreign-key is integer
 
-@combined_dp
+@dp_type
 def compile_type(type_: T.primitive):
     assert type_ <= T.primitive
     s = {
@@ -775,11 +774,11 @@ def compile_type(type_: T.primitive):
         s += " NOT NULL"
     return s
 
-@combined_dp
+@dp_type
 def compile_type(_type: T.null):
     return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
 
-@combined_dp
+@dp_type
 def compile_type(idtype: T.t_id):
     s = "INTEGER"   # TODO non-int idtypes
     if not idtype.nullable:

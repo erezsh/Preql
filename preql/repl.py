@@ -20,6 +20,7 @@ from prompt_toolkit.validation import Validator, ValidationError
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text.html import HTML, html_escape
+from prompt_toolkit.key_binding import KeyBindings
 
 from . import Preql
 from . import pql_objects as objects
@@ -104,16 +105,15 @@ class MyValidator(Validator):
             # raise ValidationError(message=e.args[0], cursor_position=0)
             # pass
 
-from prompt_toolkit.key_binding import KeyBindings
-kb = KeyBindings()
-@kb.add('c-space')
-def _(event):
-    " Initialize autocompletion, or select the next completion. "
-    buff = event.app.current_buffer
-    if buff.complete_state:
-        buff.complete_next()
-    else:
-        buff.start_completion(select_first=False)
+# kb = KeyBindings()
+# @kb.add('c-space')
+# def _(event):
+#     " Initialize autocompletion, or select the next completion. "
+#     buff = event.app.current_buffer
+#     if buff.complete_state:
+#         buff.complete_next()
+#     else:
+#         buff.start_completion(select_first=False)
 
 
 @memoize

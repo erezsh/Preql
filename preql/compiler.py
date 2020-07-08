@@ -9,7 +9,8 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func
-from .pql_types import T, join_names, pql_dp, flatten_type, Type, Object
+from .pql_types import T, join_names, dp_inst, flatten_type, Type, Object
+from .casts import _cast
 
 @dataclass
 class Table(Object):
@@ -214,7 +215,7 @@ def compile_to_inst(state: State, like: ast.Like):
 
 
 ## Contains
-@pql_dp
+@dp_inst
 def _contains(state, op, a: T.string, b: T.string):
     f = {
         'in': 'str_contains',
@@ -222,9 +223,8 @@ def _contains(state, op, a: T.string, b: T.string):
     }[op]
     return call_pql_func(state, f, [a, b])
 
-@pql_dp
+@dp_inst
 def _contains(state, op, a: T.primitive, b: T.collection):
-    from .pql_functions import _cast
     b_list = _cast(state, b.type, T.list, b)
     if not (a.type <= b_list.type.elem):
         a = _cast(state, a.type, b_list.type.elem, a)
@@ -235,29 +235,29 @@ def _contains(state, op, a: T.primitive, b: T.collection):
     code = sql.Contains(op, [a.code, b_list.code])
     return objects.Instance.make(code, T.bool, [a, b_list])
 
-@pql_dp
+@dp_inst
 def _contains(state, op, a: T.any, b: T.any):
     raise pql_TypeError.make(state, op, f"Contains not implemented for {a.type} and {b.type}")
 
 
 ## Compare
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.any, b: T.any):
     raise pql_TypeError.make(state, op, f"Compare not implemented for {a.type} and {b.type}")
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.null, b: T.null):
     return objects.new_value_instance(op == '=')
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.type, b: T.null):
     assert not a.type.nullable
     return objects.new_value_instance(False)
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.null, b: T.type):
     return _compare(state, op, b, a)
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.null, b: T.object):
     # TODO Enable this type-based optimization:
     # if not b.type.nullable:
@@ -266,20 +266,20 @@ def _compare(state, op, a: T.null, b: T.object):
         b = b.primary_key()
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.object, b: T.null):
     return _compare(state, op, b, a)
 
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.unknown, b: T.object):
     return objects.UnknownInstance()
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.object, b: T.unknown):
     return objects.UnknownInstance()
 
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.primitive, b: T.primitive):
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
                 f = {
@@ -297,33 +297,33 @@ def _compare(state, op, a: T.primitive, b: T.primitive):
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 
-@pql_dp
+@dp_inst
 def _compare(state, arith, a: T.aggregate, b: T.aggregate):
     res = _compare(state, arith, a.elem, b.elem)
     return objects.aggregate(res)
 
-@pql_dp
+@dp_inst
 def _compare(state, arith, a: T.aggregate, b: T.int):
     res = _compare(state, arith, a.elem, b)
     return objects.aggregate(res)
 
-@pql_dp
+@dp_inst
 def _compare(state, arith, a: T.int, b: T.aggregate):
     return _compare(state, arith, b, a)
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.type, b: T.type):
     return objects.new_value_instance(a == b)
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.number, b: T.row):
     return _compare(state, op, a, b.primary_key())
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.row, b: T.number):
     return _compare(state, op, b, a)
 
-@pql_dp
+@dp_inst
 def _compare(state, op, a: T.row, b: T.row):
     return _compare(state, op, a.primary_key(), b.primary_key())
 
@@ -356,11 +356,11 @@ def compile_to_inst(state: State, arith: ast.Arith):
 
     return _compile_arith(state, arith, *args)
 
-@pql_dp
+@dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
     raise pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
 
-@pql_dp
+@dp_inst
 def _compile_arith(state, arith, a: T.collection, b: T.collection):
     # TODO validate types
     ops = {
@@ -378,26 +378,26 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
     return state.get_var(op).func(state, a, b)
 
 
-@pql_dp
+@dp_inst
 def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
     res = _compile_arith(state, arith, a.elem, b.elem)
     return objects.aggregate(res)
 
-@pql_dp
+@dp_inst
 def _compile_arith(state, arith, a: T.aggregate, b: T.primitive):
     res = _compile_arith(state, arith, a.elem, b)
     return objects.aggregate(res)
-@pql_dp
+@dp_inst
 def _compile_arith(state, arith, a: T.primitive, b: T.aggregate):
     return _compile_arith(state, arith, b, a)
 
-@pql_dp
+@dp_inst
 def _compile_arith(state, arith, a: T.string, b: T.int):
     if arith.op != '*':
         raise pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
     return call_pql_func(state, "repeat", [a, b])
 
-@pql_dp
+@dp_inst
 def _compile_arith(state, arith, a: T.number, b: T.number):
     if arith.op == '/' or a.type <= T.float or b.type <= T.float:
         res_type = T.float
@@ -418,7 +418,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
     code = sql.arith(res_type, arith.op, [a.code, b.code])
     return objects.make_instance(code, res_type, [a, b])
 
-@pql_dp
+@dp_inst
 def _compile_arith(state, arith, a: T.string, b: T.string):
     if arith.op != '+':
         raise exc.pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not supported for strings.")

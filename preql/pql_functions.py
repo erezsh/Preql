@@ -15,7 +15,8 @@ from . import sql
 
 from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
 from .evaluate import evaluate, localize, db_query, TableConstructor
-from .pql_types import Object, T, table_flat_for_insert, Type, join_names, combined_dp
+from .pql_types import Object, T, table_flat_for_insert, Type, join_names
+from .casts import _cast
 
 # def _pql_SQL_callback(state: State, var: str, instances):
 #     var = var.group()
@@ -378,73 +379,6 @@ def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
         return inst
 
     return _cast(state, inst.type, type_, inst)
-
-@combined_dp
-def _cast(state, inst_type, target_type, inst):
-    raise pql_TypeError.make(state, None, f"Cast not implemented for {inst_type}->{target_type}")
-
-@combined_dp
-def _cast(state, inst_type: T.list, target_type: T.list, inst):
-    if inst is objects.EmptyList:
-        return inst.replace(type=target_type)
-        # return evaluate(state, ast.List_( None, target_type, []), )
-
-    if (inst_type.elem <= target_type.elem):
-        return inst
-
-    value = inst.get_column('value')
-    elem = _cast(state, value.type, target_type.elem, value)
-    code = sql.Select(target_type, inst.code, [sql.ColumnAlias(elem.code, 'value')])
-    return inst.replace(code=code, type=T.list[elem.type])
-
-
-@combined_dp
-def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
-    res = _cast(state, inst_type.elem, target_type.elem, inst.elem)
-    return objects.aggregate(res)   # ??
-
-@combined_dp
-def _cast(state, inst_type: T.table, target_type: T.list, inst):
-    t = inst.type
-    if len(t.elems) != 1:
-        raise pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Too many columns")
-    if not (inst_type.elem <= target_type.elem):
-        raise pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
-
-    (elem_name, elem_type) ,= inst_type.elems.items()
-    code = sql.Select(T.list[elem_type], inst.code, [sql.ColumnAlias(sql.Name(elem_type, elem_name), 'value')])
-
-    return objects.ListInstance.make(code, T.list[elem_type], [inst])
-
-@combined_dp
-def _cast(state, inst_type: T.t_id, target_type: T.int, inst):
-    return inst.replace(type=T.int)
-
-@combined_dp
-def _cast(state, inst_type: T.union[T.float, T.bool], target_type: T.int, inst):
-    code = sql.Cast(T.int, "int", inst.code)
-    return objects.Instance.make(code, T.int, [inst])
-
-@combined_dp
-def _cast(state, inst_type: T.union[T.int, T.bool], target_type: T.float, inst):
-    code = sql.Cast(T.float, "float", inst.code)
-    return objects.Instance.make(code, T.float, [inst])
-
-@dy
-def _cast(state, inst_type: T.string, target_type: T.int, inst):
-    # TODO error on bad string?
-    code = sql.Cast(T.int, "int", inst.code)
-    return objects.Instance.make(code, T.int, [inst])
-
-@combined_dp
-def _cast(state, inst_type: T.primitive, target_type: T.string, inst):
-    code = sql.Cast(T.string, "varchar", inst.code)
-    return objects.Instance.make(code, T.string, [inst])
-
-@combined_dp
-def _cast(state, inst_type: T.t_relation, target_type: T.t_id, inst):
-    # TODO verify same table? same type?
-    return inst.replace(type=target_type)
 
 
 def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] = objects.null):
