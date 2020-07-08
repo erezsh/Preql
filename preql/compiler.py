@@ -80,6 +80,7 @@ def compile_to_inst(state: State, x):
 def compile_to_inst(state: State, node: ast.Ast):
     return node
 
+
 @dy
 def compile_to_inst(state: State, proj: ast.Projection):
     table = evaluate(state, proj.table)

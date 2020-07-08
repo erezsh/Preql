@@ -65,9 +65,8 @@ insert_rows: atom "+=" expr _NL
 set_value: atom "=" expr _NL
 
 selection: molecule expr_list
-slice: molecule "[" range "]"
-range: [molecule] ".." molecule
-     | molecule ".." [molecule]
+slice: molecule range
+range:  "[" ([molecule] ".." molecule | molecule ".." [molecule]) "]"
 
 projection: molecule "{" _NL? proj_exprs _NL? "}"
           | molecule "{" _NL? proj_exprs _NL? "=>" _NL? proj_exprs _NL? "}" -> projection_grouped
@@ -104,6 +103,7 @@ delete: molecule "delete" expr_list
      | func_call
      | pql_list
      | pql_dict
+     | range
      | selection
      | projection
      | slice

@@ -589,7 +589,8 @@ class Subquery(Sql):
     def _compile(self, qb):
         query = self.query.compile(qb).text
         fields = [f.compile(qb.replace(is_root=False)).text for f in self.fields]
-        return f"{self.table_name}({', '.join(fields)}) AS ({query})"
+        fields_str = "(" + ', '.join(fields) + ")" if fields else ''
+        return f"{self.table_name}{fields_str} AS ({query})"
 
     def compile(self, qb):
         sql_code = self._compile(qb)

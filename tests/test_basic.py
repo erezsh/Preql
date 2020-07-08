@@ -390,6 +390,21 @@ class BasicTests(PreqlTests):
         ''')
         self.assertEqual( list(preql.test()), [{'_':x} for x in [0, 1, 1]])
 
+    def test_range(self):
+        preql = self.Preql()
+        preql('''
+            func to20() = [..20]
+            func abc() = [1..3]
+            func adult() = [18..]
+        ''')
+
+        assert preql.to20() == list(range(20))
+        assert preql.abc() == list(range(1,3))
+        assert preql('adult()[..10]') == list(range(18, 28))
+        assert preql('adult()[..10] + adult()[..1]') == list(range(18, 28)) + [18]
+        assert preql('list( (adult()[..10] + adult()[..1]) {value + 1} )') == list(range(19, 29)) + [19]
+
+
     def test_rowtype(self):
         preql = Preql()
         preql('''

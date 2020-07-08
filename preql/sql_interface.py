@@ -55,7 +55,7 @@ class SqlInterface:
 
         if subqueries:
             subqs = [q.compile(qb).text for (name, q) in subqueries.items()]
-            sql_code = 'WITH ' + ',\n     '.join(subqs) + '\n'
+            sql_code = 'WITH RECURSIVE ' + ',\n     '.join(subqs) + '\n'
         else:
             sql_code = ''
         compiled = sql.compile(qb)

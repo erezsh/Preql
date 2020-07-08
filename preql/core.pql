@@ -110,6 +110,11 @@ _core_limit = limit
 _core_limit_offset = limit_offset
 //
 
+func distinct(t) {
+    "Remove identical rows"
+    return SQL(t, "SELECT distinct * FROM $t")
+}
+
 if (get_db_type() == "postgres") {
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
     func now() = SQL(datetime, "NOW()")         // Postgres

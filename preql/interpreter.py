@@ -3,7 +3,7 @@ from pathlib import Path
 from .utils import SafeDict, benchmark
 from .exceptions import PreqlError, pql_TypeError, pql_ValueError
 
-from .evaluate import State, execute, evaluate, localize, eval_func_call
+from .evaluate import State, execute, evaluate, eval_func_call
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects

@@ -67,6 +67,23 @@ WITH my_list(value) AS (VALUES(13),(27),(42))
 SELECT n in my_list FROM lucky_numbers
 ```
 
+## Range
+
+For when you want to create a sequence of numbers.
+
+Preql:
+
+```go
+[1..10]
+```
+
+SQL:
+
+```SQL
+WITH RECURSIVE range AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM range WHERE value+1<10)
+SELECT * FROM range
+```
+
 ## Better GROUP BY syntax
 
 Preql lets you express aggragation as {key => value}, instead of SQL's clunky syntax.
@@ -79,3 +96,4 @@ Person { country => name }
 -- postgreql
 SELECT country, array_agg(name) AS name FROM Person GROUP BY country
 ```
+

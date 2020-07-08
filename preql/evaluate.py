@@ -276,11 +276,12 @@ def execute(state, stmt):
 
 # Simplify performs local operations before any db-specific compilation occurs
 # Technically not super useful at the moment, but makes conceptual sense.
+
 @dy
 def simplify(state: State, cb: ast.CodeBlock):
-    if len(cb.statements) == 1:
-        s ,= cb.statements
-        return simplify(state, s)
+    # if len(cb.statements) == 1:
+    #     s ,= cb.statements
+    #     return simplify(state, s)
     return _execute(state, cb)
 
 @dy
@@ -917,3 +918,22 @@ def new_table_from_rows(state, name, columns, rows):
     state.set_var(table.name, x)
 
 
+
+
+
+@dy
+def compile_to_inst(state: State, range: ast.Range):
+    start = localize(state, evaluate(state, range.start)) if range.start else 0
+    if range.stop:
+        stop = localize(state, evaluate(state, range.stop))
+        stop_str = f" WHERE value+1<{stop}"
+    else:
+        stop_str = ''
+
+    type_ = T.list[T.int]
+    name = state.unique_name("range")
+    skip = 1
+    code = f"SELECT {start} AS value UNION ALL SELECT value+{skip} FROM {name}{stop_str}"
+    subq = sql.Subquery(name, [], sql.RawSql(type_, code))
+    code = sql.TableName(type_, name)
+    return objects.ListInstance(code, type_, {name: subq})
