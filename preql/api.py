@@ -4,6 +4,7 @@ from . import settings
 from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
+from . import exceptions as exc
 from .interpreter import Interpreter
 from .evaluate import localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
@@ -28,20 +29,22 @@ MAX_AUTO_COUNT = 10000
 
 
 
-def table_limit(self, state, limit):
-    return call_pql_func(state, '_core_limit', [self, _make_const(limit)])
+def table_limit(self, state, limit, offset=0):
+    return call_pql_func(state, '_core_limit_offset', [self, _make_const(limit), _make_const(offset)])
 
 
-def _rich_table(name, count_str, rows, colors=True, show_footer=False):
+def _rich_table(name, count_str, rows, offset, colors=True, show_footer=False):
+    header = 'table '
     if name:
-        header = f"table {name} {count_str}"
-    else:
-        header = f"table {count_str}"
+        header += name
+    if offset:
+        header += f'[{offset}..]'
+    header += f" {count_str}"
 
     if not rows:
         return header
 
-    table = rich.table.Table(title=header, show_footer=show_footer)
+    table = rich.table.Table(title=rich.markup.escape(header), show_footer=show_footer)
 
     # TODO enable/disable styling
     for k, v in rows[0].items():
@@ -65,7 +68,17 @@ def _rich_table(name, count_str, rows, colors=True, show_footer=False):
     return table
 
 
-def table_repr(self, state):
+_g_last_table = None
+_g_last_offset = 0
+def table_more(state):
+    if not _g_last_table:
+        raise exc.pql_ValueError.make(state, None, "No table yet")
+
+    return table_repr(_g_last_table, state, _g_last_offset)
+
+
+def table_repr(self, state, offset=0):
+    global _g_last_table, _g_last_offset
 
     assert isinstance(state, State), state
     count = _call_pql_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)])
@@ -80,8 +93,9 @@ def table_repr(self, state):
     #     elems = ', '.join(repr_value(ast.Const(None, self.type.elem, r)) for r in rows)
     #     return f'[{elems}{post}]'
 
-    # rows = list(_call_pql_func(state, 'limit', [self, _make_const(TABLE_PREVIEW_SIZE)]))
-    rows = localize(state, table_limit(self, state, TABLE_PREVIEW_SIZE))
+    rows = localize(state, table_limit(self, state, TABLE_PREVIEW_SIZE, offset))
+    _g_last_table = self
+    _g_last_offset = offset + len(rows)
     if self.type <= T.list:
         rows = [{'value': x} for x in rows]
 
@@ -100,9 +114,9 @@ def table_repr(self, state):
         return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs)) + post
 
     elif state.fmt == 'rich':
-        return _rich_table(self.type.options.get('name', ''), count_str, rows)
+        return _rich_table(self.type.options.get('name', ''), count_str, rows, offset)
 
-    return _rich_table(self.type.options.get('name', ''), count_str, rows, rich=False)
+    return _rich_table(self.type.options.get('name', ''), count_str, rows, offset, colors=False)
 
     raise NotImplementedError(f"Unknown format: {state.fmt}")
 

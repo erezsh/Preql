@@ -15,7 +15,7 @@ asyncio.set_event_loop(loop)
 from . import Preql
 from . import pql_objects as objects
 from . import pql_ast as ast
-from .api import TablePromise
+from .api import table_more
 from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError
 from .pql_types import Object
 from .parser import parse_stmts
@@ -162,8 +162,13 @@ def start_repl(p, prompt=' >> '):
                 if not code.strip():
                     continue
 
+
                 start_time = time()
                 try:
+                    if code == 'more':
+                        console.print(table_more(p.interp.state), overflow='ellipsis')
+                        continue
+
                     # Evaluate (Really just compile)
                     res = p.run_code(code, '<repl>')
 

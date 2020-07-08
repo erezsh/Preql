@@ -476,10 +476,8 @@ def compile_to_inst(state: State, lst: ast.List_):
     if not (elem_type <= T.primitive):
         raise pql_TypeError.make(state, lst, "Cannot create lists of type %s" % elem_type)
 
-    # XXX should work with a better type system where isa(int, any) == true
-    # assert isinstance(elem_type, type(lst.type.elemtype)), (elem_type, lst.type.elemtype)
+    assert elem_type <= lst.type.elems[0]
 
-    # code = sql.TableArith(table_type, 'UNION ALL', [ sql.SelectValue(e.type, e.code) for e in elems ])
     list_type = T.list[elem_type]
     name = state.unique_name("list_")
     table_code, subq = sql.create_list(list_type, name, [e.code for e in elems])

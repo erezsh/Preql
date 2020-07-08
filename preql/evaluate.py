@@ -894,8 +894,6 @@ objects.Instance.repr = instance_repr
 
 
 
-
-
 def new_table_from_rows(state, name, columns, rows):
     # TODO check table doesn't exist
 
@@ -918,9 +916,4 @@ def new_table_from_rows(state, name, columns, rows):
     x = objects.new_table(table)
     state.set_var(table.name, x)
 
-
-
-
-# XXX These don't belong in evaluate.py
-# =========================================
 
