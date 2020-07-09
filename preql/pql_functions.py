@@ -7,7 +7,7 @@ from typing import Optional
 from tqdm import tqdm
 
 from .utils import safezip, listgen
-from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp
+from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp, pql_AssertionError
 
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -68,7 +68,7 @@ def _pql_PY_callback(state: State, var: str):
     if not isinstance(inst, objects.ValueInstance):
         raise pql_TypeError.make(state, None, f"Cannot convert {inst} to a Python value")
 
-    return '%s' % (inst.local_value)
+    return str(inst.local_value)
 
 def pql_PY(state: State, code_expr: ast.Expr):
     code_expr2 = evaluate(state, code_expr)
@@ -80,6 +80,7 @@ def pql_PY(state: State, code_expr: ast.Expr):
         res = eval(py_code)
     except Exception as e:
         raise pql_ValueError.make(state, code_expr, f"Python code provided returned an error: {e}")
+
     return objects.new_value_instance(res)
 
 
@@ -114,8 +115,10 @@ def pql_breakpoint(state: State):
 
 def pql_debug(state: State):
     "Hop into a debug session with REPL"
+    py_api = state._py_api
+
     with state.use_scope(breakpoint_funcs):
-        state._py_api.start_repl('debug> ')
+        py_api.start_repl('debug> ')
     return objects.null
 
 
@@ -228,19 +231,19 @@ def sql_bin_op(state, op, table1, table2, name):
     return type(t1).make(code, t1.type, [t1, t2])
 
 def pql_intersect(state: State, t1: ast.Expr, t2: ast.Expr):
-    "Intersect two tables"
+    "Intersect two tables. Used for `t1 & t2`"
     return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
 
 def pql_subtract(state: State, t1: ast.Expr, t2: ast.Expr):
-    "Substract two tables (except)"
+    "Substract two tables (except). Used for `t1 - t2`"
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
 def pql_union(state: State, t1: ast.Expr, t2: ast.Expr):
-    "Union two tables"
+    "Union two tables. Used for `t1 | t2`"
     return sql_bin_op(state, "UNION", t1, t2, "union")
 
 def pql_concat(state: State, t1: ast.Expr, t2: ast.Expr):
-    "Concatenate two tables (union all)"
+    "Concatenate two tables (union all). Used for `t1 + t2`"
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
 
 

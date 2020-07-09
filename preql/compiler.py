@@ -1,4 +1,6 @@
+import re
 import operator
+from copy import copy
 
 from .utils import safezip, listgen, find_duplicate, dataclass
 from .exceptions import pql_TypeError, pql_SyntaxError
@@ -8,7 +10,7 @@ from . import settings
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func
+from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, localize
 from .pql_types import T, join_names, dp_inst, flatten_type, Type, Object
 from .casts import _cast
 
@@ -17,29 +19,43 @@ class Table(Object):
     type: Type
     name: str
 
+@dy
+def cast_to_instance(state, x: list):
+    return [cast_to_instance(state, i) for i in x]
 
+@dy
+def cast_to_instance(state, x):
+    x = simplify(state, x)  # just compile Name?
+    inst = compile_to_inst(state, x)
+    if isinstance(inst, ast.ResolveParametersString):
+        raise exc.InsufficientAccessLevel(inst)
+
+    if not isinstance(inst, objects.AbsInstance):
+        raise pql_TypeError.make(state, None, f"Could not compile {inst}")
+
+    return inst
+
+
+
+@listgen
 def _process_fields(state: State, fields):
-    processed_fields = []
     for f in fields:
+        v = cast_to_instance(state, f.value)
 
-        v = evaluate(state, f.value)
+        # TODO proper error message
+        # if not isinstance(v, objects.AbsInstance):
+        #     raise pql_TypeError.make(state, None, f"Projection field is not an instance. Instead it is: {v}")
 
-        if isinstance(v, ast.ResolveParametersString):
-            raise exc.InsufficientAccessLevel()
-
-        if not isinstance(v, objects.AbsInstance):
-            raise pql_TypeError.make(state, None, f"Projection field is not an instance. Instead it is: {v}")
-
-        if (v.type <= T.aggregate):
+        # In Preql, {=>v} creates an array. In SQL, it selects the first element.
+        # Here we mitigate that disparity.
+        if v.type <= T.aggregate:
             v = v.primary_key()
             v = objects.make_instance(sql.MakeArray(v.type, v.code), v.type, [v])
 
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
 
-        processed_fields.append( [name, v] )
-
-    return processed_fields
+        yield [name, v]
 
 
 @listgen
@@ -85,14 +101,10 @@ def compile_to_inst(state: State, node: ast.Ast):
 
 @dy
 def compile_to_inst(state: State, proj: ast.Projection):
-    table = evaluate(state, proj.table)
+    table = cast_to_instance(state, proj.table)
+
     if table is objects.EmptyList:
         return table   # Empty list projection is always an empty list.
-
-    if isinstance(table, ast.ResolveParametersString):
-        raise exc.InsufficientAccessLevel()
-
-    assert isinstance(table, objects.AbsInstance), table
 
     if not (table.type <= T.union[T.collection, T.struct]):
         raise pql_TypeError.make(state, proj, f"Cannot project objects of type {table.type}")
@@ -489,27 +501,106 @@ def compile_to_inst(state: State, lst: ast.List_):
     return inst
 
 
+# def resolve_parameters(state: State, res: ast.ResolveParameters):
+@dy
+def compile_to_inst(state: State, res: ast.ResolveParameters):
+
+    # XXX use a different mechanism??
+    if isinstance(res.obj, objects.Instance):
+        obj = res.obj
+    else:
+        with state.use_scope(res.values):
+            obj = evaluate(state, res.obj)
+
+    state.require_access(state.AccessLevels.WRITE_DB)
+
+    if not isinstance(obj, objects.Instance):
+        if isinstance(obj, objects.Function):
+            return obj
+        return res.replace(obj=obj)
+
+    code = _resolve_sql_parameters(state, obj.code)
+
+    return obj.replace(code=code)
+
+
+def _resolve_sql_parameters(state, node):
+    return sql.ResolveParameters(node, (state, copy(state.ns)))
+
+def _raw_sql_callback(state: State, var: str, instances):
+    var = var.group()
+    assert var[0] == '$'
+    var_name = var[1:]
+    obj = state.get_var(var_name)
+
+    # if isinstance(obj, types.TableType):
+    if isinstance(obj, Type) and obj.issubtype(T.table):
+        # This branch isn't strictly necessary
+        # It exists to create nicer SQL code output
+        inst = objects.new_table(obj)
+    else:
+        inst = evaluate(state, obj)
+
+    instances.append(inst)
+
+    qb = sql.QueryBuilder(state.db.target, False)
+    code = _resolve_sql_parameters(state, inst.code)
+    return '%s' % code.compile(qb).text
+
+@dy
+def compile_to_inst(state: State, rps: ast.ResolveParametersString):
+    # TODO if this is still here, it should be in evaluate, not db_rw
+    state.catch_access(state.AccessLevels.EVALUATE)
+
+    sql_code = localize(state, evaluate(state, rps.string))
+    assert isinstance(sql_code, str)
+
+    type_ = evaluate(state, rps.type)
+    if isinstance(type_, objects.Instance):
+        type_ = type_.type
+    assert isinstance(type_, Type), type_
+
+    instances = []
+    expanded = re.sub(r"\$\w+", lambda m: _raw_sql_callback(state, m, instances), sql_code)
+    code = sql.RawSql(type_, expanded)
+    # code = sql.ResolveParameters(sql_code)
+
+    # TODO validation!!
+    if type_ <= T.table:
+        name = state.unique_name("subq_")
+
+        # TODO this isn't in the tests!
+        fields = [sql.Name(c, path) for path, c in flatten_type(type_)]
+
+        subq = sql.Subquery(name, fields, code)
+
+        inst = objects.new_table(type_, name, instances)
+        inst.subqueries[name] = subq
+        return inst
+
+    return objects.Instance.make(code, type_, instances)
+
 @dy
 def compile_to_inst(state: State, s: ast.Slice):
-    obj = evaluate(state, s.table)
+    obj = cast_to_instance(state, s.table)
 
     assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
 
     instances = [obj]
     if s.range.start:
-        start = evaluate(state, s.range.start)
+        start = cast_to_instance(state, s.range.start)
         instances += [start]
     else:
         start = new_value_instance(0)
 
     if s.range.stop:
-        stop = evaluate(state, s.range.stop)
+        stop = cast_to_instance(state, s.range.stop)
         instances += [stop]
     else:
         stop = None
 
     if obj.type <= T.string:
-        code = sql.StringSlice(obj.code, start.code, stop and stop.code)
+        code = sql.StringSlice(obj.code, sql.add_one(start.code), stop and sql.add_one(stop.code))
     else:
         code = sql.table_slice(obj, start.code, stop and stop.code)
 
@@ -527,7 +618,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     assert_type(table.type, T.collection, state, sel, "Selection")
 
     with state.use_scope(table.all_attrs()):
-        conds = evaluate(state, sel.conds)
+        conds = cast_to_instance(state, sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):
         code = sql.unknown

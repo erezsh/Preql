@@ -692,7 +692,7 @@ class StringSlice(Sql):
         return f'{f}({" ".join(params)})'
 
 
-def value(x):
+def make_value(x):
     if x is None:
         return null
 
@@ -717,6 +717,8 @@ def value(x):
 
     return Primitive(t, r)
 
+def add_one(x):
+    return Arith('+', [x, make_value(1)])
 
 
 def compile_type_def(state, table_name, table) -> Sql:

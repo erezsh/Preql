@@ -367,9 +367,10 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql('"bak" in "kabab"'), False )
         self.assertEqual( preql('"bak" !in "kabab"'), True )
 
-        self.assertEqual( preql('"hello"[1..4]'), "hel" )
-        self.assertEqual( preql('"hello"[2..]'), "ello" )
-        self.assertEqual( preql('"hello"[..2]'), "h" )
+        self.assertEqual( preql('"hello"[0..3]'), "hel" )
+        self.assertEqual( preql('"hello"[1..]'), "ello" )
+        self.assertEqual( preql('"hello"[..1]'), "h" )
+        self.assertEqual( preql('"hello"[2..4]'), "ll" )
 
     def test_casts(self):
         preql = self.Preql()
@@ -813,10 +814,10 @@ class BasicTests(PreqlTests):
         preql.load('simple2.pql', rel_to=__file__)
 
         res = [
-                {'id': 3, 'name': 'Eric Blaire', 'country': 2},
-                {'id': 4, 'name': 'H.G. Wells', 'country': 2},
-                {'id': 5, 'name': 'John Steinbeck', 'country': 3}
-            ]
+            {'id': 3, 'name': 'Eric Blaire', 'country': 2},
+            {'id': 4, 'name': 'H.G. Wells', 'country': 2},
+            {'id': 5, 'name': 'John Steinbeck', 'country': 3}
+        ]
         assert preql.english_speakers().json() == res   # TODO country should probably be a dict?
 
         res = [

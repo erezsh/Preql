@@ -14,7 +14,7 @@ class Object:    # XXX should be in a base module
     "Any object that the user might interact with through the language, as so has to behave like an object inside Preql"
     # dyn_attrs: dict = field(default_factory=dict, init=False, compare=False)
 
-    def repr(self, pql):
+    def repr(self, state):
         return repr(self)
 
     def get_attr(self, attr):

@@ -86,7 +86,7 @@ def _search_puppet(puppet):
                 t = Token(choice, _closing_tokens[choice], 1, 1, 1, 1, 2, 2)
                 new_p = p.copy()
                 try:
-                    res = new_p.feed_token(t)
+                    new_p.feed_token(t)
                 except KeyError:    # Illegal
                     pass
                 else:

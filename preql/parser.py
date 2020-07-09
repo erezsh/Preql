@@ -216,7 +216,7 @@ class TreeToAst(Transformer):
         return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, c]))
 
     def ellipsis(self, meta, *exclude):
-        return ast.Ellipsis(meta, exclude or [])
+        return ast.Ellipsis(meta, list(exclude))
 
     @v_args(inline=False, meta=True)
     def codeblock(self, stmts, meta):

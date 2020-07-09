@@ -26,6 +26,10 @@ def simplify():
 def evaluate(state: type(None), _any: type(None)):
     raise NotImplementedError()
 
+@dy
+def localize():
+    raise NotImplementedError()
+
 
 class AccessLevels:
     COMPILE = 1

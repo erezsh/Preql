@@ -89,6 +89,7 @@ class AutocompleteTests(PreqlTests):
             three: int
         }
         <<<x>>>{<<<three>>>}
+        <<<x>>>{ => min(<<<two>>>), max(<<<three>>>)}
         """
         progressive_test(state, s)
 

@@ -14,10 +14,8 @@
 #         execute remote queries
 #         simplify (compute) into the final result
 
-from copy import copy
 from typing import List, Optional
 import logging
-import re
 
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func
@@ -441,31 +439,6 @@ def _call_expr(state, expr):
     except ReturnSignal as r:
         return r.value
 
-@dy
-def resolve_parameters(state: State, x):
-    return x
-
-@dy
-def resolve_parameters(state: State, res: ast.ResolveParameters):
-
-    # XXX use a different mechanism??
-    if isinstance(res.obj, objects.Instance):
-        obj = res.obj
-    else:
-        with state.use_scope(res.values):
-            obj = evaluate(state, res.obj)
-
-    state.require_access(state.AccessLevels.WRITE_DB)
-
-    if not isinstance(obj, objects.Instance):
-        if isinstance(obj, objects.Function):
-            return obj
-        return res.replace(obj=obj)
-
-    code = _resolve_sql_parameters(state, obj.code)
-
-    return obj.replace(code=code)
-
 # TODO fix these once we have proper types
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
@@ -484,66 +457,11 @@ def test_nonzero(state: State, inst: objects.Instance):
 def test_nonzero(state: State, inst: Type):
     return True
 
-def _raw_sql_callback(state: State, var: str, instances):
-    var = var.group()
-    assert var[0] == '$'
-    var_name = var[1:]
-    obj = state.get_var(var_name)
-
-    # if isinstance(obj, types.TableType):
-    if isinstance(obj, Type) and obj.issubtype(T.table):
-        # This branch isn't strictly necessary
-        # It exists to create nicer SQL code output
-        inst = objects.new_table(obj)
-    else:
-        inst = evaluate(state, obj)
-
-    instances.append(inst)
-
-    qb = sql.QueryBuilder(state.db.target, False)
-    code = _resolve_sql_parameters(state, inst.code)
-    return '%s' % code.compile(qb).text
 
 
 
-@dy
-def resolve_parameters(state: State, p: ast.Parameter):
-    return state.get_var(p.name)
 
 
-# TODO move this to SQL compilation??
-@dy
-def apply_database_rw(state: State, rps: ast.ResolveParametersString):
-    # TODO if this is still here, it should be in evaluate, not db_rw
-    state.catch_access(state.AccessLevels.EVALUATE)
-
-    sql_code = localize(state, evaluate(state, rps.string))
-    assert isinstance(sql_code, str)
-
-    type_ = evaluate(state, rps.type)
-    if isinstance(type_, objects.Instance):
-        type_ = type_.type
-    assert isinstance(type_, Type), type_
-
-    instances = []
-    expanded = re.sub(r"\$\w+", lambda m: _raw_sql_callback(state, m, instances), sql_code)
-    code = sql.RawSql(type_, expanded)
-    # code = sql.ResolveParameters(sql_code)
-
-    # TODO validation!!
-    if type_ <= T.table:
-        name = state.unique_name("subq_")
-
-        # TODO this isn't in the tests!
-        fields = [sql.Name(c, path) for path, c in flatten_type(type_)]
-
-        subq = sql.Subquery(name, fields, code)
-
-        inst = objects.new_table(type_, name, instances)
-        inst.subqueries[name] = subq
-        return inst
-
-    return objects.Instance.make(code, type_, instances)
 
 
 @dy
@@ -701,7 +619,7 @@ def _new_row(state, new_ast, table, matched):
     destructured_pairs = _destructure_param_match(state, new_ast, matched)
 
     keys = [name for (name, _) in destructured_pairs]
-    values = [sql.value(v) for (_,v) in destructured_pairs]
+    values = [sql.make_value(v) for (_,v) in destructured_pairs]
     assert keys and values
     # XXX use regular insert?
     q = sql.InsertConsts(new_ast.type, keys, [values])
@@ -766,6 +684,16 @@ def add_as_subquery(state: State, inst: objects.Instance):
 def evaluate(state, obj: list):
     return [evaluate(state, item) for item in obj]
 
+
+@dy
+def resolve_parameters(state: State, x):
+    return x
+
+@dy
+def resolve_parameters(state: State, p: ast.Parameter):
+    return state.get_var(p.name)
+
+
 @dy
 def evaluate(state, obj_):
     # - Generic, non-db related operations
@@ -785,6 +713,7 @@ def evaluate(state, obj_):
         return obj
 
     # - Resolve parameters to "instanciate" the cached code
+    # TODO necessary?
     obj = resolve_parameters(state, obj)
 
     if state.access_level < state.AccessLevels.READ_DB:
@@ -808,30 +737,6 @@ def apply_database_rw(state, x):
 #
 # Return the local value of the expression. Only requires computation if the value is an instance.
 #
-@dy
-def __resolve_sql_parameters(ns, param: sql.Parameter):
-    inst = ns.get_var(param.name)
-    assert isinstance(inst, objects.Instance)
-    assert inst.type == param.type
-    ns = type(ns)(ns.ns[-1])
-    return __resolve_sql_parameters(ns, inst.code)
-
-@dy
-def __resolve_sql_parameters(ns, l: list):
-    return [__resolve_sql_parameters(ns, n) for n in l]
-
-@dy
-def __resolve_sql_parameters(ns, node):
-    resolved = {k:__resolve_sql_parameters(ns, v) for k, v in node
-                if isinstance(v, sql.Sql) or isinstance(v, list) and all(isinstance(i, sql.Sql) for i in v)}
-    return node.replace(**resolved)
-
-def _resolve_sql_parameters(state, node):
-    # 1. Resolve parameters while compiling
-    return sql.ResolveParameters(node, (state, copy(state.ns)))
-    # 2. Resolve parameters before compiling. Eqv to (1) but slower
-    # return __resolve_sql_parameters(state.ns, node)
-
 
 @dy
 def localize(state, inst: objects.AbsInstance):
@@ -893,7 +798,7 @@ def new_table_from_rows(state, name, columns, rows):
     # TODO check table doesn't exist
 
     tuples = [
-        [sql.value(i) for i in row[1:]] # XXX Without index?
+        [sql.make_value(i) for i in row[1:]] # XXX Without index?
         for row in rows
     ]
 
@@ -930,4 +835,4 @@ def compile_to_inst(state: State, range: ast.Range):
     code = f"SELECT {start} AS value UNION ALL SELECT value+{skip} FROM {name}{stop_str}"
     subq = sql.Subquery(name, [], sql.RawSql(type_, code))
     code = sql.TableName(type_, name)
-    return objects.ListInstance(code, type_, {name: subq})
+    return objects.ListInstance(code, type_, SafeDict({name: subq}))

@@ -66,7 +66,7 @@ class Const(Expr):
 
 @dataclass
 class Ellipsis(Expr):
-    exclude: List[str]
+    exclude: List[Union[str, Marker]]
 
 @dataclass
 class Compare(Expr):

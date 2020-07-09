@@ -94,7 +94,7 @@ class MyValidator(Validator):
             return
 
         try:
-            s = parse_stmts(text, '<repl>')
+            parse_stmts(text, '<repl>')
         except pql_SyntaxError as e:
             text_ref, message = e.args
             if text_ref:
