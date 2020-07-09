@@ -190,11 +190,11 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
 @dy
 def compile_to_inst(state: State, order: ast.Order):
-    table = evaluate(state, order.table)
+    table = cast_to_instance(state, order.table)
     assert_type(table.type, T.table, state, order, "'order'")
 
     with state.use_scope(table.all_attrs()):
-        fields = evaluate(state, order.fields)
+        fields = cast_to_instance(state, order.fields)
 
     code = sql.table_order(table, [c.code for c in fields])
 
@@ -202,7 +202,7 @@ def compile_to_inst(state: State, order: ast.Order):
 
 @dy
 def compile_to_inst(state: State, expr: ast.DescOrder):
-    obj = evaluate(state, expr.value)
+    obj = cast_to_instance(state, expr.value)
     return obj.replace(code=sql.Desc(obj.code))
 
 
@@ -214,8 +214,8 @@ def compile_to_inst(state: State, lst: list):
 
 @dy
 def compile_to_inst(state: State, like: ast.Like):
-    s = evaluate(state, like.str)
-    p = evaluate(state, like.pattern)
+    s = cast_to_instance(state, like.str)
+    p = cast_to_instance(state, like.pattern)
     if s.type != T.string:
         raise pql_TypeError.make(state, like.str, f"Like (~) operator expects two strings")
     if p.type != T.string:
@@ -356,7 +356,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 
 @dy
 def compile_to_inst(state: State, neg: ast.Neg):
-    expr = evaluate(state, neg.expr)
+    expr = cast_to_instance(state, neg.expr)
     assert_type(expr.type, T.number, state, neg, "Negation")
 
     return objects.Instance.make(sql.Neg(expr.code), expr.type, [expr])
@@ -539,7 +539,7 @@ def _raw_sql_callback(state: State, var: str, instances):
         # It exists to create nicer SQL code output
         inst = objects.new_table(obj)
     else:
-        inst = evaluate(state, obj)
+        inst = cast_to_instance(state, obj)
 
     instances.append(inst)
 
@@ -608,12 +608,11 @@ def compile_to_inst(state: State, s: ast.Slice):
 
 @dy
 def compile_to_inst(state: State, sel: ast.Selection):
-    table = evaluate(state, sel.table)
-    if isinstance(table, Type):
-        return _apply_type_generics(state, table, sel.conds)
+    obj = simplify(state, sel.table)
+    if isinstance(obj, Type):
+        return _apply_type_generics(state, obj, sel.conds)
 
-    if not isinstance(table, objects.Instance):
-        return sel.replace(table=table)
+    table = cast_to_instance(state, obj)
 
     assert_type(table.type, T.collection, state, sel, "Selection")
 
