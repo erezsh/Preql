@@ -545,7 +545,7 @@ def _raw_sql_callback(state: State, var: str, instances):
 
     qb = sql.QueryBuilder(state.db.target, False)
     code = _resolve_sql_parameters(state, inst.code)
-    return '%s' % code.compile(qb).text
+    return code.compile(qb).finalize()   # XXX temp. this shouldn't be here
 
 @dy
 def compile_to_inst(state: State, rps: ast.ResolveParametersString):

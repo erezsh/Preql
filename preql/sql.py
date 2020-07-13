@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict
 
-from .utils import dataclass, X
+from .utils import dataclass, X, listgen
 from . import pql_types
 from .pql_types import T, join_names, flatten_type, Type, dp_type
 
@@ -49,25 +49,30 @@ class Sql:
 
     def compile(self, qb):  # Move to Expr? Doesn't apply to statements
         sql_code = self._compile(qb.replace(is_root=False))
-        assert isinstance(sql_code, str), self
+        assert isinstance(sql_code, list), self
+        assert all(isinstance(c, str) for c in sql_code), self
+        # assert sum(x.count('(') for x in sql_code) == sum(x.count(')') for x in sql_code)
 
         if self._is_select:
             if not qb.is_root:
                 if qb.target == 'postgres':
-                    sql_code = f'({sql_code}) {qb.unique_name()}' # postgres requires an alias
+                    sql_code = ['('] + sql_code + [') ', qb.unique_name()]  # postgres requires an alias
                 else:
-                    sql_code = f'({sql_code})'
+                    sql_code = ['('] + sql_code + [')']
         else:
             if qb.is_root and self.type <= T.primitive:
-                sql_code = f'SELECT {sql_code}'
+                sql_code = ['SELECT '] + sql_code
 
         return CompiledSQL(sql_code, self)
 
 
 @dataclass
 class CompiledSQL:
-    text: str
-    sql: Sql
+    code: list
+    source_tree: Sql
+
+    def finalize(self):
+        return ''.join(self.code)
 
 @dataclass
 class RawSql(Sql):
@@ -75,7 +80,7 @@ class RawSql(Sql):
     text: str
 
     def _compile(self, qb):
-        return self.text
+        return [self.text]
 
     @property
     def _is_select(self):
@@ -86,7 +91,7 @@ class Null(Sql):
     type = T.null
 
     def _compile(self, qb):
-        return 'null'
+        return ['null']
 
 @dataclass
 class Unknown(Sql):
@@ -108,7 +113,7 @@ class Parameter(Sql):
         obj = ns.get_var(state, self.name)
         obj = evaluate(state, obj)
         assert obj.type == self.type
-        return obj.code.compile(qb).text
+        return obj.code.compile(qb).code
 
 
 @dataclass
@@ -142,7 +147,7 @@ class Primitive(Atom):
     text: str
 
     def _compile(self, qb):
-        return self.text
+        return [self.text]
 
 
 @dataclass
@@ -156,7 +161,7 @@ class EmptyList(Table):
     _is_select = True
 
     def _compile(self, qb):
-        return 'SELECT NULL AS VALUE LIMIT 0'
+        return ['SELECT NULL AS VALUE LIMIT 0']
 
 
 @dataclass
@@ -170,7 +175,7 @@ class TableName(Table):
         else:
             sql_code = qb.safe_name(self.name)
 
-        return CompiledSQL(sql_code, self)
+        return CompiledSQL([sql_code], self)
 
 class TableOperation(Table):
     _is_select = True
@@ -184,7 +189,7 @@ class FieldFunc(Sql):
     type = T.int
 
     def _compile(self, qb):
-        return f'{self.name}({self.field.compile(qb).text})'
+        return [f'{self.name}('] + self.field.compile(qb).code + [')']
 
 
 @dataclass
@@ -193,7 +198,7 @@ class CountTable(Scalar):
     type = T.int
 
     def _compile(self, qb):
-        return f'(SELECT COUNT(*) FROM {self.table.compile(qb).text})'
+        return [f'(SELECT COUNT(*) FROM '] + self.table.compile(qb).code + [')']
 
 @dataclass
 class FuncCall(Sql):
@@ -202,8 +207,8 @@ class FuncCall(Sql):
     fields: List[Sql]
 
     def _compile(self, qb):
-        s = ', '.join(f.compile(qb).text for f in self.fields)
-        return f'{self.name}({s})'
+        s = join_comma(f.compile(qb).code for f in self.fields)
+        return [f'{self.name}('] + s + [')']
 
 @dataclass
 class Cast(Sql):
@@ -212,7 +217,7 @@ class Cast(Sql):
     value: Sql
 
     def _compile(self, qb):
-        return f'CAST({self.value.compile(qb).text} AS {self.as_type})'
+        return [f'CAST('] + self.value.compile(qb).code + [f' AS {self.as_type})']
 
 
 @dataclass
@@ -223,11 +228,11 @@ class MakeArray(Sql):
     _sp = "|"
 
     def _compile(self, qb):
-        field = self.field.compile(qb).text
+        field = self.field.compile(qb).code
         if qb.target == sqlite:
-            return f'group_concat({field}, "{self._sp}")'
+            return ['group_concat('] + field + [f', "{self._sp}")']
         elif qb.target == postgres:
-            return f'array_agg({field})'
+            return ['array_agg('] + field + [')']
 
         assert False, qb.target
 
@@ -241,10 +246,13 @@ class Contains(Scalar):
     def _compile(self, qb):
         assert self.op
         item, container = self.exprs
-        c_item = item.compile(qb).text
-        c_cont = container.compile(qb.replace(is_root=True)).text
-        return f'{c_item} {self.op} ({c_cont})'
+        c_item = item.compile(qb).code
+        c_cont = container.compile(qb.replace(is_root=True)).code
+        return c_item + [' ', self.op, ' '] + parens(c_cont)
 
+
+def parens(x):
+    return ['('] + x + [')']
 
 @dataclass
 class Compare(Scalar):
@@ -268,8 +276,8 @@ class Compare(Scalar):
                 '!=': 'is distinct from'
             }.get(op, op)
 
-        elems = [e.compile(qb).text for e in self.exprs]
-        return '(%s)' % (f' {op} ').join(elems)
+        elems = [e.compile(qb).code for e in self.exprs]
+        return parens( join_sep(elems, f' {op} ') )
 
 @dataclass
 class Like(Scalar):
@@ -280,7 +288,7 @@ class Like(Scalar):
     def _compile(self, qb):
         s = self.string.compile(qb)
         p = self.pattern.compile(qb)
-        return f'{s.text} like {p.text}'
+        return s.code + [' like '] + p.code
 
 @dataclass
 class Arith(Scalar):
@@ -288,8 +296,8 @@ class Arith(Scalar):
     exprs: List[Sql]
 
     def _compile(self, qb):
-        x = (f' {self.op} ').join(e.compile(qb).text for e in self.exprs)
-        return f'({x})'
+        x = join_sep([e.compile(qb).code for e in self.exprs], f' {self.op} ')
+        return parens(x)
 
     type = property(X.exprs[0].type)     # TODO ensure type correctness
 
@@ -301,13 +309,13 @@ class TableArith(TableOperation):
 
     def _compile(self, qb):
         tables = [t.compile(qb) for t in self.exprs]
-        selects = [f"SELECT * FROM {t.text}" for t in tables]
+        selects = [[f"SELECT * FROM "] + t.code for t in tables]
 
-        code = f" {self.op} ".join(selects)
+        code = join_sep(selects, f" {self.op} ")
 
         if qb.target == sqlite:
             # Limit -1 is due to a strange bug in SQLite (fixed in newer versions), where the limit is reset otherwise.
-            code += " LIMIT -1"
+            code += [" LIMIT -1"]
 
         return code
 
@@ -320,7 +328,7 @@ class Neg(Sql):
 
     def _compile(self, qb):
         s = self.expr.compile(qb)
-        return "-" + s.text
+        return ["-"] + s.code
 
     type = property(X.expr.type)
 
@@ -330,7 +338,7 @@ class Desc(Sql):
 
     def _compile(self, qb):
         s = self.expr.compile(qb)
-        return s.text + " DESC"
+        return s.code + [" DESC"]
 
     type = property(X.expr.type)
 
@@ -348,7 +356,7 @@ class Name(Sql):
         name = qb.safe_name(self.name)
         if qb.table_name:
             name = qb.table_name[-1] + '.' + name
-        return name
+        return [name]
 
 @dataclass
 class Attr(Sql):
@@ -371,12 +379,12 @@ class ColumnAlias(Sql):
 
     def _compile(self, qb):
         alias = qb.safe_name(self.alias)
-        value = self.value.compile(qb).text
+        value = self.value.compile(qb).code
         assert alias and value, (alias, value)
         if value == alias:  # TODO disable when unoptimized?
             return alias  # This is just for beauty, it's not necessary for function
 
-        return f'{value} AS {alias}'
+        return value + [f' AS {alias}']
 
     type = property(X.value.type)
 
@@ -389,7 +397,7 @@ class Insert(Sql):
     type = T.null
 
     def _compile(self, qb):
-        return f'INSERT INTO "{self.table_name}"({", ".join(self.columns)}) SELECT * FROM ' + self.query.compile(qb).text
+        return [f'INSERT INTO "{self.table_name}"({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile(qb).code
 
 @dataclass
 class InsertConsts(Sql):
@@ -401,17 +409,16 @@ class InsertConsts(Sql):
     def _compile(self, qb):
         assert self.tuples, self
 
-        values = ', '.join(
-            '(%s)' % ', '.join([e.compile(qb).text for e in tpl])
+        values = join_comma(
+            parens(join_comma([e.compile(qb).code for e in tpl]))
             for tpl in self.tuples
         )
 
         q = ['INSERT INTO', qb.safe_name(self.table),
              "(", ', '.join(self.cols), ")",
-             "VALUES",
-             values,
+             "VALUES ",
         ]
-        return ' '.join(q) + ';'
+        return [' '.join(q)] + values #+ [';']
 
 @dataclass
 class InsertConsts2(Sql):
@@ -423,17 +430,16 @@ class InsertConsts2(Sql):
     def _compile(self, qb):
         assert self.tuples, self
 
-        values = ', '.join(
-            '(%s)' % ', '.join(tpl)
+        values = join_comma(
+            parens(join_comma(tpl))
             for tpl in self.tuples
         )
 
         q = ['INSERT INTO', qb.safe_name(self.table),
              "(", ', '.join(self.cols), ")",
-             "VALUES",
-             values,
+             "VALUES ",
         ]
-        return ' '.join(q) + ';'
+        return [' '.join(q)] + values #+ ';'
 
 
 @dataclass
@@ -442,9 +448,9 @@ class LastRowId(Atom):
 
     def _compile(self, qb):
         if qb.target == sqlite:
-            return 'last_insert_rowid()'   # Sqlite
+            return ['last_insert_rowid()']   # Sqlite
         else:
-            return 'lastval()'   # Postgres
+            return ['lastval()']   # Postgres
 
 @dataclass
 class SelectValue(Atom, TableOperation):
@@ -453,7 +459,7 @@ class SelectValue(Atom, TableOperation):
 
     def _compile(self, qb):
         value = self.value.compile(qb)
-        return f'SELECT {value.text} AS value'
+        return [f'SELECT '] + value.code + [' AS '] + value
 
     type = property(X.value.type)
 
@@ -462,7 +468,7 @@ class RowDict(Sql):
     values: Dict[str, Sql]
 
     def _compile(self, qb):
-        return {f'{v.compile(qb).text} as {name}' for name, v in self.values.items()}
+        return {v.compile(qb).code + [f' as {name}'] for name, v in self.values.items()}
 
 
 @dataclass
@@ -473,8 +479,8 @@ class Values(Table):
     def _compile(self, qb):
         values = [v.compile(qb) for v in self.values]
         if not values:  # SQL doesn't support empty values
-            return 'SELECT NULL LIMIT 0'
-        return 'VALUES' + ','.join(f'({v.text})' for v in values)
+            return ['SELECT NULL LIMIT 0']
+        return ['VALUES '] + join_comma(parens(v.code) for v in values)
 
 
 @dataclass
@@ -482,7 +488,7 @@ class AllFields(Sql):
     type: Type
 
     def _compile(self, qb):
-        return '*'
+        return ['*']
 
 @dataclass
 class Update(Sql):
@@ -492,13 +498,13 @@ class Update(Sql):
     type = T.null
 
     def _compile(self, qb):
-        fields_sql = ['%s = %s' % (k.compile(qb).text, v.compile(qb).text) for k, v in self.fields.items()]
-        fields_sql = ', '.join(fields_sql)
+        fields_sql = [k.compile(qb).code + [' = '] + v.compile(qb).code for k, v in self.fields.items()]
+        fields_sql = join_comma(fields_sql)
 
-        sql = f'UPDATE {self.table.compile(qb).text} SET {fields_sql}'
+        sql = ['UPDATE '] + self.table.compile(qb).code + [' SET '] + fields_sql
 
         if self.conds:
-            sql += ' WHERE ' + ' AND '.join(c.compile(qb).text for c in self.conds)
+            sql += [' WHERE '] + join_sep([c.compile(qb).code for c in self.conds], ' AND ')
 
         return sql
 
@@ -509,8 +515,8 @@ class Delete(Sql):
     type = T.null
 
     def _compile(self, qb):
-        conds = ' AND '.join(c.compile(qb).text for c in self.conds)
-        return f'DELETE FROM {self.table.compile(qb).text} WHERE {conds}'
+        conds = join_sep([c.compile(qb).code for c in self.conds], ' AND ')
+        return ['DELETE FROM '] + self.table.compile(qb).code + [' WHERE '] + conds
 
 @dataclass
 class Select(TableOperation):
@@ -551,31 +557,43 @@ class Select(TableOperation):
         # Compile
         #
         fields_sql = [f.compile(qb) for f in self.fields]
-        select_sql = ', '.join(f.text for f in fields_sql)
+        select_sql = join_comma(f.code for f in fields_sql)
 
-        sql = f'SELECT {select_sql} FROM {self.table.compile(qb).text}'
+        sql = ['SELECT '] + select_sql + [' FROM '] + self.table.compile(qb).code
 
         if self.conds:
-            sql += ' WHERE ' + ' AND '.join(c.compile(qb).text for c in self.conds)
+            sql += [' WHERE '] + join_sep([c.compile(qb).code for c in self.conds], ' AND ')
 
 
         if self.group_by:
-            sql += ' GROUP BY ' + ', '.join(e.compile(qb).text for e in self.group_by)
+            sql += [' GROUP BY '] + join_comma(e.compile(qb).code for e in self.group_by)
 
         if self.limit:
-            sql += ' LIMIT ' + self.limit.compile(qb).text
+            sql += [' LIMIT '] + self.limit.compile(qb).code
         elif self.offset:
             if qb.target == sqlite:
-                sql += ' LIMIT -1'  # Sqlite only (and only old versions of it)
+                sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
 
         if self.offset:
-            sql += ' OFFSET ' + self.offset.compile(qb).text
+            sql += [' OFFSET '] + self.offset.compile(qb).code
 
         if self.order:
-            sql += ' ORDER BY ' + ', '.join(o.compile(qb).text for o in self.order)
+            sql += [' ORDER BY '] + join_comma(o.compile(qb).code for o in self.order)
 
         return sql
 
+
+@listgen
+def join_sep(code_list, sep):
+    code_list = list(code_list)
+    yield from code_list[0]
+    for c in code_list[1:]:
+        assert isinstance(c, list)
+        yield sep
+        yield from c
+
+def join_comma(code_list):
+    return join_sep(code_list, ", ")
 
 @dataclass
 class Subquery(Sql):
@@ -585,10 +603,10 @@ class Subquery(Sql):
     type = property(X.query.type)
 
     def _compile(self, qb):
-        query = self.query.compile(qb).text
-        fields = [f.compile(qb.replace(is_root=False)).text for f in self.fields]
-        fields_str = "(" + ', '.join(fields) + ")" if fields else ''
-        return f"{self.table_name}{fields_str} AS ({query})"
+        query = self.query.compile(qb).code
+        fields = [f.compile(qb.replace(is_root=False)).code for f in self.fields]
+        fields_str = ["("] + join_comma(fields) + [")"] if fields else []
+        return [f"{self.table_name}"] + fields_str + [" AS ("] + query + [")"]
 
     def compile(self, qb):
         sql_code = self._compile(qb)
@@ -604,16 +622,16 @@ class Join(TableOperation):
     conds: List[Sql]
 
     def _compile(self, qb):
-        tables_sql = [t.compile(qb).text for t in self.tables]
+        tables_sql = [t.compile(qb).code for t in self.tables]
         join_op = ' %s ' % self.join_op.upper()
-        join_sql = join_op.join(e for e in tables_sql)
+        join_sql = join_sep([e for e in tables_sql], join_op)
 
         if self.conds:
-            conds = ' AND '.join(c.compile(qb).text for c in self.conds)
+            conds = join_sep([c.compile(qb).code for c in self.conds], ' AND ')
         else:
-            conds = '1=1'   # Postgres requires ON clause
+            conds = ['1=1']   # Postgres requires ON clause
 
-        return f'SELECT * FROM {join_sql} ON {conds}'
+        return [f'SELECT * FROM '] + join_sql + [' ON '] + conds
 
 
 
@@ -668,28 +686,28 @@ class StringSlice(Sql):
     type = T.string
 
     def _compile(self, qb):
-        string = self.string.compile(qb).text
-        start = self.start.compile(qb).text
+        string = self.string.compile(qb).code
+        start = self.start.compile(qb).code
         if self.stop:
-            stop = self.stop.compile(qb).text
-            length = f'({stop}-{start})'
+            stop = self.stop.compile(qb).code
+            length = parens(stop + ['-'] + start)
         else:
             length = None
 
         if qb.target == sqlite:
             f = 'substr'
-            params = [string, ',', start]
+            params = string + [', '] + start
             if length:
-                params += [',', length]
+                params += [', '] + length
         elif qb.target == postgres:
             f = 'substring'
-            params = [string, 'from', start]
+            params = string + [' from '] + start
             if length:
-                params += ['for', length]
+                params += [' for '] + length
         else:
             assert False
 
-        return f'{f}({" ".join(params)})'
+        return [f'{f}('] + params + [')']
 
 
 def make_value(x):
