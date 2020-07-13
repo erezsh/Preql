@@ -34,6 +34,28 @@ def table_limit(self, state, limit, offset=0):
     return call_pql_func(state, '_core_limit_offset', [self, _make_const(limit), _make_const(offset)])
 
 
+def _html_table(name, count_str, rows, offset):
+    header = 'table '
+    if name:
+        header += name
+    if offset:
+        header += f'[{offset}..]'
+    header += f" {count_str}"
+    header = f"<pre>table {name}, {count_str}</pre>"
+
+    if not rows:
+        return header
+
+    cols = list(rows[0])
+    ths = '<tr>%s</tr>' % ' '.join([f"<th>{col}</th>" for col in cols])
+    trs = [
+        '<tr>%s</tr>' % ' '.join([f"<td>{v}</td>" for v in row.values()])
+        for row in rows
+    ]
+
+    return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
+
+
 def _rich_table(name, count_str, rows, offset, colors=True, show_footer=False):
     header = 'table '
     if name:
@@ -102,22 +124,15 @@ def table_repr(self, state, offset=0):
 
     post = '\n\t...' if len(rows) < count else ''
 
+    table_name = self.type.options.get('name', '')
+
     if state.fmt == 'html':
-        header = f"<pre>table {self.type.name}, {count_str}</pre>"
-        if rows:
-            cols = list(rows[0])
-            ths = '<tr>%s</tr>' % ' '.join([f"<th>{col}</th>" for col in cols])
-            trs = [
-                '<tr>%s</tr>' % ' '.join([f"<td>{v}</td>" for v in row.values()])
-                for row in rows
-            ]
-
-        return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs)) + post
-
+        return _html_table(table_name, count_str, rows, offset)
     elif state.fmt == 'rich':
-        return _rich_table(self.type.options.get('name', ''), count_str, rows, offset)
+        return _rich_table(table_name, count_str, rows, offset)
 
-    return _rich_table(self.type.options.get('name', ''), count_str, rows, offset, colors=False)
+    assert state.fmt == 'text'
+    return _rich_table(table_name, count_str, rows, offset, colors=False)
 
     # raise NotImplementedError(f"Unknown format: {state.fmt}")
 
@@ -181,6 +196,9 @@ class Interface:
         # self.engine.ping()
 
         self._reset_interpreter()
+
+    def set_output_format(self, fmt):
+        self.interp.state.fmt = fmt  # TODO proper api
 
     def _reset_interpreter(self):
         self.interp = Interpreter(self.engine)

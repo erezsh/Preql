@@ -133,7 +133,7 @@ def start_repl(p, prompt=' >> '):
     repl_log.info("Welcome to the Preql REPL. Type help() for help")
     save_last = '_'   # XXX A little hacky
 
-    p.interp.state.fmt = 'rich' # TODO proper api
+    p.set_output_format('rich')
 
     console = rich.console.Console()
 

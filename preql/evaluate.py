@@ -29,7 +29,7 @@ from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
 from .compiler import compile_to_inst
-from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type
+from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type, Object
 
 
 
@@ -371,7 +371,8 @@ def simplify(state: State, funccall: ast.FuncCall):
     finally:
         assert state.stacktrace[-1] is funccall.text_ref
         state.stacktrace.pop()
-    # assert isinstance(res, types.PqlObject), (type(res), res) # TODO this should work
+
+    assert isinstance(res, Object), (type(res), res)
     return res
 
 
@@ -379,7 +380,6 @@ def eval_func_call(state, func, args):
     assert isinstance(func, objects.Function)
 
     matched_args = func.match_params(state, args)
-
 
 
     if isinstance(func, objects.MethodInstance):

@@ -23,9 +23,9 @@ def initial_namespace():
     return [dict(ns)]
 
 class Interpreter:
-    def __init__(self, sqlengine):
+    def __init__(self, sqlengine, fmt='text'):
         self.sqlengine = sqlengine
-        self.state = State(self, sqlengine, 'text', initial_namespace())
+        self.state = State(self, sqlengine, fmt, initial_namespace())
         self.include('core.pql', __file__) # TODO use an import mechanism instead
 
     def call_func(self, fname, args):
