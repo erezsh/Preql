@@ -415,12 +415,14 @@ def eval_func_call(state, func, args):
                         logging.info(f"Compiling.. {func}")
                         expr = _call_expr(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
                         logging.info("Compiled successfully")
-                        # qb = sql.QueryBuilder(state.db.target, False)
-                        # x = expr.code.compile(qb)
-                        # breakpoint()
+                        qb = sql.QueryBuilder(state.db.target, True)
+                        x = expr.code.compile(qb)
+                        x = x.optimize()
+                        expr = expr.replace(code=x)
                         state._cache[sig] = expr
 
                 expr = ast.ResolveParameters(None, expr, args)
+
             except exc.InsufficientAccessLevel:
                 # Don't cache
                 expr = func.expr

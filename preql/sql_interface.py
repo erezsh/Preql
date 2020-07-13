@@ -1,7 +1,7 @@
 from .utils import dataclass
 from .loggers import sql_log
 
-from .sql import Sql, QueryBuilder, sqlite, postgres
+from .sql import Sql, QueryBuilder, sqlite, postgres, CompiledSQL
 from . import exceptions
 
 from .pql_types import T, Type, from_sql, Object
@@ -54,12 +54,12 @@ class SqlInterface:
         qb = QueryBuilder(self.target, parameters=state and [state.ns])
 
         if subqueries:
-            subqs = [q.compile(qb).finalize() for (name, q) in subqueries.items()]
+            subqs = [q.compile(qb).finalize(state) for (name, q) in subqueries.items()]
             sql_code = 'WITH RECURSIVE ' + ',\n     '.join(subqs) + '\n'
         else:
             sql_code = ''
         compiled = sql.compile(qb)
-        sql_code += compiled.finalize()
+        sql_code += compiled.finalize(state)
         return sql_code
 
     def ping(self):

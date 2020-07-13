@@ -44,13 +44,13 @@ class QueryBuilder:
 
 
 @dataclass
-class Sql:
+class Sql:  # Should be TreeSql(Sql)
     _is_select = False
 
     def compile(self, qb):  # Move to Expr? Doesn't apply to statements
         sql_code = self._compile(qb.replace(is_root=False))
         assert isinstance(sql_code, list), self
-        assert all(isinstance(c, str) for c in sql_code), self
+        assert all(isinstance(c, (str, Parameter)) for c in sql_code), self
         # assert sum(x.count('(') for x in sql_code) == sum(x.count(')') for x in sql_code)
 
         if self._is_select:
@@ -63,16 +63,38 @@ class Sql:
             if qb.is_root and self.type <= T.primitive:
                 sql_code = ['SELECT '] + sql_code
 
-        return CompiledSQL(sql_code, self)
+        return CompiledSQL(self.type, sql_code, self)
 
 
 @dataclass
-class CompiledSQL:
+class CompiledSQL(Sql):
+    type: Type
     code: list
     source_tree: Sql
 
-    def finalize(self):
+    def finalize(self, state):
         return ''.join(self.code)
+
+    def compile(self, qb):
+        # XXX this shouldn't happen. Make it all compiled always!
+        return self
+
+    def optimize(self):
+        if not self.code:
+            return self
+
+        # unify strings for faster resolve_parameters and finalize
+        new_code = []
+        last = self.code[0]
+        for c in self.code[1:]:
+            if isinstance(c, str) and isinstance(last, str):
+                last += c
+            else:
+                new_code.append(last)
+                last = c
+        new_code.append(last)
+        return self.replace(code=new_code)
+
 
 @dataclass
 class RawSql(Sql):
@@ -107,30 +129,7 @@ class Parameter(Sql):
     name: str
 
     def _compile(self, qb):
-        # TODO messy
-        from .evaluate import evaluate
-        state, ns = qb.parameters[-1]
-        obj = ns.get_var(state, self.name)
-        obj = evaluate(state, obj)
-        assert obj.type == self.type
-        return obj.code.compile(qb).code
-
-
-@dataclass
-class ResolveParameters(Sql):
-    obj: Sql
-    # values: Dict[str, Sql]
-    ns: object
-
-    def compile(self, qb):
-        qb.parameters.append(self.ns)
-        obj = self.obj.compile(qb)
-        qb.parameters.pop()
-        return obj
-
-    @property
-    def type(self):
-        return self.obj.type
+        return [self]
 
 
 @dataclass
@@ -175,7 +174,7 @@ class TableName(Table):
         else:
             sql_code = qb.safe_name(self.name)
 
-        return CompiledSQL([sql_code], self)
+        return CompiledSQL(self.type, [sql_code], self)
 
 class TableOperation(Table):
     _is_select = True
@@ -610,7 +609,7 @@ class Subquery(Sql):
 
     def compile(self, qb):
         sql_code = self._compile(qb)
-        return CompiledSQL(sql_code, self)
+        return CompiledSQL(self.type, sql_code, self)
 
 
 
@@ -710,6 +709,23 @@ class StringSlice(Sql):
         return [f'{f}('] + params + [')']
 
 
+@dp_type
+def _repr(t: T.union[T.number, T.bool], x):
+    return str(x)
+
+@dp_type
+def _repr(t: T.decimal, x):
+    return repr(float(x))  # TODO SQL decimal?
+
+@dp_type
+def _repr(t: T.datetime, x):
+    # TODO Better to pass the object instead of a string?
+    return repr(str(x))
+
+@dp_type
+def _repr(t: T.union[T.string, T.text], x):
+    return "'%s'" % str(x).replace("'", "''")
+
 def make_value(x):
     if x is None:
         return null
@@ -719,21 +735,7 @@ def make_value(x):
     except KeyError:
         raise ValueError(x)
 
-    if t <= T.datetime:
-        # TODO Better to pass the object instead of a string?
-        r = repr(str(x))
-
-    elif t <= T.union[T.string, T.text]:
-        r = "'%s'" % str(x).replace("'", "''")
-
-    elif t <= T.decimal:
-        r = repr(float(x))  # TODO SQL decimal?
-
-    else:
-        assert t <= T.union[T.number, T.bool], t
-        r = repr(x)
-
-    return Primitive(t, r)
+    return Primitive(t, _repr(t, x))
 
 def add_one(x):
     return Arith('+', [x, make_value(1)])

@@ -506,6 +506,8 @@ def compile_to_inst(state: State, lst: ast.List_):
 def compile_to_inst(state: State, res: ast.ResolveParameters):
 
     # XXX use a different mechanism??
+
+    # basically cast_to_instance(). Ideally should be an instance whenever possible
     if isinstance(res.obj, objects.Instance):
         obj = res.obj
     else:
@@ -514,6 +516,7 @@ def compile_to_inst(state: State, res: ast.ResolveParameters):
 
     state.require_access(state.AccessLevels.WRITE_DB)
 
+    # handle non-compilable entities (meta, etc.)
     if not isinstance(obj, objects.Instance):
         if isinstance(obj, objects.Function):
             return obj
@@ -524,8 +527,23 @@ def compile_to_inst(state: State, res: ast.ResolveParameters):
     return obj.replace(code=code)
 
 
-def _resolve_sql_parameters(state, node):
-    return sql.ResolveParameters(node, (state, copy(state.ns)))
+def _resolve_sql_parameters(state, compiled_sql):
+    qb = sql.QueryBuilder(state.db.target, False)
+
+    # Ensure <= CompiledSQL
+    compiled_sql = compiled_sql.compile(qb)
+    new_code = []
+    for c in compiled_sql.code:
+        if isinstance(c, sql.Parameter):
+            inst = evaluate(state, state.get_var(c.name))
+            if inst.type != c.type:
+                raise pql_TypeError.make(state, None, f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})")
+            new_code += inst.code.compile(qb).code
+        else:
+            new_code.append(c)
+
+    return compiled_sql.replace(code=new_code)
+
 
 def _raw_sql_callback(state: State, var: str, instances):
     var = var.group()
@@ -545,7 +563,7 @@ def _raw_sql_callback(state: State, var: str, instances):
 
     qb = sql.QueryBuilder(state.db.target, False)
     code = _resolve_sql_parameters(state, inst.code)
-    return code.compile(qb).finalize()   # XXX temp. this shouldn't be here
+    return code.compile(qb).finalize(state)   # XXX temp. this shouldn't be here
 
 @dy
 def compile_to_inst(state: State, rps: ast.ResolveParametersString):
