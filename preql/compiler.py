@@ -527,8 +527,8 @@ def compile_to_inst(state: State, res: ast.ResolveParameters):
     return obj.replace(code=code)
 
 
-def _resolve_sql_parameters(state, compiled_sql):
-    qb = sql.QueryBuilder(state.db.target, False)
+def _resolve_sql_parameters(state, compiled_sql, is_root=False):
+    qb = sql.QueryBuilder(state.db.target, is_root)
 
     # Ensure <= CompiledSQL
     compiled_sql = compiled_sql.compile(qb)
