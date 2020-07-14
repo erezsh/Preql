@@ -514,17 +514,18 @@ def compile_to_inst(state: State, res: ast.ResolveParameters):
         with state.use_scope(res.values):
             obj = evaluate(state, res.obj)
 
+        # handle non-compilable entities (meta, etc.)
+        if not isinstance(obj, objects.Instance):
+            if isinstance(obj, objects.Function):
+                return obj
+            return res.replace(obj=obj)
+
     state.require_access(state.AccessLevels.WRITE_DB)
 
-    # handle non-compilable entities (meta, etc.)
-    if not isinstance(obj, objects.Instance):
-        if isinstance(obj, objects.Function):
-            return obj
-        return res.replace(obj=obj)
-
     code = _resolve_sql_parameters(state, obj.code)
+    subqueries = {k: _resolve_sql_parameters(state, v) for k, v in obj.subqueries.items()}
 
-    return obj.replace(code=code)
+    return obj.replace(code=code, subqueries=subqueries)
 
 
 def _resolve_sql_parameters(state, compiled_sql, is_root=False):

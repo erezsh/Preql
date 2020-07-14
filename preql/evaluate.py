@@ -28,7 +28,7 @@ from . import settings
 from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
-from .compiler import compile_to_inst, _resolve_sql_parameters
+from .compiler import compile_to_inst
 from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type, Object
 
 
@@ -755,8 +755,7 @@ def localize(state, inst: objects.AbsStructInstance):
 def localize(state, inst: objects.Instance):
     state.require_access(state.AccessLevels.WRITE_DB)
 
-    code = _resolve_sql_parameters(state, inst.code, True)
-    return db_query(state, code, inst.subqueries)
+    return db_query(state, inst.code, inst.subqueries)
 
 @dy
 def localize(state, inst: objects.ValueInstance):
