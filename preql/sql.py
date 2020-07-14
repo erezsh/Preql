@@ -59,9 +59,6 @@ class Sql:  # Should be TreeSql(Sql)
                     sql_code = ['('] + sql_code + [') ', qb.unique_name()]  # postgres requires an alias
                 else:
                     sql_code = ['('] + sql_code + [')']
-        else:
-            if qb.is_root and self.type <= T.primitive:
-                sql_code = ['SELECT '] + sql_code
 
         return CompiledSQL(self.type, sql_code, self)
 
@@ -70,10 +67,14 @@ class Sql:  # Should be TreeSql(Sql)
 class CompiledSQL(Sql):
     type: Type
     code: list
-    source_tree: Sql
+    source_tree: Optional[Sql]
 
-    def finalize(self, state):
-        return ''.join(self.code)
+    def finalize(self, state, qb):
+        if qb.is_root and self.type <= T.primitive:
+            code = ['SELECT '] + self.code
+        else:
+            code = self.code
+        return ''.join(code)
 
     def compile(self, qb):
         # XXX this shouldn't happen. Make it all compiled always!

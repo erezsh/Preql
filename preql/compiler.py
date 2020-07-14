@@ -532,6 +532,7 @@ def _resolve_sql_parameters(state, compiled_sql):
 
     # Ensure <= CompiledSQL
     compiled_sql = compiled_sql.compile(qb)
+
     new_code = []
     for c in compiled_sql.code:
         if isinstance(c, sql.Parameter):
@@ -545,30 +546,18 @@ def _resolve_sql_parameters(state, compiled_sql):
     return compiled_sql.replace(code=new_code)
 
 
-def _raw_sql_callback(state: State, var: str, instances):
-    var = var.group()
-    assert var[0] == '$'
-    var_name = var[1:]
-    obj = state.get_var(var_name)
-
-    # if isinstance(obj, types.TableType):
-    if isinstance(obj, Type) and obj.issubtype(T.table):
-        # This branch isn't strictly necessary
-        # It exists to create nicer SQL code output
-        inst = objects.new_table(obj)
-    else:
-        inst = cast_to_instance(state, obj)
-
-    instances.append(inst)
-
-    qb = sql.QueryBuilder(state.db.target, False)
-    code = _resolve_sql_parameters(state, inst.code)
-    return code.compile(qb).finalize(state)   # XXX temp. this shouldn't be here
+@listgen
+def re_split(r, s):
+    offset = 0
+    for m in re.finditer(r, s):
+        yield None,s[offset:m.start()]
+        yield m,s[m.start():m.end()]
+        offset = m.end()
+    yield None,s[offset:]
 
 @dy
 def compile_to_inst(state: State, rps: ast.ResolveParametersString):
-    # TODO if this is still here, it should be in evaluate, not db_rw
-    state.catch_access(state.AccessLevels.EVALUATE)
+    # TODO Create CompiledSQL
 
     sql_code = localize(state, evaluate(state, rps.string))
     assert isinstance(sql_code, str)
@@ -579,9 +568,25 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
     assert isinstance(type_, Type), type_
 
     instances = []
-    expanded = re.sub(r"\$\w+", lambda m: _raw_sql_callback(state, m, instances), sql_code)
-    code = sql.RawSql(type_, expanded)
-    # code = sql.ResolveParameters(sql_code)
+    tokens = re_split(r"\$\w+", sql_code)
+    new_code = []
+    for m, t in tokens:
+        if m:
+            assert t[0] == '$'
+            obj = state.get_var(t[1:])
+            if isinstance(obj, Type) and obj.issubtype(T.table):
+                # This branch isn't strictly necessary
+                # It exists to create nicer SQL code output
+                inst = objects.new_table(obj)
+            else:
+                inst = cast_to_instance(state, obj)
+
+            instances.append(inst)
+            new_code += _resolve_sql_parameters(state, inst.code).code
+        else:
+            new_code.append(t)
+
+    code = sql.CompiledSQL(type_, new_code, None)
 
     # TODO validation!!
     if type_ <= T.table:
