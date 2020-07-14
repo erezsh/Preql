@@ -2,7 +2,7 @@ import re
 import operator
 from copy import copy
 
-from .utils import safezip, listgen, find_duplicate, dataclass
+from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
 from .exceptions import pql_TypeError, pql_SyntaxError
 from . import exceptions as exc
 
@@ -525,7 +525,7 @@ def compile_to_inst(state: State, res: ast.ResolveParameters):
     code = _resolve_sql_parameters(state, obj.code)
     subqueries = {k: _resolve_sql_parameters(state, v) for k, v in obj.subqueries.items()}
 
-    return obj.replace(code=code, subqueries=subqueries)
+    return obj.replace(code=code, subqueries=SafeDict(subqueries))
 
 
 def _resolve_sql_parameters(state, compiled_sql, is_root=False):
@@ -587,7 +587,7 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
         else:
             new_code.append(t)
 
-    code = sql.CompiledSQL(type_, new_code, None)
+    code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
 
     # TODO validation!!
     if type_ <= T.table:

@@ -1,7 +1,7 @@
 from .utils import dataclass
 from .loggers import sql_log
 
-from .sql import Sql, QueryBuilder, sqlite, postgres, CompiledSQL
+from .sql import Sql, QueryBuilder, sqlite, postgres
 from . import exceptions
 
 from .pql_types import T, Type, from_sql, Object

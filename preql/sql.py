@@ -43,8 +43,11 @@ class QueryBuilder:
 
 
 
+class Sql:
+    pass
+
 @dataclass
-class Sql:  # Should be TreeSql(Sql)
+class SqlTree(Sql):
     _is_select = False
 
     def compile(self, qb):  # Move to Expr? Doesn't apply to statements
@@ -53,14 +56,16 @@ class Sql:  # Should be TreeSql(Sql)
         assert all(isinstance(c, (str, Parameter)) for c in sql_code), self
         # assert sum(x.count('(') for x in sql_code) == sum(x.count(')') for x in sql_code)
 
-        if self._is_select:
-            if not qb.is_root:
-                if qb.target == 'postgres':
-                    sql_code = ['('] + sql_code + [') ', qb.unique_name()]  # postgres requires an alias
-                else:
-                    sql_code = ['('] + sql_code + [')']
+        return CompiledSQL(self.type, sql_code, self, self._is_select, False).wrap(qb)  # XXX hack
 
-        return CompiledSQL(self.type, sql_code, self)
+    def compile_for_cache(self, qb):
+        assert False
+        sql_code = self._compile(qb.replace(is_root=False))
+        assert isinstance(sql_code, list), self
+        assert all(isinstance(c, (str, Parameter)) for c in sql_code), self
+        # assert sum(x.count('(') for x in sql_code) == sum(x.count(')') for x in sql_code)
+
+        return CompiledSQL(self.type, sql_code, self, self._is_select, False)
 
 
 @dataclass
@@ -68,16 +73,40 @@ class CompiledSQL(Sql):
     type: Type
     code: list
     source_tree: Optional[Sql]
+    _is_select: bool   # Needed for embedding in SqlTree
+    _needs_select: bool
 
     def finalize(self, state, qb):
-        if qb.is_root and self.type <= T.primitive:
+        assert qb.is_root
+        if self.type <= T.primitive:
             code = ['SELECT '] + self.code
         else:
             code = self.code
         return ''.join(code)
 
-    def compile(self, qb):
+    def wrap(self, qb):
         # XXX this shouldn't happen. Make it all compiled always!
+        code = self.code
+
+        if qb.is_root:
+            if self._needs_select:
+                code = ['SELECT * FROM'] + code
+                return self.replace(code=code, _needs_select=False)
+        else:
+            if self._is_select and not self._needs_select:
+                # Bad recursion
+                if qb.target == 'postgres':
+                    code = ['('] + code + [') ', qb.unique_name()]  # postgres requires an alias
+                else:
+                    code = ['('] + code + [')']
+
+                return self.replace(code=code, _is_select=False)
+
+        return self
+
+    def compile(self, qb):
+        return self
+    def compile_for_cache(self, qb):
         return self
 
     def optimize(self):
@@ -98,7 +127,7 @@ class CompiledSQL(Sql):
 
 
 @dataclass
-class RawSql(Sql):
+class RawSql(SqlTree):
     type: Type
     text: str
 
@@ -107,17 +136,17 @@ class RawSql(Sql):
 
     @property
     def _is_select(self):
-        return self.text.lower().startswith('select')   # XXX Hacky! Is there a cleaner solution?
+        return self.text.lstrip().lower().startswith('select')   # XXX Hacky! Is there a cleaner solution?
 
 @dataclass
-class Null(Sql):
+class Null(SqlTree):
     type = T.null
 
     def _compile(self, qb):
         return ['null']
 
 @dataclass
-class Unknown(Sql):
+class Unknown(SqlTree):
     def _compile(self, qb):
         raise NotImplementedError("Unknown")
 
@@ -125,7 +154,7 @@ null = Null()
 unknown = Unknown()
 
 @dataclass
-class Parameter(Sql):
+class Parameter(SqlTree):
     type: Type
     name: str
 
@@ -134,7 +163,7 @@ class Parameter(Sql):
 
 
 @dataclass
-class Scalar(Sql):
+class Scalar(SqlTree):
     pass
 
 @dataclass
@@ -151,7 +180,7 @@ class Primitive(Atom):
 
 
 @dataclass
-class Table(Sql):
+class Table(SqlTree):
     pass
 
 @dataclass
@@ -170,12 +199,14 @@ class TableName(Table):
     name: str
 
     def compile(self, qb):
-        if qb.is_root:
-            sql_code = f'SELECT * FROM {qb.safe_name(self.name)}'
-        else:
-            sql_code = qb.safe_name(self.name)
+        sql_code = qb.safe_name(self.name)
+        return CompiledSQL(self.type, [sql_code], self, True, True).wrap(qb)
 
-        return CompiledSQL(self.type, [sql_code], self)
+    def compile_for_cache(self, qb):
+        assert False
+        sql_code = qb.safe_name(self.name)
+        return CompiledSQL(self.type, [sql_code], self, True, True)
+
 
 class TableOperation(Table):
     _is_select = True
@@ -183,7 +214,7 @@ class TableOperation(Table):
 
 
 @dataclass
-class FieldFunc(Sql):
+class FieldFunc(SqlTree):
     name: str
     field: Sql
     type = T.int
@@ -201,7 +232,7 @@ class CountTable(Scalar):
         return [f'(SELECT COUNT(*) FROM '] + self.table.compile(qb).code + [')']
 
 @dataclass
-class FuncCall(Sql):
+class FuncCall(SqlTree):
     type: Type
     name: str
     fields: List[Sql]
@@ -211,7 +242,7 @@ class FuncCall(Sql):
         return [f'{self.name}('] + s + [')']
 
 @dataclass
-class Cast(Sql):
+class Cast(SqlTree):
     type: Type
     as_type: str
     value: Sql
@@ -221,7 +252,7 @@ class Cast(Sql):
 
 
 @dataclass
-class MakeArray(Sql):
+class MakeArray(SqlTree):
     type: Type
     field: Sql
 
@@ -323,7 +354,7 @@ class TableArith(TableOperation):
 
 
 @dataclass
-class Neg(Sql):
+class Neg(SqlTree):
     expr: Sql
 
     def _compile(self, qb):
@@ -333,7 +364,7 @@ class Neg(Sql):
     type = property(X.expr.type)
 
 @dataclass
-class Desc(Sql):
+class Desc(SqlTree):
     expr: Sql
 
     def _compile(self, qb):
@@ -345,7 +376,7 @@ class Desc(Sql):
 _reserved = {'index', 'create', 'unique', 'table', 'select', 'where', 'group', 'by', 'over', 'user'}
 
 @dataclass
-class Name(Sql):
+class Name(SqlTree):
     type: Type
     name: str
 
@@ -359,7 +390,7 @@ class Name(Sql):
         return [name]
 
 @dataclass
-class Attr(Sql):
+class Attr(SqlTree):
     type: Type
     obj: Sql
     name: str
@@ -369,7 +400,7 @@ class Attr(Sql):
     # return base
 
 @dataclass
-class ColumnAlias(Sql):
+class ColumnAlias(SqlTree):
     value: Sql
     alias: str
 
@@ -390,7 +421,7 @@ class ColumnAlias(Sql):
 
 
 @dataclass
-class Insert(Sql):
+class Insert(SqlTree):
     table_name: str
     columns: List[str]
     query: Sql
@@ -400,7 +431,7 @@ class Insert(Sql):
         return [f'INSERT INTO "{self.table_name}"({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile(qb).code
 
 @dataclass
-class InsertConsts(Sql):
+class InsertConsts(SqlTree):
     table: str
     cols: List[str]
     tuples: list #List[List[Sql]]
@@ -421,7 +452,7 @@ class InsertConsts(Sql):
         return [' '.join(q)] + values #+ [';']
 
 @dataclass
-class InsertConsts2(Sql):
+class InsertConsts2(SqlTree):
     table: str
     cols: List[str]
     tuples: list #List[List[Sql]]
@@ -464,7 +495,7 @@ class SelectValue(Atom, TableOperation):
     type = property(X.value.type)
 
 @dataclass
-class RowDict(Sql):
+class RowDict(SqlTree):
     values: Dict[str, Sql]
 
     def _compile(self, qb):
@@ -484,14 +515,14 @@ class Values(Table):
 
 
 @dataclass
-class AllFields(Sql):
+class AllFields(SqlTree):
     type: Type
 
     def _compile(self, qb):
         return ['*']
 
 @dataclass
-class Update(Sql):
+class Update(SqlTree):
     table: TableName
     fields: Dict[Sql, Sql]
     conds: List[Sql]
@@ -509,7 +540,7 @@ class Update(Sql):
         return sql
 
 @dataclass
-class Delete(Sql):
+class Delete(SqlTree):
     table: TableName
     conds: List[Sql]
     type = T.null
@@ -596,7 +627,7 @@ def join_comma(code_list):
     return join_sep(code_list, ", ")
 
 @dataclass
-class Subquery(Sql):
+class Subquery(SqlTree):
     table_name: str
     fields: List[Name]
     query: Sql
@@ -610,7 +641,7 @@ class Subquery(Sql):
 
     def compile(self, qb):
         sql_code = self._compile(qb)
-        return CompiledSQL(self.type, sql_code, self)
+        return CompiledSQL(self.type, sql_code, self, self._is_select, False)
 
 
 
@@ -678,7 +709,7 @@ def arith(res_type, op, args):
 
 
 @dataclass
-class StringSlice(Sql):
+class StringSlice(SqlTree):
     string: Sql
     start: Sql
     stop: Optional[Sql]
