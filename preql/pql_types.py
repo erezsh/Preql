@@ -66,6 +66,7 @@ class Type(Object, AbsType):
     def __eq__(self, other, memo=None):
         "Repetitive nested equalities are assumed to be true"
 
+
         if not isinstance(other, Type):
             return False
 
@@ -78,14 +79,16 @@ class Type(Object, AbsType):
 
         memo.add((a, b))
 
-        l1 = self.elems if isinstance(self.elems, tuple) else list(self.elems.values())
-        l2 = other.elems if isinstance(other.elems, tuple) else list(other.elems.values())
+        l1 = self.elems if isinstance(self.elems, dict) else dict(enumerate(self.elems))
+        l2 = other.elems if isinstance(other.elems, dict) else dict(enumerate(other.elems))
         if len(l1) != len(l2):
             return False
 
-        return self.typename == other.typename and all(
-            i1.__eq__(i2, memo) for i1, i2 in zip(l1, l2)
+        res = self.typename == other.typename and all(
+            k1==k2 and v1.__eq__(v2, memo)
+            for (k1,v1), (k2,v2) in zip(l1.items(), l2.items())
         )
+        return res
 
 
     @property

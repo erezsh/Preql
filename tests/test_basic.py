@@ -1079,3 +1079,16 @@ class BasicTests(PreqlTests):
         t = preql('type(A{...!id})')
         assert a_type != t  # different order
         assert a_type.elems == t.elems
+
+
+class TestTypes(PreqlTests):
+    def test_types(self):
+        assert T.int == T.int
+        assert T.int != T.number
+        assert T.int <= T.number
+        assert T.int <= T.union[T.number, T.string]
+        assert T.union[T.int, T.string] != T.union[T.bool, T.text]
+
+        assert T.struct(n=T.int) == T.struct(n=T.int)
+        assert T.struct(n=T.int) != T.struct(m=T.int)
+        assert T.struct(n=T.int) != T.struct(n=T.string)
