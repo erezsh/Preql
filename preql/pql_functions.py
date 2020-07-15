@@ -18,45 +18,6 @@ from .evaluate import evaluate, localize, db_query, TableConstructor
 from .pql_types import Object, T, table_flat_for_insert, Type, join_names
 from .casts import _cast
 
-# def _pql_SQL_callback(state: State, var: str, instances):
-#     var = var.group()
-#     assert var[0] == '$'
-#     var_name = var[1:]
-#     obj = state.get_var(var_name)
-
-#     if isinstance(obj, types.TableType):
-#         # This branch isn't strictly necessary
-#         # It exists to create nicer SQL code output
-#         inst = objects.TableInstance.make(sql.TableName(obj, obj.name), obj, [], {})
-#     else:
-#         inst = evaluate(state, obj)
-
-#         # if isinstance(inst, objects.TableInstance):
-
-#         #     # Make new type
-#         #     new_columns = {
-#         #         name: objects.make_column_instance(sql.Name(col.type, name), col.type, [col])
-#         #         for name, col in inst.columns.items()
-#         #     }
-
-#         #     # Make code
-#         #      ql_fields = [
-#         #         sql.ColumnAlias.make(o.code, n.code)
-#         #          or old, new in safezip(inst.columns.values(), new_columns.values())
-#         #         for o, n in safezip(old.flatten(), new.flatten())
-#         #
-
-#         #     code = sql.Select(inst.type, inst.code, sql_fields)
-
-#         #     # Make Instance
-#         #     inst = objects.TableInstance.make(code, inst.type, [inst], new_columns)
-
-#     instances.append(inst)
-
-#     qb = sql.QueryBuilder(state.db.target, False)
-#     return '%s' % inst.code.compile(qb).text
-
-
 
 def _pql_PY_callback(state: State, var: str):
     var = var.group()

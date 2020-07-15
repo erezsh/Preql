@@ -51,14 +51,14 @@ class SqlInterface:
 
 
     def _compile_sql(self, sql, subqueries=None, qargs=(), state=None):
-        qb = QueryBuilder(self.target, parameters=state and [state.ns])
+        qb = QueryBuilder(self.target)
 
         if subqueries:
-            subqs = [q.compile(qb).finalize(state, qb) for (name, q) in subqueries.items()]
+            subqs = [q.compile_wrap(qb).finalize(state, qb) for (name, q) in subqueries.items()]
             sql_code = 'WITH RECURSIVE ' + ',\n     '.join(subqs) + '\n'
         else:
             sql_code = ''
-        compiled = sql.compile(qb)
+        compiled = sql.compile_wrap(qb)
         sql_code += compiled.finalize(state, qb)
         return sql_code
 

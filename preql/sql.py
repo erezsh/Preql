@@ -9,12 +9,11 @@ sqlite = 'sqlite'
 postgres = 'postgres'
 
 class QueryBuilder:
-    def __init__(self, target, is_root=True, start_count=0, parameters=None):
+    def __init__(self, target, is_root=True, start_count=0):
         self.target = target
         self.is_root = is_root
 
         self.counter = start_count
-        self.parameters = parameters or []
 
         self.table_name = []
 
@@ -25,7 +24,7 @@ class QueryBuilder:
     def replace(self, is_root):
         if is_root == self.is_root:
             return self # Optimize
-        return QueryBuilder(self.target, is_root, self.counter, self.parameters)
+        return QueryBuilder(self.target, is_root, self.counter)
 
     def push_table(self, t):
         self.table_name.append(t)
@@ -50,20 +49,17 @@ class Sql:
 class SqlTree(Sql):
     _is_select = False
 
-    def compile(self, qb):  # Move to Expr? Doesn't apply to statements
+    def compile_wrap(self, qb):  # Move to Expr? Doesn't apply to statements
         sql_code = self._compile(qb.replace(is_root=False))
         assert isinstance(sql_code, list), self
         assert all(isinstance(c, (str, Parameter)) for c in sql_code), self
-        # assert sum(x.count('(') for x in sql_code) == sum(x.count(')') for x in sql_code)
 
         return CompiledSQL(self.type, sql_code, self, self._is_select, False).wrap(qb)  # XXX hack
 
-    def compile_for_cache(self, qb):
-        assert False
+    def compile(self, qb):
         sql_code = self._compile(qb.replace(is_root=False))
         assert isinstance(sql_code, list), self
         assert all(isinstance(c, (str, Parameter)) for c in sql_code), self
-        # assert sum(x.count('(') for x in sql_code) == sum(x.count(')') for x in sql_code)
 
         return CompiledSQL(self.type, sql_code, self, self._is_select, False)
 
@@ -77,6 +73,7 @@ class CompiledSQL(Sql):
     _needs_select: bool
 
     def finalize(self, state, qb):
+        self = self.wrap(qb)
         assert qb.is_root
         if self.type <= T.primitive:
             code = ['SELECT '] + self.code
@@ -90,8 +87,8 @@ class CompiledSQL(Sql):
 
         if qb.is_root:
             if self._needs_select:
-                code = ['SELECT * FROM'] + code
-                return self.replace(code=code, _needs_select=False)
+                code = ['SELECT * FROM '] + code
+                return self.replace(code=code, _needs_select=False, _is_select=True)
         else:
             if self._is_select and not self._needs_select:
                 # Bad recursion
@@ -104,9 +101,9 @@ class CompiledSQL(Sql):
 
         return self
 
+    def compile_wrap(self, qb):
+        return self.wrap(qb)
     def compile(self, qb):
-        return self
-    def compile_for_cache(self, qb):
         return self
 
     def optimize(self):
@@ -198,12 +195,11 @@ class TableName(Table):
     type: Type
     name: str
 
-    def compile(self, qb):
+    def compile_wrap(self, qb):
         sql_code = qb.safe_name(self.name)
         return CompiledSQL(self.type, [sql_code], self, True, True).wrap(qb)
 
-    def compile_for_cache(self, qb):
-        assert False
+    def compile(self, qb):
         sql_code = qb.safe_name(self.name)
         return CompiledSQL(self.type, [sql_code], self, True, True)
 
@@ -220,7 +216,7 @@ class FieldFunc(SqlTree):
     type = T.int
 
     def _compile(self, qb):
-        return [f'{self.name}('] + self.field.compile(qb).code + [')']
+        return [f'{self.name}('] + self.field.compile_wrap(qb).code + [')']
 
 
 @dataclass
@@ -229,7 +225,7 @@ class CountTable(Scalar):
     type = T.int
 
     def _compile(self, qb):
-        return [f'(SELECT COUNT(*) FROM '] + self.table.compile(qb).code + [')']
+        return [f'(SELECT COUNT(*) FROM '] + self.table.compile_wrap(qb).code + [')']
 
 @dataclass
 class FuncCall(SqlTree):
@@ -238,7 +234,7 @@ class FuncCall(SqlTree):
     fields: List[Sql]
 
     def _compile(self, qb):
-        s = join_comma(f.compile(qb).code for f in self.fields)
+        s = join_comma(f.compile_wrap(qb).code for f in self.fields)
         return [f'{self.name}('] + s + [')']
 
 @dataclass
@@ -248,7 +244,7 @@ class Cast(SqlTree):
     value: Sql
 
     def _compile(self, qb):
-        return [f'CAST('] + self.value.compile(qb).code + [f' AS {self.as_type})']
+        return [f'CAST('] + self.value.compile_wrap(qb).code + [f' AS {self.as_type})']
 
 
 @dataclass
@@ -259,7 +255,7 @@ class MakeArray(SqlTree):
     _sp = "|"
 
     def _compile(self, qb):
-        field = self.field.compile(qb).code
+        field = self.field.compile_wrap(qb).code
         if qb.target == sqlite:
             return ['group_concat('] + field + [f', "{self._sp}")']
         elif qb.target == postgres:
@@ -277,8 +273,8 @@ class Contains(Scalar):
     def _compile(self, qb):
         assert self.op
         item, container = self.exprs
-        c_item = item.compile(qb).code
-        c_cont = container.compile(qb.replace(is_root=True)).code
+        c_item = item.compile_wrap(qb).code
+        c_cont = container.compile_wrap(qb.replace(is_root=True)).code
         return c_item + [' ', self.op, ' '] + parens(c_cont)
 
 
@@ -307,7 +303,7 @@ class Compare(Scalar):
                 '!=': 'is distinct from'
             }.get(op, op)
 
-        elems = [e.compile(qb).code for e in self.exprs]
+        elems = [e.compile_wrap(qb).code for e in self.exprs]
         return parens( join_sep(elems, f' {op} ') )
 
 @dataclass
@@ -317,8 +313,8 @@ class Like(Scalar):
     type = T.bool
 
     def _compile(self, qb):
-        s = self.string.compile(qb)
-        p = self.pattern.compile(qb)
+        s = self.string.compile_wrap(qb)
+        p = self.pattern.compile_wrap(qb)
         return s.code + [' like '] + p.code
 
 @dataclass
@@ -327,7 +323,7 @@ class Arith(Scalar):
     exprs: List[Sql]
 
     def _compile(self, qb):
-        x = join_sep([e.compile(qb).code for e in self.exprs], f' {self.op} ')
+        x = join_sep([e.compile_wrap(qb).code for e in self.exprs], f' {self.op} ')
         return parens(x)
 
     type = property(X.exprs[0].type)     # TODO ensure type correctness
@@ -339,7 +335,7 @@ class TableArith(TableOperation):
     exprs: List[Table]
 
     def _compile(self, qb):
-        tables = [t.compile(qb) for t in self.exprs]
+        tables = [t.compile_wrap(qb) for t in self.exprs]
         selects = [[f"SELECT * FROM "] + t.code for t in tables]
 
         code = join_sep(selects, f" {self.op} ")
@@ -358,7 +354,7 @@ class Neg(SqlTree):
     expr: Sql
 
     def _compile(self, qb):
-        s = self.expr.compile(qb)
+        s = self.expr.compile_wrap(qb)
         return ["-"] + s.code
 
     type = property(X.expr.type)
@@ -368,7 +364,7 @@ class Desc(SqlTree):
     expr: Sql
 
     def _compile(self, qb):
-        s = self.expr.compile(qb)
+        s = self.expr.compile_wrap(qb)
         return s.code + [" DESC"]
 
     type = property(X.expr.type)
@@ -410,7 +406,7 @@ class ColumnAlias(SqlTree):
 
     def _compile(self, qb):
         alias = qb.safe_name(self.alias)
-        value = self.value.compile(qb).code
+        value = self.value.compile_wrap(qb).code
         assert alias and value, (alias, value)
         if value == alias:  # TODO disable when unoptimized?
             return alias  # This is just for beauty, it's not necessary for function
@@ -428,7 +424,7 @@ class Insert(SqlTree):
     type = T.null
 
     def _compile(self, qb):
-        return [f'INSERT INTO "{self.table_name}"({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile(qb).code
+        return [f'INSERT INTO "{self.table_name}"({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
 
 @dataclass
 class InsertConsts(SqlTree):
@@ -441,7 +437,7 @@ class InsertConsts(SqlTree):
         assert self.tuples, self
 
         values = join_comma(
-            parens(join_comma([e.compile(qb).code for e in tpl]))
+            parens(join_comma([e.compile_wrap(qb).code for e in tpl]))
             for tpl in self.tuples
         )
 
@@ -489,7 +485,7 @@ class SelectValue(Atom, TableOperation):
     value: Sql
 
     def _compile(self, qb):
-        value = self.value.compile(qb)
+        value = self.value.compile_wrap(qb)
         return [f'SELECT '] + value.code + [' AS '] + value
 
     type = property(X.value.type)
@@ -499,7 +495,7 @@ class RowDict(SqlTree):
     values: Dict[str, Sql]
 
     def _compile(self, qb):
-        return {v.compile(qb).code + [f' as {name}'] for name, v in self.values.items()}
+        return {v.compile_wrap(qb).code + [f' as {name}'] for name, v in self.values.items()}
 
 
 @dataclass
@@ -508,7 +504,7 @@ class Values(Table):
     values: List[Sql]
 
     def _compile(self, qb):
-        values = [v.compile(qb) for v in self.values]
+        values = [v.compile_wrap(qb) for v in self.values]
         if not values:  # SQL doesn't support empty values
             return ['SELECT NULL LIMIT 0']
         return ['VALUES '] + join_comma(parens(v.code) for v in values)
@@ -529,13 +525,13 @@ class Update(SqlTree):
     type = T.null
 
     def _compile(self, qb):
-        fields_sql = [k.compile(qb).code + [' = '] + v.compile(qb).code for k, v in self.fields.items()]
+        fields_sql = [k.compile_wrap(qb).code + [' = '] + v.compile_wrap(qb).code for k, v in self.fields.items()]
         fields_sql = join_comma(fields_sql)
 
-        sql = ['UPDATE '] + self.table.compile(qb).code + [' SET '] + fields_sql
+        sql = ['UPDATE '] + self.table.compile_wrap(qb).code + [' SET '] + fields_sql
 
         if self.conds:
-            sql += [' WHERE '] + join_sep([c.compile(qb).code for c in self.conds], ' AND ')
+            sql += [' WHERE '] + join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
 
         return sql
 
@@ -546,8 +542,8 @@ class Delete(SqlTree):
     type = T.null
 
     def _compile(self, qb):
-        conds = join_sep([c.compile(qb).code for c in self.conds], ' AND ')
-        return ['DELETE FROM '] + self.table.compile(qb).code + [' WHERE '] + conds
+        conds = join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
+        return ['DELETE FROM '] + self.table.compile_wrap(qb).code + [' WHERE '] + conds
 
 @dataclass
 class Select(TableOperation):
@@ -587,29 +583,29 @@ class Select(TableOperation):
         #
         # Compile
         #
-        fields_sql = [f.compile(qb) for f in self.fields]
+        fields_sql = [f.compile_wrap(qb) for f in self.fields]
         select_sql = join_comma(f.code for f in fields_sql)
 
-        sql = ['SELECT '] + select_sql + [' FROM '] + self.table.compile(qb).code
+        sql = ['SELECT '] + select_sql + [' FROM '] + self.table.compile_wrap(qb).code
 
         if self.conds:
-            sql += [' WHERE '] + join_sep([c.compile(qb).code for c in self.conds], ' AND ')
+            sql += [' WHERE '] + join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
 
 
         if self.group_by:
-            sql += [' GROUP BY '] + join_comma(e.compile(qb).code for e in self.group_by)
+            sql += [' GROUP BY '] + join_comma(e.compile_wrap(qb).code for e in self.group_by)
 
         if self.limit:
-            sql += [' LIMIT '] + self.limit.compile(qb).code
+            sql += [' LIMIT '] + self.limit.compile_wrap(qb).code
         elif self.offset:
             if qb.target == sqlite:
                 sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
 
         if self.offset:
-            sql += [' OFFSET '] + self.offset.compile(qb).code
+            sql += [' OFFSET '] + self.offset.compile_wrap(qb).code
 
         if self.order:
-            sql += [' ORDER BY '] + join_comma(o.compile(qb).code for o in self.order)
+            sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
 
         return sql
 
@@ -635,11 +631,11 @@ class Subquery(SqlTree):
 
     def _compile(self, qb):
         query = self.query.compile(qb).code
-        fields = [f.compile(qb.replace(is_root=False)).code for f in self.fields]
+        fields = [f.compile_wrap(qb.replace(is_root=False)).code for f in self.fields]
         fields_str = ["("] + join_comma(fields) + [")"] if fields else []
         return [f"{self.table_name}"] + fields_str + [" AS ("] + query + [")"]
 
-    def compile(self, qb):
+    def compile_wrap(self, qb):
         sql_code = self._compile(qb)
         return CompiledSQL(self.type, sql_code, self, self._is_select, False)
 
@@ -653,12 +649,12 @@ class Join(TableOperation):
     conds: List[Sql]
 
     def _compile(self, qb):
-        tables_sql = [t.compile(qb).code for t in self.tables]
+        tables_sql = [t.compile_wrap(qb).code for t in self.tables]
         join_op = ' %s ' % self.join_op.upper()
         join_sql = join_sep([e for e in tables_sql], join_op)
 
         if self.conds:
-            conds = join_sep([c.compile(qb).code for c in self.conds], ' AND ')
+            conds = join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
         else:
             conds = ['1=1']   # Postgres requires ON clause
 
@@ -717,10 +713,10 @@ class StringSlice(SqlTree):
     type = T.string
 
     def _compile(self, qb):
-        string = self.string.compile(qb).code
-        start = self.start.compile(qb).code
+        string = self.string.compile_wrap(qb).code
+        start = self.start.compile_wrap(qb).code
         if self.stop:
-            stop = self.stop.compile(qb).code
+            stop = self.stop.compile_wrap(qb).code
             length = parens(stop + ['-'] + start)
         else:
             length = None

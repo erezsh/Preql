@@ -318,7 +318,7 @@ def make_instance_from_name(t, cn):
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
-    assert not t.issubtype(T.struct)
+    assert not t.issubtype(T.struct), t
     if t <= T.list:
         return ListInstance.make(code, t, insts)
     elif t <= T.table:
@@ -400,7 +400,7 @@ class StructInstance(AbsStructInstance):
 class MapInstance(AbsStructInstance):
     attrs: Dict[str, Object]
 
-    type = T.any
+    type = T.struct
 
     def __len__(self):
         return len(self.attrs)

@@ -41,17 +41,6 @@ class BasicTests(PreqlTests):
         preql = self.Preql()
         preql.load('country_person.pql', rel_to=__file__)
 
-        self.assertEqual( list(preql('Person {name, ...}')[0].keys()) , ['name', 'id', 'country'])
-
-        assert preql('Person {name, ...}[name=="Erez Shinan"]') == [{'name': 'Erez Shinan', 'id': 1, 'country': 1}]
-
-        preql("""
-            func q1() = Person
-            func q2() = q1
-        """)
-        res = preql("q2()()[id==me] {name}")
-        print(res.to_json())
-
         self._test_basic(preql)
         self._test_ellipsis(preql)
         self._test_ellipsis_exclude(preql)
@@ -171,8 +160,6 @@ class BasicTests(PreqlTests):
             func q2() = q1
         """)
         res = preql("q2()()[id==me] {name}")
-        print(res.to_json())
-
         assert is_eq(res, [("Erez Shinan",)])
 
         preql("""
@@ -588,6 +575,7 @@ class BasicTests(PreqlTests):
     def test_list_ops(self):
         # TODO should be consistent - always table, or always array
         preql = self.Preql()
+
         res = preql("""[1,2,3]""")
         assert res == [1,2,3], res
         res = preql("""[1,2,3] + [5,6]""")

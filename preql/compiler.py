@@ -522,14 +522,15 @@ def compile_to_inst(state: State, res: ast.ResolveParameters):
 
     state.require_access(state.AccessLevels.WRITE_DB)
 
-    code = _resolve_sql_parameters(state, obj.code)
-    subqueries = {k: _resolve_sql_parameters(state, v) for k, v in obj.subqueries.items()}
+    sq2 = SafeDict()
+    code = _resolve_sql_parameters(state, obj.code, subqueries=sq2)
+    subqueries = {k: _resolve_sql_parameters(state, v, subqueries=sq2) for k, v in obj.subqueries.items()}
 
-    return obj.replace(code=code, subqueries=SafeDict(subqueries))
+    return obj.replace(code=code, subqueries=SafeDict(subqueries).update(sq2))
 
 
-def _resolve_sql_parameters(state, compiled_sql, is_root=False):
-    qb = sql.QueryBuilder(state.db.target, is_root)
+def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
+    qb = sql.QueryBuilder(state.db.target, False)
 
     # Ensure <= CompiledSQL
     compiled_sql = compiled_sql.compile(qb)
@@ -540,11 +541,15 @@ def _resolve_sql_parameters(state, compiled_sql, is_root=False):
             inst = evaluate(state, state.get_var(c.name))
             if inst.type != c.type:
                 raise pql_TypeError.make(state, None, f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})")
-            new_code += inst.code.compile(qb).code
+            new_code += inst.code.compile_wrap(qb).code
+            subqueries.update(inst.subqueries)
         else:
             new_code.append(c)
 
-    return compiled_sql.replace(code=new_code)
+    res = compiled_sql.replace(code=new_code)
+    if wrap:
+        res = res.wrap(qb)
+    return res
 
 
 @listgen
@@ -569,6 +574,7 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
     assert isinstance(type_, Type), type_
 
     instances = []
+    subqueries = SafeDict()
     tokens = re_split(r"\$\w+", sql_code)
     new_code = []
     for m, t in tokens:
@@ -583,14 +589,14 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
                 inst = cast_to_instance(state, obj)
 
             instances.append(inst)
-            new_code += _resolve_sql_parameters(state, inst.code).code
+            new_code += _resolve_sql_parameters(state, inst.code, wrap=bool(new_code), subqueries=subqueries).code
+            assert not subqueries
         else:
             new_code.append(t)
 
-    code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
-
     # TODO validation!!
     if type_ <= T.table:
+        code = sql.CompiledSQL(type_, new_code, None, True, False)
         name = state.unique_name("subq_")
 
         # TODO this isn't in the tests!
@@ -602,6 +608,7 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
         inst.subqueries[name] = subq
         return inst
 
+    code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
     return objects.Instance.make(code, type_, instances)
 
 @dy
@@ -657,6 +664,9 @@ def compile_to_inst(state: State, sel: ast.Selection):
 @dy
 def compile_to_inst(state: State, param: ast.Parameter):
     if state.access_level == state.AccessLevels.COMPILE:
+        if param.type <= T.struct:
+            # TODO why can't I just make an instance?
+            raise exc.InsufficientAccessLevel("Structs not supported yet")
         return objects.make_instance(sql.Parameter(param.type, param.name), param.type, [])
     else:
         return state.get_var(param.name)

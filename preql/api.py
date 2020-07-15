@@ -171,7 +171,8 @@ class TablePromise:
             return call_pql_func(self._state, '_core_limit_offset', [self._inst, _make_const(limit), _make_const(offset)])
 
         # TODO different debug log level / mode
-        res ,= localize(self._state, evaluate(self._state, self[index:1]))
+        inst = evaluate(self._state, self[index:1])
+        res ,= localize(self._state, inst)
         return res
 
     def __repr__(self):

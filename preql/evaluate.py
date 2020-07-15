@@ -390,7 +390,8 @@ def eval_func_call(state, func, args):
 
     # XXX simplify destroys text_ref, so it harms error messages.
     # TODO Can I get rid of it, or make it preserve the text_ref somehow?
-    args.update( {p.name:simplify(state, a) for p,a in matched_args} )
+    # Don't I need an instance to ensure I have type?
+    args.update( {p.name:evaluate(state, a) for p,a in matched_args} )
     # args.update( {p.name:a for p,a in matched_args} )
 
 
@@ -416,19 +417,9 @@ def eval_func_call(state, func, args):
                         expr = _call_expr(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
                         logging.info("Compiled successfully")
                         if isinstance(expr, objects.Instance):
-                            # NOTE:
-                            # Compiling here is problematic. We don't know if it's root or not
-                            # But we have to compile, or we can't save time
-                            # So we have one of two options:
-                            # 1) Compile for both (silly)
-                            # 2) Finish the cosmetics later on in CompiledSQL, when we do know
-                            # Basically this algorithm:
-                            # If root:
-                            #   * If needs_select, add select (for tablename basically)
-                            # else:
-                            #   * If is_select (and not needs_select), add parens (else nop)
+                            # XXX a little ugly
                             qb = sql.QueryBuilder(state.db.target, True)
-                            x = expr.code.compile_for_cache(qb)
+                            x = expr.code.compile(qb)
                             x = x.optimize()
                             expr = expr.replace(code=x)
                         state._cache[sig] = expr
