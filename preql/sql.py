@@ -48,20 +48,17 @@ class Sql:
 @dataclass
 class SqlTree(Sql):
     _is_select = False
+    _needs_select = False
 
     def compile_wrap(self, qb):  # Move to Expr? Doesn't apply to statements
-        sql_code = self._compile(qb.replace(is_root=False))
-        assert isinstance(sql_code, list), self
-        assert all(isinstance(c, (str, Parameter)) for c in sql_code), self
-
-        return CompiledSQL(self.type, sql_code, self, self._is_select, False).wrap(qb)  # XXX hack
+        return self.compile(qb).wrap(qb)
 
     def compile(self, qb):
         sql_code = self._compile(qb.replace(is_root=False))
         assert isinstance(sql_code, list), self
         assert all(isinstance(c, (str, Parameter)) for c in sql_code), self
 
-        return CompiledSQL(self.type, sql_code, self, self._is_select, False)
+        return CompiledSQL(self.type, sql_code, self, self._is_select, self._needs_select)
 
 
 @dataclass
@@ -82,7 +79,6 @@ class CompiledSQL(Sql):
         return ''.join(code)
 
     def wrap(self, qb):
-        # XXX this shouldn't happen. Make it all compiled always!
         code = self.code
 
         if qb.is_root:
@@ -195,18 +191,14 @@ class TableName(Table):
     type: Type
     name: str
 
-    def compile_wrap(self, qb):
-        sql_code = qb.safe_name(self.name)
-        return CompiledSQL(self.type, [sql_code], self, True, True).wrap(qb)
+    def _compile(self, qb):
+        return [qb.safe_name(self.name)]
 
-    def compile(self, qb):
-        sql_code = qb.safe_name(self.name)
-        return CompiledSQL(self.type, [sql_code], self, True, True)
+    _needs_select = True
 
 
 class TableOperation(Table):
     _is_select = True
-
 
 
 @dataclass
@@ -634,11 +626,6 @@ class Subquery(SqlTree):
         fields = [f.compile_wrap(qb.replace(is_root=False)).code for f in self.fields]
         fields_str = ["("] + join_comma(fields) + [")"] if fields else []
         return [f"{self.table_name}"] + fields_str + [" AS ("] + query + [")"]
-
-    def compile_wrap(self, qb):
-        sql_code = self._compile(qb)
-        return CompiledSQL(self.type, sql_code, self, self._is_select, False)
-
 
 
 @dataclass
