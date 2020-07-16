@@ -118,6 +118,8 @@ class MyValidator(Validator):
 
 @memoize
 def _code_is_valid(code):
+    if code == '.':
+        return True
     if code:
         try:
             parse_stmts(code, '<repl>')
@@ -160,7 +162,7 @@ def start_repl(p, prompt=' >> '):
 
                 start_time = time()
                 try:
-                    if code == 'more':
+                    if code == '.':
                         console.print(table_more(p.interp.state), overflow='ellipsis')
                         continue
 

@@ -524,6 +524,15 @@ def new_table(type_, name=None, instances=None, select_fields=False):
 
     return inst
 
+def new_const_table(state, table_type, tuples):
+    name = state.unique_name("table_")
+    table_code, subq = sql.create_table(table_type, name, tuples)
+
+    inst = TableInstance.make(table_code, table_type, [])
+    inst.subqueries[name] = subq
+    return inst
+
+
 
 def from_python(value):
     if value is None:

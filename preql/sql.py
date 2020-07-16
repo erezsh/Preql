@@ -501,6 +501,27 @@ class Values(Table):
             return ['SELECT NULL LIMIT 0']
         return ['VALUES '] + join_comma(parens(v.code) for v in values)
 
+@dataclass
+class Tuple(SqlTree):
+    type: Type
+    values: List[Sql]
+
+    def _compile(self, qb):
+        values = [v.compile_wrap(qb).code for v in self.values]
+        return join_comma(values)
+
+@dataclass
+class ValuesTuples(Table):
+    type: Type
+    values: List[Tuple]
+
+    def _compile(self, qb):
+        if not self.values:  # SQL doesn't support empty values
+            return ['SELECT '] + join_comma(['NULL']*len(self.type.elems)) +  ['LIMIT 0']
+        values = [v.compile_wrap(qb) for v in self.values]
+        return ['VALUES '] + join_comma(v.code for v in values)
+
+
 
 @dataclass
 class AllFields(SqlTree):
@@ -666,6 +687,12 @@ def create_list(list_type, name, elems):
     fields = [Name(list_type.elem, 'value')]
     subq = Subquery(name, fields, Values(list_type, elems))
     table = TableName(list_type, name)
+    return table, subq
+
+def create_table(table_type, name, rows):
+    fields = [Name(col_type, col_name) for col_name, col_type in table_type.elems.items()]
+    subq = Subquery(name, fields, Values(table_type, rows))
+    table = TableName(table_type, name)
     return table, subq
 
 def table_slice(table, start, stop):

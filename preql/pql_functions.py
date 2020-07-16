@@ -417,13 +417,26 @@ def pql_names(state: State, obj: Object = objects.null):
         inst = evaluate(state, obj)
         if not (inst.type <= T.collection): # XXX temp.
             raise pql_TypeError.make(state, obj, "Argument to names() must be a table")
-        all_vars = list(inst.all_attrs())
+        all_vars = (inst.all_attrs())
     else:
-        all_vars = list(state.ns.get_all_vars())
+        all_vars = (state.ns.get_all_vars())
 
     assert all(isinstance(s, str) for s in all_vars)
-    names = [new_value_instance(str(s), T.string) for s in all_vars]
-    return evaluate(state, ast.List_(None, T.list[T.string], names))
+    tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(v.type).code]) for n,v in all_vars.items()]
+
+    table_type = T.table(name=T.string, type=T.string)
+    return objects.new_const_table(state, table_type, tuples)
+
+def new_str(x):
+    return new_value_instance(str(x), T.string)
+
+def pql_tables(state: State):
+    names = state.db.list_tables()
+    values = [(name, state.db.import_table_type(state, name, None)) for name in names]
+    tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in values]
+
+    table_type = T.table(name=T.string, type=T.string)
+    return objects.new_const_table(state, table_type, tuples)
 
 
 
@@ -504,6 +517,7 @@ internal_funcs = create_internal_funcs({
     'exit': pql_exit,
     'help': pql_help,
     'names': pql_names,
+    'tables': pql_tables,
     'dir': pql_names,
     'connect': pql_connect,
     'import_table': pql_import_table,

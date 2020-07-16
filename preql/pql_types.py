@@ -295,8 +295,11 @@ def repr_value(v: T.bool):
 
 @dp_inst
 def from_sql(state, res: T.primitive):
-    row ,= res.value
-    item ,= row
+    try:
+        row ,= res.value
+        item ,= row
+    except ValueError:
+        raise exc.pql_TypeError.make(state, None, "Expected primitive. Got: '%s'" % res.value)
     return item
 
 def _from_datetime(s):

@@ -104,6 +104,11 @@ class PostgresInterface(SqlInterface):
         cnt = self._execute_sql(T.int, sql_code, None)
         return cnt > 0
 
+    def list_tables(self):
+        sql_code = "SELECT table_name FROM information_schema.tables where table_schema='public'"
+        return self._execute_sql(T.list[T.string], sql_code, None)
+
+
     def import_table_type(self, state, name, columns_whitelist):
 
         columns_t = T.table(
@@ -176,6 +181,11 @@ class SqliteInterface(SqlInterface):
         sql_code = "SELECT count(*) FROM sqlite_master where name='%s' and type='table'" % name
         cnt = self._execute_sql(T.int, sql_code, None)
         return cnt > 0
+
+    def list_tables(self):
+        sql_code = "SELECT name FROM sqlite_master where type='table'"
+        return self._execute_sql(T.list[T.string], sql_code, None)
+
 
     table_schema_type = T.table(
         pos=T.int,

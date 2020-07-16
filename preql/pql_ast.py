@@ -274,6 +274,11 @@ class List_(Expr):
     elems: list
 
 @dataclass
+class Table_Columns(Expr):
+    type: Object
+    cols: Dict[str, list]
+
+@dataclass
 class Dict_(Expr):
     elems: dict
 

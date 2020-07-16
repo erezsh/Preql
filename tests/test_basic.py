@@ -783,7 +783,7 @@ class BasicTests(PreqlTests):
             table a {x: int}
         ''')
 
-        self.assertEqual( p('names(a)'), ['id', 'x'] )
+        self.assertEqual( p('list(names(a){name})'), ['id', 'x'] )
         self.assertEqual( p('columns(a)'), {'id': p.t_id, 'x': p.int} )
 
 
