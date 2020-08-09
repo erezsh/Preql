@@ -450,7 +450,7 @@ class InsertConsts2(SqlTree):
         assert self.tuples, self
 
         values = join_comma(
-            parens(join_comma(tpl))
+            parens(join_comma([t] for t in tpl))
             for tpl in self.tuples
         )
 
