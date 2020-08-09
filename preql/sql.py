@@ -498,7 +498,8 @@ class Values(Table):
     def _compile(self, qb):
         values = [v.compile_wrap(qb) for v in self.values]
         if not values:  # SQL doesn't support empty values
-            return ['SELECT NULL LIMIT 0']
+            nulls = ', '.join(['NULL' for _ in range(len(self.type.elems))])
+            return ['SELECT ' + nulls + ' LIMIT 0']
         return ['VALUES '] + join_comma(parens(v.code) for v in values)
 
 @dataclass
