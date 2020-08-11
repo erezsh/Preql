@@ -126,7 +126,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
             raise exc.pql_TypeError.make(state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
-        t = T.struct(**{n:c.type for n,c in fields})
+        t = T.struct({n:c.type for n,c in fields})
         return objects.StructInstance(t, dict(fields))
 
     agg_fields = []
@@ -152,7 +152,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         elems[name] = inst.type
 
     # TODO inherit primary key? indexes?
-    new_table_type = T.table(**elems).set_options(temporary=True)
+    new_table_type = T.table(elems, temporary=True)
 
     # Make code
     flat_codes = [code
@@ -462,7 +462,7 @@ def compile_to_inst(state: State, d: ast.Dict_):
 
     # TODO handle duplicate key names
     elems = {k or guess_field_name(v): evaluate(state, v) for k, v in d.elems.items()}
-    t = T.table(**{k: v.type for k,v in elems.items()})
+    t = T.table({k: v.type for k,v in elems.items()})
     return objects.RowInstance(T.row[t], elems)
 
 @dy

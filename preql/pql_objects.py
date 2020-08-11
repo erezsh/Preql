@@ -43,7 +43,7 @@ class Function(Object):
 
     @property
     def type(self):
-        return T.function[tuple(p.type or T.any for p in self.params)].set_options(param_collector=self.param_collector is not None)
+        return T.function[tuple(p.type or T.any for p in self.params)](param_collector=self.param_collector is not None)
 
     def help_str(self, state):
         raise NotImplementedError()

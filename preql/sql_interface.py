@@ -111,14 +111,14 @@ class PostgresInterface(SqlInterface):
 
     def import_table_type(self, state, name, columns_whitelist):
 
-        columns_t = T.table(
+        columns_t = T.table(dict(
             schema=T.string,
             table=T.string,
             name=T.string,
             pos=T.int,
             nullable=T.bool,
             type=T.string,
-        )
+        ))
         columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
             FROM information_schema.columns
             WHERE table_name = '%s'
@@ -133,7 +133,7 @@ class PostgresInterface(SqlInterface):
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
-        return T.table(**cols).set_options(name=name)
+        return T.table(cols, name=name)
 
     def _bool_from_sql(self, n):
         if n == 'NO':
@@ -187,14 +187,14 @@ class SqliteInterface(SqlInterface):
         return self._execute_sql(T.list[T.string], sql_code, None)
 
 
-    table_schema_type = T.table(
+    table_schema_type = T.table(dict(
         pos=T.int,
         name=T.string,
         type=T.string,
         notnull=T.bool,
         default_value=T.string,
         pk=T.bool,
-    )
+    ))
 
     def import_table_type(self, state, name, columns_whitelist):
 
@@ -209,7 +209,7 @@ class SqliteInterface(SqlInterface):
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
-        return T.table(**cols).set_options(name=name)
+        return T.table(cols, name=name)
 
     def _bool_from_sql(self, n):
         if n == 'NO':
@@ -259,14 +259,14 @@ class GitqliteInterface(SqliteInterface):
         self._print_sql = print_sql
 
 
-    table_schema_type = T.table(
+    table_schema_type = T.table(dict(
         pos=T.int,
         default_value=T.string,
         name=T.string,
         notnull=T.bool,
         pk=T.bool,
         type=T.string,
-    )
+    ))
 
     def _execute_sql(self, sql_type, sql_code, state):
         try:

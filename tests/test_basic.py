@@ -1090,9 +1090,9 @@ class TestTypes(PreqlTests):
         assert T.int <= T.union[T.number, T.string]
         assert T.union[T.int, T.string] != T.union[T.bool, T.text]
 
-        assert T.struct(n=T.int) == T.struct(n=T.int)
-        assert T.struct(n=T.int) != T.struct(m=T.int)
-        assert T.struct(n=T.int) != T.struct(n=T.string)
+        assert T.struct(dict(n=T.int)) == T.struct(dict(n=T.int))
+        assert T.struct(dict(n=T.int)) != T.struct(dict(m=T.int))
+        assert T.struct(dict(n=T.int)) != T.struct(dict(n=T.string))
 
         assert T.list[T.number] <= T.list
         assert T.list[T.any] <= T.list

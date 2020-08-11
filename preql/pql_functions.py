@@ -146,7 +146,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     if 'id' in elems and not const:
         raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
 
-    table = T.table(**elems).set_options(name=name, pk=[] if const else [['id']], temporary=True)
+    table = T.table(elems, name=name, pk=[] if const else [['id']], temporary=True)
 
     if not const:
         table.elems['id'] = T.t_id
@@ -226,7 +226,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
         raise pql_TypeError.make(state, None, "Cannot join on an untyped empty list")
 
     if isinstance(a, objects.UnknownInstance) or isinstance(b, objects.UnknownInstance):
-        table_type = T.table(**{e: T.unknown for e in exprs})
+        table_type = T.table({e: T.unknown for e in exprs})
         return objects.TableInstance.make(sql.unknown, table_type, [])
 
     if isinstance(a, objects.SelectedColumnInstance) and isinstance(b, objects.SelectedColumnInstance):
@@ -243,7 +243,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     assert all((t.type <= T.collection) for t in tables)
 
-    structs = {name: T.struct(**table.type.elem_dict) for name, table in safezip(exprs, tables)}
+    structs = {name: T.struct(table.type.elem_dict) for name, table in safezip(exprs, tables)}
 
     # Update nullable for left/right/outer joins
     if nullable:
@@ -256,7 +256,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
                     for name, t in safezip(exprs, tables)
                     for pk in t.type.options.get('pk', [])
                 ]
-    table_type = T.table(**structs).set_options(name=state.unique_name("joinall" if joinall else "join"), pk=primary_keys)
+    table_type = T.table(structs, name=state.unique_name("joinall" if joinall else "join"), pk=primary_keys)
 
     conds = [] if joinall else [sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip(structs, cols)])]
 
@@ -424,7 +424,7 @@ def pql_names(state: State, obj: Object = objects.null):
     assert all(isinstance(s, str) for s in all_vars)
     tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(v.type).code]) for n,v in all_vars.items()]
 
-    table_type = T.table(name=T.string, type=T.string)
+    table_type = T.table(dict(name=T.string, type=T.string))
     return objects.new_const_table(state, table_type, tuples)
 
 def new_str(x):
@@ -435,7 +435,7 @@ def pql_tables(state: State):
     values = [(name, state.db.import_table_type(state, name, None)) for name in names]
     tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in values]
 
-    table_type = T.table(name=T.string, type=T.string)
+    table_type = T.table(dict(name=T.string, type=T.string))
     return objects.new_const_table(state, table_type, tuples)
 
 

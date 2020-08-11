@@ -36,17 +36,17 @@ from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_typ
 @dy
 def resolve(state: State, struct_def: ast.StructDef):
     members = {str(k):resolve(state, v) for k, v in struct_def.members}
-    struct = T.struct(**members)
+    struct = T.struct(members)
     state.set_var(struct_def.name, struct)
     return struct
 
 @dy
 def resolve(state: State, table_def: ast.TableDef):
-    t = T.table.set_options(name=table_def.name)
+    t = T.table({}, name=table_def.name)
 
     with state.use_scope({table_def.name: t}):  # For self-reference
         elems = {c.name: resolve(state, c) for c in table_def.columns}
-        t = t(**elems)
+        t = t(elems)
 
     if table_def.methods:
         methods = evaluate(state, table_def.methods)
@@ -64,9 +64,9 @@ def resolve(state: State, col_def: ast.ColumnDef):
     assert not isinstance(col, objects.CollectionInstance)
 
     if col <= T.table:
-        return T.t_relation[col].set_options(name=col_def.type.name).replace(nullable=col.nullable)
+        return T.t_relation[col](name=col_def.type.name).replace(nullable=col.nullable)
 
-    return col.set_options(default=col_def.default)
+    return col(default=col_def.default)
 
 @dy
 def resolve(state: State, type_: ast.Type):
@@ -114,11 +114,11 @@ def _execute(state: State, table_def: ast.TableDef):
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
-            t = t(**t.elems, **elems_to_add)
+            t = t({**t.elems, **elems_to_add})
 
         # Auto-add id only if it exists already and not defined by user
         if 'id' in cur_type.elems and 'id' not in t.elems:
-            t = t(id=T.t_id, **t.elems).set_options(pk=[['id']])
+            t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
 
         for e_name, e1_type in t.elems.items():
 
@@ -133,7 +133,7 @@ def _execute(state: State, table_def: ast.TableDef):
         inst = objects.new_table(t, table_def.name, select_fields=True)
     else:
         # Auto-add id by default
-        t = t(id=T.t_id, **t.elems).set_options(pk=[['id']])
+        t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
         inst = objects.new_table(t, table_def.name)
 
     state.set_var(table_def.name, inst)
@@ -811,7 +811,7 @@ def new_table_from_rows(state, name, columns, rows):
     # TODO refactor into function?
     elems = {c:v.type for c,v in zip(columns, tuples[0])}
     elems['id'] = T.t_id
-    table = T.table(**elems).set_options(temporary=True, pk=[['id']], name=name)
+    table = T.table(elems, temporary=True, pk=[['id']], name=name)
 
     db_query(state, sql.compile_type_def(state, name, table))
 

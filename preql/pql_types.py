@@ -124,13 +124,8 @@ class Type(Object, AbsType):
             elems = elems,
         return self.replace(elems=tuple(elems))
 
-    def __call__(self, **kw):
-        return self.replace(elems=kw, methods=dict(self.methods))
-
-    def set_options(self, **kw):
-        options = dict(self.options)
-        options.update(kw)
-        return self.replace(options=options)
+    def __call__(self, elems=None, **options):
+        return self.replace(elems=elems or self.elems, methods=dict(self.methods), options={**self.options, **options})
 
     def __repr__(self):
         # TODO fix. Move to dp_inst?
