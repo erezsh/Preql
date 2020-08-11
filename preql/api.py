@@ -9,7 +9,7 @@ from . import pql_types as types
 from . import pql_objects as objects
 from . import exceptions as exc
 from .interpreter import Interpreter
-from .evaluate import localize, evaluate, new_table_from_rows
+from .evaluate import cast_to_python, localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
 from .pql_types import T
 
@@ -22,7 +22,7 @@ def _make_const(value):
 
 def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)
-    return localize(state, evaluate(state, count))
+    return cast_to_python(state, count)
 
 TABLE_PREVIEW_SIZE = 16
 LIST_PREVIEW_SIZE = 128
@@ -111,12 +111,12 @@ def table_repr(self, state, offset=0):
         count_str = f'={count}'
 
     # if len(self.type.elems) == 1:
-    #     rows = localize(state, table_limit(self, state, LIST_PREVIEW_SIZE))
+    #     rows = cast_to_python(state, table_limit(self, state, LIST_PREVIEW_SIZE))
     #     post = f', ... ({count_str})' if len(rows) < count else ''
     #     elems = ', '.join(repr_value(ast.Const(None, self.type.elem, r)) for r in rows)
     #     return f'[{elems}{post}]'
 
-    rows = localize(state, table_limit(self, state, TABLE_PREVIEW_SIZE, offset))
+    rows = cast_to_python(state, table_limit(self, state, TABLE_PREVIEW_SIZE, offset))
     _g_last_table = self
     _g_last_offset = offset + len(rows)
     if self.type <= T.list:
@@ -147,7 +147,7 @@ class TablePromise:
 
     def to_json(self):
         if self._rows is None:
-            self._rows = localize(self._state, self._inst)
+            self._rows = cast_to_python(self._state, self._inst)
         assert self._rows is not None
         return self._rows
 
@@ -171,8 +171,8 @@ class TablePromise:
             return call_pql_func(self._state, '_core_limit_offset', [self._inst, _make_const(limit), _make_const(offset)])
 
         # TODO different debug log level / mode
-        inst = evaluate(self._state, self[index:1])
-        res ,= localize(self._state, inst)
+        # inst = evaluate(self._state,
+        res ,= cast_to_python(self._state, self[index:index+1])
         return res
 
     def __repr__(self):

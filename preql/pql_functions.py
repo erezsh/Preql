@@ -14,7 +14,7 @@ from . import pql_ast as ast
 from . import sql
 
 from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
-from .evaluate import evaluate, localize, db_query, TableConstructor
+from .evaluate import evaluate, cast_to_python, db_query, TableConstructor
 from .pql_types import Object, T, table_flat_for_insert, Type, join_names
 from .casts import _cast
 
@@ -32,8 +32,7 @@ def _pql_PY_callback(state: State, var: str):
     return str(inst.local_value)
 
 def pql_PY(state: State, code_expr: ast.Expr):
-    code_expr2 = evaluate(state, code_expr)
-    py_code = localize(state, code_expr2)
+    py_code = cast_to_python(state, code_expr)
 
     py_code = re.sub(r"\$\w+", lambda m: _pql_PY_callback(state, m), py_code)
 
@@ -132,7 +131,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
     # 'const table' doesn't
     expr = evaluate(state, expr_ast)
-    const = localize(state, const)
+    const = cast_to_python(state, const)
     assert_type(expr.type, T.collection, state, expr_ast, 'temptable')
 
     # elems = dict(expr.type.elems)
@@ -317,7 +316,7 @@ def pql_repr(state: State, obj: ast.Expr):
     try:
         return objects.new_value_instance(inst.repr(state))
     except ValueError:
-        value = repr(localize(state, inst))
+        value = repr(cast_to_python(state, inst))
         return objects.new_value_instance(value)
 
 def pql_columns(state: State, table: ast.Expr):
@@ -353,8 +352,8 @@ def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] =
     Example:
         >> import_table("my_sql_table", ["some_column", "another_column])
     """
-    name_str = localize(state, evaluate(state, name))
-    columns_whitelist = localize(state, evaluate(state, columns)) or []
+    name_str = cast_to_python(state, name)
+    columns_whitelist = cast_to_python(state, columns) or []
     if not isinstance(columns_whitelist, list):
         raise pql_TypeError.make(state, columns, "Expected list")
     if not isinstance(name_str, str):
@@ -375,7 +374,7 @@ def pql_connect(state: State, uri: ast.Expr):
     """
     Connect to a new database, specified by the uri
     """
-    uri = localize(state, evaluate(state, uri))
+    uri = cast_to_python(state, uri)
     state.connect(uri)
     return objects.null
 
@@ -470,8 +469,8 @@ def pql_import_csv(state: State, table: Object, filename: Object, header: Object
     "Import a csv into an existing table"
     # TODO better error handling, validation
     table = evaluate(state, table)
-    filename = localize(state, evaluate(state, filename))
-    header = localize(state, evaluate(state, header))
+    filename = cast_to_python(state, filename)
+    header = cast_to_python(state, header)
     print(f"Importing CSV file: '{filename}'")
 
     ROWS_PER_QUERY = 1024

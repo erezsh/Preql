@@ -28,7 +28,7 @@ from . import settings
 from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
-from .compiler import compile_to_inst
+from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type, Object
 
 
@@ -196,14 +196,14 @@ def _execute(state: State, func_def: ast.FuncDef):
 
 @dy
 def _execute(state: State, p: ast.Print):
+    # TODO Can be done better. Maybe cast to ReprText?
     inst = evaluate(state, p.value)
-    res = localize(state, inst)
+    res = localize(state, p.value)
     print(res)
 
 @dy
 def _execute(state: State, p: ast.Assert):
-    inst = evaluate(state, p.cond)
-    res = localize(state, inst)
+    res = cast_to_python(state, p.cond)
     if not res:
         # TODO pretty print values
         if isinstance(p.cond, ast.Compare):
@@ -220,7 +220,7 @@ def _execute(state: State, cb: ast.CodeBlock):
 
 @dy
 def _execute(state: State, i: ast.If):
-    cond = localize(state, evaluate(state, i.cond))
+    cond = cast_to_python(state, i.cond)
     if cond:
         execute(state, i.then)
     elif i.else_:
@@ -228,7 +228,7 @@ def _execute(state: State, i: ast.If):
 
 @dy
 def _execute(state: State, f: ast.For):
-    expr = localize(state, evaluate(state, f.iterable))
+    expr = cast_to_python(state, f.iterable)
     for i in expr:
         with state.use_scope({f.var: objects.from_python(i)}):
             execute(state, f.do)
@@ -451,15 +451,11 @@ def _call_expr(state, expr):
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
     count = call_pql_func(state, "count", [table])
-    return localize(state, evaluate(state, count))
-
-@dy
-def test_nonzero(state: State, inst: objects.ValueInstance):
-    return bool(inst.local_value)
+    return bool(cast_to_python(state, count))
 
 @dy
 def test_nonzero(state: State, inst: objects.Instance):
-    return localize(state, inst)
+    return bool(cast_to_python(state, inst))
 
 @dy
 def test_nonzero(state: State, inst: Type):
@@ -651,7 +647,7 @@ def apply_database_rw(state: State, new: ast.New):
     # XXX Assimilate this special case
     if isinstance(obj, type) and issubclass(obj, PreqlError):
         def create_exception(state, msg):
-            msg = localize(state, evaluate(state, msg))
+            msg = cast_to_python(state, msg)
             assert new.text_ref is state.stacktrace[-1]
             return obj(list(state.stacktrace), msg)    # TODO move this to `throw`?
         f = objects.InternalFunction(obj.__name__, [objects.Param(None, 'message')], create_exception)
@@ -779,14 +775,14 @@ def localize(state, x):
 ### Added functions
 
 def function_help_str(self, state):
-    params = [p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in self.params]
+    params = [p.name if p.default is None else f'{p.name}={cast_to_python(state, p.default)}' for p in self.params]
     if self.param_collector is not None:
         params.append(f"...{self.param_collector.name}")
     param_str = ', '.join(params)
     return f"func {self.name}({param_str}) = ..."
 
 def function_localize_keys(self, state, struct):
-    return localize(state, evaluate(state, struct))
+    return cast_to_python(state, struct)
 
 objects.Function.help_str = function_help_str
 objects.Function._localize_keys = function_localize_keys
@@ -825,19 +821,19 @@ def new_table_from_rows(state, name, columns, rows):
 
 
 
-@dy
-def compile_to_inst(state: State, range: ast.Range):
-    start = localize(state, evaluate(state, range.start)) if range.start else 0
-    if range.stop:
-        stop = localize(state, evaluate(state, range.stop))
-        stop_str = f" WHERE value+1<{stop}"
-    else:
-        stop_str = ''
 
-    type_ = T.list[T.int]
-    name = state.unique_name("range")
-    skip = 1
-    code = f"SELECT {start} AS value UNION ALL SELECT value+{skip} FROM {name}{stop_str}"
-    subq = sql.Subquery(name, [], sql.RawSql(type_, code))
-    code = sql.TableName(type_, name)
-    return objects.ListInstance(code, type_, SafeDict({name: subq}))
+@dy
+def cast_to_python(state, obj: ast.Ast):
+    inst = cast_to_instance(state, obj)
+    return localize(state, inst)
+
+@dy
+def cast_to_python(state, obj: objects.AbsInstance):
+    res = localize(state, obj)
+    assert isinstance(res, (int, str, float, list, type(None)))
+    return res
+
+@dy
+def cast_to_python(state, obj):
+    raise NotImplementedError(obj)
+

@@ -10,7 +10,7 @@ from . import settings
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, localize
+from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
 from .pql_types import T, join_names, dp_inst, flatten_type, Type, Object
 from .casts import _cast
 
@@ -561,12 +561,15 @@ def re_split(r, s):
         offset = m.end()
     yield None,s[offset:]
 
+
+
 @dy
 def compile_to_inst(state: State, rps: ast.ResolveParametersString):
     # TODO Create CompiledSQL
 
-    sql_code = localize(state, evaluate(state, rps.string))
-    assert isinstance(sql_code, str)
+    sql_code = cast_to_python(state, rps.string)
+    if not isinstance(sql_code, str):
+        raise pql_TypeError.make(state, rps, f"Expected string, got '{rps.string}'")
 
     type_ = evaluate(state, rps.type)
     if isinstance(type_, objects.Instance):
@@ -728,3 +731,20 @@ class AutocompleteSuggestions(Exception):
 def compile_to_inst(state: State, marker: ast.Marker):
     ns = state.ns.get_all_vars()
     raise AutocompleteSuggestions(ns)
+
+@dy
+def compile_to_inst(state: State, range: ast.Range):
+    start = cast_to_python(state, range.start) if range.start else 0
+    if range.stop:
+        stop = cast_to_python(state, range.stop)
+        stop_str = f" WHERE value+1<{stop}"
+    else:
+        stop_str = ''
+
+    type_ = T.list[T.int]
+    name = state.unique_name("range")
+    skip = 1
+    code = f"SELECT {start} AS value UNION ALL SELECT value+{skip} FROM {name}{stop_str}"
+    subq = sql.Subquery(name, [], sql.RawSql(type_, code))
+    code = sql.TableName(type_, name)
+    return objects.ListInstance(code, type_, SafeDict({name: subq}))
