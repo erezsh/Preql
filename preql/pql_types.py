@@ -42,7 +42,7 @@ class Type(Object, AbsType):
     nullable: bool = field(default_factory=bool)
 
     @property
-    def typename_with_q(self):
+    def _typename_with_q(self):
         n = '?' if self.nullable else ''
         return f'{self.typename}{n}'
 
@@ -131,12 +131,12 @@ class Type(Object, AbsType):
         # TODO fix. Move to dp_inst?
         if self.elems:
             if isinstance(self.elems, dict):
-                elems = '[%s]' % ', '.join(f'{k}: {v.typename_with_q if isinstance(v, Type) else repr(v)}' for k,v in self.elems.items())
+                elems = '[%s]' % ', '.join(f'{k}: {v._typename_with_q if isinstance(v, Type) else repr(v)}' for k,v in self.elems.items())
             else:
                 elems = '[%s]' % ', '.join(e.typename if isinstance(e, Type) else repr(e) for e in self.elems)
         else:
             elems = ''
-        return f'{self.typename_with_q}{elems}'
+        return f'{self._typename_with_q}{elems}'
 
     def get_attr(self, attr):
         if self is T.unknown:
@@ -324,7 +324,6 @@ def from_sql(state, res: T.datetime):
 
 @dp_inst
 def from_sql(state, arr: T.list):
-    # TODO not assert
     if not all(len(e)==1 for e in arr.value):
         raise exc.pql_TypeError(state, None, f"Expected 1 column. Got {len(arr.value[0])}")
     return [e[0] for e in arr.value]
@@ -339,6 +338,18 @@ def from_sql(state, arr: T.table):
         i = iter(row)
         yield {name: restructure_result(col, i) for name, col in arr.type.elems.items()}
 
+@dp_type
+def restructure_result(t: T.struct, i):
+    return ({name: restructure_result(col, i) for name, col in t.elem_dict.items()})
+
+@dp_type
+def restructure_result(t: T.union[T.primitive, T.null], i):
+    return next(i)
+
+@dp_type
+def restructure_result(t: T.datetime, i):
+    s = next(i)
+    return _from_datetime(s)
 
 
 
@@ -365,22 +376,9 @@ def flatten_type(tp, path = []):
 
 
 def table_params(t):
-    # TODO hide_from_init, not id
+    # TODO hide_from_init / writeable, not id
     return [(name, c) for name, c in t.elems.items() if not c <= T.t_id]
 
-
-@dp_type
-def restructure_result(t: T.struct, i):
-    return ({name: restructure_result(col, i) for name, col in t.elem_dict.items()})
-
-@dp_type
-def restructure_result(t: T.union[T.primitive, T.null], i):
-    return next(i)
-
-@dp_type
-def restructure_result(t: T.datetime, i):
-    s = next(i)
-    return _from_datetime(s)
 
 
 def table_flat_for_insert(table):
@@ -391,5 +389,3 @@ def table_flat_for_insert(table):
     pks = {join_names(pk) for pk in table.options.get('pk', [])}
     names = [name for name,t in flatten_type(table)]
     return classify_bool(names, lambda name: name in pks)
-
-# global_methods['zz'] = T.int
