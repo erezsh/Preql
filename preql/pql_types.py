@@ -6,24 +6,25 @@ from decimal import Decimal
 import runtype
 from runtype.typesystem import TypeSystem
 
+from .base import Object
 from .utils import dataclass, listgen, concat_for, classify_bool
 from . import exceptions as exc
 
-@dataclass
-class Object:    # XXX should be in a base module
-    "Any object that the user might interact with through the language, as so has to behave like an object inside Preql"
-    # dyn_attrs: dict = field(default_factory=dict, init=False, compare=False)
 
-    def repr(self, state):
-        return repr(self)
+def Object_repr(self, state):
+    return repr(self)
 
-    def get_attr(self, attr):
-        raise exc.pql_AttributeError([], f"{self} has no attribute: {attr}")    # XXX TODO
+def Object_get_attr(self, attr):
+    raise exc.pql_AttributeError([], f"{self} has no attribute: {attr}")    # XXX TODO
 
-    def isa(self, t):
-        if not isinstance(t, Type):
-            raise exc.pql_TypeError([], f"'type' argument to isa() isn't a type. It is {t}")
-        return self.type <= t
+def Object_isa(self, t):
+    if not isinstance(t, Type):
+        raise exc.pql_TypeError([], f"'type' argument to isa() isn't a type. It is {t}")
+    return self.type <= t
+
+Object.repr = Object_repr
+Object.get_attr = Object_get_attr
+Object.isa = Object_isa
 
 
 class AbsType:

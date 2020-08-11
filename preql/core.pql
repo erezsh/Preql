@@ -51,9 +51,17 @@ func max(field) {
     return _sql_agg_func("MAX", field)
 }
 
-func first(field) {
+func first(obj) {
     "Return the first member of a column or a list"
-    return _sql_agg_func("", field)
+
+    if (isa(obj, aggregate)) {
+        return SQL(type(obj).elem, "($obj)")
+    } else {
+        obj = list(obj)
+        if (isa(obj, list)) {
+            return one one obj{ => value: first(value) }     // Recursive
+        }
+    }
 }
 
 

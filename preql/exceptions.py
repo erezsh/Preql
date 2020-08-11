@@ -1,6 +1,7 @@
 from typing import Optional, List
 
 from .utils import dataclass, TextReference
+from .base import Object
 
 
 
@@ -11,7 +12,7 @@ class DatabaseQueryError(Exception):
 
 
 @dataclass
-class PreqlError(Exception):
+class PreqlError(Object, Exception):
     text_refs: List[TextReference]
 
     @property
