@@ -176,7 +176,7 @@ class TablePromise:
         return res
 
     def __repr__(self):
-        return self._inst.repr(self._state)
+        return repr(self.to_json()) #str(self._inst.repr(self._state))
 
 
 def promise(state, inst):

@@ -7,6 +7,9 @@ SQLITE_URI = 'sqlite://:memory:'
 POSTGRES_URI = 'postgres://postgres:qweqwe123@localhost/postgres'
 
 class PreqlTests(TestCase):
+    optimized = True
+    uri = SQLITE_URI
+
     def Preql(self):
         settings.optimize = self.optimized
         preql = Preql(self.uri)

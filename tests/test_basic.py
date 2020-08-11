@@ -1096,3 +1096,12 @@ class TestTypes(PreqlTests):
 
         assert T.list[T.number] <= T.list
         assert T.list[T.any] <= T.list
+
+
+from pandas import DataFrame
+class TestPandas(PreqlTests):
+    def test_pandas(self):
+        f = DataFrame([[1,2,"a"], [4,5,"b"], [7,8,"c"]], columns=['x', 'y', 'z'])
+        p = self.Preql()
+        p.import_pandas(x=f)
+        assert (p('x{... !id}').to_pandas() == f).all().all()

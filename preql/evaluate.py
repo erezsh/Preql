@@ -809,18 +809,17 @@ def new_table_from_rows(state, name, columns, rows):
     ]
 
     # TODO refactor into function?
-    table = T.table.set_options(temporary=True)
-    table.columns['id'] = T.t_id #[table]
-    for c,v in zip(columns, tuples[0]):
-        table.columns[c] = v.type
+    elems = {c:v.type for c,v in zip(columns, tuples[0])}
+    elems['id'] = T.t_id
+    table = T.table(**elems).set_options(temporary=True, pk=[['id']], name=name)
 
-    db_query(state, sql.compile_type_def(state, table))
+    db_query(state, sql.compile_type_def(state, name, table))
 
     code = sql.InsertConsts(name, columns, tuples)
     db_query(state, code)
 
     x = objects.new_table(table)
-    state.set_var(table.name, x)
+    state.set_var(name, x)
 
 
 
