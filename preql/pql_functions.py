@@ -15,7 +15,8 @@ from . import sql
 
 from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor
-from .pql_types import Object, T, table_flat_for_insert, Type, join_names
+from .pql_types import Object, T, Type
+from .types_impl import table_flat_for_insert, join_names
 from .casts import _cast
 
 

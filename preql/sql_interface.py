@@ -4,7 +4,8 @@ from .loggers import sql_log
 from .sql import Sql, QueryBuilder, sqlite, postgres
 from . import exceptions
 
-from .pql_types import T, Type, from_sql, Object
+from .pql_types import T, Type, Object
+from .types_impl import from_sql
 
 
 @dataclass

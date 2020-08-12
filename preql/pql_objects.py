@@ -10,7 +10,8 @@ from . import settings
 from . import pql_ast as ast
 from . import sql
 
-from .pql_types import T, Type, Object, repr_value, flatten_type, join_names
+from .pql_types import T, Type, Object
+from .types_impl import repr_value, flatten_type, join_names
 
 # Functions
 @dataclass

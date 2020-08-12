@@ -2,7 +2,8 @@ from typing import List, Optional, Dict
 
 from .utils import dataclass, X, listgen
 from . import pql_types
-from .pql_types import T, join_names, flatten_type, Type, dp_type
+from .pql_types import T, Type, dp_type
+from .types_impl import join_names, flatten_type
 
 
 sqlite = 'sqlite'

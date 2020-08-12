@@ -11,7 +11,8 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, join_names, dp_inst, flatten_type, Type, Object
+from .pql_types import T, Object, Type
+from .types_impl import join_names, dp_inst, flatten_type
 from .casts import _cast
 
 @dataclass

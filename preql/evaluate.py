@@ -29,7 +29,8 @@ from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
 from .compiler import compile_to_inst, cast_to_instance
-from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type, Object
+from .pql_types import T, Type, Object
+from .types_impl import table_params, table_flat_for_insert, flatten_type
 
 
 
@@ -640,8 +641,6 @@ def _new_row(state, new_ast, table, matched):
 def apply_database_rw(state: State, new: ast.New):
     state.catch_access(state.AccessLevels.WRITE_DB)
 
-    # XXX This function has side-effects.
-    # Perhaps it belongs in resolve, rather than simplify?
     obj = state.get_var(new.type)
 
     # XXX Assimilate this special case
@@ -685,11 +684,6 @@ def add_as_subquery(state: State, inst: objects.Instance):
 
 
 @dy
-def evaluate(state, obj: list):
-    return [evaluate(state, item) for item in obj]
-
-
-@dy
 def resolve_parameters(state: State, x):
     return x
 
@@ -697,6 +691,10 @@ def resolve_parameters(state: State, x):
 def resolve_parameters(state: State, p: ast.Parameter):
     return state.get_var(p.name)
 
+
+@dy
+def evaluate(state, obj: list):
+    return [evaluate(state, item) for item in obj]
 
 @dy
 def evaluate(state, obj_):

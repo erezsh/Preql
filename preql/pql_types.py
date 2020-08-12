@@ -1,39 +1,18 @@
+import runtype
+from runtype.typesystem import TypeSystem
+
 from typing import Union
 from datetime import datetime
 from dataclasses import field
 from decimal import Decimal
 
-import runtype
-from runtype.typesystem import TypeSystem
-
 from .base import Object
-from .utils import dataclass, listgen, concat_for, classify_bool
-from . import exceptions as exc
-
-
-def Object_repr(self, state):
-    return repr(self)
-
-def Object_get_attr(self, attr):
-    raise exc.pql_AttributeError([], f"{self} has no attribute: {attr}")    # XXX TODO
-
-def Object_isa(self, t):
-    if not isinstance(t, Type):
-        raise exc.pql_TypeError([], f"'type' argument to isa() isn't a type. It is {t}")
-    return self.type <= t
-
-Object.repr = Object_repr
-Object.get_attr = Object_get_attr
-Object.isa = Object_isa
-
-
-class AbsType:
-    pass
+from .utils import dataclass
 
 global_methods = {}
 
 @dataclass
-class Type(Object, AbsType):
+class Type(Object):
     typename: str
     supertypes: frozenset
     elems: Union[tuple, dict] = field(hash=False, default_factory=dict)
@@ -102,7 +81,7 @@ class Type(Object, AbsType):
     def elem_dict(self):
         elems = self.elems
         if isinstance(elems, tuple):
-            assert len(elems) == 1
+            assert len(elems) == 1, self
             elems = {'value': elems[0]}
         return elems
 
@@ -166,40 +145,43 @@ class TypeDict(dict):
         dict.__setattr__(T, name, t)
 
     def __setattr__(self, name, args):
-        self._register(name, *args)
+        if isinstance(args, tuple):
+            self._register(name, *args)
+        else:
+            self._register(name, args)
 
 
 
 T = TypeDict()
 
 T.any = ()
-T.unknown = [T.any],
+T.unknown = [T.any]
 
-T.union = [T.any],
-T.type = [T.any],
+T.union = [T.any]
+T.type = [T.any]
 Type.type = T.type
 
-T.object = [T.any],
-T.null = [T.object],
+T.object = [T.any]
+T.null = [T.object]
 
-T.primitive = [T.object],
+T.primitive = [T.object]
 
-T.text = [T.primitive],
-T.string = [T.text],
-T.number = [T.primitive],
-T.int = [T.number],
-T.float = [T.number],
-T.bool = [T.primitive],    # number?
-T.decimal = [T.number],
+T.text = [T.primitive]
+T.string = [T.text]
+T.number = [T.primitive]
+T.int = [T.number]
+T.float = [T.number]
+T.bool = [T.primitive]    # number
+T.decimal = [T.number]
 
-T.datetime = [T.primitive],    # primitive? struct?
+T.datetime = [T.primitive]    # primitive? struct?
 
-T.container = [T.object], #(T.object,)
+T.container = [T.object]
 
-T.struct = [T.container], {}
-T.row = [T.struct], {}
+T.struct = [T.container]
+T.row = [T.struct]
 
-T.collection = [T.container],
+T.collection = [T.container], {}
 T.table = [T.collection], {}
 T.list = [T.table], (T.any,)
 T.set = [T.table], (T.any,)
@@ -207,13 +189,39 @@ T.aggregate = [T.collection], (T.any,)
 T.t_id = [T.number], (T.table,)
 T.t_relation = [T.number], (T.table,)   # t_id?
 
-T.function = [T.object], {}
+T.function = [T.object]
 
-T.exception = [T.object], {}
+T.signal = [T.object]
 #-----------
 
-def join_names(names):
-    return "_".join(names)
+T.Exception = [T.signal]
+
+T.IOError = [T.Exception]
+T.CodeError = [T.Exception]
+T.EvalError = [T.Exception]
+
+# CodeError - Failures due to inherently unexecutable code
+T.SyntaxError = [T.CodeError]
+T.NotImplemented = [T.CodeError]
+
+# IOError - All errors resulting directly from attempts at I/O communication
+T.FileError = [T.IOError]
+T.DbError = [T.IOError]
+T.DbQueryError = [T.DbError]
+T.DbConnectionError = [T.DbError]
+
+# EvalError - Errors that arise only when evaluating the code (either at run-time or compile-time)
+T.TypeError = [T.EvalError]
+T.ValueError = [T.EvalError]
+T.NameError = [T.EvalError]
+
+T.AttributeError = [T.NameError]
+T.AssertError = [T.ValueError]
+T.IndexError = [T.ValueError]
+
+
+
+#-------------
 
 
 _t = {
@@ -228,7 +236,6 @@ def from_python(t):
     return _t[t]
 
 
-#---------------------
 
 class ProtoTS(TypeSystem):
     def issubclass(self, t1, t2):
@@ -265,127 +272,3 @@ class TS_Preql_subclass(ProtoTS):
 
 dp_type = runtype.Dispatch(TS_Preql_subclass())
 dp_inst = runtype.Dispatch(TS_Preql())
-
-
-
-@dp_inst
-def repr_value(v: T.object):
-    return repr(v.value)
-
-@dp_inst
-def repr_value(v: T.decimal):
-    raise exc.pql_NotImplementedError([], "Decimal not implemented")
-
-@dp_inst
-def repr_value(v: T.string):
-    return f'"{v.value}"'
-
-@dp_inst
-def repr_value(v: T.text):
-    return str(v.value)
-
-@dp_inst
-def repr_value(v: T.bool):
-    return 'true' if v.value else 'false'
-
-
-@dp_inst
-def from_sql(state, res: T.primitive):
-    try:
-        row ,= res.value
-        item ,= row
-    except ValueError:
-        raise exc.pql_TypeError.make(state, None, "Expected primitive. Got: '%s'" % res.value)
-    return item
-
-def _from_datetime(s):
-    if s is None:
-        return None
-
-    # Postgres
-    if isinstance(s, datetime):
-        return s
-
-    # Sqlite
-    if not isinstance(s, str):
-        raise exc.pql_TypeError([], f"datetime expected a string. Instead got: {s}")
-    try:
-        return datetime.fromisoformat(s)
-    except ValueError as e:
-        raise exc.pql_ValueError([], str(e))
-
-@dp_inst
-def from_sql(state, res: T.datetime):
-    # XXX doesn't belong here?
-    row ,= res.value
-    item ,= row
-    s = item
-    return _from_datetime(s)
-
-@dp_inst
-def from_sql(state, arr: T.list):
-    if not all(len(e)==1 for e in arr.value):
-        raise exc.pql_TypeError(state, None, f"Expected 1 column. Got {len(arr.value[0])}")
-    return [e[0] for e in arr.value]
-
-@dp_inst
-@listgen
-def from_sql(state, arr: T.table):
-    expected_length = len(flatten_type(arr.type))   # TODO optimize?
-    for row in arr.value:
-        if len(row) != expected_length:
-            raise exc.pql_TypeError.make(state, None, f"Expected {expected_length} columns, but got {len(row)}")
-        i = iter(row)
-        yield {name: restructure_result(col, i) for name, col in arr.type.elems.items()}
-
-@dp_type
-def restructure_result(t: T.struct, i):
-    return ({name: restructure_result(col, i) for name, col in t.elem_dict.items()})
-
-@dp_type
-def restructure_result(t: T.union[T.primitive, T.null], i):
-    return next(i)
-
-@dp_type
-def restructure_result(t: T.datetime, i):
-    s = next(i)
-    return _from_datetime(s)
-
-
-
-
-
-@dp_type
-def flatten_path(path, t):
-    return [(path, t)]
-
-@dp_type
-def flatten_path(path, t: T.union[T.table, T.struct]):
-    elems = t.elem_dict
-    if t.nullable:
-        elems = {k:v.replace(nullable=True) for k, v in elems.items()}
-    return concat_for(flatten_path(path + [name], col) for name, col in elems.items())
-@dp_type
-def flatten_path(path, t: T.list):
-    return concat_for(flatten_path(path + [name], col) for name, col in [('value', t.elem)])
-
-
-def flatten_type(tp, path = []):
-    # return [(join_names(path), t.col_type) for path, t in flatten_path([name], tp)]
-    return [(join_names(path), t) for path, t in flatten_path(path, tp)]
-
-
-def table_params(t):
-    # TODO hide_from_init / writeable, not id
-    return [(name, c) for name, c in t.elems.items() if not c <= T.t_id]
-
-
-
-def table_flat_for_insert(table):
-    # auto_count = join_names(self.primary_keys)
-    # if 'pk' not in table.options:
-    #     raise exc.pql_TypeError([], f"Cannot add to table. Primary key not defined")
-
-    pks = {join_names(pk) for pk in table.options.get('pk', [])}
-    names = [name for name,t in flatten_type(table)]
-    return classify_bool(names, lambda name: name in pks)
