@@ -20,7 +20,7 @@ func _table_func(t, c) = t[country==c]
 func _f2(t) = _table_func(t, "Israel")
 f3 = _f2(Person) {name}
 
-demography = Person {country => population: count(id)}
+demography = Person {country => population: count(id)} order {^population}
 
 
 # func _page(tabl, num, size) = tabl.offset(num*size).limit(size)

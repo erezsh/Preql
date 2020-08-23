@@ -179,7 +179,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
             # groupby = [new_table.get_column(n).primary_key().code for n, rc in fields]
             groupby = [sql.Primitive(T.int, str(i+1)) for i in range(len(fields))]
         else:
-            limit = sql.Primitive(T.int, '1')
+            limit = 1
             # Alternatively we could
             #   groupby = [sql.null]
             # But postgres doesn't support it
@@ -428,7 +428,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
         }[arith.op]
         return new_value_instance(f(a.local_value, b.local_value), res_type)
 
-    code = sql.arith(res_type, arith.op, [a.code, b.code])
+    code = sql.arith(state.db.target, res_type, arith.op, [a.code, b.code])
     return objects.make_instance(code, res_type, [a, b])
 
 @dp_inst
@@ -440,7 +440,7 @@ def _compile_arith(state, arith, a: T.string, b: T.string):
         # Local folding for better performance (optional, for better performance)
         return new_value_instance(a.local_value + b.local_value, T.string)
 
-    code = sql.arith(T.string, arith.op, [a.code, b.code])
+    code = sql.arith(state.db.target, T.string, arith.op, [a.code, b.code])
     return objects.make_instance(code, T.string, [a, b])
 
 
@@ -637,7 +637,9 @@ def compile_to_inst(state: State, s: ast.Slice):
     if obj.type <= T.string:
         code = sql.StringSlice(obj.code, sql.add_one(start.code), stop and sql.add_one(stop.code))
     else:
-        code = sql.table_slice(obj, start.code, stop and stop.code)
+        start_n = cast_to_python(state, start)
+        stop_n = stop and cast_to_python(state, stop)
+        code = sql.table_slice(obj, start_n, stop_n)
 
     return objects.make_instance(code, obj.type, instances)
 

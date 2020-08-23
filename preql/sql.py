@@ -40,7 +40,8 @@ class QueryBuilder:
         if self.target == sqlite:
             return '[%s]' % base
         else:
-            return '"%s"' % base
+            # return '"%s"' % base
+            return _quote(self.target, base)
 
 
 
@@ -90,7 +91,7 @@ class CompiledSQL(Sql):
         else:
             if self._is_select and not self._needs_select:
                 # Bad recursion
-                if qb.target == 'postgres':
+                if qb.target == 'postgres' or qb.target == 'mysql':
                     code = ['('] + code + [') ', qb.unique_name()]  # postgres requires an alias
                 else:
                     code = ['('] + code + [')']
@@ -254,6 +255,8 @@ class MakeArray(SqlTree):
             return ['group_concat('] + field + [f', "{self._sp}")']
         elif qb.target == postgres:
             return ['array_agg('] + field + [')']
+        elif qb.target == mysql:
+            return ['json_arrayagg('] + field + [')']
 
         assert False, qb.target
 
@@ -285,11 +288,21 @@ class Compare(Scalar):
         assert self.op in ('=', '<=', '>=', '<', '>', '!=', 'IN'), self.op
 
     def _compile(self, qb):
+        elems = [e.compile_wrap(qb).code for e in self.exprs]
+
         op = self.op
         if qb.target == sqlite:
             op = {
                 '=': 'is',
                 '!=': 'is not'
+            }.get(op, op)
+        elif qb.target is mysql:
+            if op == '!=':
+                # Special case,
+                return parens( ['not '] + join_sep(elems, f' <=> ') )
+
+            op = {
+                '=': '<=>',
             }.get(op, op)
         else:
             op = {
@@ -297,7 +310,6 @@ class Compare(Scalar):
                 '!=': 'is distinct from'
             }.get(op, op)
 
-        elems = [e.compile_wrap(qb).code for e in self.exprs]
         return parens( join_sep(elems, f' {op} ') )
 
 @dataclass
@@ -418,7 +430,7 @@ class Insert(SqlTree):
     type = T.null
 
     def _compile(self, qb):
-        return [f'INSERT INTO "{self.table_name}"({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
+        return [f'INSERT INTO {_quote(qb.target, self.table_name)}({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
 
 @dataclass
 class InsertConsts(SqlTree):
@@ -470,6 +482,8 @@ class LastRowId(Atom):
     def _compile(self, qb):
         if qb.target == sqlite:
             return ['last_insert_rowid()']   # Sqlite
+        elif qb.target == mysql:
+            return ['last_insert_id()']
         else:
             return ['lastval()']   # Postgres
 
@@ -502,7 +516,13 @@ class Values(Table):
         if not values:  # SQL doesn't support empty values
             nulls = ', '.join(['NULL' for _ in range(len(self.type.elems))])
             return ['SELECT ' + nulls + ' LIMIT 0']
-        return ['VALUES '] + join_comma(parens(v.code) for v in values)
+
+        if qb.target == mysql:
+            def row_func(x):
+                return ['ROW('] + x + [')']
+        else:
+            row_func = parens
+        return ['VALUES '] + join_comma(row_func(v.code) for v in values)
 
 @dataclass
 class Tuple(SqlTree):
@@ -569,8 +589,10 @@ class Select(TableOperation):
     conds: List[Sql] = ()
     group_by: List[Sql] = ()
     order: List[Sql] = ()
-    offset: Optional[Sql] = None
-    limit: Optional[Sql] = None
+
+    # MySQL doesn't support arithmetic in offset/limit, and we don't need it anyway
+    offset: Optional[int] = None
+    limit: Optional[int] = None
 
     def __post_init__(self):
         assert self.fields, self
@@ -612,13 +634,13 @@ class Select(TableOperation):
             sql += [' GROUP BY '] + join_comma(e.compile_wrap(qb).code for e in self.group_by)
 
         if self.limit:
-            sql += [' LIMIT '] + self.limit.compile_wrap(qb).code
+            sql += [' LIMIT ', str(self.limit)]
         elif self.offset:
             if qb.target == sqlite:
                 sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
 
         if self.offset:
-            sql += [' OFFSET '] + self.offset.compile_wrap(qb).code
+            sql += [' OFFSET ', str(self.offset)]
 
         if self.order:
             sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
@@ -699,7 +721,7 @@ def create_table(table_type, name, rows):
     return table, subq
 
 def table_slice(table, start, stop):
-    limit = Arith('-', [stop, start]) if stop else None
+    limit = stop - start if stop else None
     return Select(table.type, table.code, [AllFields(table.type)], offset=start, limit=limit)
 
 def table_selection(table, conds):
@@ -708,15 +730,20 @@ def table_selection(table, conds):
 def table_order(table, fields):
     return Select(table.type, table.code, [AllFields(table.type)], order=fields)
 
-def arith(res_type, op, args):
+def arith(target, res_type, op, args):
     arg_codes = list(args)
     if res_type == T.string:
         assert op == '+'
         op = '||'
     elif op == '/':
-        arg_codes[0] = Cast(T.float, 'float', arg_codes[0])
+        if target != mysql:
+            # In MySQL division returns a float. All others return int
+            arg_codes[0] = Cast(T.float, 'float', arg_codes[0])
     elif op == '/~':
-        op = '/'
+        if target == mysql:
+            op = 'DIV'
+        else:
+            op = '/'
 
     return Arith(op, arg_codes)
 
@@ -785,9 +812,16 @@ def make_value(x):
 def add_one(x):
     return Arith('+', [x, make_value(1)])
 
+def _quote(target, name):
+    if target is mysql:
+        return f'`{name}`'
+    else:
+        return f'"{name}"'
 
 def compile_type_def(state, table_name, table) -> Sql:
     assert table <= T.table
+
+    target = state.db.target
 
     posts = []
     pks = []
@@ -797,19 +831,22 @@ def compile_type_def(state, table_name, table) -> Sql:
     for name, c in flatten_type(table):
         if name in pks:
             assert c <= T.t_id
-            if state.db.target == postgres:
+            if target == postgres:
                 type_ = "SERIAL" # Postgres
+            elif target == mysql:
+                type_ = "INT NOT NULL AUTO_INCREMENT"
             else:
                 type_ = "INTEGER"   # TODO non-int idtypes
         else:
             type_ = compile_type(c)
 
-        columns.append( f'"{name}" {type_}' )
+        columns.append( f'{_quote(target, name)} {type_}' )
+
         if c <= T.t_relation:
             # TODO any column, using projection / get_attr
             if not table.options.get('temporary', False):
                 # In postgres, constraints on temporary tables may reference only temporary tables
-                s = f"FOREIGN KEY({name}) REFERENCES \"{c.options['name']}\"(id)"
+                s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, c.options['name'])}(id)"
                 posts.append(s)
 
     if pks:
@@ -818,7 +855,7 @@ def compile_type_def(state, table_name, table) -> Sql:
 
     # Consistent among SQL databases
     command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
-    return RawSql(T.null, f'{command} "{table_name}" (' + ', '.join(columns + posts) + ')')
+    return RawSql(T.null, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
 
 @dp_type
 def compile_type(type_: T.t_relation):

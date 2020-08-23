@@ -1,3 +1,4 @@
+from decimal import Decimal
 from mysql.connector import Connect
 from .utils import dataclass
 from .loggers import sql_log
@@ -110,6 +111,11 @@ class MysqlInterface(SqlInterface):
                 raise ConnectError(*e.args) from e
 
         self._print_sql = print_sql
+
+    def table_exists(self, name):
+        return False
+    def list_tables(self):
+        return []
 
 
 class PostgresInterface(SqlInterface):

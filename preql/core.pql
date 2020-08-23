@@ -125,8 +125,8 @@ func distinct(t) {
 
 if (get_db_type() == "postgres") {
     func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
-    func now() = SQL(datetime, "NOW()")         // Postgres
-    func random() = SQL(float, "RANDOM()")   // Postgres
+    func now() = SQL(datetime, "NOW()")
+    func random() = SQL(float, "RANDOM()")
     func pi() = SQL(float, "PI()")
 
     func str_index(a, b) = SQL(int, "POSITION($a in $b)")
@@ -149,7 +149,14 @@ if (get_db_type() == "postgres") {
         func str_index(a, b) = SQL(int, "INSTR($b, $a)")
 
     } else {
-        throw new TypeError("Unexpected")
+        if (get_db_type() == "mysql") {
+            func pi() = SQL(float, "PI()")
+            func now() = SQL(datetime, "NOW()")
+            func random() = SQL(float, "RAND()")
+        }
+        else {
+            throw new TypeError("Unexpected")
+        }
     }
 }
 

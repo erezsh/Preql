@@ -27,7 +27,7 @@ def is_eq(a, b):
 class BasicTests(PreqlTests):
     def Preql(self, **kw):
         settings.optimize = self.optimized
-        preql = Preql(self.uri, **kw)
+        preql = Preql(self.uri, print_sql=True, **kw)
         self.preql = preql
         return preql
 
@@ -82,7 +82,7 @@ class BasicTests(PreqlTests):
 
     def _test_ellipsis(self, preql):
 
-        assert preql('Person {name, ...}[name=="Erez Shinan"]') == [{'name': 'Erez Shinan', 'id': 1, 'country': 1}]
+        assert preql('Person {name, ...}[name=="Erez Shinan"]{name}') == [{'name': 'Erez Shinan'}]
 
         self.assertEqual( list(preql('Person {name, ...}')[0].keys()) , ['name', 'id', 'country'])
         assert list(preql('Person {country, ...}')[0].keys()) == ['country', 'id', 'name']
@@ -101,7 +101,7 @@ class BasicTests(PreqlTests):
         self.assertRaises( pql_SyntaxError, preql, 'Person {...+"a", 2}')
 
     def _test_ellipsis_exclude(self, preql):
-        self.assertEqual( preql('Person {name, ... !id}[name=="Erez Shinan"]'), [{'name': 'Erez Shinan', 'country': 1}] )
+        self.assertEqual( preql('Person {name, ... !id !country}[name=="Erez Shinan"]'), [{'name': 'Erez Shinan'}] )
 
         assert list(preql('Person {name, ... !id !country}')[0].keys()) == ['name']
         assert list(preql('Person {country, ... !name}')[0].keys()) == ['country', 'id']
@@ -495,19 +495,23 @@ class BasicTests(PreqlTests):
     def _test_groupby(self, preql):
         assert preql('one one [1,2,3]{=>sum(value*value)}') == 14
 
-        res = preql("Country {language => count(id)}")
-        assert is_eq(res, [("en", 2), ("he", 1)])
+        res = preql("Country {language => count(id)} order {language}")
+        assert is_eq(res, [("en", 2), ("he", 1)]), res
 
         assert len(preql("Country {=> first(id)}")) == 1
 
-        res = preql("join(p:Person, c:Country) {country:c.name => population:count(p.id)}")
+        res = preql("join(p:Person, c:Country) {country:c.name => population:count(p.id)} order {country}")
         assert is_eq(res, [
             ("England", 2),
             ("Israel", 2),
             ("United States", 1),
         ])
 
-        res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name}")
+        # res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name}")
+        # res = preql("join(p:Person.id, c:Country.id)")
+        res = list(preql("join(p1:Person.id, p2:Person.id)"))
+        res = list(res)
+        breakpoint()
         # TODO Array, not string
 
         if preql.engine.target == sql.sqlite:
@@ -793,15 +797,15 @@ class BasicTests(PreqlTests):
         preql = self.Preql()
         preql.load('simple1.pql', rel_to=__file__)
 
-        self.assertEqual(preql.english, [{'id': 2, 'name': 'Eric Blaire'}, {'id': 3, 'name': 'H.G. Wells'}])
-        assert preql.by_country('Israel') == [{'id': 1, 'name': 'Erez Shinan', 'country': 'Israel'}]
+        self.assertEqual([x['name'] for x in preql.english], ['Eric Blaire', 'H.G. Wells'])
+        assert [x['name'] for x in preql.by_country('Israel')] == ['Erez Shinan']
 
         assert preql.english2 == [{'name': 'H.G. Wells'}, {'name': 'Eric Blaire'}]
         # assert preql.english3().json() == [{'n': 'H.G. Wells'}, {'n': 'Eric Blaire'}] # TODO
 
         # assert preql.person1() == [{'id': 1, 'name': 'Erez Shinan', 'country': 'Israel'}]
         # assert preql.person1b() == [{'id': 2, 'name': 'Eric Blaire', 'country': 'England'}]
-        assert preql.demography == [{'country': 'England', 'population': 2}, {'country': 'Israel', 'population': 1}]
+        assert preql.demography == [{'country': 'England', 'population': 2}, {'country': 'Israel', 'population': 1}], list(preql.demography)
 
         # expected = [{'country': 'England', 'population': ['Eric Blaire', 'H.G. Wells']}, {'country': 'Israel', 'population': ['Erez Shinan']}]
         # res = preql('Person {country => population: name}')

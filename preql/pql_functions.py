@@ -296,7 +296,7 @@ def _auto_join(state, join, ta, tb):
 @listgen
 def _find_table_reference(t1, t2):
     # XXX TODO need to check TableType too (owner)?
-    for name, c in t1.type.elems.items():
+    for name, c in t1.type.elem_dict.items():
         if (c <= T.t_relation):
             if c.elem == t2.type:
                 # TODO depends on the query XXX
