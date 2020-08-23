@@ -10,7 +10,7 @@ from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel
 
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .sql_interface import SqliteInterface, PostgresInterface, GitqliteInterface, ConnectError
+from .sql_interface import MysqlInterface, SqliteInterface, PostgresInterface, GitqliteInterface, ConnectError
 from .pql_types import Type
 
 dy = Dispatch()
@@ -161,6 +161,8 @@ def create_engine(db_uri, print_sql):
         return SqliteInterface(path, print_sql=print_sql)
     elif dsn.scheme == 'postgres':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+    elif dsn.scheme == 'mysql':
+        return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif dsn.scheme == 'gitqlite':
         return GitqliteInterface(path, print_sql=print_sql)
 

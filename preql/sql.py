@@ -8,6 +8,7 @@ from .types_impl import join_names, flatten_type
 
 sqlite = 'sqlite'
 postgres = 'postgres'
+mysql = 'mysql'
 
 class QueryBuilder:
     def __init__(self, target, is_root=True, start_count=0):

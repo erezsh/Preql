@@ -1,7 +1,8 @@
+from mysql.connector import Connect
 from .utils import dataclass
 from .loggers import sql_log
 
-from .sql import Sql, QueryBuilder, sqlite, postgres
+from .sql import Sql, QueryBuilder, sqlite, postgres, mysql
 from . import exceptions
 
 from .pql_types import T, Type, Object
@@ -85,6 +86,30 @@ def log_sql(sql):
     for i, s in enumerate(sql.split('\n')):
         prefix = '/**/    ' if i else '/**/;;  '
         sql_log.debug(prefix+s)
+
+
+class MysqlInterface(SqlInterface):
+    target = mysql
+
+    def __init__(self, host, port, database, user, password, print_sql=False):
+        import mysql.connector
+        from mysql.connector import errorcode
+
+        args = dict(host=host, port=port, database=database, user=user, password=password)
+        args = {k:v for k, v in args.items() if v is not None}
+
+        try:
+            # self._conn = mysql.connector.connect(host=host, port=port, database=database, user=user, password=password)
+            self._conn = mysql.connector.connect(**args)
+        except mysql.connector.Error as e:
+            if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+                raise ConnectError("Bad user name or password") from e
+            elif e.errno == errorcode.ER_BAD_DB_ERROR:
+                raise ConnectError("Database does not exist") from e
+            else:
+                raise ConnectError(*e.args) from e
+
+        self._print_sql = print_sql
 
 
 class PostgresInterface(SqlInterface):

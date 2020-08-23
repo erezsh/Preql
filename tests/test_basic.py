@@ -9,7 +9,7 @@ from preql.interp_common import pql_TypeError
 from preql import sql, settings
 from preql.pql_types import T
 
-from .common import PreqlTests, SQLITE_URI, POSTGRES_URI
+from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI
 
 
 
@@ -20,6 +20,7 @@ def is_eq(a, b):
 @parameterized_class(("name", "uri", "optimized"), [
     ("Normal_Lt", SQLITE_URI, True),
     ("Normal_Pg", POSTGRES_URI, True),
+    ("Normal_My", MYSQL_URI, True),
     ("Unoptimized_Lt", SQLITE_URI, False),
     ("Unoptimized_Pg", POSTGRES_URI, False),
 ])
