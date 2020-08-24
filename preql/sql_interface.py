@@ -100,8 +100,8 @@ class MysqlInterface(SqlInterface):
         args = {k:v for k, v in args.items() if v is not None}
 
         try:
-            # self._conn = mysql.connector.connect(host=host, port=port, database=database, user=user, password=password)
-            self._conn = mysql.connector.connect(**args)
+            # TODO utf8??
+            self._conn = mysql.connector.connect(charset='latin1', **args)
         except mysql.connector.Error as e:
             if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
                 raise ConnectError("Bad user name or password") from e

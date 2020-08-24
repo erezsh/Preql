@@ -49,9 +49,11 @@ def _process_fields(state: State, fields):
 
         # In Preql, {=>v} creates an array. In SQL, it selects the first element.
         # Here we mitigate that disparity.
+
         if v.type <= T.aggregate:
             v = v.primary_key()
-            v = objects.make_instance(sql.MakeArray(v.type, v.code), v.type, [v])
+            t = T.list[v.type]
+            v = objects.make_instance(sql.MakeArray(t, v.code), t, [v])
 
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
