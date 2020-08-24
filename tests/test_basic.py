@@ -27,7 +27,7 @@ def is_eq(a, b):
 class BasicTests(PreqlTests):
     def Preql(self, **kw):
         settings.optimize = self.optimized
-        preql = Preql(self.uri, print_sql=True, **kw)
+        preql = Preql(self.uri, **kw)
         self.preql = preql
         return preql
 
@@ -304,19 +304,11 @@ class BasicTests(PreqlTests):
         self.assertEqual( res1, res2 )
 
         # TODO make these work, or at least throw a graceful error
-        if preql.engine.target == sql.sqlite:
-            res = [{'a': {'value': 1}, 'b': '3|4'}, {'a': {'value': 2}, 'b': '3|4'}]
-        else:
-            res = [{'a': {'value': 1}, 'b': [3, 4]}, {'a': {'value': 2}, 'b': [3, 4]}]
-
+        res = [{'a': {'value': 1}, 'b': [3, 4]}, {'a': {'value': 2}, 'b': [3, 4]}]
         self.assertEqual(preql("joinall(a:[1,2], b:[3, 4]) {a => b}" ), res)
 
-        if preql.engine.target == sql.sqlite:
-            res = [{'b': '2|3', 'a': '1|2'}]
-        else:
-            res = [{'b': [2, 3], 'a': [1, 2]}]
-
-        self.assertEqual(preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {b => a}"), res)
+        res = [{'b': 5, 'a': [1, 2]}]
+        self.assertEqual(preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: sum(b.value)} {b => a}"), res)
         # preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {count(b) => a}")
 
         res = preql("one joinall(a:[1,2], b:[2, 3]) {a: a.value => b: count(b.value)} {b => a: count(a)}")
@@ -403,7 +395,7 @@ class BasicTests(PreqlTests):
         assert preql.abc() == list(range(1,3))
         assert preql('adult()[..10]') == list(range(18, 28))
         assert preql('adult()[..10] + adult()[..1]') == list(range(18, 28)) + [18]
-        assert preql('list( (adult()[..10] + adult()[..1]) {value + 1} )') == list(range(19, 29)) + [19]
+        self.assertEqual( preql('list( (adult()[..10] + adult()[..1]) {value + 1} )') , list(range(19, 29)) + [19] )
 
 
     def test_rowtype(self):

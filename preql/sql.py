@@ -633,7 +633,7 @@ class Select(TableOperation):
         if self.group_by:
             sql += [' GROUP BY '] + join_comma(e.compile_wrap(qb).code for e in self.group_by)
 
-        if self.limit:
+        if self.limit is not None:
             sql += [' LIMIT ', str(self.limit)]
         elif self.offset:
             if qb.target == sqlite:
