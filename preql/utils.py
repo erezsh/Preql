@@ -178,8 +178,9 @@ class TextReference:
         source = Path(self.source_file)
 
         if rich:
+            start = self.ref.start
             return [
-                (True, "  [red]~~~[/red] At '%s' line %d, column %d:" % (source.name, self.ref.start.line, self.ref.start.column)),
+                (True, f"  [red]~~~[/red] At '{source.name}' line {start.line}, column {start.column}"),
                 (False, text_before + text_after),
                 (False, ' ' * (len(text_before)-mark_before) + MARK_CHAR*mark_before + '^' + MARK_CHAR*mark_after),
             ]
