@@ -30,6 +30,12 @@ class PreqlError(Object, Exception):
         ]
         return ''.join(texts)
 
+    def get_rich_lines(self):
+        yield True, '[bold]Exception traceback:[/bold]'
+        for ref in self.text_refs:
+            yield from ref.get_pinpoint_text(rich=True)
+        yield True, '[red]%s[/red]: %s' % (self.exc_name, self.message)
+
     @classmethod
     def make(cls, state, ast, *args):
         ast_ref = getattr(ast, 'text_ref', None)

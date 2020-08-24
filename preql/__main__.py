@@ -1,8 +1,9 @@
 import argparse
 from pathlib import Path
 from itertools import chain
+import rich
 
-from . import Preql, __version__
+from . import Preql, __version__, PreqlError
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', default=False, help="Enter interactive mode after running the script")
@@ -10,6 +11,7 @@ parser.add_argument('-v', '--version', action='store_true', help="Print version"
 parser.add_argument('--print-sql', action='store_true', help="Print the SQL code that's being executed")
 parser.add_argument('-f', '--file', type=str, help='Path to a Preql script to run')
 parser.add_argument('database', type=str, nargs='?', default=None, help="database url (postgres://user:password@host:port/db_name")
+
 
 def find_dot_preql():
     cwd = Path.cwd()
@@ -32,7 +34,16 @@ def main():
 
     if args.file:
         with open(args.file) as f:
-            p.run_code(f.read(), args.file)
+            try:
+                p.run_code(f.read(), args.file)
+            except PreqlError as e:
+                for is_rich, line in e.get_rich_lines():
+                    if is_rich:
+                        rich.print(line)
+                    else:
+                        print(line)
+                return -1
+
     elif not args.version:
         dot_preql = find_dot_preql()
         if dot_preql:

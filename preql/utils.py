@@ -164,7 +164,7 @@ class TextReference:
         text_after = self.text[pos:end].split('\n', 1)[0]
         return expand_tab(text_before), expand_tab(text_after)
 
-    def get_pinpoint_text(self, span=80):
+    def get_pinpoint_text(self, span=80, rich=False):
         text_before, text_after = self.get_surrounding_line(span)
 
         MARK_CHAR = '-'
@@ -176,11 +176,21 @@ class TextReference:
             assert mark_before >= 0 and mark_after >= 0
 
         source = Path(self.source_file)
-        return ''.join([
-            "~~~ At '%s' line %d, column %d:\n" % (source.name, self.ref.start.line, self.ref.start.column),
+
+        if rich:
+            return [
+                (True, "  [red]~~~[/red] At '%s' line %d, column %d:" % (source.name, self.ref.start.line, self.ref.start.column)),
+                (False, text_before + text_after),
+                (False, ' ' * (len(text_before)-mark_before) + MARK_CHAR*mark_before + '^' + MARK_CHAR*mark_after),
+            ]
+
+        res = [
+            "  ~~~ At '%s' line %d, column %d:\n" % (source.name, self.ref.start.line, self.ref.start.column),
             text_before, text_after, '\n',
             ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
-        ])
+        ]
+
+        return ''.join(res)
 
     def __str__(self):
         return '<text-ref>'
