@@ -635,11 +635,11 @@ class Select(TableOperation):
 
         if self.limit is not None:
             sql += [' LIMIT ', str(self.limit)]
-        elif self.offset:
+        elif self.offset is not None:
             if qb.target == sqlite:
                 sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
 
-        if self.offset:
+        if self.offset is not None:
             sql += [' OFFSET ', str(self.offset)]
 
         if self.order:
