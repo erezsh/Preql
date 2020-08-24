@@ -1,3 +1,5 @@
+import json
+
 from .base import Object
 from . import exceptions as exc
 from .utils import dataclass, listgen, concat_for, classify_bool
@@ -121,24 +123,34 @@ def from_sql(state, arr: T.list):
 @dp_inst
 @listgen
 def from_sql(state, arr: T.table):
+    target = state.db.target
     expected_length = len(flatten_type(arr.type))   # TODO optimize?
     for row in arr.value:
         if len(row) != expected_length:
             raise exc.pql_TypeError.make(state, None, f"Expected {expected_length} columns, but got {len(row)}")
         i = iter(row)
-        yield {name: restructure_result(col, i) for name, col in arr.type.elems.items()}
+        yield {name: restructure_result(target, col, i) for name, col in arr.type.elems.items()}
 
 
 @dp_type
-def restructure_result(t: T.struct, i):
-    return ({name: restructure_result(col, i) for name, col in t.elem_dict.items()})
+def restructure_result(target, t: T.struct, i):
+    return ({name: restructure_result(target, col, i) for name, col in t.elem_dict.items()})
 
 @dp_type
-def restructure_result(t: T.union[T.primitive, T.null], i):
+def restructure_result(target, t: T.union[T.primitive, T.null], i):
     return next(i)
 
 @dp_type
-def restructure_result(t: T.datetime, i):
+def restructure_result(target, t: T.list[T.primitive, T.null], i):
+    res = next(i)
+    if target == 'mysql':   # TODO use constant
+        res = json.loads(res)
+    elif target == 'sqlite':
+        res = res.split('|')
+    return res
+
+@dp_type
+def restructure_result(target, t: T.datetime, i):
     s = next(i)
     return _from_datetime(s)
 

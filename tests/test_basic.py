@@ -507,40 +507,19 @@ class BasicTests(PreqlTests):
             ("United States", 1),
         ])
 
-        # res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name}")
-        # res = preql("join(p:Person.id, c:Country.id)")
-        res = list(preql("join(p1:Person.id, p2:Person.id)"))
-        res = list(res)
-        breakpoint()
-        # TODO Array, not string
-
-        if preql.engine.target == sql.sqlite:
-            assert is_eq(res, [
-                ("England", "Eric Blaire|H.G. Wells"),
-                ("Israel", "Erez Shinan|Ephraim Kishon"),
-                ("United States", "John Steinbeck"),
-            ]), list(res)
-        else:
-            assert is_eq(res, [
-                ("England", ["Eric Blaire", "H.G. Wells"]),
-                ("Israel", ["Erez Shinan", "Ephraim Kishon"]),
-                ("United States", ["John Steinbeck"]),
-            ]), list(res)
+        res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name}")
+        assert is_eq(res, [
+            ("England", ["Eric Blaire", "H.G. Wells"]),
+            ("Israel", ["Erez Shinan", "Ephraim Kishon"]),
+            ("United States", ["John Steinbeck"]),
+        ]), list(res)
 
         res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name, count(p.id)}")
-        # TODO Array, not string
-        if preql.engine.target == sql.sqlite:
-            assert is_eq(res, [
-                ("England", "Eric Blaire|H.G. Wells", 2),
-                ("Israel", "Erez Shinan|Ephraim Kishon", 2),
-                ("United States", "John Steinbeck", 1),
-            ])
-        else:
-            assert is_eq(res, [
-                ("England", ["Eric Blaire", "H.G. Wells"], 2),
-                ("Israel", ["Erez Shinan", "Ephraim Kishon"], 2),
-                ("United States", ["John Steinbeck"], 1),
-            ])
+        assert is_eq(res, [
+            ("England", ["Eric Blaire", "H.G. Wells"], 2),
+            ("Israel", ["Erez Shinan", "Ephraim Kishon"], 2),
+            ("United States", ["John Steinbeck"], 1),
+        ])
 
         res = preql('[1,2,3]{=>sum(value*value)}')
         assert res == [{'sum': 14}], list(res)

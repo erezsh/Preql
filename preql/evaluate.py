@@ -91,7 +91,7 @@ def db_query(state: State, sql_code, subqueries=None):
     try:
         return state.db.query(sql_code, subqueries, state=state)
     except exc.DatabaseQueryError as e:
-        raise exc.pql_DatabaseQueryError.make(state, None, e.args[0])
+        raise exc.pql_DatabaseQueryError.make(state, None, e.args[0]) from e
 
 
 @dy

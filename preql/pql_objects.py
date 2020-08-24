@@ -178,7 +178,6 @@ class AbsInstance(Object):
         if v <= T.function:
             return MethodInstance(self, v)
 
-        breakpoint()
         raise pql_AttributeError([], f"No such attribute: {name}")
 
 @dataclass
