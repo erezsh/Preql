@@ -140,13 +140,19 @@ def restructure_result(target, t: T.struct, i):
 def restructure_result(target, t: T.union[T.primitive, T.null], i):
     return next(i)
 
+
 @dp_type
 def restructure_result(target, t: T.list[T.primitive, T.null], i):
+    # XXX specific to choice of db. So belongs in sql.py?
     res = next(i)
     if target == 'mysql':   # TODO use constant
         res = json.loads(res)
     elif target == 'sqlite':
         res = res.split('|')
+    if t.elem <= T.int: # XXX hack! TODO Use a generic form
+        res = [int(x) for x in res]
+    elif t.elem <= T.float: # XXX hack! TODO Use a generic form
+        res = [float(x) for x in res]
     return res
 
 @dp_type

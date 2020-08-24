@@ -289,10 +289,7 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql.f1(), 9)
         self.assertEqual( len(preql.f2()), 2)
         self.assertEqual( len(preql.f3()), 3)
-        if preql.engine.target == sql.sqlite:
-            self.assertEqual( preql.f3().to_json()[0]['y'], '3' )
-        else:
-            self.assertEqual( preql.f3().to_json()[0]['y'], [3] )
+        self.assertEqual( preql.f3().to_json()[0]['y'], [3] )
         self.assertEqual( len(preql.f4()), 1)
         self.assertEqual( preql.f4().to_json(), [{'y': 7}])
 
