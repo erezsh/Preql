@@ -252,6 +252,11 @@ class Interface:
     def commit(self):
         return self.engine.commit()
 
+    def _drop_tables(self, *tables):
+        # XXX temporary method
+        for t in tables:
+            self.engine._execute_sql(T.null, f"DROP TABLE {t};", self.interp.state)
+
     def import_pandas(self, **dfs):
         for name, df in dfs.items():
             cols = list(df)

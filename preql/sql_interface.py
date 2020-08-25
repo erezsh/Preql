@@ -115,7 +115,8 @@ class MysqlInterface(SqlInterface):
     def table_exists(self, name):
         return False
     def list_tables(self):
-        return []
+        sql_code = "SHOW TABLES"
+        return self._execute_sql(T.list[T.string], sql_code, None)
 
 
 class PostgresInterface(SqlInterface):

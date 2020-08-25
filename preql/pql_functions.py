@@ -1,4 +1,5 @@
 import inspect
+from preql.sql import mysql
 import re
 import csv
 import inspect
@@ -7,7 +8,7 @@ from typing import Optional
 from tqdm import tqdm
 
 from .utils import safezip, listgen
-from .exceptions import pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp, pql_AssertionError
+from .exceptions import pql_NotImplementedError, pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp, pql_AssertionError
 
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -197,6 +198,8 @@ def pql_intersect(state: State, t1: ast.Expr, t2: ast.Expr):
 
 def pql_subtract(state: State, t1: ast.Expr, t2: ast.Expr):
     "Substract two tables (except). Used for `t1 - t2`"
+    if state.db.target is mysql:
+        raise pql_NotImplementedError.make(state, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
 def pql_union(state: State, t1: ast.Expr, t2: ast.Expr):

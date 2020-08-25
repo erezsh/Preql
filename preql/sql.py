@@ -638,6 +638,11 @@ class Select(TableOperation):
         elif self.offset is not None:
             if qb.target == sqlite:
                 sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
+            elif qb.target == mysql:
+                # MySQL requires a specific limit, always!
+                # See: https://stackoverflow.com/questions/255517/mysql-offset-infinite-rows
+                sql += [' LIMIT 18446744073709551615']
+
 
         if self.offset is not None:
             sql += [' OFFSET ', str(self.offset)]
@@ -735,6 +740,8 @@ def arith(target, res_type, op, args):
     if res_type == T.string:
         assert op == '+'
         op = '||'
+        if target is mysql: # doesn't support a || b
+            return FuncCall(res_type, 'concat', arg_codes)
     elif op == '/':
         if target != mysql:
             # In MySQL division returns a float. All others return int
@@ -770,7 +777,7 @@ class StringSlice(SqlTree):
             params = string + [', '] + start
             if length:
                 params += [', '] + length
-        elif qb.target == postgres:
+        elif qb.target in (postgres, mysql):
             f = 'substring'
             params = string + [' from '] + start
             if length:
