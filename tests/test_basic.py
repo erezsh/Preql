@@ -16,6 +16,9 @@ from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI
 def uses_tables(*names):
     def decorator(decorated):
         def wrapper(self):
+            if self.uri != MYSQL_URI:
+                return decorated(self)
+
             p = self.Preql()
             tables = p.engine.list_tables()
             if tables:
@@ -1098,7 +1101,7 @@ class BasicTests(PreqlTests):
             table A {...}
         """)
         t = preql('type(A{...!id})')
-        assert a_type == t
+        assert a_type == t, (a_type, t)
 
         preql._reset_interpreter()
         preql("""
