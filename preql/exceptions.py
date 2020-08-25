@@ -13,7 +13,7 @@ class DatabaseQueryError(Exception):
 
 @dataclass
 class PreqlError(Object, Exception):
-    text_refs: List[TextReference]
+    text_refs: List[Optional[TextReference]]    # XXX must it be optional?
 
     @property
     def exc_name(self):
@@ -24,7 +24,7 @@ class PreqlError(Object, Exception):
 
     def __str__(self):
         texts = ['Exception traceback:\n']
-        texts += [ref.get_pinpoint_text() for ref in self.text_refs]
+        texts += [ref.get_pinpoint_text() if ref else '  ~~~ ???\n' for ref in self.text_refs]
         texts += [
             '[%s] %s\n' % (self.exc_name, self.message)
         ]
@@ -33,7 +33,7 @@ class PreqlError(Object, Exception):
     def get_rich_lines(self):
         yield True, '[bold]Exception traceback:[/bold]'
         for ref in self.text_refs:
-            yield from ref.get_pinpoint_text(rich=True)
+            yield from ref.get_pinpoint_text(rich=True) if ref else ['???']
         yield True, '[red]%s[/red]: %s' % (self.exc_name, self.message)
 
     @classmethod

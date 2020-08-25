@@ -101,7 +101,7 @@ class MysqlInterface(SqlInterface):
 
         try:
             # TODO utf8??
-            self._conn = mysql.connector.connect(charset='latin1', **args)
+            self._conn = mysql.connector.connect(charset='utf8', **args)
         except mysql.connector.Error as e:
             if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
                 raise ConnectError("Bad user name or password") from e
@@ -113,9 +113,32 @@ class MysqlInterface(SqlInterface):
         self._print_sql = print_sql
 
     def table_exists(self, name):
-        return False
+        tables = [t.lower() for t in self.list_tables()]
+        return name.lower() in tables
+
     def list_tables(self):
-        return []
+        sql_code = "SHOW TABLES"
+        return self._execute_sql(T.list[T.string], sql_code, None)
+
+    def import_table_type(self, state, name, columns_whitelist):
+        columns_t = T.table(dict(
+            name=T.string,
+            type=T.string,
+            nullable=T.string,
+            key=T.string,
+            default=T.string,
+            extra=T.string,
+        ))
+        columns_q = "desc %s" % name
+        sql_columns = self._execute_sql(columns_t, columns_q, state)
+
+        if columns_whitelist:
+            wl = set(columns_whitelist)
+            sql_columns = [c for c in sql_columns if c['name'] in wl]
+
+        cols = {c['name']: _type_from_sql(c['type'].decode(), c['nullable']) for c in sql_columns}
+
+        return T.table(cols, name=name)
 
 
 class PostgresInterface(SqlInterface):
@@ -161,44 +184,11 @@ class PostgresInterface(SqlInterface):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = [(c['pos'], c['name'], self._type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
+        cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
         return T.table(cols, name=name)
-
-    def _bool_from_sql(self, n):
-        if n == 'NO':
-            n = False
-        if n == 'YES':
-            n = True
-        assert isinstance(n, bool), n
-        return n
-
-    def _type_from_sql(self, type, nullable):
-        d = {
-            'integer': T.int,
-            'serial': T.t_id,
-            'bigserial': T.t_id,
-            'smallint': T.int,  # TODO smallint / bigint?
-            'bigint': T.int,
-            'character varying': T.string,
-            'character': T.string,  # TODO char?
-            'real': T.float,
-            'double precision': T.float,    # double on 32-bit?
-            'boolean': T.bool,
-            'timestamp': T.datetime,
-            'timestamp without time zone': T.datetime,
-            'text': T.text,
-        }
-        try:
-            v = d[type]
-        except KeyError:
-            return T.string.replace(nullable=True)
-
-        nullable = self._bool_from_sql(nullable)
-
-        return v.replace(nullable=nullable)
 
 
 class SqliteInterface(SqlInterface):
@@ -237,49 +227,12 @@ class SqliteInterface(SqlInterface):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = [(c['pos'], c['name'], self._type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
+        cols = [(c['pos'], c['name'], _type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
         return T.table(cols, name=name)
 
-    def _bool_from_sql(self, n):
-        if n == 'NO':
-            n = False
-        if n == 'YES':
-            n = True
-        assert isinstance(n, bool), n
-        return n
-
-    def _type_from_sql(self, type, nullable):
-        type = type.lower()
-        d = {
-            'integer': T.int,
-            'serial': T.t_id,
-            'bigserial': T.t_id,
-            'smallint': T.int,  # TODO smallint / bigint?
-            'bigint': T.int,
-            'character varying': T.string,
-            'character': T.string,  # TODO char?
-            'real': T.float,
-            'float': T.float,
-            'double precision': T.float,    # double on 32-bit?
-            'boolean': T.bool,
-            'timestamp': T.datetime,
-            'timestamp without time zone': T.datetime,
-            'text': T.text,
-        }
-        try:
-            v = d[type]
-        except KeyError:
-            if type.startswith('int('): # TODO actually parse it
-                return T.int
-
-            return T.string.replace(nullable=True)
-
-        nullable = self._bool_from_sql(nullable)
-
-        return v.replace(nullable=nullable)
 
 import subprocess
 import json
@@ -317,3 +270,48 @@ class GitqliteInterface(SqliteInterface):
             return from_sql(state, Const(sql_type, res))
 
 
+
+
+def _bool_from_sql(n):
+    if n == 'NO':
+        n = False
+    if n == 'YES':
+        n = True
+    assert isinstance(n, bool), n
+    return n
+
+def _type_from_sql(type, nullable):
+    type = type.lower()
+    d = {
+        'integer': T.int,
+        'int': T.int,           # mysql
+        'tinyint(1)': T.bool,   # mysql
+        'serial': T.t_id,
+        'bigserial': T.t_id,
+        'smallint': T.int,  # TODO smallint / bigint?
+        'bigint': T.int,
+        'character varying': T.string,
+        'character': T.string,  # TODO char?
+        'real': T.float,
+        'float': T.float,
+        'double precision': T.float,    # double on 32-bit?
+        'boolean': T.bool,
+        'timestamp': T.datetime,
+        'timestamp without time zone': T.datetime,
+        'text': T.text,
+    }
+    try:
+        v = d[type]
+    except KeyError:
+        if type.startswith('int('): # TODO actually parse it
+            return T.int
+        elif type.startswith('tinyint('): # TODO actually parse it
+            return T.int
+        elif type.startswith('varchar('): # TODO actually parse it
+            return T.string
+
+        return T.string.replace(nullable=True)
+
+    nullable = _bool_from_sql(nullable)
+
+    return v.replace(nullable=nullable)

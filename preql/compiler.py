@@ -1,9 +1,10 @@
+from preql.sql import mysql
 import re
 import operator
 from copy import copy
 
 from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
-from .exceptions import pql_TypeError, pql_SyntaxError
+from .exceptions import pql_NotImplementedError, pql_TypeError, pql_SyntaxError
 from . import exceptions as exc
 
 from . import settings
@@ -744,6 +745,8 @@ def compile_to_inst(state: State, range: ast.Range):
         stop = cast_to_python(state, range.stop)
         stop_str = f" WHERE value+1<{stop}"
     else:
+        if state.db.target is mysql:
+            raise pql_NotImplementedError.make(state, range, "MySQL doesn't support infinite recursion!")
         stop_str = ''
 
     type_ = T.list[T.int]

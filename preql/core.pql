@@ -153,6 +153,9 @@ if (get_db_type() == "postgres") {
             func pi() = SQL(float, "PI()")
             func now() = SQL(datetime, "NOW()")
             func random() = SQL(float, "RAND()")
+
+            func repeat(s, num) = SQL(string, "REPEAT($s, $num)")   // same as postgres
+            func str_index(a, b) = SQL(int, "INSTR($b, $a)")    // same as sqlite
         }
         else {
             throw new TypeError("Unexpected")

@@ -27,7 +27,7 @@ def evaluate(state: type(None), _any: type(None)):
     raise NotImplementedError()
 
 @dy
-def cast_to_python():
+def cast_to_python(state: type(NotImplemented), obj):
     raise NotImplementedError()
 
 

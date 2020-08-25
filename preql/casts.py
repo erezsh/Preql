@@ -1,3 +1,4 @@
+from preql.sql import mysql
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import sql
@@ -46,7 +47,11 @@ def _cast(state, inst_type: T.t_id, target_type: T.int, inst):
 
 @dp_type
 def _cast(state, inst_type: T.union[T.float, T.bool], target_type: T.int, inst):
-    code = sql.Cast(T.int, "int", inst.code)
+    if state.db.target is mysql:
+        t = "signed integer"
+    else:
+        t = "int"
+    code = sql.Cast(T.int, t, inst.code)
     return objects.Instance.make(code, T.int, [inst])
 
 @dp_type

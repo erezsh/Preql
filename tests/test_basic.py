@@ -1,10 +1,11 @@
+from preql.sql import mysql
 from unittest import skip
 
 from parameterized import parameterized_class
 
 from preql import Preql
 from preql.pql_objects import UserFunction
-from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError, pql_NameNotFound
+from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError, pql_NameNotFound, pql_NotImplementedError
 from preql.interp_common import pql_TypeError
 from preql import sql, settings
 from preql.pql_types import T
@@ -12,6 +13,29 @@ from preql.pql_types import T
 from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI
 
 
+def uses_tables(*names):
+    def decorator(decorated):
+        def wrapper(self):
+            if self.uri != MYSQL_URI:
+                return decorated(self)
+
+            p = self.Preql()
+            tables = p.engine.list_tables()
+            if tables:
+                print("@@ Deleting", tables, decorated)
+            p._drop_tables(*tables)
+            # assert not tables
+            try:
+                return decorated(self)
+            finally:
+                p = self.preql
+                if p.interp.state.db.target is mysql:
+                    p._drop_tables(*names)
+                tables = p.engine.list_tables()
+                assert not tables, tables
+
+        return wrapper
+    return decorator
 
 def is_eq(a, b):
     a = [tuple(row.values()) for row in a]
@@ -38,6 +62,7 @@ class BasicTests(PreqlTests):
         if self.preql:
             self.preql.engine.rollback()
 
+    @uses_tables('Person', 'Country')
     def test_basic1(self):
         preql = self.Preql()
         preql.load('country_person.pql', rel_to=__file__)
@@ -116,12 +141,13 @@ class BasicTests(PreqlTests):
 
     def test_arith(self):
         preql = self.Preql()
+
         assert preql("1 + 2 / 4") == 1.5
         assert preql("1 + 2 /~ 4 + 1") == 2
         assert preql('"a" + "b"') == "ab"
         assert preql('"a" * 3') == "aaa"
         assert preql('"ab" * 3') == "ababab"
-        assert preql('"a" + "b"*2 + "c"') == 'abbc'
+        self.assertEqual( preql('"a" + "b"*2 + "c"'), 'abbc' )
         assert preql('"a" ~ "a%"')
         assert preql('"abc" ~ "a%"')
         assert preql('"abc" ~ "a%c"')
@@ -134,6 +160,7 @@ class BasicTests(PreqlTests):
         self.assertRaises(pql_TypeError, preql, '3 ~ 3')
 
 
+    @uses_tables('Point')
     def test_update_basic(self):
         preql = self.Preql()
         preql("""
@@ -146,14 +173,16 @@ class BasicTests(PreqlTests):
 
         const table backup = Point
 
-        func p() = Point[x==3] update{y: y + 13}
+        func p2() = Point[x==3] update{y: y + 13}
+        func p() = p2() {...!id}
         """)
-        assert preql.p() == [{'id': 3, 'x': 3, 'y': 14}]
-        assert preql.p() == [{'id': 3, 'x': 3, 'y': 27}]
+        assert preql.p() == [{'x': 3, 'y': 14}]
+        assert preql.p() == [{'x': 3, 'y': 27}]
         assert preql('backup[x==3]{y}') == [{'y': 1}]
         res = preql('backup[x==3] update {y: x+y}')
-        assert res == [{'id': 3, 'x': 3, 'y': 4}], res
+        assert res == [{'id': res[0]['id'], 'x': 3, 'y': 4}], res
         assert preql('backup[x==3]{y}') == [{'y': 4}]
+
 
     def _test_user_functions(self, preql):
         preql("""
@@ -252,6 +281,7 @@ class BasicTests(PreqlTests):
         assert list(preql.q2) == [{'value': 3}]
         # assert list(preql.q3) == [{'a': {'value': 3}}]    # TODO
 
+    @uses_tables('Point')
     def test_update(self):
         preql = self.Preql()
         preql("""
@@ -268,6 +298,9 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql.p().to_json()[0]['y'], 14)
         self.assertEqual( preql.p().to_json()[0]['y'], 27)
 
+
+
+    @uses_tables('Point')
     def test_SQL(self):
         preql = self.Preql()
         preql("""
@@ -292,6 +325,7 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql.f3().to_json()[0]['y'], [3] )
         self.assertEqual( len(preql.f4()), 1)
         self.assertEqual( preql.f4().to_json(), [{'y': 7}])
+
 
     def test_nested_projections(self):
         preql = self.Preql()
@@ -390,13 +424,21 @@ class BasicTests(PreqlTests):
 
         assert preql.to20() == list(range(20))
         assert preql.abc() == list(range(1,3))
+
+        try:
+            assert preql('adult()[..10]') == list(range(18, 28))
+        except pql_NotImplementedError:
+            assert preql.interp.state.db.target == mysql   # Not supported
+            return
+
         assert preql('adult()[..10]') == list(range(18, 28))
         assert preql('adult()[..10] + adult()[..1]') == list(range(18, 28)) + [18]
         self.assertEqual( preql('list( (adult()[..10] + adult()[..1]) {value + 1} )') , list(range(19, 29)) + [19] )
 
 
+    @uses_tables('B', 'A')
     def test_rowtype(self):
-        preql = Preql()
+        preql = self.Preql()
         preql('''
             table A { x: int }
             a = new A(4)
@@ -418,6 +460,7 @@ class BasicTests(PreqlTests):
         self.assertEqual(preql.eq2, True)
         # self.assertEqual(preql.eq3, False)    # TODO check table type
 
+
     def test_vararg(self):
         preql = self.Preql()
         preql('''
@@ -436,6 +479,7 @@ class BasicTests(PreqlTests):
         # self.assertEqual(preql('x1 == x2'), True) # TODO
 
 
+    @uses_tables('Node', 'Square', 'a')
     def test_methods(self):
         preql = self.Preql()
         assert not T.table.methods
@@ -480,6 +524,7 @@ class BasicTests(PreqlTests):
 
         ''')
         self.assertEqual( preql('count(Node[parent==null].children())'), 2 )
+
 
     def _test_groupby(self, preql):
         assert preql('one one [1,2,3]{=>sum(value*value)}') == 14
@@ -557,8 +602,12 @@ class BasicTests(PreqlTests):
         res = preql("""[1,2,3] | [3,4]""")
         self.assertEqual(set(res), {1,2,3,4})
 
-        res = preql("""[1,2,3] - [3,4]""")
-        assert res == [1,2]
+        # XXX not supported by mysql, but can be done using NOT IN
+        try:
+            res = preql("""[1,2,3] - [3,4]""")
+            assert res == [1,2]
+        except pql_NotImplementedError:
+            assert preql.interp.state.db.target is mysql
 
         res = preql("""[1,2,3]{v:value*2}[v < 5]""")
         assert res == [{'v': 2}, {'v': 4}], res
@@ -684,6 +733,7 @@ class BasicTests(PreqlTests):
         # TODO
         # assert preql('a == A[x==1]')
 
+    @uses_tables('A')
     def test_delete(self):
         preql = self.Preql()
         preql('''
@@ -705,6 +755,8 @@ class BasicTests(PreqlTests):
         assert len(res) == 0
         assert preql('count(A)') == 0
 
+
+    @uses_tables('A')
     def test_text(self):
         preql = self.Preql()
         preql(r'''
@@ -718,6 +770,8 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql("one A[id==2]{x}"), {'x': "hello\nworld"} )
 
 
+
+    @uses_tables('A')
     def test_column_default(self):
         preql = self.Preql()
         preql('''
@@ -733,6 +787,8 @@ class BasicTests(PreqlTests):
         assert preql('A{y}') == [{'y': 2}, {'y': 1}]
         assert preql('a2.y') == 1
 
+
+    @uses_tables('Circle', 'Box', 'NamedLine')
     def test_structs(self):
         preql = self.Preql()
         preql.load('box_circle.pql', rel_to=__file__)
@@ -745,6 +801,8 @@ class BasicTests(PreqlTests):
         assert res2 == res3, (list(res2), list(res3))
 
 
+
+    @uses_tables('a')
     def test_names(self):
         p = self.Preql()
         try:
@@ -760,6 +818,8 @@ class BasicTests(PreqlTests):
         self.assertEqual( p('columns(a)'), {'id': p.t_id, 'x': p.int} )
 
 
+
+    @uses_tables('Person')
     def test_simple1(self):
         # TODO uncomment these tests
         preql = self.Preql()
@@ -778,6 +838,7 @@ class BasicTests(PreqlTests):
         # expected = [{'country': 'England', 'population': ['Eric Blaire', 'H.G. Wells']}, {'country': 'Israel', 'population': ['Erez Shinan']}]
         # res = preql('Person {country => population: name}')
         # assert expected == res, (res, expected)
+
 
 
     @skip("Not ready yet")
@@ -884,6 +945,7 @@ class BasicTests(PreqlTests):
         assert (preql('A_B {a, b} {a.value, b.value}').json() ) == res
 
 
+    @uses_tables('A')
     def test_partial_table(self):
         p = self.Preql()
         p("""
@@ -914,6 +976,7 @@ class BasicTests(PreqlTests):
             assert count(A[c ~ "hell"]) == 0
             assert (one one A{d}) == 3.14
         """)
+
 
     @skip("Not ready yet")
     def test_self_reference(self):
@@ -1016,6 +1079,7 @@ class BasicTests(PreqlTests):
 
         # print( preql('new B:a_set', b1=b1) )
 
+    @uses_tables('A')
     def test_import_table(self):
         preql = self.Preql()
         preql("""
@@ -1037,7 +1101,7 @@ class BasicTests(PreqlTests):
             table A {...}
         """)
         t = preql('type(A{...!id})')
-        assert a_type == t
+        assert a_type == t, (a_type, t)
 
         preql._reset_interpreter()
         preql("""
@@ -1053,7 +1117,6 @@ class BasicTests(PreqlTests):
         t = preql('type(A{...!id})')
         assert a_type != t  # different order
         assert a_type.elems == t.elems
-
 
 class TestTypes(PreqlTests):
     def test_types(self):
