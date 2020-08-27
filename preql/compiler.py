@@ -4,7 +4,7 @@ import operator
 from copy import copy
 
 from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
-from .exceptions import pql_NotImplementedError, pql_TypeError, pql_SyntaxError
+from .exceptions import pql_NotImplementedError, pql_TypeError, pql_SyntaxError, pql_ValueError
 from . import exceptions as exc
 
 from . import settings
@@ -428,7 +428,11 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
             '/': operator.truediv,
             '/~': operator.floordiv,
         }[arith.op]
-        return new_value_instance(f(a.local_value, b.local_value), res_type)
+        try:
+            value = f(a.local_value, b.local_value)
+        except ZeroDivisionError as e:
+            raise pql_ValueError.make(state, arith.args[-1], str(e))
+        return new_value_instance(value, res_type)
 
     code = sql.arith(state.db.target, res_type, arith.op, [a.code, b.code])
     return objects.make_instance(code, res_type, [a, b])
