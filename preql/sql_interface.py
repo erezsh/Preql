@@ -56,14 +56,7 @@ class SqlInterface:
     def _compile_sql(self, sql, subqueries=None, qargs=(), state=None):
         qb = QueryBuilder(self.target)
 
-        if subqueries:
-            subqs = [q.compile_wrap(qb).finalize(state, qb) for (name, q) in subqueries.items()]
-            sql_code = 'WITH RECURSIVE ' + ',\n     '.join(subqs) + '\n'
-        else:
-            sql_code = ''
-        compiled = sql.compile_wrap(qb)
-        sql_code += compiled.finalize(state, qb)
-        return sql_code
+        return sql.finalize_with_subqueries(qb, subqueries)
 
     def ping(self):
         c = self._conn.cursor()
@@ -101,7 +94,7 @@ class MysqlInterface(SqlInterface):
 
         try:
             # TODO utf8??
-            self._conn = mysql.connector.connect(charset='utf8', **args)
+            self._conn = mysql.connector.connect(charset='utf8', use_unicode=True, **args)
         except mysql.connector.Error as e:
             if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
                 raise ConnectError("Bad user name or password") from e

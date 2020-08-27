@@ -63,6 +63,16 @@ class SqlTree(Sql):
 
         return CompiledSQL(self.type, sql_code, self, self._is_select, self._needs_select)
 
+    def finalize_with_subqueries(self, qb, subqueries):
+        if subqueries:
+            subqs = [q.compile_wrap(qb).finalize(qb) for (name, q) in subqueries.items()]
+            sql_code = ['WITH RECURSIVE ']
+            sql_code += join_comma([q, '\n    '] for q in subqs)
+        else:
+            sql_code = []
+        sql_code += self.compile_wrap(qb).finalize(qb)
+        return ''.join(sql_code)
+
 
 @dataclass
 class CompiledSQL(Sql):
@@ -72,7 +82,7 @@ class CompiledSQL(Sql):
     _is_select: bool   # Needed for embedding in SqlTree
     _needs_select: bool
 
-    def finalize(self, state, qb):
+    def finalize(self, qb):
         self = self.wrap(qb)
         assert qb.is_root
         if self.type <= T.primitive:
@@ -104,6 +114,9 @@ class CompiledSQL(Sql):
         return self.wrap(qb)
     def compile(self, qb):
         return self
+    def finalize_with_subqueries(self, qb, subqueries):
+        assert not subqueries   # TODO
+        return self.compile(qb).finalize(qb)
 
     def optimize(self):
         if not self.code:
@@ -432,6 +445,14 @@ class Insert(SqlTree):
     def _compile(self, qb):
         return [f'INSERT INTO {_quote(qb.target, self.table_name)}({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
 
+    def finalize_with_subqueries(self, qb, subqueries):
+        if qb.target is mysql:
+            sql_code = f'INSERT INTO {_quote(qb.target, self.table_name)}({", ".join(self.columns)}) '
+            sql_code += self.query.finalize_with_subqueries(qb, subqueries)
+            return ''.join(sql_code)
+
+        return super().finalize_with_subqueries(qb, subqueries)
+
 @dataclass
 class InsertConsts(SqlTree):
     table: str
@@ -642,7 +663,6 @@ class Select(TableOperation):
                 # MySQL requires a specific limit, always!
                 # See: https://stackoverflow.com/questions/255517/mysql-offset-infinite-rows
                 sql += [' LIMIT 18446744073709551615']
-
 
         if self.offset is not None:
             sql += [' OFFSET ', str(self.offset)]

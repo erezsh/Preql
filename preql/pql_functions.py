@@ -109,7 +109,7 @@ def _count(state, obj: ast.Expr, table_func, name):
 
     if obj.type <= T.table:
         code = table_func(obj.code)
-    elif isinstance(obj, objects.RowInstance):
+    elif isinstance(obj, objects.StructInstance):
         return objects.new_value_instance(len(obj.attrs))
     else:
         if not (obj.type <= T.aggregate):

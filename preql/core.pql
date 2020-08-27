@@ -156,6 +156,17 @@ if (get_db_type() == "postgres") {
 
             func repeat(s, num) = SQL(string, "REPEAT($s, $num)")   // same as postgres
             func str_index(a, b) = SQL(int, "INSTR($b, $a)")    // same as sqlite
+
+            // TODO use AST interface instead?
+            func count_false(field) {
+                "Count how many values in the field are false or zero"
+                return SQL(int, "sum(cast($field=0 as unsigned))")
+            }
+            func count_true(field) {
+                "Count how many values in the field are true (non-zero)"
+                return SQL(int, "sum(cast($field!=0 as unsigned))")
+            }
+
         }
         else {
             throw new TypeError("Unexpected")

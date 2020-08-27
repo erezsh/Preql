@@ -142,7 +142,6 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     # Make new type
     elems = {}
-
     # codename = state.unique_name('proj')
     for name_, inst in all_fields:
         assert isinstance(inst, objects.AbsInstance)
@@ -462,12 +461,10 @@ def compile_to_inst(state: State, c: ast.Const):
 
 @dy
 def compile_to_inst(state: State, d: ast.Dict_):
-    assert isinstance(d.elems, dict), d
-
     # TODO handle duplicate key names
     elems = {k or guess_field_name(v): evaluate(state, v) for k, v in d.elems.items()}
-    t = T.table({k: v.type for k,v in elems.items()})
-    return objects.RowInstance(T.row[t], elems)
+    t = T.struct({k: v.type for k,v in elems.items()})
+    return objects.StructInstance(t, elems)
 
 @dy
 def compile_to_inst(state: State, lst: ast.List_):
