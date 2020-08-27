@@ -327,7 +327,7 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql.f4().to_json(), [{'y': 7}])
 
 
-    def test_nested_projections(self):
+    def test_nested_projection(self):
         preql = self.Preql()
 
         res1 = preql("joinall(a:[1,2], b:[2, 3]) {a.value => count(b.value)}")
@@ -364,6 +364,13 @@ class BasicTests(PreqlTests):
 
         res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab {b: b.value, a: a.value}, c}[..1]")
         self.assertEqual(res1.to_json(), [{'ab': {'b': 2, 'a': 1}, 'c': {'value': 4}}])
+
+    def test_nested2(self):
+        preql = self.Preql()
+
+        assert preql(" [1] {a:{b:{value}}} ") == [{'a': {'b': {'value': 1}}}]
+        assert preql("[1] {a:{value}}") == preql("[1] {a:{value}} {a}")
+        assert preql("[1] {value}") == preql("([1] {a:{value}}) {a.value}")
 
 
     def test_agg_funcs(self):
@@ -667,6 +674,7 @@ class BasicTests(PreqlTests):
         res = preql(""" temptable(temptable(Person, true)[name=="Erez Shinan"], true){name} """) # 2 temp tables
         assert is_eq(res, [("Erez Shinan",)])
 
+    @uses_tables("A", "B")
     def test_copy_rows(self):
         preql = self.Preql()
         preql('''

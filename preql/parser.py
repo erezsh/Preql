@@ -76,6 +76,7 @@ def _fix_escaping(s):
 
     return s
 
+from .compiler import guess_field_name
 @v_args(wrapper=_args_wrapper)
 class TreeToAst(Transformer):
     def __init__(self, code_ref):
@@ -89,7 +90,16 @@ class TreeToAst(Transformer):
         return ast.Const(meta, T.string, _fix_escaping( s.value[3:-3]) )
 
     def pql_dict(self, meta, items):
-        d = {item.name: item.value for item in items}
+        # if not all(item.name for item in items):
+        #     # TODO autocomplete names in some situations, like in projection
+        #     raise pql_SyntaxError([meta], "Dict expects all items to have keys")
+        d = {}
+        for item in items:
+            name = item.name or guess_field_name(item.value)
+            if name in d:
+                raise pql_SyntaxError([meta], f"Dict key appearing more than once: {name}")
+            d[name] = item.value
+
         return ast.Dict_(meta, d)
 
     def int(self, meta, i):

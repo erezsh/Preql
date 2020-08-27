@@ -199,7 +199,7 @@ def _execute(state: State, func_def: ast.FuncDef):
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
     inst = evaluate(state, p.value)
-    res = localize(state, p.value)
+    res = localize(state, inst)
     print(res)
 
 @dy

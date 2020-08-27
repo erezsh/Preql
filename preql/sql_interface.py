@@ -101,7 +101,7 @@ class MysqlInterface(SqlInterface):
 
         try:
             # TODO utf8??
-            self._conn = mysql.connector.connect(charset='utf8', **args)
+            self._conn = mysql.connector.connect(charset='utf8', use_unicode=True, **args)
         except mysql.connector.Error as e:
             if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
                 raise ConnectError("Bad user name or password") from e

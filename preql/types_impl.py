@@ -133,6 +133,11 @@ def from_sql(state, arr: T.table):
 
 
 @dp_type
+def restructure_result(target, t: T.table, i):
+    # return ({name: restructure_result(target, col, i) for name, col in t.elem_dict.items()})
+    return next(i)
+
+@dp_type
 def restructure_result(target, t: T.struct, i):
     return ({name: restructure_result(target, col, i) for name, col in t.elem_dict.items()})
 
