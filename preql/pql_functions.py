@@ -107,7 +107,9 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
 def _count(state, obj: ast.Expr, table_func, name):
     obj = evaluate(state, obj)
 
-    if obj.type <= T.table:
+    if obj is objects.null:
+        code = sql.FieldFunc(name, sql.AllFields(T.any))
+    elif obj.type <= T.table:
         code = table_func(obj.code)
     elif isinstance(obj, objects.StructInstance):
         return objects.new_value_instance(len(obj.attrs))
@@ -120,7 +122,7 @@ def _count(state, obj: ast.Expr, table_func, name):
 
     return objects.Instance.make(code, T.int, [obj])
 
-def pql_count(state: State, obj: ast.Expr):
+def pql_count(state: State, obj: ast.Expr = objects.null):
     "Count how many rows are in the given table, or in the projected column."
     return _count(state, obj, sql.CountTable, 'count')
 

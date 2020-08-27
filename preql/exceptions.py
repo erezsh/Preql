@@ -34,7 +34,8 @@ class PreqlError(Object, Exception):
         yield True, '[bold]Exception traceback:[/bold]'
         for ref in self.text_refs:
             yield from ref.get_pinpoint_text(rich=True) if ref else ['???']
-        yield True, '[red]%s[/red]: %s' % (self.exc_name, self.message)
+        # yield True, '[red]%s[/red]: %s' % (self.exc_name, self.message)
+        yield False, '%s: %s' % (self.exc_name, self.message)
 
     @classmethod
     def make(cls, state, ast, *args):
