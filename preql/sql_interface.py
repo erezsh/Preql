@@ -56,14 +56,7 @@ class SqlInterface:
     def _compile_sql(self, sql, subqueries=None, qargs=(), state=None):
         qb = QueryBuilder(self.target)
 
-        if subqueries:
-            subqs = [q.compile_wrap(qb).finalize(state, qb) for (name, q) in subqueries.items()]
-            sql_code = 'WITH RECURSIVE ' + ',\n     '.join(subqs) + '\n'
-        else:
-            sql_code = ''
-        compiled = sql.compile_wrap(qb)
-        sql_code += compiled.finalize(state, qb)
-        return sql_code
+        return sql.finalize_with_subqueries(qb, subqueries)
 
     def ping(self):
         c = self._conn.cursor()

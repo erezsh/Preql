@@ -674,7 +674,7 @@ class BasicTests(PreqlTests):
         res = preql(""" temptable(temptable(Person, true)[name=="Erez Shinan"], true){name} """) # 2 temp tables
         assert is_eq(res, [("Erez Shinan",)])
 
-    @uses_tables("A", "B")
+    @uses_tables("A", "B", "Person", "Country")
     def test_copy_rows(self):
         preql = self.Preql()
         preql('''
