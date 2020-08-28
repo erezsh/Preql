@@ -243,6 +243,12 @@ class Throw(Statement):
     value: Object
 
 @dataclass
+class Import(Statement):
+    module_path: str
+    as_name: Optional[str] = None
+    use_core: bool = True
+
+@dataclass
 class CodeBlock(Statement):
     statements: List[Ast]
 
@@ -282,4 +288,5 @@ class Table_Columns(Expr):
 @dataclass
 class Dict_(Expr):
     elems: dict
+
 

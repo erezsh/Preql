@@ -9,6 +9,7 @@ stmts: _NL? stmt+   -> as_list
      | if_stmt
      | for_stmt
      | return_stmt
+     | import_stmt
      | throw
      | try_catch
      | expr _NL
@@ -54,6 +55,7 @@ if_stmt: "if" "(" expr ")" codeblock (_NL | _NL? "else" codeblock _NL)
 for_stmt: "for" "(" name "in" expr ")" codeblock _NL
 codeblock: "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
+import_stmt: "import" NAME _NL
 throw: "throw" expr _NL
 print: "print" expr _NL
 assert_: "assert" expr _NL

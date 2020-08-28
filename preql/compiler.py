@@ -736,7 +736,7 @@ class AutocompleteSuggestions(Exception):
     pass
 @dy
 def compile_to_inst(state: State, marker: ast.Marker):
-    ns = state.ns.get_all_vars()
+    ns = state.get_all_vars()
     raise AutocompleteSuggestions(ns)
 
 @dy

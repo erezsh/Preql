@@ -167,3 +167,7 @@ def restructure_result(target, t: T.datetime, i):
 
 def join_names(names):
     return "_".join(names)
+
+
+
+exc.PreqlError.type = T.Exception

@@ -16,16 +16,17 @@
 
 from typing import List, Optional
 import logging
+from pathlib import Path
 
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func
-from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, PreqlError, pql_SyntaxError
+from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, PreqlError, pql_SyntaxError, pql_ImportError
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from . import settings
-from .parser import Str
+from .parser import Str, parse_stmts
 
 from .interp_common import State, dy, new_value_instance
 from .compiler import compile_to_inst, cast_to_instance
@@ -244,6 +245,39 @@ def _execute(state: State, t: ast.Try):
             execute(state, t.catch_block)
         else:
             raise
+
+def import_module(state, r):
+    paths = [Path(__file__).parent, Path.cwd()]
+    for path in paths:
+        module_path =  (path / r.module_path).with_suffix(".pql")
+        if module_path.exists():
+            with open(module_path, encoding='utf8') as f:
+                text = f.read()
+                break
+    else:
+        raise pql_ImportError.make(state, r, "Cannot find module")
+
+    from .interpreter import Interpreter
+    i = Interpreter(state.db, state.fmt, use_core=r.use_core)
+    i.state.stacktrace = state.stacktrace   # XXX proper interface
+
+    state.stacktrace.append(r.text_ref)
+    try:
+        i.include(module_path)
+    finally:
+        assert state.stacktrace[-1] is r.text_ref
+        state.stacktrace.pop()
+
+    ns = i.state.ns.ns
+    assert len(ns) == 1
+    return objects.Module(r.module_path, i.state.ns.ns[0])
+
+
+@dy
+def _execute(state: State, r: ast.Import):
+    module = import_module(state, r)
+    state.set_var(r.as_name or r.module_path, module)
+    return module
 
 @dy
 def _execute(state: State, r: ast.Return):

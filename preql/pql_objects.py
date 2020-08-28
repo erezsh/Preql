@@ -39,6 +39,20 @@ class ParamDict(Object):
     def type(self):
         return tuple((n,p.type) for n,p in self.params.items())
 
+@dataclass
+class Module(Object):
+    name: str
+    namespace: dict
+
+    def get_attr(self, attr):
+        try:
+            return self.namespace[attr]
+        except KeyError:
+            raise pql_AttributeError([], f"No such attribute: {attr}")
+
+    @property
+    def type(self):
+        return T.module
 
 class Function(Object):
 

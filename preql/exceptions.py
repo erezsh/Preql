@@ -61,6 +61,9 @@ class PreqlError_Message(PreqlError):
 class pql_TypeError(PreqlError_Message):
     pass
 
+class pql_ImportError(PreqlError_Message):
+    pass
+
 class pql_AttributeError(PreqlError_Message):
     pass
 

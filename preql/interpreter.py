@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 from . import exceptions as exc
-from .evaluate import State, execute, eval_func_call
+from .evaluate import State, execute, eval_func_call, import_module
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -20,21 +20,26 @@ def initial_namespace():
     # TODO all exceptions
     ns['TypeError'] = exc.pql_TypeError
     ns['ValueError'] = exc.pql_ValueError
-    return [dict(ns)]
+    name = '__builtins__'
+    module = objects.Module(name, dict(ns))
+    return [{name: module}]
+
+
 
 class Interpreter:
-    def __init__(self, sqlengine, fmt='text'):
+    def __init__(self, sqlengine, fmt='text', use_core=True):
         self.state = State(self, sqlengine, fmt, initial_namespace())
-        self.include('core.pql', __file__) # TODO use an import mechanism instead
+        if use_core:
+            # self.include('core.pql', __file__) # TODO use an import mechanism instead
+            mns = import_module(self.state, ast.Import(None, 'core', use_core=False)).namespace
+            bns = self.state.get_var('__builtins__').namespace
+            # safe-update
+            for k,v in mns.items():
+                assert k not in bns
+                bns[k] = v
 
     def call_func(self, fname, args):
         return eval_func_call(self.state, self.state.get_var(fname), args)
-
-    # def eval_expr(self, code, args):
-    #     expr_ast = parse_expr(code)
-    #     with self.state.use_scope(args):
-    #         obj = evaluate(self.state, expr_ast)
-    #     return obj
 
     def execute_code(self, code, source_file, args=None):
         assert not args, "Not implemented yet: %s" % args

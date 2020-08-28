@@ -157,6 +157,10 @@ def progressive_test(state, s, test_partial=False):
             names = autocomplete(state, ps)
             total += 1
             if i in d:
+                # if d[i] not in names:
+                #     breakpoint()
+                #     names = autocomplete(state, ps)
+
                 assert d[i] in names, (i, d[i])
 
     duration = time.time() - start

@@ -190,6 +190,7 @@ T.t_id = [T.number], (T.table,)
 T.t_relation = [T.number], (T.table,)   # t_id?
 
 T.function = [T.object]
+T.module = [T.object]
 
 T.signal = [T.object]
 #-----------

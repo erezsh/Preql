@@ -120,9 +120,14 @@ def autocomplete_tree(puppet):
 class AcState(State):
     def get_var(self, name):
         try:
-            return self.ns.get_var(self, name)
+            return super().get_var(name)
         except pql_NameNotFound:
             return objects.UnknownInstance()
+
+    def get_all_vars(self):
+        all_vars = dict(self.ns.get_var(self, '__builtins__').namespace)
+        all_vars.update( self.ns.get_all_vars() )
+        return all_vars
 
     def replace(self, **kw):
         assert False
@@ -158,4 +163,4 @@ def autocomplete(state, code, source='<autocomplete>'):
     else:
         _eval_autocomplete(ac_state, stmts)
 
-    return ac_state.ns.get_all_vars()
+    return ac_state.get_all_vars()

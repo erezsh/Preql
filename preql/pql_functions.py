@@ -420,9 +420,12 @@ def pql_names(state: State, obj: Object = objects.null):
     # TODO support all objects
     if obj is not objects.null:
         inst = evaluate(state, obj)
-        if not (inst.type <= T.collection): # XXX temp.
-            raise pql_TypeError.make(state, obj, "Argument to names() must be a table")
-        all_vars = (inst.all_attrs())
+        if inst.type <= T.module:
+            all_vars = inst.namespace
+        elif inst.type <= T.collection:
+            all_vars = (inst.all_attrs())
+        else:
+            raise pql_TypeError.make(state, obj, "Argument to names() must be a table or module")
     else:
         all_vars = (state.ns.get_all_vars())
 

@@ -212,6 +212,7 @@ class TreeToAst(Transformer):
     print = ast.Print
     assert_ = ast.Assert
     return_stmt = ast.Return
+    import_stmt = ast.Import
     throw = ast.Throw
     if_stmt = ast.If
     for_stmt = ast.For

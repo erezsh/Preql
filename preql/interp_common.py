@@ -6,7 +6,7 @@ import dsnparse
 
 from runtype import Dispatch
 
-from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, pql_NotImplementedError, pql_DatabaseConnectError, pql_ValueError
+from .exceptions import pql_AttributeError, pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, pql_NotImplementedError, pql_DatabaseConnectError, pql_ValueError
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -94,8 +94,25 @@ class State:
         self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
 
 
+    def get_all_vars(self):
+        return self.ns.get_all_vars()
+
     def get_var(self, name):
-        return self.ns.get_var(self, name)
+        try:
+            return self.ns.get_var(self, name)
+        except pql_NameNotFound as e:
+            try:
+                core = self.ns.get_var(self, '__builtins__')
+            except pql_NameNotFound:
+                raise e
+
+            try:
+                return core.get_attr(name)
+            except pql_AttributeError:
+                raise e
+
+            assert False
+
     def set_var(self, name, value):
         return self.ns.set_var(name, value)
     def use_scope(self, scope: dict):
