@@ -1,3 +1,4 @@
+from preql.pql_objects import vectorized
 from preql.sql import mysql
 import re
 import operator
@@ -12,7 +13,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Object, Type
+from .pql_types import T, Object, Type, dp_type
 from .types_impl import join_names, dp_inst, flatten_type
 from .casts import _cast
 
@@ -110,7 +111,8 @@ def compile_to_inst(state: State, proj: ast.Projection):
     if table is objects.EmptyList:
         return table   # Empty list projection is always an empty list.
 
-    if not (table.type <= T.union[T.collection, T.struct]):
+    t = T.union[T.collection, T.struct]
+    if not (table.type <= T.union[t, T.vectorized[t]]):
         raise pql_TypeError.make(state, proj, f"Cannot project objects of type {table.type}")
 
     fields = _expand_ellipsis(state, table, proj.fields)
@@ -122,11 +124,13 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     attrs = table.all_attrs()
 
-    with state.use_scope(attrs):
+    # with state.use_scope(attrs):
+    with state.use_scope({n:objects.vectorized(c) for n,c in attrs.items()}):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        if not (f.type <= T.union[T.primitive, T.struct, T.null, T.unknown]):
+        t = T.union[T.primitive, T.struct, T.null, T.unknown]
+        if not (f.type <= T.union[t, T.vectorized[t]]):
             raise exc.pql_TypeError.make(state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
@@ -152,7 +156,11 @@ def compile_to_inst(state: State, proj: ast.Projection):
         while name in elems:
             name = name_ + str(i)
             i += 1
-        elems[name] = inst.type
+        t = inst.type
+        # Devectorize
+        if t <= T.vectorized:
+            t = t.elem
+        elems[name] = t
 
     # TODO inherit primary key? indexes?
     new_table_type = T.table(elems, temporary=True)
@@ -215,17 +223,43 @@ def compile_to_inst(state: State, lst: list):
     return [evaluate(state, e) for e in lst]
 
 
+# @dp_inst
+# def _like(state, a: T.any, b: T.any):
+#     raise pql_TypeError.make(state, "~", f"Operator '{~}' not implemented for {a.type} and {b.type}")
+
+# @dp_inst
+# def _like(state, s: T.string, p: T.string):
+#     code = sql.Like(s.code, p.code)
+#     return objects.Instance.make(code, T.bool, [s, p])
+
+# @dp_inst
+# def _like(state, a: T.vectorized, b: T.string):
+#     res = _like(state, objects.unvectorized(a), b)
+#     return objects.vectorized(res)
+# @dp_inst
+# def _like(arith, a: T.vectorized, b: T.vectorized):
+#     res = _like(state, objects.unvectorized(a), objects.unvectorized(b))
+#     return objects.vectorized(res)
+# @dp_inst
+# def _like(state, a: T.string, b: T.vectorized):
+#     res = _like(state, a, objects.unvectorized(b))
+#     return objects.vectorized(res)
+
+
+
 @dy
 def compile_to_inst(state: State, like: ast.Like):
     s = cast_to_instance(state, like.str)
     p = cast_to_instance(state, like.pattern)
-    if s.type != T.string:
-        raise pql_TypeError.make(state, like.str, f"Like (~) operator expects two strings")
-    if p.type != T.string:
-        raise pql_TypeError.make(state, like.pattern, f"Like (~) operator expects two strings")
 
-    code = sql.Like(s.code, p.code)
-    return objects.Instance.make(code, T.bool, [s, p])
+    return _compile_arith(state, like, s, p)
+    # if s.type != T.string:
+    #     raise pql_TypeError.make(state, like.str, f"Like (~) operator expects two strings")
+    # if p.type != T.string:
+        # raise pql_TypeError.make(state, like.pattern, f"Like (~) operator expects two strings")
+
+    # code = sql.Like(s.code, p.code)
+    # return objects.Instance.make(code, T.bool, [s, p])
 
 
 
@@ -237,6 +271,11 @@ def _contains(state, op, a: T.string, b: T.string):
         '!in': 'str_notcontains',
     }[op]
     return call_pql_func(state, f, [a, b])
+
+@dp_inst
+def _contains(state, op, a: T.vectorized[T.primitive], b: T.collection):
+    res = _contains(state, op, objects.unvectorized(a), b)
+    return objects.vectorized(res)
 
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.collection):
@@ -313,18 +352,27 @@ def _compare(state, op, a: T.primitive, b: T.primitive):
     return objects.Instance.make(code, T.bool, [a, b])
 
 @dp_inst
-def _compare(state, arith, a: T.aggregate, b: T.aggregate):
-    res = _compare(state, arith, a.elem, b.elem)
+def _compare(state, ast_node, a: T.aggregate, b: T.aggregate):
+    res = _compare(state, ast_node, a.elem, b.elem)
     return objects.aggregate(res)
 
 @dp_inst
-def _compare(state, arith, a: T.aggregate, b: T.int):
-    res = _compare(state, arith, a.elem, b)
+def _compare(state, ast_node, a: T.aggregate, b: T.int):
+    res = _compare(state, ast_node, a.elem, b)
     return objects.aggregate(res)
 
 @dp_inst
-def _compare(state, arith, a: T.int, b: T.aggregate):
-    return _compare(state, arith, b, a)
+def _compare(state, ast_node, a: T.vectorized, b: T.primitive):
+    res = _compare(state, ast_node, objects.unvectorized(a), b)
+    return objects.vectorized(res)
+@dp_inst
+def _compare(state, ast_node, a: T.vectorized, b: T.vectorized):
+    res = _compare(state, ast_node, objects.unvectorized(a), objects.unvectorized(b))
+    return objects.vectorized(res)
+
+@dp_inst
+def _compare(state, ast_node, a: T.int, b: T.aggregate):
+    return _compare(state, ast_node, b, a)
 
 @dp_inst
 def _compare(state, op, a: T.type, b: T.type):
@@ -333,6 +381,10 @@ def _compare(state, op, a: T.type, b: T.type):
 @dp_inst
 def _compare(state, op, a: T.number, b: T.row):
     return _compare(state, op, a, b.primary_key())
+@dp_inst
+def _compare(state, ast_node, a: T.vectorized[T.number], b: T.row):
+    res = _compare(state, ast_node, objects.unvectorized(a), b)
+    return objects.vectorized(res)
 
 @dp_inst
 def _compare(state, op, a: T.row, b: T.number):
@@ -388,10 +440,23 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
     try:
         op = ops[arith.op]
     except KeyError:
-        raise pql_TypeError.make(state, arith.op, f"Operation '{arith.op}' not supported for tables")
+        raise pql_TypeError.make(state, arith.op, f"Operation '{arith.op}' not supported for tables ({a.type}, {b.type})")
 
     return state.get_var(op).func(state, a, b)
 
+
+@dp_inst
+def _compile_arith(state, arith, a: T.vectorized, b: T.primitive):
+    res = _compile_arith(state, arith, objects.unvectorized(a), b)
+    return objects.vectorized(res)
+@dp_inst
+def _compile_arith(state, arith, a: T.primitive, b: T.vectorized):
+    res = _compile_arith(state, arith, a, objects.unvectorized(b))
+    return objects.vectorized(res)
+@dp_inst
+def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
+    res = _compile_arith(state, arith, objects.unvectorized(a), objects.unvectorized(b))
+    return objects.vectorized(res)
 
 @dp_inst
 def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
@@ -419,8 +484,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
     else:
         res_type = T.int
 
-    if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
-            # Local folding for better performance (optional, for better performance)
+    try:
         f = {
             '+': operator.add,
             '-': operator.sub,
@@ -428,6 +492,13 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
             '/': operator.truediv,
             '/~': operator.floordiv,
         }[arith.op]
+    except KeyError:
+        raise pql_TypeError.make(state, arith, f"Operator {arith.op} not supported between types '{a.type}' and '{b.type}'")
+
+    if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
+        # Local folding for better performance.
+        # However, acts a little different than SQL. For example, in this branch 1/0 raises ValueError,
+        # while SQL returns NULL
         try:
             value = f(a.local_value, b.local_value)
         except ZeroDivisionError as e:
@@ -439,6 +510,10 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
 
 @dp_inst
 def _compile_arith(state, arith, a: T.string, b: T.string):
+    if arith.op == '~':
+        code = sql.Like(a.code, b.code)
+        return objects.Instance.make(code, T.bool, [a, b])
+
     if arith.op != '+':
         raise exc.pql_TypeError.make(state, arith.op, f"Operator '{arith.op}' not supported for strings.")
 
@@ -657,14 +732,15 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     assert_type(table.type, T.collection, state, sel, "Selection")
 
-    with state.use_scope(table.all_attrs()):
+    # with state.use_scope(table.all_attrs()):
+    with state.use_scope({n:objects.vectorized(c) for n,c in table.all_attrs().items()}):
         conds = cast_to_instance(state, sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):
         code = sql.unknown
     else:
         for i, c in enumerate(conds):
-            if not (c.type <= T.bool):
+            if not (c.type <= T.union[T.bool, T.vectorized[T.bool]]):
                 raise exc.pql_TypeError.make(state, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
         code = sql.table_selection(table, [c.code for c in conds])

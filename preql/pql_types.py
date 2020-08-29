@@ -189,6 +189,8 @@ T.aggregate = [T.collection], (T.any,)
 T.t_id = [T.number], (T.table,)
 T.t_relation = [T.number], (T.table,)   # t_id?
 
+T.vectorized = [T.container], (T.any,)  # sequence or collection?
+
 T.function = [T.object]
 T.module = [T.object]
 

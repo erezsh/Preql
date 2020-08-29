@@ -392,7 +392,7 @@ class StructInstance(AbsStructInstance):
     attrs: Dict[str, Object]
 
     def __post_init__(self):
-        assert self.type <= T.struct
+        assert self.type <= T.union[T.struct, T.vectorized[T.struct]]
 
     @property
     def subqueries(self):
@@ -456,6 +456,10 @@ class UnknownInstance(AbsInstance):
     def flatten_code(self):
         return [self.code]
 
+    def replace(self, **kw):
+        # XXX Is this right?
+        return self
+
 
 unknown = UnknownInstance()
 
@@ -498,6 +502,17 @@ def aggregate(inst):
         return AggregateInstance(T.aggregate[inst.type], inst)
 
     return inst
+
+def vectorized(inst):
+    if not isinstance(inst, AbsInstance):
+        return inst
+    if inst.type <= T.vectorized:
+        return inst
+    return inst.replace(type=T.vectorized[inst.type])
+
+def unvectorized(inst):
+    assert inst.type <= T.vectorized
+    return inst.replace(type=inst.type.elem)
 
 
 null = ValueInstance.make(sql.null, T.null, [], None)

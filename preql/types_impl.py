@@ -144,6 +144,10 @@ def restructure_result(target, t: T.struct, i):
 def restructure_result(target, t: T.union[T.primitive, T.null], i):
     return next(i)
 
+@dp_type
+def restructure_result(target, t: T.vectorized[T.union[T.primitive, T.null]], i):
+    return next(i)
+
 
 @dp_type
 def restructure_result(target, t: T.list[T.primitive, T.null], i):

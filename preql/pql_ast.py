@@ -109,6 +109,8 @@ class Like(Expr):
     str: Expr
     pattern: Expr
 
+    op = "~"
+
 @dataclass
 class NamedField(Expr):
     name: Optional[str]
