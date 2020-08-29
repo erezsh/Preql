@@ -14,6 +14,7 @@
 #         execute remote queries
 #         simplify (compute) into the final result
 
+from preql.pql_objects import Instance, make_instance
 from typing import List, Optional
 import logging
 from pathlib import Path
@@ -220,9 +221,11 @@ def _execute(state: State, cb: ast.CodeBlock):
         execute(state, stmt)
     return objects.null
 
+
 @dy
 def _execute(state: State, i: ast.If):
     cond = cast_to_python(state, i.cond)
+
     if cond:
         execute(state, i.then)
     elif i.else_:
@@ -312,7 +315,15 @@ def simplify(state: State, cb: ast.CodeBlock):
     # if len(cb.statements) == 1:
     #     s ,= cb.statements
     #     return simplify(state, s)
-    return _execute(state, cb)
+    try:
+        return _execute(state, cb)
+    except ReturnSignal as r:
+        # XXX is this correct?
+        return r.value
+    except pql_TypeError as e:
+        # Failed to run it, so try to cast as instance
+        # XXX order should be other way around!
+        return compile_to_inst(state, cb)
 
 @dy
 def simplify(state: State, n: ast.Name):
@@ -857,12 +868,14 @@ def new_table_from_rows(state, name, columns, rows):
 @dy
 def cast_to_python(state, obj: ast.Ast):
     inst = cast_to_instance(state, obj)
-    return localize(state, inst)
+    return cast_to_python(state, inst)
 
 @dy
 def cast_to_python(state, obj: objects.AbsInstance):
+    if obj.type <= T.vectorized:
+        raise pql_TypeError.make(state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
     res = localize(state, obj)
-    assert isinstance(res, (int, str, float, list, type(None)))
+    assert isinstance(res, (int, str, float, dict, list, type(None))), res
     return res
 
 @dy

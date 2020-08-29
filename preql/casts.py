@@ -71,6 +71,11 @@ def _cast(state, inst_type: T.primitive, target_type: T.string, inst):
     return objects.Instance.make(code, T.string, [inst])
 
 @dp_type
+def _cast(state, inst_type: T.vectorized, target_type: T.string, inst):
+    x = objects.unvectorized(inst)
+    return _cast(state, x.type, target_type, x)
+
+@dp_type
 def _cast(state, inst_type: T.t_relation, target_type: T.t_id, inst):
     # TODO verify same table? same type?
     return inst.replace(type=target_type)

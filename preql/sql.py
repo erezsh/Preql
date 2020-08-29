@@ -256,6 +256,24 @@ class Cast(SqlTree):
 
 
 @dataclass
+class Case(SqlTree):
+    "SQL conditional"
+    cond: Sql
+    then: Sql
+    else_: Optional[Sql]
+
+    type = T.bool
+
+    def _compile(self, qb):
+        cond = self.cond.compile_wrap(qb).code
+        then = self.then.compile_wrap(qb).code
+        code = ["CASE WHEN "] + cond +[" THEN "] + then
+        if self.else_:
+            code += [ " ELSE " ] + self.else_.compile_wrap(qb).code
+        return code + [" END "]
+
+
+@dataclass
 class MakeArray(SqlTree):
     type: Type
     field: Sql

@@ -5,7 +5,7 @@ import operator
 from copy import copy
 
 from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
-from .exceptions import pql_NotImplementedError, pql_TypeError, pql_SyntaxError, pql_ValueError
+from .exceptions import ReturnSignal, pql_CompileError, pql_NotImplementedError, pql_TypeError, pql_SyntaxError, pql_ValueError
 from . import exceptions as exc
 
 from . import settings
@@ -28,8 +28,12 @@ def cast_to_instance(state, x: list):
 
 @dy
 def cast_to_instance(state, x):
-    x = simplify(state, x)  # just compile Name?
-    inst = compile_to_inst(state, x)
+    try:
+        x = simplify(state, x)  # just compile Name?
+        inst = compile_to_inst(state, x)
+    except exc.ReturnSignal:
+        raise pql_CompileError.make(state, None, f"Bad compilation of {x}")
+
     if isinstance(inst, ast.ResolveParametersString):
         raise exc.InsufficientAccessLevel(inst)
 
@@ -102,6 +106,22 @@ def compile_to_inst(state: State, x):
 @dy
 def compile_to_inst(state: State, node: ast.Ast):
     return node
+
+
+@dy
+def compile_to_inst(state: State, cb: ast.CodeBlock):
+    if len(cb.statements) == 1:
+        return compile_to_inst(state, cb.statements[0])
+
+    # TODO some statements can be evaluated at compile time
+    raise pql_CompileError.make(state, cb, "Cannot compile this code block")
+@dy
+def compile_to_inst(state: State, i: ast.If):
+    cond = cast_to_instance(state, i.cond)
+    then = cast_to_instance(state, i.then)
+    else_ = cast_to_instance(state, i.else_)
+    code = sql.Case(cond.code, then.code, else_.code)
+    return objects.make_instance(code, T.bool, [cond, then, else_])
 
 
 @dy
