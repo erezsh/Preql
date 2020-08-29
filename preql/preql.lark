@@ -51,9 +51,9 @@ typemod: PK | NULLABLE
 
 func_def: "func" name func_params ("=" expr _NL | codeblock _NL)
 try_catch: "try" codeblock _NL? "catch" "(" expr ")" codeblock _NL
-if_stmt: "if" "(" expr ")" codeblock (_NL | _NL? "else" codeblock _NL)
+if_stmt: "if" "(" expr ")" codeblock (_NL? "else" (codeblock _NL|if_stmt) | _NL)
 for_stmt: "for" "(" name "in" expr ")" codeblock _NL
-codeblock: "{" _NL? stmt* "}"
+codeblock: _NL? "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
 import_stmt: "import" NAME _NL
 throw: "throw" expr _NL

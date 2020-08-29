@@ -262,7 +262,7 @@ class Try(Statement):
 class If(Statement):
     cond: Object
     then: Statement
-    else_: Optional[CodeBlock] = None
+    else_: Optional[Statement] = None
 
 @dataclass
 class For(Statement):
