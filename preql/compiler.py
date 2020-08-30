@@ -1,11 +1,9 @@
-from preql.pql_objects import vectorized
-from preql.sql import mysql
 import re
 import operator
 from copy import copy
 
 from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
-from .exceptions import ReturnSignal, pql_CompileError, pql_NotImplementedError, pql_TypeError, pql_SyntaxError, pql_ValueError
+from .exceptions import pql_TypeError
 from . import exceptions as exc
 
 from . import settings
@@ -13,9 +11,10 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Object, Type, dp_type
-from .types_impl import join_names, dp_inst, flatten_type
+from .pql_types import T, Object, Type
+from .types_impl import dp_inst, flatten_type
 from .casts import _cast
+from .pql_objects import vectorized, unvectorized, make_instance, new_value_instance
 
 @dataclass
 class Table(Object):
@@ -32,7 +31,7 @@ def cast_to_instance(state, x):
         x = simplify(state, x)  # just compile Name?
         inst = compile_to_inst(state, x)
     except exc.ReturnSignal:
-        raise pql_CompileError.make(state, None, f"Bad compilation of {x}")
+        raise exc.pql_CompileError.make(state, None, f"Bad compilation of {x}")
 
     if isinstance(inst, ast.ResolveParametersString):
         raise exc.InsufficientAccessLevel(inst)
@@ -59,7 +58,7 @@ def _process_fields(state: State, fields):
         if v.type <= T.aggregate:
             v = v.primary_key()
             t = T.list[v.type]
-            v = objects.make_instance(sql.MakeArray(t, v.code), t, [v])
+            v = make_instance(sql.MakeArray(t, v.code), t, [v])
 
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
@@ -76,7 +75,7 @@ def _expand_ellipsis(state, table, fields):
 
         if isinstance(f.value, ast.Ellipsis):
             if f.name:
-                raise pql_SyntaxError.make(state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
+                raise exc.pql_SyntaxError.make(state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
                 elems = table.type.elem_dict
                 for n in f.value.exclude:
@@ -114,14 +113,14 @@ def compile_to_inst(state: State, cb: ast.CodeBlock):
         return compile_to_inst(state, cb.statements[0])
 
     # TODO some statements can be evaluated at compile time
-    raise pql_CompileError.make(state, cb, "Cannot compile this code block")
+    raise exc.pql_CompileError.make(state, cb, "Cannot compile this code block")
 @dy
 def compile_to_inst(state: State, i: ast.If):
     cond = cast_to_instance(state, i.cond)
     then = cast_to_instance(state, i.then)
     else_ = cast_to_instance(state, i.else_)
     code = sql.Case(cond.code, then.code, else_.code)
-    return objects.make_instance(code, T.bool, [cond, then, else_])
+    return make_instance(code, T.bool, [cond, then, else_])
 
 
 @dy
@@ -145,7 +144,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     attrs = table.all_attrs()
 
     # with state.use_scope(attrs):
-    with state.use_scope({n:objects.vectorized(c) for n,c in attrs.items()}):
+    with state.use_scope({n:vectorized(c) for n,c in attrs.items()}):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
@@ -243,44 +242,13 @@ def compile_to_inst(state: State, lst: list):
     return [evaluate(state, e) for e in lst]
 
 
-# @dp_inst
-# def _like(state, a: T.any, b: T.any):
-#     raise pql_TypeError.make(state, "~", f"Operator '{~}' not implemented for {a.type} and {b.type}")
-
-# @dp_inst
-# def _like(state, s: T.string, p: T.string):
-#     code = sql.Like(s.code, p.code)
-#     return objects.Instance.make(code, T.bool, [s, p])
-
-# @dp_inst
-# def _like(state, a: T.vectorized, b: T.string):
-#     res = _like(state, objects.unvectorized(a), b)
-#     return objects.vectorized(res)
-# @dp_inst
-# def _like(arith, a: T.vectorized, b: T.vectorized):
-#     res = _like(state, objects.unvectorized(a), objects.unvectorized(b))
-#     return objects.vectorized(res)
-# @dp_inst
-# def _like(state, a: T.string, b: T.vectorized):
-#     res = _like(state, a, objects.unvectorized(b))
-#     return objects.vectorized(res)
-
-
-
 @dy
 def compile_to_inst(state: State, like: ast.Like):
+    # XXX move to ast.Arith ?
     s = cast_to_instance(state, like.str)
     p = cast_to_instance(state, like.pattern)
 
     return _compile_arith(state, like, s, p)
-    # if s.type != T.string:
-    #     raise pql_TypeError.make(state, like.str, f"Like (~) operator expects two strings")
-    # if p.type != T.string:
-        # raise pql_TypeError.make(state, like.pattern, f"Like (~) operator expects two strings")
-
-    # code = sql.Like(s.code, p.code)
-    # return objects.Instance.make(code, T.bool, [s, p])
-
 
 
 ## Contains
@@ -293,9 +261,9 @@ def _contains(state, op, a: T.string, b: T.string):
     return call_pql_func(state, f, [a, b])
 
 @dp_inst
-def _contains(state, op, a: T.vectorized[T.primitive], b: T.collection):
-    res = _contains(state, op, objects.unvectorized(a), b)
-    return objects.vectorized(res)
+def _contains(state, op, a: T.vectorized, b: T.collection):
+    res = _contains(state, op, unvectorized(a), b)
+    return vectorized(res)
 
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.collection):
@@ -321,12 +289,12 @@ def _compare(state, op, a: T.any, b: T.any):
 
 @dp_inst
 def _compare(state, op, a: T.null, b: T.null):
-    return objects.new_value_instance(op == '=')
+    return new_value_instance(op == '=')
 
 @dp_inst
 def _compare(state, op, a: T.type, b: T.null):
     assert not a.type.nullable
-    return objects.new_value_instance(False)
+    return new_value_instance(False)
 @dp_inst
 def _compare(state, op, a: T.null, b: T.type):
     return _compare(state, op, b, a)
@@ -365,7 +333,7 @@ def _compare(state, op, a: T.primitive, b: T.primitive):
                     '>=': operator.ge,
                     '<=': operator.le,
                 }[op]
-                return objects.new_value_instance(f(a.local_value, b.local_value))
+                return new_value_instance(f(a.local_value, b.local_value))
 
     # TODO regular equality for primitives? (not 'is')
     code = sql.Compare(op, [a.code, b.code])
@@ -383,12 +351,12 @@ def _compare(state, ast_node, a: T.aggregate, b: T.int):
 
 @dp_inst
 def _compare(state, ast_node, a: T.vectorized, b: T.primitive):
-    res = _compare(state, ast_node, objects.unvectorized(a), b)
-    return objects.vectorized(res)
+    res = _compare(state, ast_node, unvectorized(a), b)
+    return vectorized(res)
 @dp_inst
 def _compare(state, ast_node, a: T.vectorized, b: T.vectorized):
-    res = _compare(state, ast_node, objects.unvectorized(a), objects.unvectorized(b))
-    return objects.vectorized(res)
+    res = _compare(state, ast_node, unvectorized(a), unvectorized(b))
+    return vectorized(res)
 
 @dp_inst
 def _compare(state, ast_node, a: T.int, b: T.aggregate):
@@ -396,15 +364,15 @@ def _compare(state, ast_node, a: T.int, b: T.aggregate):
 
 @dp_inst
 def _compare(state, op, a: T.type, b: T.type):
-    return objects.new_value_instance(a == b)
+    return new_value_instance(a == b)
 
 @dp_inst
 def _compare(state, op, a: T.number, b: T.row):
     return _compare(state, op, a, b.primary_key())
 @dp_inst
 def _compare(state, ast_node, a: T.vectorized[T.number], b: T.row):
-    res = _compare(state, ast_node, objects.unvectorized(a), b)
-    return objects.vectorized(res)
+    res = _compare(state, ast_node, unvectorized(a), b)
+    return vectorized(res)
 
 @dp_inst
 def _compare(state, op, a: T.row, b: T.number):
@@ -434,7 +402,7 @@ def compile_to_inst(state: State, neg: ast.Neg):
     expr = cast_to_instance(state, neg.expr)
     assert_type(expr.type, T.number, state, neg, "Negation")
 
-    return objects.Instance.make(sql.Neg(expr.code), expr.type, [expr])
+    return make_instance(sql.Neg(expr.code), expr.type, [expr])
 
 
 @dy
@@ -467,16 +435,16 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
 
 @dp_inst
 def _compile_arith(state, arith, a: T.vectorized, b: T.primitive):
-    res = _compile_arith(state, arith, objects.unvectorized(a), b)
-    return objects.vectorized(res)
+    res = _compile_arith(state, arith, unvectorized(a), b)
+    return vectorized(res)
 @dp_inst
 def _compile_arith(state, arith, a: T.primitive, b: T.vectorized):
-    res = _compile_arith(state, arith, a, objects.unvectorized(b))
-    return objects.vectorized(res)
+    res = _compile_arith(state, arith, a, unvectorized(b))
+    return vectorized(res)
 @dp_inst
 def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
-    res = _compile_arith(state, arith, objects.unvectorized(a), objects.unvectorized(b))
-    return objects.vectorized(res)
+    res = _compile_arith(state, arith, unvectorized(a), unvectorized(b))
+    return vectorized(res)
 
 @dp_inst
 def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
@@ -522,11 +490,11 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
         try:
             value = f(a.local_value, b.local_value)
         except ZeroDivisionError as e:
-            raise pql_ValueError.make(state, arith.args[-1], str(e))
+            raise exc.pql_ValueError.make(state, arith.args[-1], str(e))
         return new_value_instance(value, res_type)
 
     code = sql.arith(state.db.target, res_type, arith.op, [a.code, b.code])
-    return objects.make_instance(code, res_type, [a, b])
+    return make_instance(code, res_type, [a, b])
 
 @dp_inst
 def _compile_arith(state, arith, a: T.string, b: T.string):
@@ -542,13 +510,13 @@ def _compile_arith(state, arith, a: T.string, b: T.string):
         return new_value_instance(a.local_value + b.local_value, T.string)
 
     code = sql.arith(state.db.target, T.string, arith.op, [a.code, b.code])
-    return objects.make_instance(code, T.string, [a, b])
+    return make_instance(code, T.string, [a, b])
 
 
 
 @dy
 def compile_to_inst(state: State, x: ast.Ellipsis):
-    raise pql_SyntaxError.make(state, x, "Ellipsis not allowed here")
+    raise exc.pql_SyntaxError.make(state, x, "Ellipsis not allowed here")
 
 
 @dy
@@ -712,7 +680,7 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
         return inst
 
     code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
-    return objects.Instance.make(code, type_, instances)
+    return make_instance(code, type_, instances)
 
 @dy
 def compile_to_inst(state: State, s: ast.Slice):
@@ -740,7 +708,7 @@ def compile_to_inst(state: State, s: ast.Slice):
         stop_n = stop and cast_to_python(state, stop)
         code = sql.table_slice(obj, start_n, stop_n)
 
-    return objects.make_instance(code, obj.type, instances)
+    return make_instance(code, obj.type, instances)
 
 @dy
 def compile_to_inst(state: State, sel: ast.Selection):
@@ -753,7 +721,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     assert_type(table.type, T.collection, state, sel, "Selection")
 
     # with state.use_scope(table.all_attrs()):
-    with state.use_scope({n:objects.vectorized(c) for n,c in table.all_attrs().items()}):
+    with state.use_scope({n:vectorized(c) for n,c in table.all_attrs().items()}):
         conds = cast_to_instance(state, sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):
@@ -773,7 +741,7 @@ def compile_to_inst(state: State, param: ast.Parameter):
         if param.type <= T.struct:
             # TODO why can't I just make an instance?
             raise exc.InsufficientAccessLevel("Structs not supported yet")
-        return objects.make_instance(sql.Parameter(param.type, param.name), param.type, [])
+        return make_instance(sql.Parameter(param.type, param.name), param.type, [])
     else:
         return state.get_var(param.name)
 
@@ -842,8 +810,8 @@ def compile_to_inst(state: State, range: ast.Range):
         stop = cast_to_python(state, range.stop)
         stop_str = f" WHERE value+1<{stop}"
     else:
-        if state.db.target is mysql:
-            raise pql_NotImplementedError.make(state, range, "MySQL doesn't support infinite recursion!")
+        if state.db.target is sql.mysql:
+            raise exc.pql_NotImplementedError.make(state, range, "MySQL doesn't support infinite recursion!")
         stop_str = ''
 
     type_ = T.list[T.int]

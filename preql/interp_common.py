@@ -19,16 +19,16 @@ logger = getLogger('interp')
 
 # Define common dispatch functions
 @dy
-def simplify():
+def simplify(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError()
 
 @dy
-def evaluate(state: type(None), _any: type(None)):
+def evaluate(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError()
 
 @dy
-def cast_to_python(state: type(NotImplemented), obj):
-    raise NotImplementedError()
+def cast_to_python(state, obj: type(NotImplemented)) -> object:
+    raise NotImplementedError(obj)
 
 
 class AccessLevels:

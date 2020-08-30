@@ -877,8 +877,3 @@ def cast_to_python(state, obj: objects.AbsInstance):
     res = localize(state, obj)
     assert isinstance(res, (int, str, float, dict, list, type(None))), res
     return res
-
-@dy
-def cast_to_python(state, obj):
-    raise NotImplementedError(obj)
-
