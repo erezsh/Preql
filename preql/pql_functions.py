@@ -1,5 +1,4 @@
 import inspect
-from preql.sql import mysql
 import re
 import csv
 import inspect
@@ -200,7 +199,7 @@ def pql_intersect(state: State, t1: ast.Expr, t2: ast.Expr):
 
 def pql_subtract(state: State, t1: ast.Expr, t2: ast.Expr):
     "Substract two tables (except). Used for `t1 - t2`"
-    if state.db.target is mysql:
+    if state.db.target is sql.mysql:
         raise pql_NotImplementedError.make(state, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 

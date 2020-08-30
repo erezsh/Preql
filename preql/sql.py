@@ -83,12 +83,12 @@ class CompiledSQL(Sql):
     _needs_select: bool
 
     def finalize(self, qb):
-        self = self.wrap(qb)
+        wrapped = self.wrap(qb)
         assert qb.is_root
-        if self.type <= T.primitive:
-            code = ['SELECT '] + self.code
+        if wrapped.type <= T.primitive:
+            code = ['SELECT '] + wrapped.code
         else:
-            code = self.code
+            code = wrapped.code
         return ''.join(code)
 
     def wrap(self, qb):

@@ -14,7 +14,7 @@ from .interp_common import dy, State, assert_type, new_value_instance, evaluate,
 from .pql_types import T, Object, Type
 from .types_impl import dp_inst, flatten_type
 from .casts import _cast
-from .pql_objects import vectorized, unvectorized, make_instance, new_value_instance
+from .pql_objects import vectorized, unvectorized, make_instance
 
 @dataclass
 class Table(Object):

@@ -174,13 +174,16 @@ def create_engine(db_uri, print_sql):
     if len(dsn.paths) != 1:
         raise ValueError("Bad value for uri: %s" % db_uri)
     path ,= dsn.paths
-    if dsn.scheme == 'sqlite':
+    if len(dsn.schemes) > 1:
+        raise NotImplementedError("Preql doesn't support multiple schemes")
+    scheme ,= dsn.schemes
+    if scheme == 'sqlite':
         return SqliteInterface(path, print_sql=print_sql)
-    elif dsn.scheme == 'postgres':
+    elif scheme == 'postgres':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
-    elif dsn.scheme == 'mysql':
+    elif scheme == 'mysql':
         return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
-    elif dsn.scheme == 'gitqlite':
+    elif scheme == 'gitqlite':
         return GitqliteInterface(path, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
@@ -190,7 +193,7 @@ def create_engine(db_uri, print_sql):
 def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s, instead got '%s'"):
     assert isinstance(t, Type), t
     assert isinstance(type_, Type)
-    if not (t <= type_):
+    if not t <= type_:
         if type_.typename == 'union':
             type_str = ' or '.join("'%s'" % elem for elem in type_.elems)
         else:

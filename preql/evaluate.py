@@ -254,13 +254,13 @@ def import_module(state, r):
     for path in paths:
         module_path =  (path / r.module_path).with_suffix(".pql")
         if module_path.exists():
-            with open(module_path, encoding='utf8') as f:
-                text = f.read()
-                break
+            # with open(module_path, encoding='utf8') as f:
+            #     text = f.read()
+            break
     else:
         raise pql_ImportError.make(state, r, "Cannot find module")
 
-    from .interpreter import Interpreter
+    from .interpreter import Interpreter    # XXX state.new_interp() ?
     i = Interpreter(state.db, state.fmt, use_core=r.use_core)
     i.state.stacktrace = state.stacktrace   # XXX proper interface
 
