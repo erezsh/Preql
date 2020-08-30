@@ -1,6 +1,5 @@
 import re
 import operator
-from copy import copy
 
 from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
 from .exceptions import pql_TypeError

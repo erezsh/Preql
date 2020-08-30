@@ -14,7 +14,6 @@
 #         execute remote queries
 #         simplify (compute) into the final result
 
-from preql.pql_objects import Instance, make_instance
 from typing import List, Optional
 import logging
 from pathlib import Path
@@ -27,7 +26,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from . import settings
-from .parser import Str, parse_stmts
+from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
 from .compiler import compile_to_inst, cast_to_instance

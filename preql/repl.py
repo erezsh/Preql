@@ -25,7 +25,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from . import Preql
 from . import pql_objects as objects
 from .api import table_more
-from .exceptions import PreqlError, pql_ExitInterp, pql_SyntaxError
+from .exceptions import PreqlError, ExitInterp, pql_SyntaxError
 from .pql_types import Object
 from .parser import parse_stmts
 from .loggers import repl_log
@@ -186,7 +186,7 @@ def start_repl(p, prompt=' >> '):
                     repl_log.error(e)
                     # p.interp.set_var('_e', objects.ExceptionInstance(e))
                     continue
-                except pql_ExitInterp as e:
+                except ExitInterp as e:
                     return
                 except Exception as e:
                     repl_log.exception(e)

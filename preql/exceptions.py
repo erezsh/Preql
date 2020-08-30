@@ -97,7 +97,7 @@ class pql_AssertionError(PreqlError_Message):
 
 
 @dataclass
-class pql_ExitInterp(Exception):
+class ExitInterp(Exception):
     value: object
 
 @dataclass

@@ -7,7 +7,7 @@ from typing import Optional
 from tqdm import tqdm
 
 from .utils import safezip, listgen
-from .exceptions import pql_NotImplementedError, pql_TypeError, pql_JoinError, pql_ValueError, pql_ExitInterp, pql_AssertionError
+from .exceptions import pql_NotImplementedError, pql_TypeError, pql_JoinError, pql_ValueError, ExitInterp
 
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -469,7 +469,7 @@ def pql_exit(state, value: Object = None):
     If the current interpreter is nested within another Preql interpreter (e.g. by using debug()),
     exit() will return to the parent interpreter.
     """
-    raise pql_ExitInterp(value)
+    raise ExitInterp(value)
 
 
 

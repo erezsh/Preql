@@ -5,11 +5,10 @@ from .loggers import ac_log
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .utils import bfs
-from .parser import parse_stmts, TreeToAst
 from .interp_common import State, dy
 from .evaluate import evaluate, resolve
 from .compiler import AutocompleteSuggestions
-from . import sql
+from . import sql, parser
 
 
 @dy
@@ -125,7 +124,7 @@ class AcState(State):
             return objects.UnknownInstance()
 
     def get_all_vars(self):
-        all_vars = dict(self.ns.get_var(self, '__builtins__').namespace)
+        all_vars = dict(self.get_var('__builtins__').namespace)
         all_vars.update( self.ns.get_all_vars() )
         return all_vars
 
@@ -142,13 +141,13 @@ def _eval_autocomplete(ac_state, stmts):
 def autocomplete(state, code, source='<autocomplete>'):
     ac_state = AcState.clone(state)
     try:
-        stmts = parse_stmts(code, source, wrap_syntax_error=False)
+        stmts = parser.parse_stmts(code, source, wrap_syntax_error=False)
     except UnexpectedCharacters as e:
         return {}
     except UnexpectedToken as e:
         tree = autocomplete_tree(e.puppet)
         if tree:
-            stmts = TreeToAst(code_ref=(code, source)).transform(tree)
+            stmts = parser.TreeToAst(code_ref=(code, source)).transform(tree)
 
             _eval_autocomplete(ac_state, stmts[:-1])
 

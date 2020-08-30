@@ -6,12 +6,13 @@ import dsnparse
 
 from runtype import Dispatch
 
-from .exceptions import pql_AttributeError, pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, pql_NotImplementedError, pql_DatabaseConnectError, pql_ValueError
-
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .sql_interface import MysqlInterface, SqliteInterface, PostgresInterface, GitqliteInterface, ConnectError
+from .exceptions import (InsufficientAccessLevel, pql_DatabaseConnectError, pql_NameNotFound,
+                         pql_NotImplementedError, pql_TypeError, pql_ValueError)
 from .pql_types import Type
+from .sql_interface import (ConnectError, GitqliteInterface, MysqlInterface,
+                            PostgresInterface, SqliteInterface)
 
 dy = Dispatch()
 
@@ -99,17 +100,21 @@ class State:
 
     def get_var(self, name):
         try:
-            return self.ns.get_var(self, name)
-        except pql_NameNotFound as e:
+            return self.ns.get_var(name)
+        except NameNotFound:
             try:
-                core = self.ns.get_var(self, '__builtins__')
-            except pql_NameNotFound:
-                raise e
+                core = self.ns.get_var('__builtins__')
+            except NameNotFound:
+                pass
+            else:
+                assert isinstance(core, objects.Module)
+                try:
+                    return core.namespace[name]
+                except KeyError:
+                    pass
 
-            try:
-                return core.get_attr(name)
-            except pql_AttributeError:
-                raise e
+                raise pql_NameNotFound.make(self, name, str(name))
+
 
             assert False
 
@@ -125,6 +130,9 @@ class State:
         return obj + str(self.tick[0])
 
 
+class NameNotFound(Exception):
+    pass
+
 class Namespace:
     def __init__(self, ns=None):
         self.ns = ns or [{}]
@@ -132,12 +140,12 @@ class Namespace:
     def __copy__(self):
         return Namespace([dict(n) for n in self.ns])
 
-    def get_var(self, state, name):
+    def get_var(self, name):
         for scope in reversed(self.ns):
             if name in scope:
                 return scope[name]
 
-        raise pql_NameNotFound.make(state, name, str(name))
+        raise NameNotFound(name)
 
     def set_var(self, name, value):
         assert not isinstance(value, ast.Name)
