@@ -7,7 +7,7 @@ from typing import Optional
 from tqdm import tqdm
 
 from .utils import safezip, listgen
-from .exceptions import pql_NotImplementedError, pql_TypeError, pql_JoinError, pql_ValueError, ExitInterp
+from .exceptions import Signal, ExitInterp
 
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -28,7 +28,7 @@ def _pql_PY_callback(state: State, var: str):
     inst = evaluate(state, obj)
 
     if not isinstance(inst, objects.ValueInstance):
-        raise pql_TypeError.make(state, None, f"Cannot convert {inst} to a Python value")
+        raise Signal.make(T.TypeError, state, None, f"Cannot convert {inst} to a Python value")
 
     return str(inst.local_value)
 
@@ -43,12 +43,12 @@ def pql_PY(state: State, code_expr: ast.Expr, code_setup: Optional[ast.Expr] = o
         try:
             res = exec(py_setup)
         except Exception as e:
-            raise pql_ValueError.make(state, code_expr, f"Python code provided returned an error: {e}")
+            raise Signal.make(T.EvalError, state, code_expr, f"Python code provided returned an error: {e}")
 
     try:
         res = eval(py_code)
     except Exception as e:
-        raise pql_ValueError.make(state, code_expr, f"Python code provided returned an error: {e}")
+        raise Signal.make(T.EvalError, state, code_expr, f"Python code provided returned an error: {e}")
 
     return objects.new_value_instance(res)
 
@@ -122,7 +122,7 @@ def _count(state, obj: ast.Expr, table_func, name):
         return objects.new_value_instance(len(obj.attrs))
     else:
         if not (obj.type <= T.aggregate):
-            raise pql_TypeError.make(state, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
+            raise Signal.make(T.TypeError, state, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
 
         obj = obj.primary_key()
         code = sql.FieldFunc(name, obj.code)
@@ -154,7 +154,7 @@ def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.nul
     name = state.unique_name("temp")    # TODO get name from table options
 
     if 'id' in elems and not const:
-        raise pql_ValueError.make(state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
+        raise Signal.make(T.NameError, state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
 
     table = T.table(elems, name=name, pk=[] if const else [['id']], temporary=True)
 
@@ -187,15 +187,15 @@ def sql_bin_op(state, op, table1, table2, name):
     t2 = evaluate(state, table2)
 
     if not isinstance(t1, objects.CollectionInstance):
-        raise pql_TypeError.make(state, table1, f"First argument isn't a table, it's a {t1.type}")
+        raise Signal.make(T.TypeError, state, table1, f"First argument isn't a table, it's a {t1.type}")
     if not isinstance(t2, objects.CollectionInstance):
-        raise pql_TypeError.make(state, table2, f"Second argument isn't a table, it's a {t2.type}")
+        raise Signal.make(T.TypeError, state, table2, f"Second argument isn't a table, it's a {t2.type}")
 
     # TODO Smarter matching
     l1 = len(t1.type.elems)
     l2 = len(t2.type.elems)
     if l1 != l2:
-        raise pql_TypeError.make(state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
+        raise Signal.make(T.TypeError, state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
     code = sql.TableArith(op, [t1.code, t2.code])
     # TODO new type, so it won't look like the physical table
@@ -208,7 +208,7 @@ def pql_intersect(state: State, t1: ast.Expr, t2: ast.Expr):
 def pql_subtract(state: State, t1: ast.Expr, t2: ast.Expr):
     "Substract two tables (except). Used for `t1 - t2`"
     if state.db.target is sql.mysql:
-        raise pql_NotImplementedError.make(state, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
+        raise Signal.make(T.NotImplementedError, state, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
 def pql_union(state: State, t1: ast.Expr, t2: ast.Expr):
@@ -227,15 +227,15 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
     exprs = {name: evaluate(state, value) for name,value in exprs.items()}
     for x in exprs.values():
         if not isinstance(x, objects.AbsInstance):
-            raise pql_TypeError.make(state, None, f"Unexpected object type: {x}")
+            raise Signal.make(T.TypeError, state, None, f"Unexpected object type: {x}")
 
     if len(exprs) != 2:
-        raise pql_TypeError.make(state, None, "join expected only 2 arguments")
+        raise Signal.make(T.TypeError, state, None, "join expected only 2 arguments")
 
     (a,b) = exprs.values()
 
     if a is objects.EmptyList or b is objects.EmptyList:
-        raise pql_TypeError.make(state, None, "Cannot join on an untyped empty list")
+        raise Signal.make(T.TypeError, state, None, "Cannot join on an untyped empty list")
 
     if isinstance(a, objects.UnknownInstance) or isinstance(b, objects.UnknownInstance):
         table_type = T.table({e: T.unknown for e in exprs})
@@ -246,7 +246,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
         tables = [a.parent, b.parent]
     else:
         if not ((a.type <= T.collection) and (b.type <= T.collection)):
-            raise pql_TypeError.make(state, None, f"join() got unexpected values:\n * {a}\n * {b}")
+            raise Signal.make(T.TypeError, state, None, f"join() got unexpected values:\n * {a}\n * {b}")
         if joinall:
             tables = (a, b)
         else:
@@ -294,9 +294,9 @@ def _auto_join(state, join, ta, tb):
     refs2 = _find_table_reference(tb, ta)
     auto_join_count = len(refs1) + len(refs2)
     if auto_join_count < 1:
-        raise pql_JoinError.make(state, None, "Cannot auto-join: No plausible relations found")
+        raise Signal.make(T.JoinError, state, None, "Cannot auto-join: No plausible relations found")
     elif auto_join_count > 1:   # Ambiguity in auto join resolution
-        raise pql_JoinError.make(state, None, "Cannot auto-join: Several plausible relations found")
+        raise Signal.make(T.JoinError, state, None, "Cannot auto-join: Several plausible relations found")
 
     if len(refs1) == 1:
         dst, src = refs1[0]
@@ -352,7 +352,7 @@ def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
     inst = evaluate(state, obj)
     type_ = evaluate(state, type_)
     if not isinstance(type_, Type):
-        raise pql_TypeError.make(state, type_, f"Cast expected a type, got {type_} instead.")
+        raise Signal.make(T.TypeError, state, type_, f"Cast expected a type, got {type_} instead.")
 
     if inst.type is type_:
         return inst
@@ -371,9 +371,9 @@ def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] =
     name_str = cast_to_python(state, name)
     columns_whitelist = cast_to_python(state, columns) or []
     if not isinstance(columns_whitelist, list):
-        raise pql_TypeError.make(state, columns, "Expected list")
+        raise Signal.make(T.TypeError, state, columns, "Expected list")
     if not isinstance(name_str, str):
-        raise pql_TypeError.make(state, name, "Expected string")
+        raise Signal.make(T.TypeError, state, name, "Expected string")
 
     columns_whitelist = set(columns_whitelist)
 
@@ -417,7 +417,7 @@ def pql_help(state: State, obj: Object = objects.null):
         if doc:
             lines += [doc]
     else:
-        raise pql_TypeError.make(state, None, "help() only accepts functions at the moment")
+        raise Signal.make(T.TypeError, state, None, "help() only accepts functions at the moment")
 
     text = '\n'.join(lines) + '\n'
     return new_value_instance(text).replace(type=T.text)
@@ -435,7 +435,7 @@ def pql_names(state: State, obj: Object = objects.null):
         elif inst.type <= T.collection:
             all_vars = (inst.all_attrs())
         else:
-            raise pql_TypeError.make(state, obj, "Argument to names() must be a table or module")
+            raise Signal.make(T.TypeError, state, obj, "Argument to names() must be a table or module")
     else:
         all_vars = (state.ns.get_all_vars())
 

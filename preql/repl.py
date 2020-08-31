@@ -25,7 +25,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from . import Preql
 from . import pql_objects as objects
 from .api import table_more
-from .exceptions import Signal, PreqlError, ExitInterp, pql_SyntaxError
+from .exceptions import Signal, ExitInterp, pql_SyntaxError
 from .pql_types import Object
 from .parser import parse_stmts
 from .loggers import repl_log
@@ -96,11 +96,10 @@ class MyValidator(Validator):
         try:
             parse_stmts(text, '<repl>')
         except pql_SyntaxError as e:
-            text_ref, message = e.args
-            if text_ref:
-                pos = text_ref[-1].ref.end.char_index
+            if e.text_ref:
+                pos = e.text_ref.ref.end.char_index
                 if pos < len(text):
-                    raise ValidationError(message=message, cursor_position=pos)
+                    raise ValidationError(message=e.message, cursor_position=pos)
         # except Exception as e:
             # raise ValidationError(message=e.args[0], cursor_position=0)
             # pass
@@ -184,12 +183,9 @@ def start_repl(p, prompt=' >> '):
                             res = rich.markup.escape(res)
                         console.print(res, overflow='ellipsis')
 
-                except PreqlError as e:
-                    repl_log.error(e)
-                    # p.interp.set_var('_e', objects.ExceptionInstance(e))
-                    continue
                 except Signal as s:
                     repl_log.error(s)
+                    # p.interp.set_var('_e', objects.ExceptionInstance(e))
                     continue
                 except ExitInterp as e:
                     return

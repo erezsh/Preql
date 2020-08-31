@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+from preql.exceptions import Signal
 
 from .base import Object
 from . import exceptions as exc
@@ -11,11 +12,11 @@ def Object_repr(self, state):
     return repr(self)
 
 def Object_get_attr(self, attr):
-    raise exc.pql_AttributeError([], f"{self} has no attribute: {attr}")    # XXX TODO
+    raise exc.pql_AttributeError(attr)
 
 def Object_isa(self, t):
     if not isinstance(t, Type):
-        raise exc.pql_TypeError([], f"'type' argument to isa() isn't a type. It is {t}")
+        raise Signal.make(T.TypeError, [], f"'type' argument to isa() isn't a type. It is {t}")
     return self.type <= t
 
 Object.repr = Object_repr
@@ -52,7 +53,7 @@ def table_params(t):
 def table_flat_for_insert(table):
     # auto_count = join_names(self.primary_keys)
     # if 'pk' not in table.options:
-    #     raise exc.pql_TypeError([], f"Cannot add to table. Primary key not defined")
+    #     raise Signal.pql_TypeError(T.TypeError, [], f"Cannot add to table. Primary key not defined")
 
     pks = {join_names(pk) for pk in table.options.get('pk', [])}
     names = [name for name,t in flatten_type(table)]
@@ -60,23 +61,23 @@ def table_flat_for_insert(table):
 
 
 @dp_inst
-def repr_value(v: T.object):
+def repr_value(state, v: T.object):
     return repr(v.value)
 
 @dp_inst
-def repr_value(v: T.decimal):
-    raise exc.pql_NotImplementedError([], "Decimal not implemented")
+def repr_value(state, v: T.decimal):
+    raise Signal.make(T.NotImplementedError, state, None, "Decimal not implemented")
 
 @dp_inst
-def repr_value(v: T.string):
+def repr_value(state, v: T.string):
     return f'"{v.value}"'
 
 @dp_inst
-def repr_value(v: T.text):
+def repr_value(state, v: T.text):
     return str(v.value)
 
 @dp_inst
-def repr_value(v: T.bool):
+def repr_value(state, v: T.bool):
     return 'true' if v.value else 'false'
 
 
@@ -105,10 +106,10 @@ def from_sql(state, res: T.primitive):
         row ,= res.value
         item ,= row
     except ValueError:
-        raise exc.pql_TypeError.make(state, None, "Expected primitive. Got: '%s'" % res.value)
+        raise Signal.make(T.TypeError, state, None, "Expected primitive. Got: '%s'" % res.value)
     return item
 
-def _from_datetime(s):
+def _from_datetime(state, s):
     if s is None:
         return None
 
@@ -118,11 +119,11 @@ def _from_datetime(s):
 
     # Sqlite
     if not isinstance(s, str):
-        raise exc.pql_TypeError([], f"datetime expected a string. Instead got: {s}")
+        raise Signal.make(T.TypeError, [], f"datetime expected a string. Instead got: {s}")
     try:
         return datetime.fromisoformat(s)
     except ValueError as e:
-        raise exc.pql_ValueError([], str(e))
+        raise Signal.make(T.ValueError, state, None, str(e))
 
 @dp_inst
 def from_sql(state, res: T.datetime):
@@ -130,50 +131,49 @@ def from_sql(state, res: T.datetime):
     row ,= res.value
     item ,= row
     s = item
-    return _from_datetime(s)
+    return _from_datetime(state, s)
 
 @dp_inst
 def from_sql(state, arr: T.list):
     if not all(len(e)==1 for e in arr.value):
-        raise exc.pql_TypeError(state, None, f"Expected 1 column. Got {len(arr.value[0])}")
+        raise Signal.make(T.TypeError, state, None, f"Expected 1 column. Got {len(arr.value[0])}")
     return [e[0] for e in arr.value]
 
 @dp_inst
 @listgen
 def from_sql(state, arr: T.table):
-    target = state.db.target
     expected_length = len(flatten_type(arr.type))   # TODO optimize?
     for row in arr.value:
         if len(row) != expected_length:
-            raise exc.pql_TypeError.make(state, None, f"Expected {expected_length} columns, but got {len(row)}")
+            raise Signal.make(T.TypeError, state, None, f"Expected {expected_length} columns, but got {len(row)}")
         i = iter(row)
-        yield {name: restructure_result(target, col, i) for name, col in arr.type.elems.items()}
+        yield {name: restructure_result(state, col, i) for name, col in arr.type.elems.items()}
 
 @dp_type
-def restructure_result(target, t: T.table, i):
-    # return ({name: restructure_result(target, col, i) for name, col in t.elem_dict.items()})
+def restructure_result(state, t: T.table, i):
+    # return ({name: restructure_result(state, col, i) for name, col in t.elem_dict.items()})
     return next(i)
 
 @dp_type
-def restructure_result(target, t: T.struct, i):
-    return ({name: restructure_result(target, col, i) for name, col in t.elem_dict.items()})
+def restructure_result(state, t: T.struct, i):
+    return ({name: restructure_result(state, col, i) for name, col in t.elem_dict.items()})
 
 @dp_type
-def restructure_result(target, t: T.union[T.primitive, T.null], i):
+def restructure_result(state, t: T.union[T.primitive, T.null], i):
     return next(i)
 
 @dp_type
-def restructure_result(target, t: T.vectorized[T.union[T.primitive, T.null]], i):
+def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.null]], i):
     return next(i)
 
 
 @dp_type
-def restructure_result(target, t: T.list[T.primitive, T.null], i):
+def restructure_result(state, t: T.list[T.primitive, T.null], i):
     # XXX specific to choice of db. So belongs in sql.py?
     res = next(i)
-    if target == 'mysql':   # TODO use constant
+    if state.db.target == 'mysql':   # TODO use constant
         res = json.loads(res)
-    elif target == 'sqlite':
+    elif state.db.target == 'sqlite':
         res = res.split('|')
     if t.elem <= T.int: # XXX hack! TODO Use a generic form
         res = [int(x) for x in res]
@@ -182,14 +182,11 @@ def restructure_result(target, t: T.list[T.primitive, T.null], i):
     return res
 
 @dp_type
-def restructure_result(target, t: T.datetime, i):
+def restructure_result(state, t: T.datetime, i):
     s = next(i)
-    return _from_datetime(s)
+    return _from_datetime(None, s)
 
 
 def join_names(names):
     return "_".join(names)
 
-
-
-exc.PreqlError.type = T.Exception

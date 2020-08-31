@@ -5,7 +5,7 @@ A collection of objects that may come to interaction with the user.
 from typing import List, Optional, Callable, Any, Dict
 
 from .utils import dataclass, SafeDict, X, listgen
-from .exceptions import pql_TypeError, pql_AttributeError
+from .exceptions import pql_AttributeError, Signal
 from . import settings
 from . import pql_ast as ast
 from . import sql
@@ -48,7 +48,7 @@ class Module(Object):
         try:
             return self.namespace[attr]
         except KeyError:
-            raise pql_AttributeError([], f"No such attribute: {attr}")
+            raise pql_AttributeError(attr)
 
     @property
     def type(self):
@@ -75,7 +75,7 @@ class Function(Object):
             else:
                 v = p.default
                 if v is None:
-                    raise pql_TypeError.make(state, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
+                    raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
 
 
             yield p, v
@@ -100,7 +100,7 @@ class Function(Object):
                 # XXX we only want to localize the keys, not the values
                 d = self._localize_keys(state, a.struct)
                 if not isinstance(d, dict):
-                    raise pql_TypeError.make(state, None, f"Expression to inline is not a map: {d}")
+                    raise Signal.make(T.TypeError, state, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
                     inline_args.append(ast.NamedField(None, k, new_value_instance(v)))
             else:
@@ -115,11 +115,11 @@ class Function(Object):
         else:
             if not all(n for n in named[first_named:]):
                 # TODO meta
-                raise pql_TypeError.make(state, None, f"Function {self.name} recieved a non-named argument after a named one!")
+                raise Signal.make(T.TypeError, state, None, f"Function {self.name} recieved a non-named argument after a named one!")
 
         if first_named > len(self.params):
             # TODO meta
-            raise pql_TypeError.make(state, None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
+            raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
 
         values = {p.name: p.default for p in self.params}
 
@@ -138,13 +138,13 @@ class Function(Object):
                     collected[arg_name] = named_arg.value
                 else:
                     # TODO meta
-                    raise pql_TypeError.make(state, None, f"Function '{self.name}' has no parameter named '{arg_name}'")
+                    raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' has no parameter named '{arg_name}'")
 
 
         for name, value in values.items():
             if value is None:
                 # TODO meta
-                raise pql_TypeError.make(state, None, f"Error calling function '{self.name}': parameter '{name}' has no value")
+                raise Signal.make(T.TypeError, state, None, f"Error calling function '{self.name}': parameter '{name}' has no value")
 
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values
@@ -190,7 +190,7 @@ class AbsInstance(Object):
         if v <= T.function:
             return MethodInstance(self, v)
 
-        raise pql_AttributeError([], f"No such attribute: {name}")
+        raise pql_AttributeError(attr)
 
 @dataclass
 class MethodInstance(AbsInstance, Function):
@@ -256,7 +256,7 @@ class ValueInstance(Instance):
     local_value: object
 
     def repr(self, state):
-        return repr_value(self)
+        return repr_value(state, self)
 
     @property
     def value(self):
@@ -293,7 +293,7 @@ class TableInstance(CollectionInstance):
             try:
                 return MethodInstance(self, self.type.methods[name])
             except KeyError:
-                raise pql_AttributeError([], f"No such attribute: {name}")
+                raise pql_AttributeError(attr)
 
 @dataclass
 class ListInstance(CollectionInstance):
@@ -320,7 +320,7 @@ class ListInstance(CollectionInstance):
             try:
                 return MethodInstance(self, self.type.methods[name])
             except KeyError:
-                raise pql_AttributeError([], f"No such attribute: {name}")
+                raise pql_AttributeError(attr)
 
 
 
@@ -376,12 +376,12 @@ class AbsStructInstance(AbsInstance):
         if name in self.attrs:
             return self.attrs[name]
         else:
-            raise pql_AttributeError([], f"No such attribute: {name}")
+            raise pql_AttributeError(attr)
 
     @property
     def code(self):
         # XXX this shouldn't even be allowed to happen in the first place
-        raise pql_TypeError([], "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
+        raise Signal(T.TypeError, [], "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
 
 
 @dataclass
@@ -473,7 +473,7 @@ class SelectedColumnInstance(AbsInstance):
 
     @property
     def code(self):
-        raise pql_TypeError([], f"Operation not supported for {self}")
+        raise Signal(T.TypeError, [], f"Operation not supported for {self}")
     #     return self._resolve_attr().code
 
     def flatten_code(self):

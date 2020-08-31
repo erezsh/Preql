@@ -1,6 +1,6 @@
 from lark import Token, UnexpectedCharacters, UnexpectedToken
 
-from .exceptions import Signal, ReturnSignal, PreqlError
+from .exceptions import Signal, ReturnSignal
 from .loggers import ac_log
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -20,6 +20,10 @@ def eval_autocomplete(state, x, go_inside):
 @dy
 def eval_autocomplete(state, cb: ast.Statement, go_inside):
     raise NotImplementedError(cb)
+
+@dy
+def eval_autocomplete(state, a: ast.Assert, go_inside):
+    eval_autocomplete(state, a.cond, go_inside)
 
 @dy
 def eval_autocomplete(state, x: ast.If, go_inside):
@@ -137,7 +141,7 @@ def _eval_autocomplete(ac_state, stmts):
     for stmt in stmts:
         try:
             eval_autocomplete(ac_state, stmt, False)
-        except PreqlError as e:
+        except Signal as e:
             ac_log.exception(e)
 
 def autocomplete(state, code, source='<autocomplete>'):
@@ -158,7 +162,7 @@ def autocomplete(state, code, source='<autocomplete>'):
             except AutocompleteSuggestions as e:
                 ns ,= e.args
                 return ns
-            except PreqlError as e:
+            except Signal as e:
                 ac_log.exception(e)
 
     else:

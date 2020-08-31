@@ -107,6 +107,17 @@ class AutocompleteTests(PreqlTests):
         """
         progressive_test(state, s)
 
+    def test_assert(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        hello = 10
+        assert <<<hello>>>
+        """
+        progressive_test(state, s)
+
+
     def test_attr(self):
         p = self.Preql()
         state = p.interp.state

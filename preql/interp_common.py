@@ -9,8 +9,7 @@ from runtype import Dispatch
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .exceptions import Signal
-from .exceptions import (InsufficientAccessLevel, pql_DatabaseConnectError,
-                         pql_NotImplementedError, pql_TypeError, pql_ValueError)
+from .exceptions import InsufficientAccessLevel
 from .pql_types import Type, T
 from .sql_interface import (ConnectError, GitqliteInterface, MysqlInterface,
                             PostgresInterface, SqliteInterface)
@@ -87,11 +86,11 @@ class State:
         try:
             self.db = create_engine(uri, self.db._print_sql)
         except NotImplementedError as e:
-            raise pql_NotImplementedError.make(self, None, *e.args) from e
+            raise Signal.make(T.NotImplementedError, self, None, *e.args) from e
         except ConnectError as e:
-            raise pql_DatabaseConnectError.make(self, None, *e.args) from e
+            raise Signal.make(T.DbConnectionError, self, None, *e.args) from e
         except ValueError as e:
-            raise pql_ValueError.make(self, None, *e.args) from e
+            raise Signal.make(T.ValueError, self, None, *e.args) from e
 
         self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
 
@@ -207,7 +206,7 @@ def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s,
             type_str = ' or '.join("'%s'" % elem for elem in type_.elems)
         else:
             type_str = "'%s'" % type_
-        raise pql_TypeError.make(state, ast, msg % (op, type_str, t))
+        raise Signal.make(T.TypeError, state, ast, msg % (op, type_str, t))
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])

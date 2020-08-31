@@ -4,7 +4,7 @@ from pathlib import Path
 from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken, Token
 
 from .utils import TextPos, TextRange, TextReference
-from .exceptions import pql_SyntaxError, pql_SyntaxError_PrematureEnd
+from .exceptions import pql_SyntaxError
 from . import pql_ast as ast
 from . import pql_objects as objects
 
@@ -97,7 +97,7 @@ class TreeToAst(Transformer):
         for item in items:
             name = item.name or guess_field_name(item.value)
             if name in d:
-                raise pql_SyntaxError([meta], f"Dict key appearing more than once: {name}")
+                raise pql_SyntaxError(meta, f"Dict key appearing more than once: {name}")
             d[name] = item.value
 
         return ast.Dict_(meta, d)
@@ -188,7 +188,7 @@ class TreeToAst(Transformer):
         for i, p in enumerate(params):
             if isinstance(p, objects.ParamVariadic):
                 if i != len(params)-1:
-                    raise pql_SyntaxError([], f"A variadic parameter must appear at the end of the function ({p.name})")
+                    raise pql_SyntaxError(meta, f"A variadic parameter must appear at the end of the function ({p.name})")
 
                 collector = p
                 params = params[:-1]
@@ -199,7 +199,7 @@ class TreeToAst(Transformer):
         for i, a in enumerate(args):
             if isinstance(a, ast.InlineStruct):
                 if i != len(args)-1:
-                    raise pql_SyntaxError([], f"An inlined struct must appear at the end of the function call ({a})")
+                    raise pql_SyntaxError(meta, f"An inlined struct must appear at the end of the function call ({a})")
 
 
         return ast.FuncCall(meta, func, args)
@@ -283,14 +283,14 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
             if e.token.type == '$END':
                 msg = "Code ended unexpectedly"
                 ref = TextReference(s, str(source_file), TextRange(pos, TextPos(len(s), -1 ,-1)))
-                raise pql_SyntaxError_PrematureEnd([ref], "Syntax error: " + msg)
+                raise pql_SyntaxError(ref, "Syntax error: " + msg)
             else:
                 msg = "Unexpected token: %r" % e.token.value
         else:
             msg = "Unexpected character: %r" % s[e.pos_in_stream]
 
         ref = TextReference(s, str(source_file), TextRange(pos, pos))
-        raise pql_SyntaxError([ref], "Syntax error: " + msg)
+        raise pql_SyntaxError(ref, "Syntax error: " + msg)
 
     return TreeToAst(code_ref=(s, source_file)).transform(tree)
 

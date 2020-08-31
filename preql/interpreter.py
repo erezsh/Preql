@@ -1,4 +1,5 @@
 from pathlib import Path
+from preql.exceptions import Signal, pql_SyntaxError
 
 
 from . import exceptions as exc
@@ -18,8 +19,6 @@ def initial_namespace():
     ns.update(internal_funcs)
     ns.update(joins)
     # TODO all exceptions
-    ns['TypeError'] = exc.pql_TypeError
-    ns['ValueError'] = exc.pql_ValueError
     name = '__builtins__'
     module = objects.Module(name, dict(ns))
     return [{name: module}]
@@ -44,7 +43,12 @@ class Interpreter:
     def execute_code(self, code, source_file, args=None):
         assert not args, "Not implemented yet: %s" % args
         last = None
-        for stmt in parse_stmts(code, source_file):
+        try:
+            stmts = parse_stmts(code, source_file)
+        except pql_SyntaxError as e:
+            raise Signal(T.SyntaxError, e.text_ref, e.message)
+
+        for stmt in stmts:
             last = execute(self.state, stmt)
         return last
 

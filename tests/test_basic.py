@@ -5,8 +5,7 @@ from parameterized import parameterized_class
 
 from preql import Preql
 from preql.pql_objects import UserFunction
-from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError, Signal, pql_NotImplementedError
-from preql.interp_common import pql_TypeError
+from preql.exceptions import Signal
 from preql import sql, settings
 from preql.pql_types import T
 
@@ -122,8 +121,8 @@ class BasicTests(PreqlTests):
         self.assertEqual( list(preql('Person {name2: name+"!", ..., name3: name+"!"}')[0].keys()), ['name2', 'id', 'name', 'country', 'name3'])
         self.assertEqual( list(preql('Person {name2: name+"!", ..., name3: name}')[0].keys()), ['name2', 'id', 'country', 'name3'])
 
-        self.assertRaises( pql_SyntaxError, preql, 'Person {x: ...}')
-        self.assertRaises( pql_SyntaxError, preql, 'Person {...+"a", 2}')
+        self._assertSignal(T.SyntaxError, preql, 'Person {x: ...}')
+        self._assertSignal(T.SyntaxError, preql, 'Person {...+"a", 2}')
 
     def _test_ellipsis_exclude(self, preql):
         self.assertEqual( preql('Person {name, ... !id !country}[name=="Erez Shinan"]'), [{'name': 'Erez Shinan'}] )
@@ -134,8 +133,8 @@ class BasicTests(PreqlTests):
         assert list(preql('Person {country, ... !name, id}')[0].keys()) == ['country', 'id']
 
 
-        self.assertRaises(Signal, preql, '[3]{... !hello}')
-        self.assertRaises(PreqlError, preql, '[3]{... !value}')
+        self._assertSignal(T.NameError, preql, '[3]{... !hello}')
+        self._assertSignal(T.TypeError, preql, '[3]{... !value}')
 
         # TODO exception when name doesn't exist
 
@@ -160,11 +159,11 @@ class BasicTests(PreqlTests):
         assert preql('"abc" ~ "a%c"')
         assert not preql('"ab" ~ "a%c"')
 
-        self.assertRaises(pql_TypeError, preql, '"a" + 3')
-        self.assertRaises(pql_TypeError, preql, '"a" ~ 3')
-        self.assertRaises(pql_TypeError, preql, '"a" - "b"')
-        self.assertRaises(pql_TypeError, preql, '"a" % "b"')
-        self.assertRaises(pql_TypeError, preql, '3 ~ 3')
+        self._assertSignal(T.TypeError, preql, '"a" + 3')
+        self._assertSignal(T.TypeError, preql, '"a" ~ 3')
+        self._assertSignal(T.TypeError, preql, '"a" - "b"')
+        self._assertSignal(T.TypeError, preql, '"a" % "b"')
+        self._assertSignal(T.TypeError, preql, '3 ~ 3')
 
 
     @uses_tables('Point')
@@ -441,7 +440,8 @@ class BasicTests(PreqlTests):
 
         try:
             assert preql('adult()[..10]') == list(range(18, 28))
-        except pql_NotImplementedError:
+        except Signal as e:
+            assert e.type <= T.NotImplementedError
             assert preql.interp.state.db.target == mysql   # Not supported
             return
 
@@ -592,11 +592,12 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql("""1 !in [1,2,3]"""), False )
         self.assertEqual( preql("""4 in [1,2,3]"""), False )
 
+        # TODO
         # self.assertRaises( pql_TypeError, preql, """2 > "a" """)
         # self.assertRaises( pql_TypeError, preql, """2 == "a" """)
         # self.assertRaises( pql_TypeError, preql, """ 1 == [2] """)
-        self.assertRaises( pql_TypeError, preql, """ [1] in [2] """)
-        self.assertRaises( pql_TypeError, preql, """ "a" in [2] """)
+        self._assertSignal(T.TypeError, preql, """ [1] in [2] """)
+        self._assertSignal(T.TypeError, preql, """ "a" in [2] """)
         # self.assertRaises( pql_TypeError, preql, """ 4 in ["a", "B"] """) # TODO good or bad?
 
         self.assertEqual( preql("""null == null"""), True )
@@ -621,7 +622,8 @@ class BasicTests(PreqlTests):
         try:
             res = preql("""[1,2,3] - [3,4]""")
             assert res == [1,2]
-        except pql_NotImplementedError:
+        except Signal as e:
+            assert e.type <= T.NotImplementedError
             assert preql.interp.state.db.target is mysql
 
         res = preql("""[1,2,3]{v:value*2}[v < 5]""")
@@ -647,9 +649,9 @@ class BasicTests(PreqlTests):
 
         self.assertEqual( preql("""[1,2,3][1..1]"""), [])
         self.assertEqual( preql("[] {x:0}"), [])
-        self.assertRaises( pql_TypeError, preql, """["a", 1]""")
-        self.assertRaises( pql_TypeError, preql, """[1] {a: 1, a: 2} """)
-        self.assertRaises( pql_TypeError, preql, """[1] {a: 1 => a: 2} """)
+        self._assertSignal(T.TypeError, preql, """["a", 1]""")
+        self._assertSignal(T.TypeError, preql, """[1] {a: 1, a: 2} """)
+        self._assertSignal(T.TypeError, preql, """[1] {a: 1 => a: 2} """)
 
         res ,= preql("""[1] {null, null => null, null}""")
         self.assertEqual(list(res.values()) , [None, None, None, None])
@@ -729,13 +731,23 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql('one A{x}'), {'x': 2} )
         self.assertEqual( preql('one? A{x}'), {'x': 2} )
         self.assertEqual( preql('one? B'), None )
-        self.assertRaises(pql_ValueError, preql, 'one B')
+
+        # XXX ValueError
+        self._assertSignal(T.ValueError, preql, 'one B')
 
         self.assertEqual( preql('one [2]'), 2 )
         self.assertEqual( preql('one? []'), None )
-        self.assertRaises(pql_ValueError, preql, 'one [1,2]')
-        self.assertRaises(pql_ValueError, preql, 'one? [1,2]')
-        self.assertRaises(pql_ValueError, preql, 'one []')
+        self._assertSignal(T.ValueError, preql, 'one [1,2]')
+        self._assertSignal(T.ValueError, preql, 'one? [1,2]')
+        self._assertSignal(T.ValueError, preql, 'one []')
+
+    def _assertSignal(self, sig_type, f, *args):
+        try:
+            return f(*args)
+        except Signal as e:
+            assert e.type <= sig_type, e
+        else:
+            assert False
 
     def _test_new(self):
         preql = self.Preql()

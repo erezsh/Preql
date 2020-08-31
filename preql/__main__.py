@@ -3,7 +3,7 @@ from pathlib import Path
 from itertools import chain
 import rich
 
-from . import Preql, __version__, PreqlError
+from . import Preql, __version__, Signal
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', default=False, help="Enter interactive mode after running the script")
@@ -36,7 +36,7 @@ def main():
         with open(args.file) as f:
             try:
                 p.run_code(f.read(), args.file)
-            except PreqlError as e:
+            except Signal as e:
                 for is_rich, line in e.get_rich_lines():
                     if is_rich:
                         rich.print(line)

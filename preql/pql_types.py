@@ -204,7 +204,7 @@ T.EvalError = [T.Exception]
 
 # CodeError - Failures due to inherently unexecutable code
 T.SyntaxError = [T.CodeError]
-T.NotImplemented = [T.CodeError]
+T.NotImplementedError = [T.CodeError]
 
 # IOError - All errors resulting directly from attempts at I/O communication
 T.FileError = [T.IOError]
@@ -216,6 +216,8 @@ T.DbConnectionError = [T.DbError]
 T.TypeError = [T.EvalError]
 T.ValueError = [T.EvalError]
 T.NameError = [T.EvalError]
+T.JoinError = [T.EvalError]
+T.CompileError = [T.EvalError]
 
 T.AttributeError = [T.NameError]
 T.AssertError = [T.ValueError]

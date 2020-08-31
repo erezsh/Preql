@@ -95,7 +95,7 @@ _g_last_table = None
 _g_last_offset = 0
 def table_more(state):
     if not _g_last_table:
-        raise exc.pql_ValueError.make(state, None, "No table yet")
+        raise Signal.make(T.ValueError, state, None, "No table yet")
 
     return table_repr(_g_last_table, state, _g_last_offset)
 

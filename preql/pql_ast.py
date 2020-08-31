@@ -63,7 +63,7 @@ class Const(Expr):
     value: Any
 
     def repr(self, state):
-        return repr_value(self)
+        return repr_value(state, self)
 
 @dataclass
 class Ellipsis(Expr):

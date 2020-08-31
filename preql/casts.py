@@ -1,13 +1,13 @@
 from preql.sql import mysql
-from . import exceptions as exc
 from . import pql_objects as objects
 from . import sql
 from .pql_types import T, dp_type
+from .exceptions import Signal
 # from .interp_common import dy, State, assert_type, new_value_instance, evaluate, call_pql_func
 
 @dp_type
 def _cast(state, inst_type, target_type, inst):
-    raise exc.pql_TypeError.make(state, None, f"Cast not implemented for {inst_type}->{target_type}")
+    raise Signal.make(T.TypeError, state, None, f"Cast not implemented for {inst_type}->{target_type}")
 
 @dp_type
 def _cast(state, inst_type: T.list, target_type: T.list, inst):
@@ -32,9 +32,9 @@ def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
 def _cast(state, inst_type: T.table, target_type: T.list, inst):
     t = inst.type
     if len(t.elems) != 1:
-        raise exc.pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Too many columns")
+        raise Signal.make(T.TypeError, state, None, f"Cannot cast {inst_type} to {target_type}. Too many columns")
     if not (inst_type.elem <= target_type.elem):
-        raise exc.pql_TypeError.make(state, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
+        raise Signal.make(T.TypeError, state, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
 
     (elem_name, elem_type) ,= inst_type.elems.items()
     code = sql.Select(T.list[elem_type], inst.code, [sql.ColumnAlias(sql.Name(elem_type, elem_name), 'value')])
