@@ -43,6 +43,25 @@ class PreqlError(Object, Exception):
         return cls(state.stacktrace+([ast_ref] if ast_ref else []), *args)
 
 
+@dataclass
+class Signal(Object, Exception):
+    type: object    # Type
+    text_refs: List[Optional[TextReference]]    # XXX must it be optional?
+    message: Optional[str]
+
+    @classmethod
+    def make(cls, type, state, ast, message):
+        ast_ref = getattr(ast, 'text_ref', None)
+        refs = state.stacktrace+([ast_ref] if ast_ref else [])
+        return cls(type, refs, message)
+
+    def __str__(self):
+        texts = ['Exception traceback:\n']
+        texts += [ref.get_pinpoint_text() if ref else '  ~~~ ???\n' for ref in self.text_refs]
+        texts += [
+            '[%s] %s\n' % (self.type, self.message)
+        ]
+        return ''.join(texts)
 
 
 @dataclass

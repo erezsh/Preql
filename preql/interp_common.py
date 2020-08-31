@@ -8,9 +8,10 @@ from runtype import Dispatch
 
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .exceptions import (InsufficientAccessLevel, pql_DatabaseConnectError, pql_NameNotFound,
+from .exceptions import Signal
+from .exceptions import (InsufficientAccessLevel, pql_DatabaseConnectError,
                          pql_NotImplementedError, pql_TypeError, pql_ValueError)
-from .pql_types import Type
+from .pql_types import Type, T
 from .sql_interface import (ConnectError, GitqliteInterface, MysqlInterface,
                             PostgresInterface, SqliteInterface)
 
@@ -113,7 +114,7 @@ class State:
                 except KeyError:
                     pass
 
-                raise pql_NameNotFound.make(self, name, str(name))
+                raise Signal.make(T.NameError, self, name, f"Name '{name}' not found")
 
 
             assert False

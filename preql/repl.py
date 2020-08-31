@@ -25,7 +25,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from . import Preql
 from . import pql_objects as objects
 from .api import table_more
-from .exceptions import PreqlError, ExitInterp, pql_SyntaxError
+from .exceptions import Signal, PreqlError, ExitInterp, pql_SyntaxError
 from .pql_types import Object
 from .parser import parse_stmts
 from .loggers import repl_log
@@ -179,12 +179,17 @@ def start_repl(p, prompt=' >> '):
                         res = res.repr(p.interp.state)
                         # repl_log.info(res)
                         if isinstance(res, str):
+                            if len(res) > 200:
+                                res = res[:100] + "..." + res[-100:]    # smarter limit?
                             res = rich.markup.escape(res)
                         console.print(res, overflow='ellipsis')
 
                 except PreqlError as e:
                     repl_log.error(e)
                     # p.interp.set_var('_e', objects.ExceptionInstance(e))
+                    continue
+                except Signal as s:
+                    repl_log.error(s)
                     continue
                 except ExitInterp as e:
                     return

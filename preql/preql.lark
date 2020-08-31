@@ -85,7 +85,7 @@ delete: molecule "delete" expr_list
 
 // like: molecule "~" molecule
 
-!comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"!in" //|"is"|"is" "not"
+!comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in" | "!in" //|"is"|"is" "not"
 
 ?or_test: and_test ("or" and_test)*
 ?and_test: not_test ("and" not_test)*
@@ -178,6 +178,7 @@ SIGNED_INT: ["+"|"-"] INT
 LONG_STRING: /""".*?(?<!\\)(\\\\)*?"""/s
 
 %import common.CNAME -> NAME
+
 %import common.WS_INLINE
 %import common.INT
 %import common.ESCAPED_STRING -> STRING

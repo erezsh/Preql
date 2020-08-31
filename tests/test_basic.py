@@ -5,7 +5,7 @@ from parameterized import parameterized_class
 
 from preql import Preql
 from preql.pql_objects import UserFunction
-from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError, pql_NameNotFound, pql_NotImplementedError
+from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError, Signal, pql_NotImplementedError
 from preql.interp_common import pql_TypeError
 from preql import sql, settings
 from preql.pql_types import T
@@ -134,7 +134,7 @@ class BasicTests(PreqlTests):
         assert list(preql('Person {country, ... !name, id}')[0].keys()) == ['country', 'id']
 
 
-        self.assertRaises(pql_NameNotFound, preql, '[3]{... !hello}')
+        self.assertRaises(Signal, preql, '[3]{... !hello}')
         self.assertRaises(PreqlError, preql, '[3]{... !value}')
 
         # TODO exception when name doesn't exist
@@ -514,7 +514,7 @@ class BasicTests(PreqlTests):
         ''')
 
         assert not T.table.methods
-        self.assertRaises(pql_NameNotFound, preql, 'a{area()}')
+        self.assertRaises(Signal, preql, 'a{area()}')
 
         # self.assertEqual( preql('s.area()'), 16 ) # TODO
         # self.assertEqual( preql('Square[size==4].area()'), 16 )
@@ -574,6 +574,7 @@ class BasicTests(PreqlTests):
 
     def test_compare(self):
         preql = self.Preql()
+        self.assertEqual( preql("""null != 1"""), True )
 
         self.assertEqual( preql("""1 == 1"""), True )
         self.assertEqual( preql("""1 != 1"""), False )
@@ -822,7 +823,8 @@ class BasicTests(PreqlTests):
         p = self.Preql()
         try:
             p.a
-        except PreqlError:
+        except Signal as s:
+            assert s.type <= T.NameError
             pass
 
         p('''
@@ -1110,7 +1112,7 @@ class BasicTests(PreqlTests):
         """)
         a_type = preql('type(A{...!id})')   # TODO convert 'id' to t_id
         preql._reset_interpreter()
-        self.assertRaises(pql_NameNotFound, preql, 'A')
+        self.assertRaises(Signal, preql, 'A')
 
         preql("""
             table A {...}

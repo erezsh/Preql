@@ -4,7 +4,7 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
-from .utils import dataclass, SafeDict, safezip, X, listgen
+from .utils import dataclass, SafeDict, X, listgen
 from .exceptions import pql_TypeError, pql_AttributeError
 from . import settings
 from . import pql_ast as ast
@@ -74,14 +74,12 @@ class Function(Object):
                 v = args[i]
             else:
                 v = p.default
-                # assert v is not None
                 if v is None:
                     raise pql_TypeError.make(state, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
 
 
             yield p, v
 
-        # return [(p, a) for p, a in safezip(self.params, args)]
 
     def _localize_keys(self, state, struct):
         raise NotImplementedError()

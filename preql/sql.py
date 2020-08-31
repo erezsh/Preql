@@ -322,24 +322,27 @@ class Compare(Scalar):
         elems = [e.compile_wrap(qb).code for e in self.exprs]
 
         op = self.op
-        if qb.target == sqlite:
-            op = {
-                '=': 'is',
-                '!=': 'is not'
-            }.get(op, op)
-        elif qb.target is mysql:
-            if op == '!=':
-                # Special case,
-                return parens( ['not '] + join_sep(elems, f' <=> ') )
 
-            op = {
-                '=': '<=>',
-            }.get(op, op)
-        else:
-            op = {
-                '=': 'is not distinct from',
-                '!=': 'is distinct from'
-            }.get(op, op)
+        if any(e.type.nullable for e in self.exprs):
+            # Null values are possible, so we'll use identity operators
+            if qb.target == sqlite:
+                op = {
+                    '=': 'is',
+                    '!=': 'is not'
+                }.get(op, op)
+            elif qb.target is mysql:
+                if op == '!=':
+                    # Special case,
+                    return parens( ['not '] + join_sep(elems, f' <=> ') )
+
+                op = {
+                    '=': '<=>',
+                }.get(op, op)
+            else:
+                op = {
+                    '=': 'is not distinct from',
+                    '!=': 'is distinct from'
+                }.get(op, op)
 
         return parens( join_sep(elems, f' {op} ') )
 

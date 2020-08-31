@@ -80,6 +80,23 @@ def repr_value(v: T.bool):
     return 'true' if v.value else 'false'
 
 
+###
+
+@dp_type
+def elem_dict(t: T.union[T.table, T.struct]):
+    return t.elems
+
+@dp_type
+def elem_dict(t: T.list):
+    assert len(t.elems) == 1
+    return {'value': t.elems[0]}
+
+@dp_type
+def elem_dict(t: T.vectorized):
+    return elem_dict(t.elem)
+
+
+###
 
 
 @dp_inst

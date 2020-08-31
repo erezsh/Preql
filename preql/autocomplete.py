@@ -1,6 +1,6 @@
 from lark import Token, UnexpectedCharacters, UnexpectedToken
 
-from .exceptions import ReturnSignal, pql_NameNotFound, PreqlError
+from .exceptions import Signal, ReturnSignal, PreqlError
 from .loggers import ac_log
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -8,6 +8,7 @@ from .utils import bfs
 from .interp_common import State, dy
 from .evaluate import evaluate, resolve
 from .compiler import AutocompleteSuggestions
+from .pql_types import T
 from . import sql, parser
 
 
@@ -120,7 +121,8 @@ class AcState(State):
     def get_var(self, name):
         try:
             return super().get_var(name)
-        except pql_NameNotFound:
+        except Signal as s:
+            assert s.type <= T.NameError
             return objects.UnknownInstance()
 
     def get_all_vars(self):

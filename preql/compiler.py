@@ -2,7 +2,7 @@ import re
 import operator
 
 from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
-from .exceptions import pql_TypeError
+from .exceptions import pql_TypeError, Signal
 from . import exceptions as exc
 
 from . import settings
@@ -11,7 +11,7 @@ from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
 from .pql_types import T, Object, Type
-from .types_impl import dp_inst, flatten_type
+from .types_impl import dp_inst, flatten_type, elem_dict
 from .casts import _cast
 from .pql_objects import vectorized, unvectorized, make_instance
 
@@ -76,7 +76,7 @@ def _expand_ellipsis(state, table, fields):
             if f.name:
                 raise exc.pql_SyntaxError.make(state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
-                elems = table.type.elem_dict
+                elems = elem_dict(table.type)
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
                         raise AutocompleteSuggestions({k:v for k,v in elems.items()
@@ -84,9 +84,9 @@ def _expand_ellipsis(state, table, fields):
                                                       and k not in f.value.exclude})
 
                     if n not in elems:
-                        raise exc.pql_NameNotFound.make(state, n, f"Field to exclude '{n}' not found")
+                        raise Signal.make(T.NameError, state, n, f"Field to exclude '{n}' not found")
                     if n in direct_names:
-                        raise exc.pql_NameNotFound.make(state, n, f"Field to exclude '{n}' is explicitely included in projection")
+                        raise Signal.make(T.NameError, state, n, f"Field to exclude '{n}' is explicitely included in projection")
 
                 exclude = direct_names | set(f.value.exclude)
 
@@ -142,7 +142,6 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     attrs = table.all_attrs()
 
-    # with state.use_scope(attrs):
     with state.use_scope({n:vectorized(c) for n,c in attrs.items()}):
         fields = _process_fields(state, fields)
 

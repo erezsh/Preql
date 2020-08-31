@@ -32,10 +32,18 @@ def _pql_PY_callback(state: State, var: str):
 
     return str(inst.local_value)
 
-def pql_PY(state: State, code_expr: ast.Expr):
+
+def pql_PY(state: State, code_expr: ast.Expr, code_setup: Optional[ast.Expr] = objects.null):
     py_code = cast_to_python(state, code_expr)
+    py_setup = cast_to_python(state, code_setup)
 
     py_code = re.sub(r"\$\w+", lambda m: _pql_PY_callback(state, m), py_code)
+
+    if py_setup:
+        try:
+            res = exec(py_setup)
+        except Exception as e:
+            raise pql_ValueError.make(state, code_expr, f"Python code provided returned an error: {e}")
 
     try:
         res = eval(py_code)
@@ -274,6 +282,9 @@ def pql_join(state, tables):
 def pql_leftjoin(state, tables):
     "Left join two tables into a new projection {t1, t2}"
     return _join(state, "LEFT JOIN", tables, nullable=[False, True])
+def pql_outerjoin(state, tables):
+    "Outer join two tables into a new projection {t1, t2}"
+    return _join(state, "FULL OUTER JOIN", tables, nullable=[False, True])
 def pql_joinall(state: State, tables):
     "Cartesian product of two tables into a new projection {t1, t2}"
     return _join(state, "JOIN", tables, True)
@@ -552,4 +563,5 @@ joins = {
     'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),
     'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param(None, 'tables')),
     'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param(None, 'tables')),
+    'outerjoin': objects.InternalFunction('outerjoin', [], pql_outerjoin, objects.Param(None, 'tables')),
 }

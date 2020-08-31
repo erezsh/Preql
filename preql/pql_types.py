@@ -135,14 +135,12 @@ class Type(Object):
 
 
 class TypeDict(dict):
-    def __getattr__(self, t):
-        return self[t]
 
     def _register(self, name, supertypes=(), elems=()):
         t = Type(name, frozenset(supertypes), elems)
-        assert name not in T
+        assert name not in self
         T[name] = t
-        dict.__setattr__(T, name, t)
+        dict.__setattr__(self, name, t)
 
     def __setattr__(self, name, args):
         if isinstance(args, tuple):
@@ -163,6 +161,7 @@ Type.type = T.type
 
 T.object = [T.any]
 T.null = [T.object]
+object.__setattr__(T, 'null', T.null.replace(nullable=True))    # XXX a little ugly
 
 T.primitive = [T.object]
 
