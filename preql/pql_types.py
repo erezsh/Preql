@@ -222,6 +222,7 @@ T.CompileError = [T.EvalError]
 T.AttributeError = [T.NameError]
 T.AssertError = [T.ValueError]
 T.IndexError = [T.ValueError]
+T.CastError = [T.TypeError]
 
 
 

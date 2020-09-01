@@ -196,12 +196,16 @@ def _execute(state: State, func_def: ast.FuncDef):
     assert isinstance(func, objects.UserFunction)
     state.set_var(func.name, func)
 
+import rich.console
 @dy
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
     inst = evaluate(state, p.value)
-    res = localize(state, inst)
-    print(res)
+    # res = localize(state, inst)
+    # print(res)
+    repr_ = inst.repr(state)
+    console = rich.console.Console()
+    console.print(repr_)
 
 @dy
 def _execute(state: State, p: ast.Assert):
@@ -322,7 +326,7 @@ def simplify(state: State, cb: ast.CodeBlock):
     except Signal as e:
         # Failed to run it, so try to cast as instance
         # XXX order should be other way around!
-        if e.type <= T.TypeError:
+        if e.type <= T.CastError:
             return compile_to_inst(state, cb)
         raise
 
@@ -690,13 +694,12 @@ def apply_database_rw(state: State, new: ast.New):
     obj = state.get_var(new.type)
 
     # XXX Assimilate this special case
-    if isinstance(obj, type) and issubclass(obj, Signal):
-        breakpoint()
+    if isinstance(obj, Type) and obj <= T.Exception:
         def create_exception(state, msg):
             msg = cast_to_python(state, msg)
             assert new.text_ref is state.stacktrace[-1]
-            return obj(list(state.stacktrace), msg)    # TODO move this to `throw`?
-        f = objects.InternalFunction(obj.__name__, [objects.Param(None, 'message')], create_exception)
+            return Signal(obj, list(state.stacktrace), msg)    # TODO move this to `throw`?
+        f = objects.InternalFunction(obj.typename, [objects.Param(None, 'message')], create_exception)
         res = evaluate(state, ast.FuncCall(new.text_ref, f, new.args))
         return res
 
@@ -875,7 +878,7 @@ def cast_to_python(state, obj: ast.Ast):
 @dy
 def cast_to_python(state, obj: objects.AbsInstance):
     if obj.type <= T.vectorized:
-        raise Signal.make(T.TypeError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
+        raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
     res = localize(state, obj)
     assert isinstance(res, (int, str, float, dict, list, type(None))), res
     return res

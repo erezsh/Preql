@@ -184,7 +184,12 @@ def start_repl(p, prompt=' >> '):
                         console.print(res, overflow='ellipsis')
 
                 except Signal as s:
-                    repl_log.error(s)
+                    for is_rich, line in s.get_rich_lines():
+                        if is_rich:
+                            rich.print(line)
+                        else:
+                            print(line)
+                    # repl_log.error(s)
                     # p.interp.set_var('_e', objects.ExceptionInstance(e))
                     continue
                 except ExitInterp as e:

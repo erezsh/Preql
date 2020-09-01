@@ -24,6 +24,9 @@ def eval_autocomplete(state, cb: ast.Statement, go_inside):
 @dy
 def eval_autocomplete(state, a: ast.Assert, go_inside):
     eval_autocomplete(state, a.cond, go_inside)
+@dy
+def eval_autocomplete(state, a: ast.Print, go_inside):
+    eval_autocomplete(state, a.value, go_inside)
 
 @dy
 def eval_autocomplete(state, x: ast.If, go_inside):

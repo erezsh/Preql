@@ -30,6 +30,9 @@ class Signal(Object, Exception):
         # yield True, '[red]%s[/red]: %s' % (self.exc_name, self.message)
         yield False, '%s: %s' % (self.type, self.message)
 
+    def repr(self, state):
+        return f'{self.type}("{self.message}")'
+
 
 @dataclass
 class pql_SyntaxError(Exception):
@@ -45,8 +48,9 @@ class ReturnSignal(Exception):
     value: object
 
 
+@dataclass
 class pql_AttributeError(Exception):
-    pass
+    message: str
 
 class InsufficientAccessLevel(Exception):
     pass

@@ -1,7 +1,7 @@
 
 func _sql_agg_func(name, obj, t=null) {
     if (t==null) {
-        if (isa(obj, table) and count(columns(obj))>1) {
+        if (not (isa(obj, collection) and count(columns(obj))==1)) {
             throw new TypeError(name + "() only accepts lists or tables with one column. Got '" + repr(type(obj)) + "'")
         }
 

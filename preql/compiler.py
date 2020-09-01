@@ -606,7 +606,7 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
         if isinstance(c, sql.Parameter):
             inst = evaluate(state, state.get_var(c.name))
             if inst.type != c.type:
-                raise Signal.make(T.TypeError, state, None, f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})")
+                raise Signal.make(T.CastError, state, None, f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})")
             new_code += inst.code.compile_wrap(qb).code
             subqueries.update(inst.subqueries)
         else:
