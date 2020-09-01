@@ -258,6 +258,15 @@ class Postlexer:
         return ('_NL',)
 
 
+# Prevent expressions like (1and1) or (1ina)
+# Changing these terminals in the grammar will prevent collision detection
+# Waiting on irregular!
+from lark.lexer import PatternRE
+_operators = ['IN', 'NOT_IN', 'AND', 'OR']
+def _edit_terminals(t):
+    if t.name in _operators:
+        t.pattern = PatternRE('%s(?!\w)' % t.pattern.value)
+
 parser = Lark.open(
     'preql.lark',
     rel_to=__file__,
@@ -267,8 +276,10 @@ parser = Lark.open(
     maybe_placeholders=True,
     propagate_positions=True,
     cache=True,
+    edit_terminals=_edit_terminals,
     # transformer=T()
 )
+
 
 def parse_stmts(s, source_file, wrap_syntax_error=True):
     try:

@@ -1,4 +1,4 @@
-from lark import Token, UnexpectedCharacters, UnexpectedToken
+from lark import Token, UnexpectedCharacters, UnexpectedToken, ParseError
 
 from .exceptions import Signal, ReturnSignal
 from .loggers import ac_log
@@ -91,7 +91,7 @@ def _search_puppet(puppet):
                 new_p = p.copy()
                 try:
                     new_p.feed_token(t)
-                except KeyError:    # Illegal
+                except ParseError:    # Illegal
                     pass
                 else:
                     yield new_p

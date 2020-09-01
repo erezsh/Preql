@@ -46,7 +46,7 @@ class Interpreter:
         try:
             stmts = parse_stmts(code, source_file)
         except pql_SyntaxError as e:
-            raise Signal(T.SyntaxError, e.text_ref, e.message)
+            raise Signal(T.SyntaxError, [e.text_ref], e.message)
 
         for stmt in stmts:
             last = execute(self.state, stmt)
