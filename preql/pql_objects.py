@@ -320,7 +320,7 @@ class ListInstance(CollectionInstance):
             try:
                 return MethodInstance(self, self.type.methods[name])
             except KeyError:
-                raise pql_AttributeError(attr)
+                raise pql_AttributeError(name)
 
 
 

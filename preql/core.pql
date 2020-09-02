@@ -112,6 +112,20 @@ func dict(...x) {
     return x
 }
 
+func _zipjoin(join_f, table1, table2) {
+	// Add index to each table, and then join
+	return join_f(a: enum(table1).index, b: enum(table2).index) {
+			// Remove index from nested structs
+			a {... !index}
+			b {... !index}
+		}
+}
+
+"Join two tables into one by matching rows with the same index"
+func zipjoin(a, b) = _zipjoin(join, a, b)
+func zipjoin_left(a, b) = _zipjoin(leftjoin, a, b)
+func zipjoin_longest(a, b) = _zipjoin(outerjoin, a, b)
+
 
 // Builtins hack, so they won't collide with locals. Just put them in a module
 _core_limit = limit

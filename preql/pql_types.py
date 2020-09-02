@@ -132,6 +132,9 @@ class Type(Object):
 
         return super().get_attr(attr)
 
+    def repr(self, state):
+        return repr(self)
+
 
 
 class TypeDict(dict):

@@ -15,7 +15,7 @@ from . import sql
 
 from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor
-from .pql_types import Object, T, Type
+from .pql_types import T, Type
 from .types_impl import table_flat_for_insert, join_names
 from .casts import _cast
 
@@ -33,7 +33,7 @@ def _pql_PY_callback(state: State, var: str):
     return str(inst.local_value)
 
 
-def pql_PY(state: State, code_expr: ast.Expr, code_setup: Optional[ast.Expr] = objects.null):
+def pql_PY(state: State, code_expr: T.string, code_setup: T.string.replace(nullable=True) = objects.null):
     py_code = cast_to_python(state, code_expr)
     py_setup = cast_to_python(state, code_setup)
 
@@ -53,7 +53,7 @@ def pql_PY(state: State, code_expr: ast.Expr, code_setup: Optional[ast.Expr] = o
     return objects.new_value_instance(res)
 
 
-def pql_SQL(state: State, type_expr: ast.Expr, code_expr: ast.Expr):
+def pql_SQL(state: State, type_expr: T.type, code_expr: T.string):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     # .. why not just compile with parameters? the types are already known
     type_ = evaluate(state, type_expr)
@@ -68,7 +68,7 @@ def _canonize_default(d):
 def create_internal_func(fname, f):
     sig = inspect.signature(f)
     return objects.InternalFunction(fname, [
-        objects.Param(None, pname, T.any, _canonize_default(sig.parameters[pname].default))
+        objects.Param(None, pname, type_ if isinstance(type_, Type) else T.any, _canonize_default(sig.parameters[pname].default))
         for pname, type_ in list(f.__annotations__.items())[1:]
     ], f)
 
@@ -92,7 +92,7 @@ def pql_debug(state: State):
 
 
 
-def pql_issubclass(state: State, expr: Object, type_expr: Object):
+def pql_issubclass(state: State, expr: T.any, type_expr: T.type):
     "Returns whether the give object is an instance of the given type"
     inst = evaluate(state, expr)
     type_ = evaluate(state, type_expr)
@@ -103,7 +103,7 @@ def pql_issubclass(state: State, expr: Object, type_expr: Object):
     res = inst <= type_
     return new_value_instance(res, T.bool)
 
-def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
+def pql_isa(state: State, expr: T.any, type_expr: T.type):
     "Returns whether the give object is an instance of the given type"
     inst = evaluate(state, expr)
     type_ = evaluate(state, type_expr)
@@ -111,7 +111,7 @@ def pql_isa(state: State, expr: ast.Expr, type_expr: ast.Expr):
     res = inst.isa(type_)
     return new_value_instance(res, T.bool)
 
-def _count(state, obj: ast.Expr, table_func, name):
+def _count(state, obj, table_func, name):
     obj = evaluate(state, obj)
 
     if obj is objects.null:
@@ -129,12 +129,12 @@ def _count(state, obj: ast.Expr, table_func, name):
 
     return objects.Instance.make(code, T.int, [obj])
 
-def pql_count(state: State, obj: ast.Expr = objects.null):
+def pql_count(state: State, obj: T.collection = objects.null):
     "Count how many rows are in the given table, or in the projected column."
     return _count(state, obj, sql.CountTable, 'count')
 
 
-def pql_temptable(state: State, expr_ast: ast.Expr, const: objects = objects.null):
+def pql_temptable(state: State, expr_ast: T.collection, const: T.bool.replace(nullable=True) = objects.null):
     """Generate a temporary table with the contents of the given table
 
     It will remain available until the db-session ends, unless manually removed.
@@ -201,21 +201,21 @@ def sql_bin_op(state, op, table1, table2, name):
     # TODO new type, so it won't look like the physical table
     return type(t1).make(code, t1.type, [t1, t2])
 
-def pql_intersect(state: State, t1: ast.Expr, t2: ast.Expr):
+def pql_intersect(state: State, t1: T.collection, t2: T.collection):
     "Intersect two tables. Used for `t1 & t2`"
     return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
 
-def pql_subtract(state: State, t1: ast.Expr, t2: ast.Expr):
+def pql_subtract(state: State, t1: T.collection, t2: T.collection):
     "Substract two tables (except). Used for `t1 - t2`"
     if state.db.target is sql.mysql:
         raise Signal.make(T.NotImplementedError, state, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
-def pql_union(state: State, t1: ast.Expr, t2: ast.Expr):
+def pql_union(state: State, t1: T.collection, t2: T.collection):
     "Union two tables. Used for `t1 | t2`"
     return sql_bin_op(state, "UNION", t1, t2, "union")
 
-def pql_concat(state: State, t1: ast.Expr, t2: ast.Expr):
+def pql_concat(state: State, t1: T.collection, t2: T.collection):
     "Concatenate two tables (union all). Used for `t1 + t2`"
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
 
@@ -317,14 +317,14 @@ def _find_table_reference(t1, t2):
                 # TODO depends on the query XXX
                 yield (objects.SelectedColumnInstance(t2, T.t_id, 'id'), objects.SelectedColumnInstance(t1, c, name))
 
-def pql_type(state: State, obj: ast.Expr):
+def pql_type(state: State, obj: T.any):
     """
     Returns the type of the given object
     """
     inst = evaluate(state, obj)
     return inst.type
 
-def pql_repr(state: State, obj: ast.Expr):
+def pql_repr(state: State, obj: T.any):
     """
     Returns the type of the given object
     """
@@ -335,7 +335,7 @@ def pql_repr(state: State, obj: ast.Expr):
         value = repr(cast_to_python(state, inst))
         return objects.new_value_instance(value)
 
-def pql_columns(state: State, table: ast.Expr):
+def pql_columns(state: State, table: T.collection):
     """
     Returns a dictionary of {column_name: column_type}
     """
@@ -347,7 +347,7 @@ def pql_columns(state: State, table: ast.Expr):
     return ast.Dict_(None, elems)
 
 
-def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
+def pql_cast(state: State, obj: T.any, type_: T.type):
     "Attempt to cast an object to a specified type"
     inst = evaluate(state, obj)
     type_ = evaluate(state, type_)
@@ -360,7 +360,7 @@ def pql_cast(state: State, obj: ast.Expr, type_: ast.Expr):
     return _cast(state, inst.type, type_, inst)
 
 
-def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] = objects.null):
+def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = objects.null):
     """Import an existing table from SQL
 
     If the columns argument is provided, only these columns will be imported.
@@ -386,7 +386,7 @@ def pql_import_table(state: State, name: ast.Expr, columns: Optional[ast.Expr] =
 
 
 
-def pql_connect(state: State, uri: ast.Expr):
+def pql_connect(state: State, uri: T.string):
     """
     Connect to a new database, specified by the uri
     """
@@ -394,7 +394,7 @@ def pql_connect(state: State, uri: ast.Expr):
     state.connect(uri)
     return objects.null
 
-def pql_help(state: State, obj: Object = objects.null):
+def pql_help(state: State, obj: T.any = objects.null):
     """
     Provides a brief summary for a given object
     """
@@ -422,7 +422,7 @@ def pql_help(state: State, obj: Object = objects.null):
     text = '\n'.join(lines) + '\n'
     return new_value_instance(text).replace(type=T.text)
 
-def pql_names(state: State, obj: Object = objects.null):
+def pql_names(state: State, obj: T.any = objects.null):
     """List all names in the namespace of the given object.
 
     If no object is given, lists the names in the current namespace.
@@ -472,7 +472,7 @@ breakpoint_funcs = create_internal_funcs({
 })
 
 
-def pql_exit(state, value: Object = None):
+def pql_exit(state, value: T.int.replace(nullable=True) = None):
     """Exit the current interpreter instance.
 
     Can be used from running code, or the REPL.
@@ -484,7 +484,7 @@ def pql_exit(state, value: Object = None):
 
 
 
-def pql_import_csv(state: State, table: Object, filename: Object, header: Object = ast.Const(None, T.bool, False)):
+def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.bool = ast.Const(None, T.bool, False)):
     "Import a csv into an existing table"
     # TODO better error handling, validation
     table = evaluate(state, table)

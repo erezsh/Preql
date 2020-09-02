@@ -194,7 +194,15 @@ def _execute(state: State, insert_rows: ast.InsertRows):
 def _execute(state: State, func_def: ast.FuncDef):
     func = func_def.userfunc
     assert isinstance(func, objects.UserFunction)
-    state.set_var(func.name, func)
+
+    new_params = []
+    for p in func.params:
+        if p.type:
+            t = evaluate(state, p.type)
+            p = p.replace(type=t)
+        new_params.append(p)
+
+    state.set_var(func.name, func.replace(params=new_params))
 
 import rich.console
 @dy
@@ -204,8 +212,11 @@ def _execute(state: State, p: ast.Print):
     # res = localize(state, inst)
     # print(res)
     repr_ = inst.repr(state)
-    console = rich.console.Console()
-    console.print(repr_)
+    if isinstance(repr_, rich.table.Table):
+        console = rich.console.Console()
+        console.print(repr_)
+    else:
+        print(repr_)
 
 @dy
 def _execute(state: State, p: ast.Assert):

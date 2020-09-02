@@ -220,6 +220,13 @@ class BasicTests(PreqlTests):
         # res = preql("distinct(languages())")
         # assert is_eq(res, [("he",), ("en",)])
 
+    def test_user_functions2(self):
+        p = self.Preql()
+        p("""
+            func f(x: int, y:list[string]) = 0
+        """)
+        assert p('type(f)') == T.function[T.int, T.list[T.string]]
+
     def _test_joins(self, preql):
         nonenglish_speakers = [
             ("Erez Shinan", None),
