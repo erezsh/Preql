@@ -11,6 +11,22 @@ from .utils import dataclass
 
 global_methods = {}
 
+def _repr_type_elem(t, depth):
+    return _repr_type(t, depth-1) if isinstance(t, Type) else repr(t)
+
+def _repr_type(t, depth=2):
+    if t.elems:
+        if depth > 0:
+            if isinstance(t.elems, dict):
+                elems = '[%s]' % ', '.join(f'{k}: {_repr_type_elem(v, depth)}' for k,v in t.elems.items())
+            else:
+                elems = '[%s]' % ', '.join(_repr_type_elem(e, depth) for e in t.elems)
+        else:
+            elems = '[...]'
+    else:
+        elems = ''
+    return f'{t._typename_with_q}{elems}'
+
 @dataclass
 class Type(Object):
     typename: str
@@ -32,6 +48,10 @@ class Type(Object):
         else:
             elem ,= self.elems
         return elem
+
+    def as_nullable(self):
+        assert not self.nullable
+        return self.replace(nullable=True)
 
     def supertype_chain(self):
         res = {
@@ -89,6 +109,9 @@ class Type(Object):
         assert isinstance(t, Type), t
         if t.typename == 'union':   # XXX a little hacky. Change to issupertype?
             return any(self.issubtype(t2) for t2 in t.elem_types)
+        if self is T.null:
+            if t.nullable:
+                return True
 
         # TODO zip should be aware of lengths
         if t.typename in {s.typename for s in self.supertype_chain()}:
@@ -107,15 +130,8 @@ class Type(Object):
         return self.replace(elems=elems or self.elems, methods=dict(self.methods), options={**self.options, **options})
 
     def __repr__(self):
-        # TODO fix. Move to dp_inst?
-        if self.elems:
-            if isinstance(self.elems, dict):
-                elems = '[%s]' % ', '.join(f'{k}: {v._typename_with_q if isinstance(v, Type) else repr(v)}' for k,v in self.elems.items())
-            else:
-                elems = '[%s]' % ', '.join(e.typename if isinstance(e, Type) else repr(e) for e in self.elems)
-        else:
-            elems = ''
-        return f'{self._typename_with_q}{elems}'
+        # TODO Move to dp_inst?
+        return _repr_type(self)
 
     def get_attr(self, attr):
         if self is T.unknown:

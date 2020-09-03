@@ -33,7 +33,7 @@ def _pql_PY_callback(state: State, var: str):
     return str(inst.local_value)
 
 
-def pql_PY(state: State, code_expr: T.string, code_setup: T.string.replace(nullable=True) = objects.null):
+def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable() = objects.null):
     py_code = cast_to_python(state, code_expr)
     py_setup = cast_to_python(state, code_setup)
 
@@ -53,12 +53,10 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.replace(nulla
     return objects.new_value_instance(res)
 
 
-def pql_SQL(state: State, type_expr: T.type, code_expr: T.string):
+def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     # .. why not just compile with parameters? the types are already known
-    type_ = evaluate(state, type_expr)
-    code_expr2 = evaluate(state, code_expr)
-    return ast.ResolveParametersString(None, type_, code_expr2)
+    return ast.ResolveParametersString(None, result_type, sql_code)
 
 
 
@@ -92,28 +90,24 @@ def pql_debug(state: State):
 
 
 
-def pql_issubclass(state: State, expr: T.any, type_expr: T.type):
+def pql_issubclass(state: State, inst: T.any, type: T.type):
     "Returns whether the give object is an instance of the given type"
-    inst = evaluate(state, expr)
-    type_ = evaluate(state, type_expr)
-    assert_type(inst.type, T.type, state, expr, 'issubclass')
-    assert_type(type_.type, T.type, state, expr, 'issubclass')
+    type_ = type
+    assert_type(inst.type, T.type, state, inst, 'issubclass')
+    assert_type(type_.type, T.type, state, inst, 'issubclass')
     assert isinstance(inst, Type)
     assert isinstance(type_, Type)
     res = inst <= type_
     return new_value_instance(res, T.bool)
 
-def pql_isa(state: State, expr: T.any, type_expr: T.type):
+def pql_isa(state: State, inst: T.any, type: T.type):
     "Returns whether the give object is an instance of the given type"
-    inst = evaluate(state, expr)
-    type_ = evaluate(state, type_expr)
-    assert_type(type_.type, T.type, state, expr, 'isa')
+    type_ = type
+    assert_type(type_.type, T.type, state, inst, 'isa')
     res = inst.isa(type_)
     return new_value_instance(res, T.bool)
 
 def _count(state, obj, table_func, name):
-    obj = evaluate(state, obj)
-
     if obj is objects.null:
         code = sql.FieldFunc(name, sql.AllFields(T.any))
     elif obj.type <= T.table:
@@ -129,21 +123,20 @@ def _count(state, obj, table_func, name):
 
     return objects.Instance.make(code, T.int, [obj])
 
-def pql_count(state: State, obj: T.collection = objects.null):
+def pql_count(state: State, obj: T.container.as_nullable() = objects.null):
     "Count how many rows are in the given table, or in the projected column."
     return _count(state, obj, sql.CountTable, 'count')
 
 
-def pql_temptable(state: State, expr_ast: T.collection, const: T.bool.replace(nullable=True) = objects.null):
+def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() = objects.null):
     """Generate a temporary table with the contents of the given table
 
     It will remain available until the db-session ends, unless manually removed.
     """
     # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
     # 'const table' doesn't
-    expr = evaluate(state, expr_ast)
     const = cast_to_python(state, const)
-    assert_type(expr.type, T.collection, state, expr_ast, 'temptable')
+    assert_type(expr.type, T.collection, state, expr, 'temptable')
 
     # elems = dict(expr.type.elems)
     elems = expr.type.elem_dict
@@ -182,9 +175,7 @@ def pql_get_db_type(state: State):
 
 
 
-def sql_bin_op(state, op, table1, table2, name):
-    t1 = evaluate(state, table1)
-    t2 = evaluate(state, table2)
+def sql_bin_op(state, op, t1, t2, name):
 
     if not isinstance(t1, objects.CollectionInstance):
         raise Signal.make(T.TypeError, state, table1, f"First argument isn't a table, it's a {t1.type}")
@@ -224,7 +215,7 @@ def pql_concat(state: State, t1: T.collection, t2: T.collection):
 
 def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
-    exprs = {name: evaluate(state, value) for name,value in exprs.items()}
+    exprs = {name: evaluate(state, value) for name, value in exprs.items()}
     for x in exprs.values():
         if not isinstance(x, objects.AbsInstance):
             raise Signal.make(T.TypeError, state, None, f"Unexpected object type: {x}")
@@ -259,7 +250,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     # Update nullable for left/right/outer joins
     if nullable:
-        structs = {name: t.replace(nullable=True) if n else t
+        structs = {name: t.as_nullable() if n else t
                    for (name, t), n in safezip(structs.items(), nullable)}
 
     tables = [objects.alias_table_columns(t, n) for n, t in safezip(exprs, tables)]
@@ -321,14 +312,12 @@ def pql_type(state: State, obj: T.any):
     """
     Returns the type of the given object
     """
-    inst = evaluate(state, obj)
-    return inst.type
+    return obj.type
 
 def pql_repr(state: State, obj: T.any):
     """
     Returns the type of the given object
     """
-    inst = evaluate(state, obj)
     try:
         return objects.new_value_instance(inst.repr(state))
     except ValueError:
@@ -339,7 +328,6 @@ def pql_columns(state: State, table: T.collection):
     """
     Returns a dictionary of {column_name: column_type}
     """
-    table = evaluate(state, table)
     elems = table.type.elems
     if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
         elems = {f't{i}':e for i, e in enumerate(elems)}
@@ -347,10 +335,9 @@ def pql_columns(state: State, table: T.collection):
     return ast.Dict_(None, elems)
 
 
-def pql_cast(state: State, obj: T.any, type_: T.type):
+def pql_cast(state: State, inst: T.any, type: T.type):
     "Attempt to cast an object to a specified type"
-    inst = evaluate(state, obj)
-    type_ = evaluate(state, type_)
+    type_ = type
     if not isinstance(type_, Type):
         raise Signal.make(T.TypeError, state, type_, f"Cast expected a type, got {type_} instead.")
 
@@ -394,7 +381,7 @@ def pql_connect(state: State, uri: T.string):
     state.connect(uri)
     return objects.null
 
-def pql_help(state: State, obj: T.any = objects.null):
+def pql_help(state: State, inst: T.any = objects.null):
     """
     Provides a brief summary for a given object
     """
@@ -410,7 +397,6 @@ def pql_help(state: State, obj: T.any = objects.null):
 
 
     lines = []
-    inst = evaluate(state, obj)
     if isinstance(inst, objects.Function):
         lines = ['', inst.help_str(state),'']
         doc = inst.docstring
@@ -429,7 +415,7 @@ def pql_names(state: State, obj: T.any = objects.null):
     """
     # TODO support all objects
     if obj is not objects.null:
-        inst = evaluate(state, obj)
+        inst = obj
         if inst.type <= T.module:
             all_vars = inst.namespace
         elif inst.type <= T.collection:
@@ -472,7 +458,7 @@ breakpoint_funcs = create_internal_funcs({
 })
 
 
-def pql_exit(state, value: T.int.replace(nullable=True) = None):
+def pql_exit(state, value: T.int.as_nullable() = None):
     """Exit the current interpreter instance.
 
     Can be used from running code, or the REPL.
@@ -487,7 +473,6 @@ def pql_exit(state, value: T.int.replace(nullable=True) = None):
 def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.bool = ast.Const(None, T.bool, False)):
     "Import a csv into an existing table"
     # TODO better error handling, validation
-    table = evaluate(state, table)
     filename = cast_to_python(state, filename)
     header = cast_to_python(state, header)
     print(f"Importing CSV file: '{filename}'")

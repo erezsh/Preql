@@ -443,7 +443,6 @@ def eval_func_call(state, func, args):
 
     matched_args = func.match_params(state, args)
 
-
     if isinstance(func, objects.MethodInstance):
         args = {'this': func.parent}
         # args.update(func.parent.all_attrs())
@@ -453,8 +452,15 @@ def eval_func_call(state, func, args):
     # XXX simplify destroys text_ref, so it harms error messages.
     # TODO Can I get rid of it, or make it preserve the text_ref somehow?
     # Don't I need an instance to ensure I have type?
-    args.update( {p.name:evaluate(state, a) for p,a in matched_args} )
+    # args.update( {p.name:evaluate(state, a) for p,a in matched_args} )
     # args.update( {p.name:a for p,a in matched_args} )
+
+    for i, (p, a) in enumerate(matched_args):
+        a = evaluate(state, a)
+        # TODO cast?
+        if p.type and not a.type <= p.type:
+            raise Signal.make(T.TypeError, state, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
+        args[p.name] = a
 
 
     # if isinstance(func, objects.UserFunction):
@@ -834,7 +840,15 @@ def localize(state, x):
 ### Added functions
 
 def function_help_str(self, state):
-    params = [p.name if p.default is None else f'{p.name}={cast_to_python(state, p.default)}' for p in self.params]
+    params = []
+    for p in self.params:
+        s = p.name
+        if p.type:
+            s += f": {p.type}"
+        if p.default:
+            s += f"={cast_to_python(state, p.default)}"
+        params.append(s)
+
     if self.param_collector is not None:
         params.append(f"...{self.param_collector.name}")
     param_str = ', '.join(params)
