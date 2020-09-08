@@ -11,8 +11,7 @@ from . import pql_objects as objects
 from .exceptions import Signal
 from .exceptions import InsufficientAccessLevel
 from .pql_types import Type, T
-from .sql_interface import (ConnectError, GitqliteInterface, MysqlInterface,
-                            PostgresInterface, SqliteInterface)
+from .sql_interface import (ConnectError, GitInterface, MysqlInterface, PostgresInterface, SqliteInterface)
 
 dy = Dispatch()
 
@@ -191,8 +190,8 @@ def create_engine(db_uri, print_sql):
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'mysql':
         return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
-    elif scheme == 'gitqlite':
-        return GitqliteInterface(path, print_sql=print_sql)
+    elif scheme == 'git':
+        return GitInterface(path, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
 

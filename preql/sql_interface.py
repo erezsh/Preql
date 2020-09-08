@@ -1,5 +1,4 @@
 from decimal import Decimal
-from mysql.connector import Connect
 from .utils import dataclass
 from .loggers import sql_log
 
@@ -229,7 +228,9 @@ class SqliteInterface(SqlInterface):
 
 import subprocess
 import json
-class GitqliteInterface(SqliteInterface):
+class GitInterface(SqliteInterface):
+    "Uses https://github.com/augmentable-dev/askgit"
+
     target = sqlite
 
     def __init__(self, path, print_sql):
@@ -238,8 +239,8 @@ class GitqliteInterface(SqliteInterface):
 
 
     table_schema_type = T.table(dict(
-        pos=T.int,
-        default_value=T.string,
+        cid=T.int,
+        dflt_value=T.string,
         name=T.string,
         notnull=T.bool,
         pk=T.bool,
@@ -248,7 +249,7 @@ class GitqliteInterface(SqliteInterface):
 
     def _execute_sql(self, sql_type, sql_code, state):
         try:
-            res = subprocess.check_output(['gitqlite', '--format', 'json', sql_code])
+            res = subprocess.check_output(['askgit', '--format', 'json', sql_code])
         except subprocess.CalledProcessError as e:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
             raise exceptions.DatabaseQueryError(msg%(sql_code, e))
@@ -257,11 +258,43 @@ class GitqliteInterface(SqliteInterface):
 
     def _import_result(self, sql_type, c, state):
         if sql_type is not T.null:
-            res = [list(json.loads(x).values()) for x in c.split(b'\n') if x.strip()]
-            # imp = sql_type.import_result
-            # return imp(res)
+            if sql_type <= T.table:
+                lookup = dict(reversed(x) for x in enumerate(sql_type.elems))
+                rows = [json.loads(x) for x in c.split(b'\n') if x.strip()]
+                res = []
+                for row in rows:
+                    # TODO refactor into a function
+                    x = ["PLACEHOLDER"] * len(row)
+                    for k, v in row.items():
+                        x[lookup[k]] = v
+                    assert "PLACEHOLDER" not in x, (x, row)
+                    res.append(x)
+            else:
+                res = [list(json.loads(x).values()) for x in c.split(b'\n') if x.strip()]
+
             return from_sql(state, Const(sql_type, res))
 
+    def import_table_type(self, state, name, columns_whitelist):
+        # TODO merge with superclass
+
+        columns_q = """pragma table_info('%s')""" % name
+        sql_columns = self._execute_sql(self.table_schema_type, columns_q, state)
+
+        if columns_whitelist:
+            wl = set(columns_whitelist)
+            sql_columns = [c for c in sql_columns if c['name'] in wl]
+
+        cols = [(c['cid'], c['name'], _type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
+        cols.sort()
+        cols = dict(c[1:] for c in cols)
+
+        return T.table(cols, name=name)
+
+    def list_tables(self):
+        # TODO merge with superclass?
+        sql_code = "SELECT name FROM sqlite_master where type='table'"
+        res = self._execute_sql(T.table(dict(name=T.string)), sql_code, None)
+        return [x['name'] for x in res]
 
 
 
