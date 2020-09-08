@@ -79,7 +79,7 @@ def _expand_ellipsis(state, table, fields):
                 elems = elem_dict(table.type)
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
-                        raise AutocompleteSuggestions({k:v for k,v in elems.items()
+                        raise AutocompleteSuggestions({k:v for k, v in elems.items()
                                                       if k not in direct_names
                                                       and k not in f.value.exclude})
 
@@ -142,7 +142,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     attrs = table.all_attrs()
 
-    with state.use_scope({n:vectorized(c) for n,c in attrs.items()}):
+    with state.use_scope({n:vectorized(c) for n, c in attrs.items()}):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
@@ -151,12 +151,12 @@ def compile_to_inst(state: State, proj: ast.Projection):
             raise exc.Signal.make(T.TypeError, state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
-        t = T.struct({n:c.type for n,c in fields})
+        t = T.struct({n:c.type for n, c in fields})
         return objects.StructInstance(t, dict(fields))
 
     agg_fields = []
     if proj.agg_fields:
-        with state.use_scope({n:objects.aggregate(c) for n,c in attrs.items()}):
+        with state.use_scope({n:objects.aggregate(c) for n, c in attrs.items()}):
             agg_fields = _process_fields(state, proj.agg_fields)
 
     all_fields = fields + agg_fields
@@ -528,7 +528,7 @@ def compile_to_inst(state: State, c: ast.Const):
 def compile_to_inst(state: State, d: ast.Dict_):
     # TODO handle duplicate key names
     elems = {k or guess_field_name(v): evaluate(state, v) for k, v in d.elems.items()}
-    t = T.struct({k: v.type for k,v in elems.items()})
+    t = T.struct({k: v.type for k, v in elems.items()})
     return objects.StructInstance(t, elems)
 
 @dy
@@ -622,10 +622,10 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
 def re_split(r, s):
     offset = 0
     for m in re.finditer(r, s):
-        yield None,s[offset:m.start()]
-        yield m,s[m.start():m.end()]
+        yield None, s[offset:m.start()]
+        yield m, s[m.start():m.end()]
         offset = m.end()
-    yield None,s[offset:]
+    yield None, s[offset:]
 
 
 
@@ -719,7 +719,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     assert_type(table.type, T.collection, state, sel, "Selection")
 
     # with state.use_scope(table.all_attrs()):
-    with state.use_scope({n:vectorized(c) for n,c in table.all_attrs().items()}):
+    with state.use_scope({n:vectorized(c) for n, c in table.all_attrs().items()}):
         conds = cast_to_instance(state, sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):

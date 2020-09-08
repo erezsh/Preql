@@ -33,7 +33,7 @@ class Interpreter:
             mns = import_module(self.state, ast.Import(None, 'core', use_core=False)).namespace
             bns = self.state.get_var('__builtins__').namespace
             # safe-update
-            for k,v in mns.items():
+            for k, v in mns.items():
                 assert k not in bns
                 bns[k] = v
 

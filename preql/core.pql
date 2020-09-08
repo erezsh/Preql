@@ -224,3 +224,8 @@ func sample_fast(tbl: collection, n: int, bias: number=0.05) {
     // This should happen very rarely
     return results + limit(tbl, n - count(results))
 }
+
+func page(table, index, page_size=20) {
+    offset = index*page_size
+    return table[offset..(offset+page_size)]
+}

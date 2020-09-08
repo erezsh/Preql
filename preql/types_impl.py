@@ -56,7 +56,7 @@ def table_flat_for_insert(table):
     #     raise Signal.pql_TypeError(T.TypeError, [], f"Cannot add to table. Primary key not defined")
 
     pks = {join_names(pk) for pk in table.options.get('pk', [])}
-    names = [name for name,t in flatten_type(table)]
+    names = [name for name, t in flatten_type(table)]
     return classify_bool(names, lambda name: name in pks)
 
 

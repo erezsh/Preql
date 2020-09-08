@@ -8,7 +8,7 @@ It lets you use syntax and semantics that are similar to Javascript and Python, 
 
 By combining these elements, Preql lets you write simple and elegant code that runs as fast as SQL.
 
-We'll soon dive into the language itself, let's first let's install and learn how to use the interpreter
+We'll soon dive into the language itself, but first let's install and learn how to use the interpreter
 
 ## Getting Started (Install & How to use)
 
@@ -30,7 +30,7 @@ Welcome to the Preql REPL. Type help() for help
 
 By default, the interpreter uses SQLite's memory database. We'll later see how to change it using the `connect()` function.
 
-From now on, we'll use `>>` to signify the Preql REPL
+From now on, we'll use `>>` to signify the Preql REPL.
 
 Press Ctrl+C to interrupt an existing operation or prompt. Press Ctrl+D or run `exit()` to exit the interpreter.
 
@@ -46,13 +46,17 @@ print "Hello World!"
 And then run it:
 
 ```go
-$ preql helloworld.pql
+$ preql -m helloworld
 Hello World!
 ```
 
+Alternatively, we could do `preql -f helloworld.pql`.
+
 ## Basic Expressions
 
-Preql has integers, floats and strings. They behave as you would expect:
+Preql has integers, floats and strings. They behave similarly to Python
+
+`null` behaves just like Python's None.
 
 ```go
 >> 1 + 1
@@ -70,9 +74,17 @@ Preql has integers, floats and strings. They behave as you would expect:
 True
 >> null == null     // Unlike SQL!
 True
+>> null + 1
+Exception traceback:
+  ~~~ At '<repl>' line 1, column 6
+null + 1
+-----^---
+TypeError: Operator '+' not implemented for null and int
 ```
 
 Notice that dividing two integers results in a float. To get an integer, use the `/~` operator:
+
+(Equivalent to Python's `//` operator)
 
 ```go
 >> 10 /~ 3
@@ -96,16 +108,18 @@ Declare functions using func:
 func sign(x) {
   if (x == 0) {
     return 0
-  }
-  if (x > 0) {
+  } else if (x > 0) {
     return 1
+  } else {
+    return -1
   }
-  return -1
 }
 
 >> sign(100)
 1
 ```
+
+!!!!! TODO  !!!!!  doesn't work when vectorized!
 
 There's also a shorthand for "one-liners":
 
@@ -119,9 +133,11 @@ There's also a shorthand for "one-liners":
 
 ## Tables
 
-Tables are basically a set of columns, that can be instanciated into a list of rows.
+Tables are basically a list of rows that all have the same structure.
 
-Preql's tables are stored in an SQL database, and most operations on them are done using SQL queries.
+That structure is defined by a set of columns, where each column has a name and a type.
+
+Preql's tables are stored in an SQL database, and most operations on them are done efficiently using SQL queries.
 
 
 Here is how we would define a table of points:
@@ -133,7 +149,7 @@ table Point {
 }
 ```
 
-This statement creates a permanent table in your database (if you are connected to one. The default database resides in memory and isn't persistent)
+This statement creates a persistent table in your database (if you are connected to one. The default database resides in memory and isn't persistent)
 
 For this tutorial, let's create a table that's little more meaningful, and populate it with values:
 

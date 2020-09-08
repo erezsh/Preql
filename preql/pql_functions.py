@@ -417,9 +417,9 @@ def pql_names(state: State, obj: T.any = objects.null):
     if obj is not objects.null:
         inst = obj
         if inst.type <= T.module:
-            all_vars = inst.namespace
+            all_vars = inst.all_attrs()
         elif inst.type <= T.collection:
-            all_vars = (inst.all_attrs())
+            all_vars = inst.all_attrs()
         else:
             raise Signal.make(T.TypeError, state, obj, "Argument to names() must be a table or module")
     else:

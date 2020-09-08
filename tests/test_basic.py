@@ -145,6 +145,10 @@ class BasicTests(PreqlTests):
         assert preql("one one [1,2,3] { => count()} ") == 3
         assert preql(" [1,2,3] { value /~ 2 => count()} {count} ") == [{'count': 1}, {'count': 2}]
 
+    def test_assert(self):
+        preql = self.Preql()
+        self._assertSignal(T.AssertError, preql, 'assert 0')
+
     def test_arith(self):
         preql = self.Preql()
 

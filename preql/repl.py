@@ -71,7 +71,7 @@ class Autocompleter(Completer):
         all_vars = autocomplete(self.state, context)
         all_vars.update(KEYWORDS)
 
-        for k,v in all_vars.items():
+        for k, v in all_vars.items():
             if k.startswith(fragment):
                 a, b = k[:len(fragment)], k[len(fragment):]
                 if v is None:

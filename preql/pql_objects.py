@@ -50,9 +50,15 @@ class Module(Object):
         except KeyError:
             raise pql_AttributeError(attr)
 
+    def all_attrs(self):
+        return self.namespace
+
     @property
     def type(self):
         return T.module
+
+    def repr(self, state):
+        return f'<Module {self.name} | {len(self.namespace)} members>'
 
 class Function(Object):
 
