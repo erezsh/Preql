@@ -22,4 +22,4 @@ class PreqlTests(TestCase):
 
     def tearDown(self):
         if self.preql:
-            self.preql.engine.rollback()
+            self.preql.interp.state.db.rollback()

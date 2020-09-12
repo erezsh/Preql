@@ -112,7 +112,7 @@ class MysqlInterface(SqlInterface):
         sql_code = "SHOW TABLES"
         return self._execute_sql(T.list[T.string], sql_code, None)
 
-    def import_table_type(self, state, name, columns_whitelist):
+    def import_table_type(self, state, name, columns_whitelist=None):
         columns_t = T.table(dict(
             name=T.string,
             type=T.string,
@@ -156,7 +156,7 @@ class PostgresInterface(SqlInterface):
         return self._execute_sql(T.list[T.string], sql_code, None)
 
 
-    def import_table_type(self, state, name, columns_whitelist):
+    def import_table_type(self, state, name, columns_whitelist=None):
 
         columns_t = T.table(dict(
             schema=T.string,
@@ -210,7 +210,7 @@ class SqliteInterface(SqlInterface):
         pk=T.bool,
     ))
 
-    def import_table_type(self, state, name, columns_whitelist):
+    def import_table_type(self, state, name, columns_whitelist=None):
 
         columns_q = """pragma table_info('%s')""" % name
         sql_columns = self._execute_sql(self.table_schema_type, columns_q, state)
@@ -274,7 +274,7 @@ class GitInterface(SqliteInterface):
 
             return from_sql(state, Const(sql_type, res))
 
-    def import_table_type(self, state, name, columns_whitelist):
+    def import_table_type(self, state, name, columns_whitelist=None):
         # TODO merge with superclass
 
         columns_q = """pragma table_info('%s')""" % name

@@ -212,12 +212,12 @@ def start_repl(p, prompt=' >> '):
         repl_log.info('Exiting Preql interaction')
 
 
-def main(script=None):
-    # p = Preql(db)
-    p = Preql()
-    if script:
-        p.load(script)
-    start_repl(p)
+# def main(script=None):
+#     # p = Preql(db)
+#     p = Preql()
+#     if script:
+#         p.load(script)
+#     start_repl(p)
 
-if __name__ == '__main__':
-    main(*sys.argv[1:])
+# if __name__ == '__main__':
+#     main(*sys.argv[1:])

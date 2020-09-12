@@ -91,7 +91,8 @@ class State:
         except ValueError as e:
             raise Signal.make(T.ValueError, self, None, *e.args) from e
 
-        self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
+        self._db_uri = uri
+        # self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
 
 
     def get_all_vars(self):

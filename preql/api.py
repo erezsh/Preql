@@ -193,20 +193,24 @@ class Interface:
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
 
-        self.engine = create_engine(db_uri, print_sql=print_sql)
+        self._db_uri = db_uri
+        self._print_sql = print_sql
         # self.engine.ping()
 
-        self._reset_interpreter()
+        engine = create_engine(self._db_uri, print_sql=self._print_sql)
+        self._reset_interpreter(engine)
 
     def set_output_format(self, fmt):
         self.interp.state.fmt = fmt  # TODO proper api
 
-    def _reset_interpreter(self):
-        self.interp = Interpreter(self.engine)
+    def _reset_interpreter(self, engine=None):
+        if engine is None:
+            engine = self.interp.state.db
+        self.interp = Interpreter(engine)
         self.interp.state._py_api = self # TODO proper api
 
     def close(self):
-        self.engine.close()
+        self.interp.state.db.close()
 
     def __getattr__(self, fname):
         var = self.interp.state.get_var(fname)
@@ -250,12 +254,12 @@ class Interface:
         start_repl(self, *args)
 
     def commit(self):
-        return self.engine.commit()
+        return self.interp.state.db.commit()
 
     def _drop_tables(self, *tables):
         # XXX temporary method
         for t in tables:
-            self.engine._execute_sql(T.null, f"DROP TABLE {t};", self.interp.state)
+            self.interp.state.db._execute_sql(T.null, f"DROP TABLE {t};", self.interp.state)
 
     def import_pandas(self, **dfs):
         for name, df in dfs.items():
@@ -264,8 +268,12 @@ class Interface:
                     for rec in df.to_records()]
             new_table_from_rows(self.interp.state, name, cols, rows)
 
-
-
+    def load_all_tables(self):
+        tables = self.interp.state.db.list_tables()
+        for table_name in tables:
+            table_type = self.interp.state.db.import_table_type(self.interp.state, table_name)
+            inst = objects.new_table(table_type, table_name)
+            self.interp.set_var(table_name, inst)
 
 
 

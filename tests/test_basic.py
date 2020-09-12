@@ -19,7 +19,7 @@ def uses_tables(*names):
                 return decorated(self)
 
             p = self.Preql()
-            tables = p.engine.list_tables()
+            tables = p.interp.state.db.list_tables()
             if tables:
                 print("@@ Deleting", tables, decorated)
             p._drop_tables(*tables)
@@ -30,7 +30,7 @@ def uses_tables(*names):
                 p = self.preql
                 if p.interp.state.db.target is mysql:
                     p._drop_tables(*names)
-                tables = p.engine.list_tables()
+                tables = p.interp.state.db.list_tables()
                 assert not tables, tables
 
         return wrapper
@@ -59,7 +59,7 @@ class BasicTests(PreqlTests):
 
     def tearDown(self):
         if self.preql:
-            self.preql.engine.rollback()
+            self.preql.interp.state.db.rollback()
 
     @uses_tables('Person', 'Country')
     def test_basic1(self):

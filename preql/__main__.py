@@ -56,6 +56,7 @@ def main():
 
 
     if interactive:
+        p.load_all_tables()
         p.start_repl()
 
 if __name__ == '__main__':
