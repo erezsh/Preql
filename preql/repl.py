@@ -22,7 +22,7 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text.html import HTML, html_escape
 from prompt_toolkit.key_binding import KeyBindings
 
-from . import Preql
+from . import Preql, __version__
 from . import pql_objects as objects
 from .api import table_more
 from .exceptions import Signal, ExitInterp, pql_SyntaxError
@@ -131,12 +131,12 @@ def _code_is_valid(code):
 
 
 def start_repl(p, prompt=' >> '):
-    repl_log.info("Welcome to the Preql REPL. Type help() for help")
     save_last = '_'   # XXX A little hacky
 
     p.set_output_format('rich')
 
     console = rich.console.Console()
+    console.print(f"[purple]Preql {__version__} interactive prompt. Type help() for help[/purple]")
 
     try:
         session = PromptSession(

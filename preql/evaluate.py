@@ -278,12 +278,18 @@ def import_module(state, r):
     i = Interpreter(state.db, state.fmt, use_core=r.use_core)
     i.state.stacktrace = state.stacktrace   # XXX proper interface
 
+    # Give the module access to active database
+    i.state.db = state.db
+
     state.stacktrace.append(r.text_ref)
     try:
         i.include(module_path)
     finally:
         assert state.stacktrace[-1] is r.text_ref
         state.stacktrace.pop()
+
+    # Inherit module db (in case it called connect())
+    state.db = i.state.db
 
     ns = i.state.ns.ns
     assert len(ns) == 1

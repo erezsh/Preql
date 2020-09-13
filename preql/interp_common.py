@@ -102,21 +102,15 @@ class State:
         try:
             return self.ns.get_var(name)
         except NameNotFound:
+            core = self.ns.get_var('__builtins__')
+            assert isinstance(core, objects.Module)
             try:
-                core = self.ns.get_var('__builtins__')
-            except NameNotFound:
+                return core.namespace[name]
+            except KeyError:
                 pass
-            else:
-                assert isinstance(core, objects.Module)
-                try:
-                    return core.namespace[name]
-                except KeyError:
-                    pass
 
-                raise Signal.make(T.NameError, self, name, f"Name '{name}' not found")
+            raise Signal.make(T.NameError, self, name, f"Name '{name}' not found")
 
-
-            assert False
 
     def set_var(self, name, value):
         return self.ns.set_var(name, value)

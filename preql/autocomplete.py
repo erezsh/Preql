@@ -115,7 +115,7 @@ def autocomplete_tree(puppet):
     t = Token('MARKER', '<MARKER>', 1, 1, 1, 1, 2, 2)
     try:
         res = puppet.feed_token(t)
-    except KeyError:    # Could still fail
+    except ParseError:    # Could still fail
         return
 
     assert not res

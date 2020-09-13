@@ -1,3 +1,4 @@
+from build.lib.preql.interp_common import NameNotFound
 from pathlib import Path
 from preql.exceptions import Signal, pql_SyntaxError
 
@@ -66,4 +67,11 @@ class Interpreter:
                 value = new_value_instance(value)
 
         self.state.set_var(name, value)
+
+    def has_var(self, name):
+        try:
+            self.state.get_var(name)
+        except Signal:
+            return False
+        return True
 

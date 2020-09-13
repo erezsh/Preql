@@ -56,7 +56,7 @@ def _html_table(name, count_str, rows, offset):
     return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
 
 
-def _rich_table(name, count_str, rows, offset, colors=True, show_footer=False):
+def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_footer=False):
     header = 'table '
     if name:
         header += name
@@ -87,6 +87,9 @@ def _rich_table(name, count_str, rows, offset, colors=True, show_footer=False):
 
     for r in rows:
         table.add_row(*[rich.markup.escape(str(x)) for x in r.values()])
+
+    if has_more:
+        table.add_row(*['...' for x in rows[0]])
 
     return table
 
@@ -122,17 +125,17 @@ def table_repr(self, state, offset=0):
     if self.type <= T.list:
         rows = [{'value': x} for x in rows]
 
-    post = '\n\t...' if len(rows) < count else ''
+    has_more = offset + len(rows) < count
 
     table_name = self.type.options.get('name', '')
 
     if state.fmt == 'html':
         return _html_table(table_name, count_str, rows, offset)
     elif state.fmt == 'rich':
-        return _rich_table(table_name, count_str, rows, offset)
+        return _rich_table(table_name, count_str, rows, offset, has_more)
 
     assert state.fmt == 'text'
-    return _rich_table(table_name, count_str, rows, offset, colors=False)
+    return _rich_table(table_name, count_str, rows, offset, has_more, colors=False)
 
     # raise NotImplementedError(f"Unknown format: {state.fmt}")
 
@@ -273,7 +276,8 @@ class Interface:
         for table_name in tables:
             table_type = self.interp.state.db.import_table_type(self.interp.state, table_name)
             inst = objects.new_table(table_type, table_name)
-            self.interp.set_var(table_name, inst)
+            if not self.interp.has_var(table_name):
+                self.interp.set_var(table_name, inst)
 
 
 

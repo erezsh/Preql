@@ -385,7 +385,7 @@ def pql_help(state: State, inst: T.any = objects.null):
     """
     Provides a brief summary for a given object
     """
-    if obj is objects.null:
+    if inst is objects.null:
         text = (
             "Welcome to Preql!\n\n"
             "To see the list of functions and objects available in the namespace, type 'names()'\n\n"
@@ -393,7 +393,7 @@ def pql_help(state: State, inst: T.any = objects.null):
             "For example:\n"
             "    >> help(help)\n"
         )
-        return new_value_instance(text, T.string)
+        return new_value_instance(text, T.string).replace(type=T.text)
 
 
     lines = []
