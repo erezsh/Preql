@@ -33,7 +33,7 @@ class SqlInterface:
         # return self._import_result(sql.type, cur, state)
 
     def _import_result(self, sql_type, c, state):
-        if sql_type is not T.null:
+        if sql_type is not T.nulltype:
             res = c.fetchall()
             # imp = sql_type.import_result
             # return imp(res)
@@ -257,7 +257,7 @@ class GitInterface(SqliteInterface):
         return self._import_result(sql_type, res, state)
 
     def _import_result(self, sql_type, c, state):
-        if sql_type is not T.null:
+        if sql_type is not T.nulltype:
             if sql_type <= T.table:
                 lookup = dict(reversed(x) for x in enumerate(sql_type.elems))
                 rows = [json.loads(x) for x in c.split(b'\n') if x.strip()]
@@ -340,4 +340,4 @@ def _type_from_sql(type, nullable):
 
     nullable = _bool_from_sql(nullable)
 
-    return v.replace(nullable=nullable)
+    return v.replace(_nullable=nullable)

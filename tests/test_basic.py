@@ -1173,7 +1173,7 @@ class TestTypes(PreqlTests):
         assert T.list[T.number] <= T.list
         assert T.list[T.any] <= T.list
 
-        assert T.null <= T.int.as_nullable()
+        assert T.nulltype <= T.int.as_nullable()
         assert T.int.type <= T.type
         assert T.table(x=T.int, y=T.string).type <= T.type
 

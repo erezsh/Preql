@@ -149,7 +149,7 @@ class RawSql(SqlTree):
 
 @dataclass
 class Null(SqlTree):
-    type = T.null
+    type = T.nulltype
 
     def _compile(self, qb):
         return ['null']
@@ -323,7 +323,7 @@ class Compare(Scalar):
 
         op = self.op
 
-        if any(e.type.nullable for e in self.exprs):
+        if any(e.type.maybe_null() for e in self.exprs):
             # Null values are possible, so we'll use identity operators
             if qb.target == sqlite:
                 op = {
@@ -461,7 +461,7 @@ class Insert(SqlTree):
     table_name: str
     columns: List[str]
     query: Sql
-    type = T.null
+    type = T.nulltype
 
     def _compile(self, qb):
         return [f'INSERT INTO {_quote(qb.target, self.table_name)}({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
@@ -479,7 +479,7 @@ class InsertConsts(SqlTree):
     table: str
     cols: List[str]
     tuples: list #List[List[Sql]]
-    type = T.null
+    type = T.nulltype
 
     def _compile(self, qb):
         assert self.tuples, self
@@ -500,7 +500,7 @@ class InsertConsts2(SqlTree):
     table: str
     cols: List[str]
     tuples: list #List[List[Sql]]
-    type = T.null
+    type = T.nulltype
 
     def _compile(self, qb):
         assert self.tuples, self
@@ -600,7 +600,7 @@ class Update(SqlTree):
     table: TableName
     fields: Dict[Sql, Sql]
     conds: List[Sql]
-    type = T.null
+    type = T.nulltype
 
     def _compile(self, qb):
         fields_sql = [k.compile_wrap(qb).code + [' = '] + v.compile_wrap(qb).code for k, v in self.fields.items()]
@@ -617,7 +617,7 @@ class Update(SqlTree):
 class Delete(SqlTree):
     table: TableName
     conds: List[Sql]
-    type = T.null
+    type = T.nulltype
 
     def _compile(self, qb):
         conds = join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
@@ -903,7 +903,7 @@ def compile_type_def(state, table_name, table) -> Sql:
 
     # Consistent among SQL databases
     command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
-    return RawSql(T.null, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
+    return RawSql(T.nulltype, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
 
 @dp_type
 def compile_type(type_: T.t_relation):
@@ -922,18 +922,18 @@ def compile_type(type_: T.primitive):
         't_relation': "INTEGER",
         'datetime': "TIMESTAMP",
     }[type_.typename]
-    if not type_.nullable:
+    if not type_.maybe_null():
         s += " NOT NULL"
     return s
 
 @dp_type
-def compile_type(_type: T.null):
+def compile_type(_type: T.nulltype):
     return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
 
 @dp_type
 def compile_type(idtype: T.t_id):
     s = "INTEGER"   # TODO non-int idtypes
-    if not idtype.nullable:
+    if not idtype.maybe_null():
         s += " NOT NULL"
     return s
 

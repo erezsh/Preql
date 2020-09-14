@@ -33,6 +33,7 @@ def main():
 
     interactive = args.interactive
 
+    res = 0
     try:
         if args.file:
             p.load(args.file)
@@ -52,12 +53,14 @@ def main():
                 rich.print(line)
             else:
                 print(line)
-        return -1
+        res = -1
 
 
     if interactive:
         p.load_all_tables()
         p.start_repl()
+    else:
+        return res
 
 if __name__ == '__main__':
     main()

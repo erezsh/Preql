@@ -34,11 +34,11 @@ class Type(Object):
     elems: Union[tuple, dict] = field(hash=False, default_factory=dict)
     options: dict = field(hash=False, compare=False, default_factory=dict)
     methods: dict = field(hash=False, compare=False, default_factory=lambda: dict(global_methods))
-    nullable: bool = field(default_factory=bool)
+    _nullable: bool = field(default_factory=bool)
 
     @property
     def _typename_with_q(self):
-        n = '?' if self.nullable else ''
+        n = '?' if self._nullable else ''
         return f'{self.typename}{n}'
 
     @property
@@ -50,8 +50,11 @@ class Type(Object):
         return elem
 
     def as_nullable(self):
-        assert not self.nullable
-        return self.replace(nullable=True)
+        assert not self.maybe_null()
+        return self.replace(_nullable=True)
+
+    def maybe_null(self):
+        return self._nullable or self is T.nulltype
 
     def supertype_chain(self):
         res = {
@@ -112,8 +115,8 @@ class Type(Object):
         elif self.typename == 'union':
             return any(t2.issubtype(t) for t2 in self.elem_types)
 
-        if self is T.null:
-            if t.nullable:
+        if self is T.nulltype:
+            if t.maybe_null():
                 return True
 
         # TODO zip should be aware of lengths
@@ -182,8 +185,7 @@ T.type = [T.any]
 Type.type = T.type
 
 T.object = [T.any]
-T.null = [T.object]
-object.__setattr__(T, 'null', T.null.replace(nullable=True))    # XXX a little ugly
+T.nulltype = [T.object]
 
 T.primitive = [T.object]
 

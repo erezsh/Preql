@@ -66,7 +66,7 @@ def resolve(state: State, col_def: ast.ColumnDef):
     assert not isinstance(col, objects.CollectionInstance)
 
     if col <= T.table:
-        return T.t_relation[col](name=col_def.type.name).replace(nullable=col.nullable)
+        return T.t_relation[col](name=col_def.type.name).replace(_nullable=col._nullable)
 
     return col(default=col_def.default)
 
@@ -78,7 +78,7 @@ def resolve(state: State, type_: ast.Type):
         assert t <= T.table
 
     if type_.nullable:
-        t = t.replace(nullable=True)
+        t = t.as_nullable()
 
     return t
 
@@ -868,6 +868,7 @@ objects.Function._localize_keys = function_localize_keys
 
 
 def instance_repr(self, state):
+    # TODO repr by type. Maybe use repr_value?
     return repr(localize(state, self))
 
 objects.Instance.repr = instance_repr

@@ -247,7 +247,7 @@ def new_value_instance(value, type_=None, force_type=False):
     if force_type:
         assert type_
     elif type_:
-        assert type_ <= T.union[T.primitive, T.null, T.t_id]
+        assert type_ <= T.union[T.primitive, T.nulltype, T.t_id]
         assert r.type == type_, (r.type, type_)
     else:
         type_ = r.type
@@ -519,14 +519,14 @@ def unvectorized(inst):
     return inst.replace(type=inst.type.elem)
 
 
-null = ValueInstance.make(sql.null, T.null, [], None)
+null = ValueInstance.make(sql.null, T.nulltype, [], None)
 
 @dataclass
 class EmptyListInstance(ListInstance):
     """Special case, because it is untyped
     """
 
-_empty_list_type = T.list[T.null]
+_empty_list_type = T.list[T.nulltype]
 EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
 
 

@@ -110,7 +110,7 @@ class TreeToAst(Transformer):
         return ast.Const(meta, T.float, float(f))
 
     def null(self, meta):
-        return ast.Const(meta, T.null, None)
+        return ast.Const(meta, T.nulltype, None)
     def false(self, meta):
         return ast.Const(meta, T.bool, False)
     def true(self, meta):

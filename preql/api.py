@@ -262,7 +262,7 @@ class Interface:
     def _drop_tables(self, *tables):
         # XXX temporary method
         for t in tables:
-            self.interp.state.db._execute_sql(T.null, f"DROP TABLE {t};", self.interp.state)
+            self.interp.state.db._execute_sql(T.nulltype, f"DROP TABLE {t};", self.interp.state)
 
     def import_pandas(self, **dfs):
         for name, df in dfs.items():

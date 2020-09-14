@@ -31,8 +31,8 @@ def flatten_path(path, t):
 @dp_type
 def flatten_path(path, t: T.union[T.table, T.struct]):
     elems = t.elem_dict
-    if t.nullable:
-        elems = {k:v.replace(nullable=True) for k, v in elems.items()}
+    if t.maybe_null():
+        elems = {k:v.as_nullable() for k, v in elems.items()}
     return concat_for(flatten_path(path + [name], col) for name, col in elems.items())
 @dp_type
 def flatten_path(path, t: T.list):
@@ -81,7 +81,7 @@ def repr_value(state, v: T.bool):
     return 'true' if v.value else 'false'
 
 @dp_inst
-def repr_value(state, v: T.null):
+def repr_value(state, v: T.nulltype):
     return 'null'
 
 
@@ -163,16 +163,16 @@ def restructure_result(state, t: T.struct, i):
     return ({name: restructure_result(state, col, i) for name, col in t.elem_dict.items()})
 
 @dp_type
-def restructure_result(state, t: T.union[T.primitive, T.null], i):
+def restructure_result(state, t: T.union[T.primitive, T.nulltype], i):
     return next(i)
 
 @dp_type
-def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.null]], i):
+def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.nulltype]], i):
     return next(i)
 
 
 @dp_type
-def restructure_result(state, t: T.list[T.primitive, T.null], i):
+def restructure_result(state, t: T.list[T.primitive, T.nulltype], i):
     # XXX specific to choice of db. So belongs in sql.py?
     res = next(i)
     if state.db.target == 'mysql':   # TODO use constant

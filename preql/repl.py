@@ -68,7 +68,7 @@ class Autocompleter(Completer):
 
         assert is_name(fragment[-1])
 
-        all_vars = autocomplete(self.state, context)
+        all_vars = dict(autocomplete(self.state, context))
         all_vars.update(KEYWORDS)
 
         for k, v in all_vars.items():

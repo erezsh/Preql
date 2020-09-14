@@ -146,7 +146,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        t = T.union[T.primitive, T.struct, T.null, T.unknown]
+        t = T.union[T.primitive, T.struct, T.nulltype, T.unknown]
         if not (f.type <= T.union[t, T.vectorized[t]]):
             raise exc.Signal.make(T.TypeError, state, proj, f"Cannot project values of type: {f.type}")
 
@@ -286,19 +286,19 @@ def _compare(state, op, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, state, op, f"Compare not implemented for {a.type} and {b.type}")
 
 @dp_inst
-def _compare(state, op, a: T.null, b: T.null):
+def _compare(state, op, a: T.nulltype, b: T.nulltype):
     return new_value_instance(op in ('=', '<=', '>='))
 
 @dp_inst
-def _compare(state, op, a: T.type, b: T.null):
-    assert not a.type.nullable
+def _compare(state, op, a: T.type, b: T.nulltype):
+    assert not a.type.maybe_null()
     return new_value_instance(False)
 @dp_inst
-def _compare(state, op, a: T.null, b: T.type):
+def _compare(state, op, a: T.nulltype, b: T.type):
     return _compare(state, op, b, a)
 
 @dp_inst
-def _compare(state, op, a: T.null, b: T.object):
+def _compare(state, op, a: T.nulltype, b: T.object):
     # TODO Enable this type-based optimization:
     # if not b.type.nullable:
     #     return objects.new_value_instance(False)
@@ -307,7 +307,7 @@ def _compare(state, op, a: T.null, b: T.object):
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 @dp_inst
-def _compare(state, op, a: T.object, b: T.null):
+def _compare(state, op, a: T.object, b: T.nulltype):
     return _compare(state, op, b, a)
 
 
@@ -519,7 +519,7 @@ def compile_to_inst(state: State, x: ast.Ellipsis):
 
 @dy
 def compile_to_inst(state: State, c: ast.Const):
-    if c.type == T.null:
+    if c.type == T.nulltype:
         assert c.value is None
         return objects.null
     return new_value_instance(c.value, c.type)
@@ -548,7 +548,7 @@ def compile_to_inst(state: State, lst: ast.List_):
 
     elem_type = union_types(e.type for e in elems)
 
-    if not (elem_type <= T.union[T.primitive, T.null]):
+    if not (elem_type <= T.union[T.primitive, T.nulltype]):
         raise Signal.make(T.TypeError, state, lst, "Cannot create lists of type %s" % elem_type)
 
     assert elem_type <= lst.type.elems[0]
