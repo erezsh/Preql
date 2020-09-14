@@ -1,6 +1,6 @@
 from lark import Token, UnexpectedCharacters, UnexpectedToken, ParseError
 
-from .exceptions import Signal, ReturnSignal
+from .exceptions import Signal, ReturnSignal, pql_SyntaxError
 from .loggers import ac_log
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -156,7 +156,10 @@ def autocomplete(state, code, source='<autocomplete>'):
     except UnexpectedToken as e:
         tree = autocomplete_tree(e.puppet)
         if tree:
-            stmts = parser.TreeToAst(code_ref=(code, source)).transform(tree)
+            try:
+                stmts = parser.TreeToAst(code_ref=(code, source)).transform(tree)
+            except pql_SyntaxError as e:
+                return {}
 
             _eval_autocomplete(ac_state, stmts[:-1])
 

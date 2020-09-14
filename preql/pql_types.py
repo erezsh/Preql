@@ -109,6 +109,9 @@ class Type(Object):
         assert isinstance(t, Type), t
         if t.typename == 'union':   # XXX a little hacky. Change to issupertype?
             return any(self.issubtype(t2) for t2 in t.elem_types)
+        elif self.typename == 'union':
+            return any(t2.issubtype(t) for t2 in self.elem_types)
+
         if self is T.null:
             if t.nullable:
                 return True
@@ -259,6 +262,16 @@ _t = {
 }
 def from_python(t):
     return _t[t]
+
+
+def union_types(types):
+    # TODO flatten unions, remove duplications and subtypes
+    ts = set(types)
+    if len(ts) > 1:
+        elem_type = T.union(elems=tuple(ts))
+    else:
+        elem_type ,= ts
+    return elem_type
 
 
 

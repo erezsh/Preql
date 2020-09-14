@@ -80,6 +80,10 @@ def repr_value(state, v: T.text):
 def repr_value(state, v: T.bool):
     return 'true' if v.value else 'false'
 
+@dp_inst
+def repr_value(state, v: T.null):
+    return 'null'
+
 
 ###
 

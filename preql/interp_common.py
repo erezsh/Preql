@@ -211,5 +211,4 @@ def call_pql_func(state, name, args):
     return evaluate(state, expr)
 
 
-
 new_value_instance = objects.new_value_instance

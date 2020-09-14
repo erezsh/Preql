@@ -10,7 +10,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Object, Type
+from .pql_types import T, Object, Type, union_types
 from .types_impl import dp_inst, flatten_type, elem_dict
 from .casts import _cast
 from .pql_objects import vectorized, unvectorized, make_instance
@@ -287,7 +287,7 @@ def _compare(state, op, a: T.any, b: T.any):
 
 @dp_inst
 def _compare(state, op, a: T.null, b: T.null):
-    return new_value_instance(op == '=')
+    return new_value_instance(op in ('=', '<=', '>='))
 
 @dp_inst
 def _compare(state, op, a: T.type, b: T.null):
@@ -531,6 +531,7 @@ def compile_to_inst(state: State, d: ast.Dict_):
     t = T.struct({k: v.type for k, v in elems.items()})
     return objects.StructInstance(t, elems)
 
+
 @dy
 def compile_to_inst(state: State, lst: ast.List_):
     # TODO generate (a,b,c) syntax for IN operations, with its own type
@@ -545,15 +546,9 @@ def compile_to_inst(state: State, lst: ast.List_):
 
     elems = evaluate(state, lst.elems)
 
-    type_set = {e.type for e in elems}
-    if len(type_set) > 1:
-        raise Signal.make(T.TypeError, state, lst, "Cannot create a list of mixed types: (%s)" % ', '.join(repr(t) for t in type_set))
-    elif type_set:
-        elem_type ,= type_set
-    else:
-        elem_type = lst.type.elem
+    elem_type = union_types(e.type for e in elems)
 
-    if not (elem_type <= T.primitive):
+    if not (elem_type <= T.union[T.primitive, T.null]):
         raise Signal.make(T.TypeError, state, lst, "Cannot create lists of type %s" % elem_type)
 
     assert elem_type <= lst.type.elems[0]

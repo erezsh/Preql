@@ -98,8 +98,8 @@ class MyValidator(Validator):
         except pql_SyntaxError as e:
             if e.text_ref:
                 pos = e.text_ref.ref.end.char_index
-                if pos < len(text):
-                    raise ValidationError(message=e.message, cursor_position=pos)
+                # if pos <= len(text):
+                raise ValidationError(message=e.message, cursor_position=pos)
         # except Exception as e:
             # raise ValidationError(message=e.args[0], cursor_position=0)
             # pass

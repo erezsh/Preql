@@ -71,7 +71,7 @@ def _cast(state, inst_type: T.primitive, target_type: T.string, inst):
     return objects.Instance.make(code, T.string, [inst])
 
 @dp_type
-def _cast(state, inst_type: T.vectorized, target_type: T.string, inst):
+def _cast(state, inst_type: T.vectorized, target_type: T.any, inst):
     x = objects.unvectorized(inst)
     return _cast(state, x.type, target_type, x)
 

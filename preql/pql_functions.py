@@ -15,7 +15,7 @@ from . import sql
 
 from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor
-from .pql_types import T, Type
+from .pql_types import T, Type, union_types
 from .types_impl import table_flat_for_insert, join_names
 from .casts import _cast
 
@@ -189,7 +189,8 @@ def sql_bin_op(state, op, t1, t2, name):
         raise Signal.make(T.TypeError, state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
     code = sql.TableArith(op, [t1.code, t2.code])
-    # TODO new type, so it won't look like the physical table
+    # TODO union_types([t1.type, t2.type]) should take care of everything
+    # t = T.list[union_types([t1.type.elem, t2.type.elem])]
     return type(t1).make(code, t1.type, [t1, t2])
 
 def pql_intersect(state: State, t1: T.collection, t2: T.collection):

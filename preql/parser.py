@@ -47,7 +47,8 @@ def make_text_reference(text, source_file, meta, children=()):
 
 def _args_wrapper(f, data, children, meta):
     "Create meta with 'code' from transformer"
-    return f(make_text_reference(*f.__self__.code_ref, meta, children), *children)
+    ref = make_text_reference(*f.__self__.code_ref, meta, children)
+    return f(ref, *children)
 
 
 # Taken from Lark (#TODO provide it in lark utils?)
@@ -204,7 +205,11 @@ class TreeToAst(Transformer):
 
         return ast.FuncCall(meta, func, args)
 
-    set_value = ast.SetValue
+    def set_value(self, meta, lval, rval):
+        if not isinstance(lval, (ast.Name, ast.Attr)):
+            raise pql_SyntaxError(lval.text_ref, f"{lval.type} is not a valid l-value")
+        return ast.SetValue(meta, lval, rval)
+
     insert_rows = ast.InsertRows
     struct_def = ast.StructDef
     table_def = ast.TableDef
@@ -304,8 +309,3 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
         raise pql_SyntaxError(ref, "Syntax error: " + msg)
 
     return TreeToAst(code_ref=(s, source_file)).transform(tree)
-
-# def parse_expr(s, source_file):
-#     tree = parser.parse(s, start="expr")
-#     return TreeToAst(code=s).transform(tree)
-

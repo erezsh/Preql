@@ -1,5 +1,7 @@
 from typing import Optional, List
 
+from lark.exceptions import GrammarError
+
 from .utils import dataclass, TextReference
 from .base import Object
 
@@ -35,7 +37,7 @@ class Signal(Object, Exception):
 
 
 @dataclass
-class pql_SyntaxError(Exception):
+class pql_SyntaxError(GrammarError):
     text_ref: TextReference
     message: str
 
