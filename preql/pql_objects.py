@@ -240,6 +240,9 @@ class Instance(AbsInstance):
     def primary_key(self):
         return self
 
+    def all_attrs(self):
+        return {}
+
 
 def new_value_instance(value, type_=None, force_type=False):
     r = sql.make_value(value)

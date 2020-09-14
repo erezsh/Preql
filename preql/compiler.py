@@ -711,6 +711,9 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     table = cast_to_instance(state, obj)
 
+    if table.type <= T.string:
+        raise exc.Signal.make(T.NotImplementedError, state, sel, "String indexing not implemented yet. Use slicing instead (s[start..stop])")
+
     assert_type(table.type, T.collection, state, sel, "Selection")
 
     # with state.use_scope(table.all_attrs()):

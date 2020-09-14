@@ -60,28 +60,32 @@ def table_flat_for_insert(table):
     return classify_bool(names, lambda name: name in pks)
 
 
-@dp_inst
-def repr_value(state, v: T.object):
-    return repr(v.value)
+def repr_value(state, v):
+    return pql_repr(state, v.type, v.value)
 
-@dp_inst
-def repr_value(state, v: T.decimal):
+@dp_type
+def pql_repr(state, t: T.object, value):
+    return repr(value)
+
+@dp_type
+def pql_repr(state, t: T.decimal, value):
     raise Signal.make(T.NotImplementedError, state, None, "Decimal not implemented")
 
-@dp_inst
-def repr_value(state, v: T.string):
-    return f'"{v.value}"'
+@dp_type
+def pql_repr(state, t: T.string, value):
+    value = value.replace('"', r'\"')
+    return f'"{value}"'
 
-@dp_inst
-def repr_value(state, v: T.text):
-    return str(v.value)
+@dp_type
+def pql_repr(state, t: T.text, value):
+    return str(value)
 
-@dp_inst
-def repr_value(state, v: T.bool):
-    return 'true' if v.value else 'false'
+@dp_type
+def pql_repr(state, t: T.bool, value):
+    return 'true' if value else 'false'
 
-@dp_inst
-def repr_value(state, v: T.nulltype):
+@dp_type
+def pql_repr(state, t: T.nulltype, value):
     return 'null'
 
 

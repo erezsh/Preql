@@ -320,9 +320,9 @@ def pql_repr(state: State, obj: T.any):
     Returns the type of the given object
     """
     try:
-        return objects.new_value_instance(inst.repr(state))
+        return objects.new_value_instance(obj.repr(state))
     except ValueError:
-        value = repr(cast_to_python(state, inst))
+        value = repr(cast_to_python(state, obj))
         return objects.new_value_instance(value)
 
 def pql_columns(state: State, table: T.collection):

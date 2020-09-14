@@ -31,7 +31,7 @@ from .parser import Str
 from .interp_common import State, dy, new_value_instance
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object
-from .types_impl import table_params, table_flat_for_insert, flatten_type
+from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
 
 
 
@@ -209,8 +209,6 @@ import rich.console
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
     inst = evaluate(state, p.value)
-    # res = localize(state, inst)
-    # print(res)
     repr_ = inst.repr(state)
     if isinstance(repr_, rich.table.Table):
         console = rich.console.Console()
@@ -868,8 +866,7 @@ objects.Function._localize_keys = function_localize_keys
 
 
 def instance_repr(self, state):
-    # TODO repr by type. Maybe use repr_value?
-    return repr(localize(state, self))
+    return pql_repr(state, self.type, localize(state, self))
 
 objects.Instance.repr = instance_repr
 

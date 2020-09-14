@@ -119,6 +119,7 @@ def table_repr(self, state, offset=0):
     #     elems = ', '.join(repr_value(ast.Const(None, self.type.elem, r)) for r in rows)
     #     return f'[{elems}{post}]'
 
+    # TODO load into preql and repr, instead of casting to python
     rows = cast_to_python(state, table_limit(self, state, TABLE_PREVIEW_SIZE, offset))
     _g_last_table = self
     _g_last_offset = offset + len(rows)
