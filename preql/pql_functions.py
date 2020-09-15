@@ -13,12 +13,16 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 
-from .interp_common import State, new_value_instance, dy, exclude_fields, assert_type
+from .interp_common import State, call_pql_func, new_value_instance, dy, exclude_fields, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor
 from .pql_types import T, Type, union_types
 from .types_impl import table_flat_for_insert, join_names
 from .casts import _cast
 
+def new_str(x):
+    return new_value_instance(str(x), T.string)
+def new_int(x):
+    return new_value_instance(int(x), T.int)
 
 def _pql_PY_callback(state: State, var: str):
     var = var.group()
@@ -50,7 +54,7 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
     except Exception as e:
         raise Signal.make(T.EvalError, state, code_expr, f"Python code provided returned an error: {e}")
 
-    return objects.new_value_instance(res)
+    return new_value_instance(res)
 
 
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
@@ -113,7 +117,7 @@ def _count(state, obj, table_func, name):
     elif obj.type <= T.table:
         code = table_func(obj.code)
     elif isinstance(obj, objects.StructInstance):
-        return objects.new_value_instance(len(obj.attrs))
+        return new_value_instance(len(obj.attrs))
     else:
         if not (obj.type <= T.aggregate):
             raise Signal.make(T.TypeError, state, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
@@ -320,10 +324,10 @@ def pql_repr(state: State, obj: T.any):
     Returns the type of the given object
     """
     try:
-        return objects.new_value_instance(obj.repr(state))
+        return new_value_instance(obj.repr(state))
     except ValueError:
         value = repr(cast_to_python(state, obj))
-        return objects.new_value_instance(value)
+        return new_value_instance(value)
 
 def pql_columns(state: State, table: T.collection):
     """
@@ -432,8 +436,6 @@ def pql_names(state: State, obj: T.any = objects.null):
     table_type = T.table(dict(name=T.string, type=T.string))
     return objects.new_const_table(state, table_type, tuples)
 
-def new_str(x):
-    return new_value_instance(str(x), T.string)
 
 def pql_tables(state: State):
     names = state.db.list_tables()
@@ -516,6 +518,71 @@ def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.b
     return table
 
 
+def _rest_func_endpoint(state, func):
+    from starlette.responses import JSONResponse
+    async def callback(request):
+        params = [objects.new_value_instance(v) for k, v in request.path_params.items()]
+        expr = ast.FuncCall(None, func, params)
+        res = evaluate(state, expr)
+        res = cast_to_python(state, res)
+        return JSONResponse(res)
+    return callback
+
+def _rest_table_endpoint(state, table):
+    from starlette.responses import JSONResponse
+    async def callback(request):
+        tbl = table
+        params = dict(request.query_params)
+        if params:
+            conds = [ast.Compare(None, '=', [ast.Name(None, k), objects.new_value_instance(v)])
+                     for k, v in params.items()]
+            expr = ast.Selection(None, tbl, conds)
+            tbl = evaluate(state, expr)
+        res = cast_to_python(state, tbl)
+        return JSONResponse(res)
+    return callback
+
+
+def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080)):
+
+    try:
+        from starlette.applications import Starlette
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
+    except ImportError:
+        raise Signal.make(T.ImportError, state, None, "starlette not installed! Run 'pip install starlette'")
+
+    try:
+        import uvicorn
+    except ImportError:
+        raise Signal.make(T.ImportError, state, None, "uvicorn not installed! Run 'pip install uvicorn'")
+
+    port_ = cast_to_python(state, port)
+
+    async def root(request):
+        return JSONResponse(list(endpoints.attrs))
+
+    routes = [
+        Route("/", endpoint=root)
+    ]
+
+    for func_name, func in endpoints.attrs.items():
+        path = "/" + func_name
+        if func.type <= T.function:
+            for p in func.params:
+                path += "/{%s}" % p.name
+
+            routes.append(Route(path, endpoint=_rest_func_endpoint(state, func)))
+        elif func.type <= T.collection:
+            routes.append(Route(path, endpoint=_rest_table_endpoint(state, func)))
+        else:
+            raise Signal.make(T.TypeError, state, func, f"Expected a function or a table, got {func.type}")
+
+    app = Starlette(debug=True, routes=routes)
+
+    uvicorn.run(app, port=port_)
+    return objects.null
+
 
 internal_funcs = create_internal_funcs({
     'exit': pql_exit,
@@ -543,6 +610,7 @@ internal_funcs = create_internal_funcs({
     'cast': pql_cast,
     'columns': pql_columns,
     'import_csv': pql_import_csv,
+    'serve_rest': pql_serve_rest,
 })
 
 joins = {

@@ -286,6 +286,17 @@ parser = Lark.open(
 )
 
 
+def terminal_desc(name):
+    if name == '_NL':
+        return "<NEWLINE>"
+    p = parser.get_terminal(name).pattern
+    if p.type == 'str':
+        return p.value
+    return '<%s>' % name
+
+def terminal_list_desc(term_list):
+    return [terminal_desc(x) for x in term_list if x != 'MARKER']
+
 def parse_stmts(s, source_file, wrap_syntax_error=True):
     try:
         tree = parser.parse(s+"\n", start="stmts")
@@ -293,19 +304,24 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
         if not wrap_syntax_error:
             raise
 
-        pos =  TextPos(e.pos_in_stream, e.line, e.column)
         assert isinstance(source_file, (str, Path)), source_file
+
+        pos =  TextPos(e.pos_in_stream, e.line, e.column)
+        ref = TextReference(s, str(source_file), TextRange(pos, pos))
         if isinstance(e, UnexpectedToken):
             if e.token.type == '$END':
                 msg = "Code ended unexpectedly"
                 ref = TextReference(s, str(source_file), TextRange(pos, TextPos(len(s), -1 ,-1)))
-                raise pql_SyntaxError(ref, "Syntax error: " + msg)
             else:
                 msg = "Unexpected token: %r" % e.token.value
+
+            expected = e.accepts or e.expected
+            if expected and len(expected) < 5:
+                accepts = terminal_list_desc(expected)
+                msg += '. Expected: %s' % ', '.join(accepts)
         else:
             msg = "Unexpected character: %r" % s[e.pos_in_stream]
 
-        ref = TextReference(s, str(source_file), TextRange(pos, pos))
-        raise pql_SyntaxError(ref, "Syntax error: " + msg)
+        raise pql_SyntaxError(ref, msg)
 
     return TreeToAst(code_ref=(s, source_file)).transform(tree)

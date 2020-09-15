@@ -415,6 +415,10 @@ class StructInstance(AbsStructInstance):
     def all_attrs(self):
         return self.attrs
 
+    def repr(self, state):
+        attrs = [f'{k}: {v.repr(state)}' for k, v in self.attrs.items()]
+        return '{%s}' % ', '.join(attrs)
+
 
 
 @dataclass
