@@ -11,7 +11,7 @@ from . import exceptions as exc
 from .interpreter import Interpreter
 from .evaluate import cast_to_python, localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
-from .pql_types import T
+from .pql_types import T, ITEM_NAME
 
 
 
@@ -124,7 +124,7 @@ def table_repr(self, state, offset=0):
     _g_last_table = self
     _g_last_offset = offset + len(rows)
     if self.type <= T.list:
-        rows = [{'value': x} for x in rows]
+        rows = [{ITEM_NAME: x} for x in rows]
 
     has_more = offset + len(rows) < count
 

@@ -1,9 +1,7 @@
-from build.lib.preql.interp_common import NameNotFound
 from pathlib import Path
-from preql.exceptions import Signal, pql_SyntaxError
 
 
-from . import exceptions as exc
+from .exceptions import Signal, pql_SyntaxError
 from .evaluate import State, execute, eval_func_call, import_module
 from .parser import parse_stmts
 from . import pql_ast as ast

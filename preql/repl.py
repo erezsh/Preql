@@ -30,7 +30,7 @@ from .pql_types import Object
 from .parser import parse_stmts
 from .loggers import repl_log
 from . import settings
-from preql.autocomplete import autocomplete
+from .autocomplete import autocomplete
 from .utils import memoize
 
 

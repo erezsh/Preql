@@ -1,18 +1,17 @@
 from datetime import datetime
 import json
-from preql.exceptions import Signal
+from .exceptions import Signal, pql_AttributeError
 
 from .base import Object
-from . import exceptions as exc
 from .utils import dataclass, listgen, concat_for, classify_bool
-from .pql_types import T, Type, dp_type, dp_inst
+from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst
 
 
 def Object_repr(self, state):
     return repr(self)
 
 def Object_get_attr(self, attr):
-    raise exc.pql_AttributeError(attr)
+    raise pql_AttributeError(attr)
 
 def Object_isa(self, t):
     if not isinstance(t, Type):
@@ -36,7 +35,7 @@ def flatten_path(path, t: T.union[T.table, T.struct]):
     return concat_for(flatten_path(path + [name], col) for name, col in elems.items())
 @dp_type
 def flatten_path(path, t: T.list):
-    return concat_for(flatten_path(path + [name], col) for name, col in [('value', t.elem)])
+    return concat_for(flatten_path(path + [name], col) for name, col in [(ITEM_NAME, t.elem)])
 
 
 def flatten_type(tp, path = []):
@@ -98,7 +97,7 @@ def elem_dict(t: T.union[T.table, T.struct]):
 @dp_type
 def elem_dict(t: T.list):
     assert len(t.elems) == 1
-    return {'value': t.elems[0]}
+    return {ITEM_NAME: t.elems[0]}
 
 @dp_type
 def elem_dict(t: T.vectorized):

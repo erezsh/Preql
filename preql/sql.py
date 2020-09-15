@@ -2,7 +2,7 @@ from typing import List, Optional, Dict
 
 from .utils import dataclass, X, listgen
 from . import pql_types
-from .pql_types import T, Type, dp_type
+from .pql_types import ITEM_NAME, T, Type, dp_type
 from .types_impl import join_names, flatten_type
 
 
@@ -755,7 +755,7 @@ def updates_by_ids(table, proj, ids):
         yield Update(TableName(table.type, table.type.options['name']), sql_proj, [compare])
 
 def create_list(list_type, name, elems):
-    fields = [Name(list_type.elem, 'value')]
+    fields = [Name(list_type.elem, ITEM_NAME)]
     subq = Subquery(name, fields, Values(list_type, elems))
     table = TableName(list_type, name)
     return table, subq

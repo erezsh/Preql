@@ -27,6 +27,8 @@ def _repr_type(t, depth=2):
         elems = ''
     return f'{t._typename_with_q}{elems}'
 
+ITEM_NAME = 'value'
+
 @dataclass
 class Type(Object):
     typename: str
@@ -105,7 +107,7 @@ class Type(Object):
         elems = self.elems
         if isinstance(elems, tuple):
             assert len(elems) == 1, self
-            elems = {'value': elems[0]}
+            elems = {ITEM_NAME: elems[0]}
         return elems
 
     def issubtype(self, t):

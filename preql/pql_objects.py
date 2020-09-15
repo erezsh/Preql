@@ -10,7 +10,7 @@ from . import settings
 from . import pql_ast as ast
 from . import sql
 
-from .pql_types import T, Type, Object
+from .pql_types import ITEM_NAME, T, Type, Object
 from .types_impl import repr_value, flatten_type, join_names
 
 # Functions
@@ -311,18 +311,18 @@ class ListInstance(CollectionInstance):
 
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
-        assert name == 'value'
+        assert name == ITEM_NAME
         t = self.type
         return make_instance_from_name(t.elem, name)
 
     def all_attrs(self):
         # XXX hacky way to write it
         attrs = dict(self.type.methods)
-        attrs['value'] = self.get_column('value')
+        attrs[ITEM_NAME] = self.get_column(ITEM_NAME)
         return attrs
 
     def get_attr(self, name):
-        if name == 'value':
+        if name == ITEM_NAME:
             v = self.type.elem
             return SelectedColumnInstance(self, v, name)
         else:
