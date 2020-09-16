@@ -3,7 +3,7 @@ from ipykernel.kernelbase import Kernel
 
 from . import __version__
 import preql
-from .autocomplete import autocomplete
+from preql.autocomplete import autocomplete
 from preql import Preql, Signal
 pql = Preql()
 pql.set_output_format('html')
