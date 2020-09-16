@@ -191,6 +191,15 @@ def promise(state, inst):
 
 
 class Interface:
+    """Provides an API to run Preql code from Python
+
+    Example:
+        >>> import preql
+        >>> p = preql.Preql()
+        >>> p('[1, 2]{value+1}')
+        [2, 3]
+    """
+
     __name__ = "Preql"
 
     def __init__(self, db_uri=None, print_sql=settings.print_sql):
@@ -242,8 +251,14 @@ class Interface:
         if res:
             return self._wrap_result(res)
 
-    def load(self, fn, rel_to=None):
-        self.interp.include(fn, rel_to)
+    def load(self, filename, rel_to=None):
+        """Load a Preql script
+
+        Parameters:
+            filename (str): Name of script to run
+            rel_to (Optional[str]): Path to which ``filename`` is relative.
+        """
+        self.interp.include(filename, rel_to)
 
     @contextmanager
     def transaction(self):
@@ -254,6 +269,7 @@ class Interface:
             self.commit()
 
     def start_repl(self, *args):
+        "Run the interactive prompt"
         from .repl import start_repl
         start_repl(self, *args)
 
@@ -266,6 +282,11 @@ class Interface:
             self.interp.state.db._execute_sql(T.nulltype, f"DROP TABLE {t};", self.interp.state)
 
     def import_pandas(self, **dfs):
+        """Import pandas.DataFrame instances into SQL tables
+
+        Example:
+            >>> pql.import_pandas(a=df_a, b=df_b)
+        """
         for name, df in dfs.items():
             cols = list(df)
             rows = [[i.item() if hasattr(i, 'item') else i for i in rec]

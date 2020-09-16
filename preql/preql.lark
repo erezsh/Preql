@@ -18,7 +18,7 @@ _ml_seperated{item}: (item _ml_sep)* item _ml_sep?
 _ml_sep: "," | "," _NL | _NL
 _separated{item, sep}: (item sep)* item
 
-pql_dict: "{" _NL? proj_exprs _NL? "}"
+pql_dict: "{" _ml_sep? ml_list{named_expr} _ml_sep? "}"
 key_value: name ":" expr
 
 pql_list: "[" _NL? _ml_seperated{expr}? "]"
