@@ -15,7 +15,7 @@ We'll soon dive into the language itself, but first let's install and learn how 
 You can install preql by running this in your shell/command prompt:
 
 ```sh
-$ pip install preql
+$ pip install -U preql
 ```
 
 Usually, you would connect Preql to a database, or load an existing module.
@@ -24,7 +24,7 @@ But, you can also access the preql interpreter like this:
 
 ```sh
 $ preql
-Welcome to the Preql REPL. Type help() for help
+Preql 0.1.5a interactive prompt. Type help() for help
 >>
 ```
 
@@ -38,14 +38,14 @@ You can run the `names()` function to see what functions are available.
 
 You can also run a preql file. Let's edit a file called `helloworld.pql`:
 
-```go
+```javascript
 // helloworld.pql
 print "Hello World!"
 ```
 
 And then run it:
 
-```go
+```javascript
 $ preql -m helloworld
 Hello World!
 ```
@@ -58,7 +58,7 @@ Preql has integers, floats and strings. They behave similarly to Python
 
 `null` behaves just like Python's None.
 
-```go
+```javascript
 >> 1 + 1
 2
 >> 2 / 4
@@ -86,14 +86,14 @@ Notice that dividing two integers results in a float. To get an integer, use the
 
 (Equivalent to Python's `//` operator)
 
-```go
+```javascript
 >> 10 /~ 3
 3
 ```
 
 You can get the type of anything in Preql by using the `type()` function:
 
-```go
+```javascript
 >> type(10)
 int
 >> type(int)
@@ -104,7 +104,7 @@ type
 
 Declare functions using func:
 
-```go
+```javascript
 func sign(x) {
   if (x == 0) {
     return 0
@@ -123,7 +123,7 @@ func sign(x) {
 
 There's also a shorthand for "one-liners":
 
-```go
+```javascript
 >> func str_concat(s1, s2) = s1 + s2
 >> str_concat("foo", "bar")
 "foobar"
@@ -142,7 +142,7 @@ Preql's tables are stored in an SQL database, and most operations on them are do
 
 Here is how we would define a table of points:
 
-```go
+```javascript
 table Point {
     x: float
     y: float
@@ -153,7 +153,7 @@ This statement creates a persistent table in your database (if you are connected
 
 For this tutorial, let's create a table that's little more meaningful, and populate it with values:
 
-```go
+```javascript
 table Country {
   name: string
   population: int
@@ -168,7 +168,7 @@ We assigned the newly created rows to variables, but they also exist independent
 
 We can see that the `Country` table has three rows:
 
-```go
+```javascript
 >> count(Country)
 3
 ```
@@ -179,7 +179,7 @@ The `new` statements inserted our values into an SQL table, and `count()` ran th
 
 We can also observe the variables, or the entire table:
 
-```go
+```javascript
  >> palau
 Row{id: 1, name: "Palau", population: 17900}
 >> palau.population + 1
@@ -197,11 +197,11 @@ Notice that every table automatically gets an `id` column. It's a useful practic
 
 ### Table operations
 
-There are many operations that you can perform on a table. Here we'll go through the main ones.
+There are many operations that you can perform on a table. Here we'll javascript through the main ones.
 
 **Selection** lets us filter tables using the selection operator:
 
-```go
+```javascript
 // All countries that contain the letter 'l' and a population below 15000
 >> Country[name ~ "%l%", population < 15000] {name, population}
 table Country, count=1
@@ -212,7 +212,7 @@ Tuvalu         10200
 
 We can also filter the rows by index (zero-based), by providing it with a `range` instead.
 
-```go
+```javascript
 >> Country[1..]
 table Country, count=2
   id  name      population
@@ -237,7 +237,7 @@ Lists are basically tables with a single column named `value`.
 
 **Projection** lets us create new tables, with columns of our own choice:
 
-```go
+```javascript
 >> Country{name, is_big: population>15000}
 table Country_proj3, count=3
 name      is_big
@@ -270,7 +270,7 @@ Therefor, the fields that aren't included in the projection, won't be available 
 
 The syntax is basically `{ keys => values }`
 
-```go
+```javascript
 // Count how many countries there are, for each length of name.
 >> Country { length(name) => count(id) }
 table Country_proj19, count=2
@@ -304,7 +304,7 @@ table list_int_proj37, count=2
 
 **Ordering** lets us sort the rows into a new table.
 
-```go
+```javascript
 >> Country order {population}
 table Country, count=3
   id  name      population
@@ -328,7 +328,7 @@ Immutable table operations, such as selection and projection, are lazily-evaluat
 
 This allows for gradual chaining, that the compiler will then know to merge into a single query:
 
-```go
+```javascript
 a = some_table[x > 100]   // No SQL executed
 b = a {x => sum(y)}       // ... same here
 first20 = b[..20]         // ... same here
@@ -345,7 +345,7 @@ However, in situations when the same query is used in several different statemen
 
 In those situations it may be useful to store the results in a temporary table:
 
-```go
+```javascript
 table first20 = b[..20]   // Execute a single SQL query and store it
 print first20             // Only needs to query the 'first20' table
 print first20             // Only needs to query the 'first20' table
@@ -356,7 +356,7 @@ A temporary table is a table that's persistent in the database memory for as lon
 
 Here's another example:
 
-```go
+```javascript
 // Create a temporary table that resides in database memory
 >> table t_names = Country[population>100]{name}  // Evaluated here once
 >> count(t_names) + count(t_names)
@@ -375,7 +375,7 @@ We can **update** tables in-place.
 Updates are evaluated immediately. This is true for all expressions that change the global state.
 
 Example:
-```go
+```javascript
 >> Country update {population: population + 1}
 table Country, count=3
   id  name      population
@@ -404,7 +404,7 @@ Joining two tables means returning a new table that contains the rows of both ta
 
 It is possible to omit the attributes when there is a predefined relationship between the tables.
 
-```go
+```javascript
 >> table odds = [1, 3, 5, 7, 9, 11]
 >> table primes = [2, 3, 5, 7, 11]
 
@@ -462,7 +462,7 @@ Luckily, there is an escape hatch, through the `SQL()` function.
 
 The first argument is the type of the result, and the second argument is a string of SQL code.
 
-```go
+```javascript
 >> func do_sql_stuff(x) = SQL(string, "lower($x) || '!'")   // Runs in Sqlite
 >> ["UP", "Up", "up"]{ do_sql_stuff(value) }
 table list_string_proj70, count=3
@@ -475,7 +475,7 @@ up!
 
 We can also query entire tables:
 
-```go
+```javascript
  >> SQL(Country, "SELECT * FROM $Country WHERE name == \"Palau\"")
 table Country, count=1
   id  name      population
@@ -487,7 +487,7 @@ Notice that "Country" is used twice in different contexts: once as the return ty
 
 In fact, many of Preql's core functions are written using the `SQL()` function, for example `enum`:
 
-```go
+```javascript
 func enum(tbl) {
     "Return the table with a new index column"
     // Uses SQL's window functions to calculate the index per each row

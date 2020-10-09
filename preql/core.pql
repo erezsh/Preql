@@ -112,9 +112,9 @@ func dict(...x) {
     return x
 }
 
-func _zipjoin(join_f, table1, table2) {
+func _zipjoin(join_func, table1, table2) {
 	// Add index to each table, and then join
-	return join_f(a: enum(table1).index, b: enum(table2).index) {
+	return join_func(a: enum(table1).index, b: enum(table2).index) {
 			// Remove index from nested structs
 			a {... !index}
 			b {... !index}
@@ -145,7 +145,7 @@ if (get_db_type() == "postgres") {
 
     func str_index(a, b) = SQL(int, "POSITION($a in $b)")
 } else {
-    if (get_db_type() == "sqlite") {
+    if (get_db_type() == "sqlite" or get_db_type() == "duck") {
         func repeat(s: string, num: int) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')")   // Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")

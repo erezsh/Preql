@@ -9,7 +9,7 @@ from preql.exceptions import Signal
 from preql import sql, settings
 from preql.pql_types import T
 
-from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI
+from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI
 
 
 def uses_tables(*names):
@@ -44,6 +44,7 @@ def is_eq(a, b):
     ("Normal_Lt", SQLITE_URI, True),
     ("Normal_Pg", POSTGRES_URI, True),
     ("Normal_My", MYSQL_URI, True),
+    # ("Normal_Dk", DUCK_URI, True),
     ("Unoptimized_Lt", SQLITE_URI, False),
     ("Unoptimized_Pg", POSTGRES_URI, False),
 ])
@@ -619,7 +620,7 @@ class BasicTests(PreqlTests):
 
     def test_list_ops(self):
         # TODO should be consistent - always table, or always array
-        preql = self.Preql()
+        preql = self.Preql(print_sql=True)
 
         res = preql("""[1,2,3]""")
         assert res == [1,2,3], res

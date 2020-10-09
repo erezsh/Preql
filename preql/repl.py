@@ -92,6 +92,8 @@ class MyValidator(Validator):
         text = document.text
         if not text.strip():
             return
+        if text == '.':
+            return
 
         try:
             parse_stmts(text, '<repl>')

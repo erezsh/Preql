@@ -6,6 +6,7 @@ from preql import Preql
 SQLITE_URI = 'sqlite://:memory:'
 POSTGRES_URI = 'postgres://postgres:qweqwe123@localhost/postgres'
 MYSQL_URI = 'mysql://erez:qweqwe123@localhost/preql_tests'
+DUCK_URI = 'duck://:memory:'
 
 class PreqlTests(TestCase):
     optimized = True

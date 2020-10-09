@@ -6,6 +6,7 @@ from .pql_types import ITEM_NAME, T, Type, dp_type
 from .types_impl import join_names, flatten_type
 
 
+duck = 'duck'
 sqlite = 'sqlite'
 postgres = 'postgres'
 mysql = 'mysql'
@@ -101,7 +102,7 @@ class CompiledSQL(Sql):
         else:
             if self._is_select and not self._needs_select:
                 # Bad recursion
-                if qb.target == 'postgres' or qb.target == 'mysql':
+                if qb.target == 'postgres' or qb.target == 'mysql' or qb.target == 'duck':
                     code = ['('] + code + [') ', qb.unique_name()]  # postgres requires an alias
                 else:
                     code = ['('] + code + [')']

@@ -2,7 +2,7 @@ from decimal import Decimal
 from .utils import dataclass
 from .loggers import sql_log
 
-from .sql import Sql, QueryBuilder, sqlite, postgres, mysql
+from .sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck
 from . import exceptions
 
 from .pql_types import T, Type, Object
@@ -224,6 +224,17 @@ class SqliteInterface(SqlInterface):
         cols = dict(c[1:] for c in cols)
 
         return T.table(cols, name=name)
+
+class DuckInterface(SqliteInterface):
+    target = duck
+
+    def __init__(self, filename=None, print_sql=False):
+        import duckdb
+        self._conn = duckdb.connect(filename or ':memory:')
+        self._print_sql = print_sql
+
+    def rollback(self):
+        pass    # XXX
 
 
 import subprocess
