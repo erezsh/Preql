@@ -6,13 +6,12 @@ import dsnparse
 
 from runtype import Dispatch
 
-from .exceptions import pql_NameNotFound, pql_TypeError, InsufficientAccessLevel, pql_NotImplementedError, pql_DatabaseConnectError, pql_ValueError
-
 from . import pql_ast as ast
 from . import pql_objects as objects
-from . import sql
-from .sql_interface import SqliteInterface, PostgresInterface, ConnectError
-from .pql_types import T, Type
+from .exceptions import Signal
+from .exceptions import InsufficientAccessLevel
+from .pql_types import Type, T
+from .sql_interface import (ConnectError, DuckInterface, GitInterface, MysqlInterface, PostgresInterface, SqliteInterface)
 
 dy = Dispatch()
 
@@ -20,12 +19,16 @@ logger = getLogger('interp')
 
 # Define common dispatch functions
 @dy
-def simplify():
+def simplify(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError()
 
 @dy
-def evaluate(state: type(None), any: type(None)):
+def evaluate(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError()
+
+@dy
+def cast_to_python(state, obj: type(NotImplemented)) -> object:
+    raise NotImplementedError(obj)
 
 
 class AccessLevels:
@@ -38,8 +41,9 @@ class AccessLevels:
 class State:
     AccessLevels = AccessLevels
 
-    def __init__(self, db, fmt, ns=None):
+    def __init__(self, interp, db, fmt, ns=None):
         self.db = db
+        self.interp = interp
         self.fmt = fmt
         # Add logger?
 
@@ -52,7 +56,7 @@ class State:
 
     @classmethod
     def clone(cls, inst):
-        s = cls(inst.db, inst.fmt)
+        s = cls(inst.interp, inst.db, inst.fmt)
         s.ns = copy(inst.ns)
         s.tick = inst.tick
         s.access_level = inst.access_level
@@ -81,17 +85,33 @@ class State:
         try:
             self.db = create_engine(uri, self.db._print_sql)
         except NotImplementedError as e:
-            raise pql_NotImplementedError.make(self, None, *e.args) from e
+            raise Signal.make(T.NotImplementedError, self, None, *e.args) from e
         except ConnectError as e:
-            raise pql_DatabaseConnectError.make(self, None, *e.args) from e
+            raise Signal.make(T.DbConnectionError, self, None, *e.args) from e
         except ValueError as e:
-            raise pql_ValueError.make(self, None, *e.args) from e
+            raise Signal.make(T.ValueError, self, None, *e.args) from e
 
-        self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
+        self._db_uri = uri
+        # self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
 
+
+    def get_all_vars(self):
+        return self.ns.get_all_vars()
 
     def get_var(self, name):
-        return self.ns.get_var(self, name)
+        try:
+            return self.ns.get_var(name)
+        except NameNotFound:
+            core = self.ns.get_var('__builtins__')
+            assert isinstance(core, objects.Module)
+            try:
+                return core.namespace[name]
+            except KeyError:
+                pass
+
+            raise Signal.make(T.NameError, self, name, f"Name '{name}' not found")
+
+
     def set_var(self, name, value):
         return self.ns.set_var(name, value)
     def use_scope(self, scope: dict):
@@ -104,6 +124,9 @@ class State:
         return obj + str(self.tick[0])
 
 
+class NameNotFound(Exception):
+    pass
+
 class Namespace:
     def __init__(self, ns=None):
         self.ns = ns or [{}]
@@ -111,12 +134,12 @@ class Namespace:
     def __copy__(self):
         return Namespace([dict(n) for n in self.ns])
 
-    def get_var(self, state, name):
+    def get_var(self, name):
         for scope in reversed(self.ns):
             if name in scope:
                 return scope[name]
 
-        raise pql_NameNotFound.make(state, name, str(name))
+        raise NameNotFound(name)
 
     def set_var(self, name, value):
         assert not isinstance(value, ast.Name)
@@ -153,10 +176,19 @@ def create_engine(db_uri, print_sql):
     if len(dsn.paths) != 1:
         raise ValueError("Bad value for uri: %s" % db_uri)
     path ,= dsn.paths
-    if dsn.scheme == 'sqlite':
+    if len(dsn.schemes) > 1:
+        raise NotImplementedError("Preql doesn't support multiple schemes")
+    scheme ,= dsn.schemes
+    if scheme == 'sqlite':
         return SqliteInterface(path, print_sql=print_sql)
-    elif dsn.scheme == 'postgres':
+    elif scheme == 'postgres':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+    elif scheme == 'mysql':
+        return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+    elif scheme == 'git':
+        return GitInterface(path, print_sql=print_sql)
+    elif scheme == 'duck':
+        return DuckInterface(path, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
 
@@ -165,12 +197,12 @@ def create_engine(db_uri, print_sql):
 def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s, instead got '%s'"):
     assert isinstance(t, Type), t
     assert isinstance(type_, Type)
-    if not (t <= type_):
+    if not t <= type_:
         if type_.typename == 'union':
             type_str = ' or '.join("'%s'" % elem for elem in type_.elems)
         else:
             type_str = "'%s'" % type_
-        raise pql_TypeError.make(state, ast, msg % (op, type_str, t))
+        raise Signal.make(T.TypeError, state, ast, msg % (op, type_str, t))
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=fields ))])
@@ -179,7 +211,6 @@ def exclude_fields(state, table, fields):
 def call_pql_func(state, name, args):
     expr = ast.FuncCall(None, ast.Name(None, name), args)
     return evaluate(state, expr)
-
 
 
 new_value_instance = objects.new_value_instance

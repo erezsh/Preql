@@ -1,7 +1,8 @@
-from typing import List, Any, Optional, Dict
+from typing import List, Any, Optional, Dict, Union
 
 from .utils import dataclass, TextReference
-from .pql_types import T, Type, Object, repr_value
+from .pql_types import Type, Object
+from .types_impl import repr_value
 
 # TODO We want Ast to typecheck, but sometimes types are still unknown (i.e. at parse time).
 # * Use incremental type checks?
@@ -13,6 +14,10 @@ class Ast(Object):
     text_ref: Optional[TextReference]
 
 class Expr(Ast): pass
+
+@dataclass
+class Marker(Expr):
+    pass
 
 class Statement(Ast): pass
 
@@ -50,7 +55,7 @@ class ResolveParametersString(Expr):
 class Attr(Expr):
     "Reference to an attribute (usually a column)"
     expr: Optional[Object] #Expr
-    name: str
+    name: Union[str, Marker]
 
 @dataclass
 class Const(Expr):
@@ -58,11 +63,11 @@ class Const(Expr):
     value: Any
 
     def repr(self, state):
-        return repr_value(self.value)
+        return repr_value(state, self)
 
 @dataclass
 class Ellipsis(Expr):
-    exclude: List[str]
+    exclude: List[Union[str, Marker]]
 
 @dataclass
 class Compare(Expr):
@@ -103,6 +108,8 @@ class DescOrder(Expr):
 class Like(Expr):
     str: Expr
     pattern: Expr
+
+    op = "~"
 
 @dataclass
 class NamedField(Expr):
@@ -203,7 +210,7 @@ class FuncDef(Statement, Definition):
 @dataclass
 class TableDef(Statement, Definition):
     name: str
-    columns: List[ColumnDef]
+    columns: List[Union[ColumnDef, Ellipsis]]
     methods: list
 
 @dataclass
@@ -238,6 +245,12 @@ class Throw(Statement):
     value: Object
 
 @dataclass
+class Import(Statement):
+    module_path: str
+    as_name: Optional[str] = None
+    use_core: bool = True
+
+@dataclass
 class CodeBlock(Statement):
     statements: List[Ast]
 
@@ -251,7 +264,7 @@ class Try(Statement):
 class If(Statement):
     cond: Object
     then: Statement
-    else_: Optional[CodeBlock] = None
+    else_: Optional[Statement] = None
 
 @dataclass
 class For(Statement):
@@ -270,9 +283,12 @@ class List_(Expr):
     elems: list
 
 @dataclass
+class Table_Columns(Expr):
+    type: Object
+    cols: Dict[str, list]
+
+@dataclass
 class Dict_(Expr):
     elems: dict
 
-@dataclass
-class Marker(Expr):
-    pass
+

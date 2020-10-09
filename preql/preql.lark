@@ -9,6 +9,7 @@ stmts: _NL? stmt+   -> as_list
      | if_stmt
      | for_stmt
      | return_stmt
+     | import_stmt
      | throw
      | try_catch
      | expr _NL
@@ -17,7 +18,7 @@ _ml_seperated{item}: (item _ml_sep)* item _ml_sep?
 _ml_sep: "," | "," _NL | _NL
 _separated{item, sep}: (item sep)* item
 
-pql_dict: "{" _NL? proj_exprs _NL? "}"
+pql_dict: "{" _ml_sep? ml_list{named_expr} _ml_sep? "}"
 key_value: name ":" expr
 
 pql_list: "[" _NL? _ml_seperated{expr}? "]"
@@ -26,7 +27,7 @@ proj_exprs: _ml_seperated{named_expr} -> as_list
 
 ml_list{item}: _ml_seperated{item} -> as_list   // multi-line list
 
-table_def: "table" name "{" _ml_sep? _table_contents "}" _NL
+table_def: "table" name "{" _ml_sep? _table_contents _ml_sep? "}" _NL
          | [CONST] "table" name "=" expr _NL -> table_def_by_expr
 
 CONST: "const"
@@ -50,10 +51,11 @@ typemod: PK | NULLABLE
 
 func_def: "func" name func_params ("=" expr _NL | codeblock _NL)
 try_catch: "try" codeblock _NL? "catch" "(" expr ")" codeblock _NL
-if_stmt: "if" "(" expr ")" codeblock (_NL | _NL? "else" codeblock _NL)
+if_stmt: "if" "(" expr ")" codeblock (_NL? "else" (codeblock _NL|if_stmt) | _NL)
 for_stmt: "for" "(" name "in" expr ")" codeblock _NL
-codeblock: "{" _NL? stmt* "}"
+codeblock: _NL? "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
+import_stmt: "import" NAME _NL
 throw: "throw" expr _NL
 print: "print" expr _NL
 assert_: "assert" expr _NL
@@ -65,9 +67,8 @@ insert_rows: atom "+=" expr _NL
 set_value: atom "=" expr _NL
 
 selection: molecule expr_list
-slice: molecule "[" range "]"
-range: [molecule] ".." molecule
-     | molecule ".." [molecule]
+slice: molecule range
+range:  "[" ([molecule] ".." molecule | molecule ".." [molecule]) "]"
 
 projection: molecule "{" _NL? proj_exprs _NL? "}"
           | molecule "{" _NL? proj_exprs _NL? "=>" _NL? proj_exprs _NL? "}" -> projection_grouped
@@ -84,7 +85,8 @@ delete: molecule "delete" expr_list
 
 // like: molecule "~" molecule
 
-!comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"!in" //|"is"|"is" "not"
+!comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="| "in" | NOT_IN //|"is"|"is" "not"
+NOT_IN: "!in"
 
 ?or_test: and_test ("or" and_test)*
 ?and_test: not_test ("and" not_test)*
@@ -104,6 +106,7 @@ delete: molecule "delete" expr_list
      | func_call
      | pql_list
      | pql_dict
+     | range
      | selection
      | projection
      | slice
@@ -115,10 +118,10 @@ delete: molecule "delete" expr_list
      | "^" molecule -> desc
      | new
      | one
-     | const
 
 ?atom: var
      | getattr
+     | const
 
 one: "one" [NULLABLE] molecule
 
@@ -150,10 +153,8 @@ named_expr: [name ":"] expr
 
 
 marker: MARKER
-ellipsis: "..." exclude?
-exclude: exclude_name+
-exclude_name: EXCLUDE_NAME
-EXCLUDE_NAME: "!" NAME
+ellipsis: "..." exclude*
+?exclude: "!" (name | marker)
 
 getattr: [molecule] "." (name | marker)
 name: NAME
@@ -178,6 +179,7 @@ SIGNED_INT: ["+"|"-"] INT
 LONG_STRING: /""".*?(?<!\\)(\\\\)*?"""/s
 
 %import common.CNAME -> NAME
+
 %import common.WS_INLINE
 %import common.INT
 %import common.ESCAPED_STRING -> STRING

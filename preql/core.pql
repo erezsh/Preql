@@ -1,7 +1,7 @@
 
 func _sql_agg_func(name, obj, t=null) {
     if (t==null) {
-        if (isa(obj, table) and count(columns(obj))>1) {
+        if (not (isa(obj, collection) and count(columns(obj))==1)) {
             throw new TypeError(name + "() only accepts lists or tables with one column. Got '" + repr(type(obj)) + "'")
         }
 
@@ -31,69 +31,77 @@ func _sql_agg_func(name, obj, t=null) {
 //     return _sql_agg_func("COUNT", field)
 // }
 
-func sum(field) {
+func sum(field: collection) {
     "Sum up a column or a list"
     return _sql_agg_func("SUM", field)
 }
 
-func mean(field) {
+func mean(field: collection) {
     "Mean of a column or a list"
     return _sql_agg_func("AVG", field, float)
 }
 
-func min(field) {
+func min(field: collection) {
     "Find the minimum of a column or a list"
     return _sql_agg_func("MIN", field)
 }
 
-func max(field) {
+func max(field: collection) {
     "Find the maximum of a column or a list"
     return _sql_agg_func("MAX", field)
 }
 
-func first(field) {
+func first(obj: collection) {
     "Return the first member of a column or a list"
-    return _sql_agg_func("", field)
+
+    if (isa(obj, aggregate)) {
+        return SQL(type(obj).elem, "($obj)")
+    } else {
+        obj = list(obj)
+        if (isa(obj, list)) {
+            return one one obj{ => value: first(value) }     // Recursive
+        }
+    }
 }
 
 
-func count_false(field) {
+func count_false(field: collection) {
     "Count how many values in the field are false or zero"
     return SQL(int, "sum(cast($field=0 as int))")
 }
-func count_true(field) {
+func count_true(field: collection) {
     "Count how many values in the field are true (non-zero)"
     return SQL(int, "sum(cast($field!=0 as int))")
 }
 
-func limit(tbl, n) {
+func limit(tbl: collection, n: int) {
     "Return the first 'n' rows in table"
     return tbl[..n]
 }
 
-func limit_offset(tbl, lim, offset) = SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
+func limit_offset(tbl: collection, lim: int, offset: int) = SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
 
-func enum(tbl) {
+func enum(tbl: collection) {
     "Return the table with a new index column"
     return tbl{index: SQL(int, "row_number() over ()"), ...}
 }
 
-func upper(s) {
+func upper(s: string) {
     "Return a copy of the string converted to uppercase."
     return SQL(string, "upper($s)")
 }
 
-func lower(s) {
+func lower(s: string) {
     "Return a copy of the string converted to uppercase."
     return SQL(string, "lower($s)")
 }
 
-func length(s) {
+func length(s: string) {
     "Return the length of the string"
     return SQL(string, "length($s)")
 }
 
-func round(n) {
+func round(n: number) {
     "Return a rounded float"
     return SQL(float, "round($n)")
 }
@@ -104,22 +112,41 @@ func dict(...x) {
     return x
 }
 
+func _zipjoin(join_func, table1, table2) {
+	// Add index to each table, and then join
+	return join_func(a: enum(table1).index, b: enum(table2).index) {
+			// Remove index from nested structs
+			a {... !index}
+			b {... !index}
+		}
+}
+
+"Join two tables into one by matching rows with the same index"
+func zipjoin(a: collection, b: collection) = _zipjoin(join, a, b)
+func zipjoin_left(a: collection, b: collection) = _zipjoin(leftjoin, a, b)
+func zipjoin_longest(a: collection, b: collection) = _zipjoin(outerjoin, a, b)
+
 
 // Builtins hack, so they won't collide with locals. Just put them in a module
 _core_limit = limit
 _core_limit_offset = limit_offset
 //
 
+func distinct(t: collection) {
+    "Remove identical rows"
+    return SQL(t, "SELECT distinct * FROM $t")
+}
+
 if (get_db_type() == "postgres") {
-    func repeat(s, num) = SQL(string, "REPEAT($s, $num)")
-    func now() = SQL(datetime, "NOW()")         // Postgres
-    func random() = SQL(float, "RANDOM()")   // Postgres
+    func repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")
+    func now() = SQL(datetime, "NOW()")
+    func random() = SQL(float, "RANDOM()")
     func pi() = SQL(float, "PI()")
 
     func str_index(a, b) = SQL(int, "POSITION($a in $b)")
 } else {
-    if (get_db_type() == "sqlite") {
-        func repeat(s, num) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
+    if (get_db_type() == "sqlite" or get_db_type() == "duck") {
+        func repeat(s: string, num: int) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')")   // Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
         func pi() = SQL(float, "3.141592653589793")
@@ -131,24 +158,45 @@ if (get_db_type() == "postgres") {
         func minute(date) = SQL(int, "strftime('%M', $date)")
         func day_of_week(date) = SQL(int, "strftime('%w', $date)")
         func week_of_year(date) = SQL(int, "strftime('%W', $date)")
-        func count_distinct(field) = SQL(int, "count(distinct $field)")
+        func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
 
-        func str_index(a, b) = SQL(int, "INSTR($b, $a)")
+        func str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)")
 
     } else {
-        throw new TypeError("Unexpected")
+        if (get_db_type() == "mysql") {
+            func pi() = SQL(float, "PI()")
+            func now() = SQL(datetime, "NOW()")
+            func random() = SQL(float, "RAND()")
+
+            func repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")   // same as postgres
+            func str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)")    // same as sqlite
+
+            // TODO use AST interface instead?
+            func count_false(field) {
+                "Count how many values in the field are false or zero"
+                return SQL(int, "sum(cast($field=0 as unsigned))")
+            }
+            func count_true(field) {
+                "Count how many values in the field are true (non-zero)"
+                return SQL(int, "sum(cast($field!=0 as unsigned))")
+            }
+
+        }
+        else {
+            throw new TypeError("Unexpected")
+        }
     }
 }
 
-func str_contains(a, b) = str_index(a, b) > 0
-func str_notcontains(a, b) = str_index(a, b) == 0
+func str_contains(a: string, b: string) = str_index(a, b) > 0
+func str_notcontains(a: string, b: string) = str_index(a, b) == 0
 
 func sample_ratio_fast(tbl, ratio) {
     "Return a random sample of rows from the table, at the approximate amount of (ratio*count(tbl))."
     return tbl[random() < ratio]    // random() will be re-evaluated for every row
 }
 
-func sample_fast(tbl, n, bias=0.05) {
+func sample_fast(tbl: collection, n: int, bias: number=0.05) {
     """Return a random sample of n rows from the table in one query (or at worst two queries)
 
     Higher values of 'bias' increase the chance of success in a single query,
@@ -175,4 +223,9 @@ func sample_fast(tbl, n, bias=0.05) {
     }
     // This should happen very rarely
     return results + limit(tbl, n - count(results))
+}
+
+func page(table, index, page_size=20) {
+    offset = index*page_size
+    return table[offset..(offset+page_size)]
 }

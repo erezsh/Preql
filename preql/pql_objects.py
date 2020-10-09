@@ -4,13 +4,14 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
-from .utils import dataclass, SafeDict, safezip, split_at_index, concat_for, X, listgen
-from .exceptions import pql_TypeError, pql_AttributeError
+from .utils import dataclass, SafeDict, X, listgen
+from .exceptions import pql_AttributeError, Signal
 from . import settings
 from . import pql_ast as ast
 from . import sql
 
-from .pql_types import T, Type, Object, repr_value, flatten_type, join_names, table_to_struct
+from .pql_types import ITEM_NAME, T, Type, Object
+from .types_impl import repr_value, flatten_type, join_names
 
 # Functions
 @dataclass
@@ -36,14 +37,34 @@ class ParamDict(Object):
 
     @property
     def type(self):
-        return tuple((n,p.type) for p in self.params.values())
+        return tuple((n,p.type) for n,p in self.params.items())
 
+@dataclass
+class Module(Object):
+    name: str
+    namespace: dict
+
+    def get_attr(self, attr):
+        try:
+            return self.namespace[attr]
+        except KeyError:
+            raise pql_AttributeError(attr)
+
+    def all_attrs(self):
+        return self.namespace
+
+    @property
+    def type(self):
+        return T.module
+
+    def repr(self, state):
+        return f'<Module {self.name} | {len(self.namespace)} members>'
 
 class Function(Object):
 
     @property
     def type(self):
-        return T.function[tuple(p.type or T.any for p in self.params)].set_options(param_collector=self.param_collector is not None)
+        return T.function[tuple(p.type or T.any for p in self.params)](param_collector=self.param_collector is not None)
 
     def help_str(self, state):
         raise NotImplementedError()
@@ -59,14 +80,12 @@ class Function(Object):
                 v = args[i]
             else:
                 v = p.default
-                # assert v is not None
                 if v is None:
-                    raise pql_TypeError.make(state, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
+                    raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
 
 
             yield p, v
 
-        # return [(p, a) for p, a in safezip(self.params, args)]
 
     def _localize_keys(self, state, struct):
         raise NotImplementedError()
@@ -87,7 +106,7 @@ class Function(Object):
                 # XXX we only want to localize the keys, not the values
                 d = self._localize_keys(state, a.struct)
                 if not isinstance(d, dict):
-                    raise pql_TypeError.make(state, None, f"Expression to inline is not a map: {d}")
+                    raise Signal.make(T.TypeError, state, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
                     inline_args.append(ast.NamedField(None, k, new_value_instance(v)))
             else:
@@ -102,11 +121,11 @@ class Function(Object):
         else:
             if not all(n for n in named[first_named:]):
                 # TODO meta
-                raise pql_TypeError.make(state, None, f"Function {self.name} recieved a non-named argument after a named one!")
+                raise Signal.make(T.TypeError, state, None, f"Function {self.name} recieved a non-named argument after a named one!")
 
         if first_named > len(self.params):
             # TODO meta
-            raise pql_TypeError.make(state, None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
+            raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
 
         values = {p.name: p.default for p in self.params}
 
@@ -125,13 +144,13 @@ class Function(Object):
                     collected[arg_name] = named_arg.value
                 else:
                     # TODO meta
-                    raise pql_TypeError.make(state, None, f"Function '{self.name}' has no parameter named '{arg_name}'")
+                    raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' has no parameter named '{arg_name}'")
 
 
         for name, value in values.items():
             if value is None:
                 # TODO meta
-                raise pql_TypeError.make(state, None, f"Error calling function '{self.name}': parameter '{name}' has no value")
+                raise Signal.make(T.TypeError, state, None, f"Error calling function '{self.name}': parameter '{name}' has no value")
 
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values
@@ -177,8 +196,7 @@ class AbsInstance(Object):
         if v <= T.function:
             return MethodInstance(self, v)
 
-        breakpoint()
-        raise pql_AttributeError([], f"No such attribute: {name}")
+        raise pql_AttributeError(attr)
 
 @dataclass
 class MethodInstance(AbsInstance, Function):
@@ -222,13 +240,17 @@ class Instance(AbsInstance):
     def primary_key(self):
         return self
 
+    def all_attrs(self):
+        return {}
+
 
 def new_value_instance(value, type_=None, force_type=False):
-    r = sql.value(value)
+    r = sql.make_value(value)
+
     if force_type:
         assert type_
     elif type_:
-        assert type_ <= T.union[T.primitive, T.null, T.t_id]
+        assert type_ <= T.union[T.primitive, T.nulltype, T.t_id]
         assert r.type == type_, (r.type, type_)
     else:
         type_ = r.type
@@ -243,7 +265,7 @@ class ValueInstance(Instance):
     local_value: object
 
     def repr(self, state):
-        return repr_value(self)
+        return repr_value(state, self)
 
     @property
     def value(self):
@@ -280,7 +302,7 @@ class TableInstance(CollectionInstance):
             try:
                 return MethodInstance(self, self.type.methods[name])
             except KeyError:
-                raise pql_AttributeError([], f"No such attribute: {name}")
+                raise pql_AttributeError(name)
 
 @dataclass
 class ListInstance(CollectionInstance):
@@ -289,35 +311,35 @@ class ListInstance(CollectionInstance):
 
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
-        assert name == 'value'
+        assert name == ITEM_NAME
         t = self.type
         return make_instance_from_name(t.elem, name)
 
     def all_attrs(self):
         # XXX hacky way to write it
         attrs = dict(self.type.methods)
-        attrs['value'] = self.get_column('value')
+        attrs[ITEM_NAME] = self.get_column(ITEM_NAME)
         return attrs
 
     def get_attr(self, name):
-        if name == 'value':
+        if name == ITEM_NAME:
             v = self.type.elem
             return SelectedColumnInstance(self, v, name)
         else:
             try:
                 return MethodInstance(self, self.type.methods[name])
             except KeyError:
-                raise pql_AttributeError([], f"No such attribute: {name}")
+                raise pql_AttributeError(name)
 
 
 
 def make_instance_from_name(t, cn):
-    if t <= (T.struct):
-        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in table_to_struct(t).elems.items()})
+    if t <= T.struct:
+        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elem_dict.items()})
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
-    assert not t.issubtype(T.struct)
+    assert not t.issubtype(T.struct), t
     if t <= T.list:
         return ListInstance.make(code, t, insts)
     elif t <= T.table:
@@ -355,7 +377,7 @@ class AggregateInstance(AbsInstance):
 
     def primary_key(self):
         # TODO should return aggregate key, no?
-        return (self.elem.primary_key())
+        return self.elem.primary_key()
 
 
 class AbsStructInstance(AbsInstance):
@@ -363,12 +385,12 @@ class AbsStructInstance(AbsInstance):
         if name in self.attrs:
             return self.attrs[name]
         else:
-            raise pql_AttributeError([], f"No such attribute: {name}")
+            raise pql_AttributeError(attr)
 
     @property
     def code(self):
         # XXX this shouldn't even be allowed to happen in the first place
-        raise pql_TypeError([], "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
+        raise Signal(T.TypeError, [], "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
 
 
 @dataclass
@@ -377,7 +399,7 @@ class StructInstance(AbsStructInstance):
     attrs: Dict[str, Object]
 
     def __post_init__(self):
-        assert self.type <= T.struct
+        assert self.type <= T.union[T.struct, T.vectorized[T.struct]]
 
     @property
     def subqueries(self):
@@ -393,19 +415,26 @@ class StructInstance(AbsStructInstance):
     def all_attrs(self):
         return self.attrs
 
+    def repr(self, state):
+        attrs = [f'{k}: {v.repr(state)}' for k, v in self.attrs.items()]
+        return '{%s}' % ', '.join(attrs)
+
 
 
 @dataclass
 class MapInstance(AbsStructInstance):
     attrs: Dict[str, Object]
 
-    type = T.any
+    type = T.struct
 
     def __len__(self):
         return len(self.attrs)
 
     def items(self):
         return self.attrs.items()
+
+    def all_attrs(self):
+        return dict(self.attrs)
 
     def primary_key(self):
         return self
@@ -438,6 +467,10 @@ class UnknownInstance(AbsInstance):
     def flatten_code(self):
         return [self.code]
 
+    def replace(self, **kw):
+        # XXX Is this right?
+        return self
+
 
 unknown = UnknownInstance()
 
@@ -453,7 +486,7 @@ class SelectedColumnInstance(AbsInstance):
 
     @property
     def code(self):
-        raise pql_TypeError([], f"Operation not supported for {self}")
+        raise Signal(T.TypeError, [], f"Operation not supported for {self}")
     #     return self._resolve_attr().code
 
     def flatten_code(self):
@@ -481,15 +514,26 @@ def aggregate(inst):
 
     return inst
 
+def vectorized(inst):
+    if not isinstance(inst, AbsInstance):
+        return inst
+    if inst.type <= T.vectorized:
+        return inst
+    return inst.replace(type=T.vectorized[inst.type])
 
-null = ValueInstance.make(sql.null, T.null, [], None)
+def unvectorized(inst):
+    assert inst.type <= T.vectorized
+    return inst.replace(type=inst.type.elem)
+
+
+null = ValueInstance.make(sql.null, T.nulltype, [], None)
 
 @dataclass
 class EmptyListInstance(ListInstance):
     """Special case, because it is untyped
     """
 
-_empty_list_type = T.list[T.null]
+_empty_list_type = T.list[T.nulltype]
 EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
 
 
@@ -520,12 +564,23 @@ def new_table(type_, name=None, instances=None, select_fields=False):
 
     return inst
 
+def new_const_table(state, table_type, tuples):
+    name = state.unique_name("table_")
+    table_code, subq = sql.create_table(table_type, name, tuples)
+
+    inst = TableInstance.make(table_code, table_type, [])
+    inst.subqueries[name] = subq
+    return inst
+
+
 
 def from_python(value):
     if value is None:
         return null
     elif isinstance(value, str):
         return ast.Const(None, T.string, value)
+    elif isinstance(value, bool):
+        return ast.Const(None, T.bool, value)
     elif isinstance(value, int):
         return ast.Const(None, T.int, value)
     elif isinstance(value, list):

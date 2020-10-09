@@ -1,9 +1,8 @@
 from pathlib import Path
 
-from .utils import SafeDict, benchmark
-from .exceptions import PreqlError, pql_TypeError, pql_ValueError
 
-from .evaluate import State, execute, evaluate, localize, eval_func_call
+from .exceptions import Signal, pql_SyntaxError
+from .evaluate import State, execute, eval_func_call, import_module
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -18,31 +17,37 @@ def initial_namespace():
     ns = {k:v for k, v in T.items()}
     ns.update(internal_funcs)
     ns.update(joins)
-    ns['TypeError'] = pql_TypeError
-    ns['ValueError'] = pql_ValueError
-    return [dict(ns)]
+    # TODO all exceptions
+    name = '__builtins__'
+    module = objects.Module(name, dict(ns))
+    return [{name: module}]
+
+
 
 class Interpreter:
-    def __init__(self, sqlengine):
-        self.sqlengine = sqlengine
-        self.state = State(sqlengine, 'text', initial_namespace())
-        self.state.interp = self    # TODO hack for connect()
-        self.include('core.pql', __file__) # TODO use an import mechanism instead
+    def __init__(self, sqlengine, fmt='text', use_core=True):
+        self.state = State(self, sqlengine, fmt, initial_namespace())
+        if use_core:
+            # self.include('core.pql', __file__) # TODO use an import mechanism instead
+            mns = import_module(self.state, ast.Import(None, 'core', use_core=False)).namespace
+            bns = self.state.get_var('__builtins__').namespace
+            # safe-update
+            for k, v in mns.items():
+                assert k not in bns
+                bns[k] = v
 
     def call_func(self, fname, args):
-        with benchmark.measure('call_func'):
-            return eval_func_call(self.state, self.state.get_var(fname), args)
-
-    # def eval_expr(self, code, args):
-    #     expr_ast = parse_expr(code)
-    #     with self.state.use_scope(args):
-    #         obj = evaluate(self.state, expr_ast)
-    #     return obj
+        return eval_func_call(self.state, self.state.get_var(fname), args)
 
     def execute_code(self, code, source_file, args=None):
         assert not args, "Not implemented yet: %s" % args
         last = None
-        for stmt in parse_stmts(code, source_file):
+        try:
+            stmts = parse_stmts(code, source_file)
+        except pql_SyntaxError as e:
+            raise Signal(T.SyntaxError, [e.text_ref], e.message)
+
+        for stmt in stmts:
             last = execute(self.state, stmt)
         return last
 
@@ -60,4 +65,11 @@ class Interpreter:
                 value = new_value_instance(value)
 
         self.state.set_var(name, value)
+
+    def has_var(self, name):
+        try:
+            self.state.get_var(name)
+        except Signal:
+            return False
+        return True
 

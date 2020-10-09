@@ -1,29 +1,32 @@
-from collections import deque
+from lark import Token, UnexpectedCharacters, UnexpectedToken, ParseError
 
-from lark import Token, UnexpectedCharacters, UnexpectedToken, Tree
-
-from .exceptions import ReturnSignal, pql_NameNotFound, PreqlError
+from .exceptions import Signal, ReturnSignal, pql_SyntaxError
 from .loggers import ac_log
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .utils import bfs
-from .parser import parse_stmts, TreeToAst
-from .pql_types import T
-
-from .interp_common import State, dy, new_value_instance, evaluate
-from .evaluate import evaluate, execute, resolve
+from .interp_common import State, dy
+from .evaluate import evaluate, resolve
 from .compiler import AutocompleteSuggestions
-from . import sql
+from .pql_types import T
+from . import sql, parser
 
 
 @dy
 def eval_autocomplete(state, x, go_inside):
-    res = evaluate(state, x)
+    _res = evaluate(state, x)
     # assert isinstance(res, objects.Instance)
 
 @dy
 def eval_autocomplete(state, cb: ast.Statement, go_inside):
     raise NotImplementedError(cb)
+
+@dy
+def eval_autocomplete(state, a: ast.Assert, go_inside):
+    eval_autocomplete(state, a.cond, go_inside)
+@dy
+def eval_autocomplete(state, a: ast.Print, go_inside):
+    eval_autocomplete(state, a.value, go_inside)
 
 @dy
 def eval_autocomplete(state, x: ast.If, go_inside):
@@ -90,8 +93,8 @@ def _search_puppet(puppet):
                 t = Token(choice, _closing_tokens[choice], 1, 1, 1, 1, 2, 2)
                 new_p = p.copy()
                 try:
-                    res = new_p.feed_token(t)
-                except KeyError:    # Illegal
+                    new_p.feed_token(t)
+                except ParseError:    # Illegal
                     pass
                 else:
                     yield new_p
@@ -112,50 +115,63 @@ def autocomplete_tree(puppet):
     t = Token('MARKER', '<MARKER>', 1, 1, 1, 1, 2, 2)
     try:
         res = puppet.feed_token(t)
-    except KeyError:    # Could still fail
+    except ParseError:    # Could still fail
         return
 
-    assert not res
+    assert not res, res # XXX changed in new lark versions
 
     # Search nearest solution
     return _search_puppet(puppet)
 
 
-from .interp_common import State
 class AcState(State):
     def get_var(self, name):
         try:
-            return self.ns.get_var(self, name)
-        except pql_NameNotFound:
+            return super().get_var(name)
+        except Signal as s:
+            assert s.type <= T.NameError
             return objects.UnknownInstance()
+
+    def get_all_vars(self):
+        all_vars = dict(self.get_var('__builtins__').namespace)
+        all_vars.update( self.ns.get_all_vars() )
+        return all_vars
 
     def replace(self, **kw):
         assert False
 
+def _eval_autocomplete(ac_state, stmts):
+    for stmt in stmts:
+        try:
+            eval_autocomplete(ac_state, stmt, False)
+        except Signal as e:
+            ac_log.exception(e)
+
 def autocomplete(state, code, source='<autocomplete>'):
+    ac_state = AcState.clone(state)
     try:
-        parse_stmts(code, source, wrap_syntax_error=False)
+        stmts = parser.parse_stmts(code, source, wrap_syntax_error=False)
     except UnexpectedCharacters as e:
         return {}
     except UnexpectedToken as e:
-            tree = autocomplete_tree(e.puppet)
-            if tree:
-                stmts = TreeToAst(code_ref=(code, source)).transform(tree)
-                ac_state = AcState.clone(state)
+        tree = autocomplete_tree(e.puppet)
+        if tree:
+            try:
+                stmts = parser.TreeToAst(code_ref=(code, source)).transform(tree)
+            except pql_SyntaxError as e:
+                return {}
 
-                for stmt in stmts[:-1]:
-                    try:
-                        eval_autocomplete(ac_state, stmt, False)
-                    except PreqlError as e:
-                        ac_log.exception(e)
+            _eval_autocomplete(ac_state, stmts[:-1])
 
-                try:
-                    eval_autocomplete(ac_state, stmts[-1], True)
-                except AutocompleteSuggestions as e:
-                    ns ,= e.args
-                    return ns
-                except PreqlError as e:
-                    ac_log.exception(e)
+            try:
+                eval_autocomplete(ac_state, stmts[-1], True)
+            except AutocompleteSuggestions as e:
+                ns ,= e.args
+                return ns
+            except Signal as e:
+                ac_log.exception(e)
 
-    ns = state.ns.get_all_vars()
-    return ns
+    else:
+        _eval_autocomplete(ac_state, stmts)
+
+    return ac_state.get_all_vars()

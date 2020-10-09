@@ -1,5 +1,5 @@
 # Steps for evaluation
-#     expand
+#         expand
 #         expand names
 #         expand function calls
 #     resolve types
@@ -14,43 +14,41 @@
 #         execute remote queries
 #         simplify (compute) into the final result
 
-from copy import copy
-from typing import List, Optional, Any
+from typing import List, Optional
 import logging
-import re
+from pathlib import Path
 
-from .utils import benchmark
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func
-from .exceptions import pql_TypeError, pql_ValueError, ReturnSignal, PreqlError, pql_SyntaxError, pql_CompileError
+from .exceptions import ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from . import settings
-RawSql = sql.RawSql
-Sql = sql.Sql
+from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
-from .compiler import compile_to_inst
-from .pql_types import T, Type, table_params, table_flat_for_insert, flatten_type
+from .compiler import compile_to_inst, cast_to_instance
+from .pql_types import T, Type, Object
+from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
 
 
 
 @dy
 def resolve(state: State, struct_def: ast.StructDef):
     members = {str(k):resolve(state, v) for k, v in struct_def.members}
-    struct = T.struct(**members)
+    struct = T.struct(members)
     state.set_var(struct_def.name, struct)
     return struct
 
 @dy
 def resolve(state: State, table_def: ast.TableDef):
-    t = T.table.set_options(name=table_def.name)
+    t = T.table({}, name=table_def.name)
 
     with state.use_scope({table_def.name: t}):  # For self-reference
         elems = {c.name: resolve(state, c) for c in table_def.columns}
-        t = t(**elems)
+        t = t(elems)
 
     if table_def.methods:
         methods = evaluate(state, table_def.methods)
@@ -68,9 +66,9 @@ def resolve(state: State, col_def: ast.ColumnDef):
     assert not isinstance(col, objects.CollectionInstance)
 
     if col <= T.table:
-        return T.t_relation[col].set_options(name=col_def.type.name).replace(nullable=col.nullable)
+        return T.t_relation[col](name=col_def.type.name).replace(_nullable=col._nullable)
 
-    return col.set_options(default=col_def.default)
+    return col(default=col_def.default)
 
 @dy
 def resolve(state: State, type_: ast.Type):
@@ -80,7 +78,7 @@ def resolve(state: State, type_: ast.Type):
         assert t <= T.table
 
     if type_.nullable:
-        t = t.replace(nullable=True)
+        t = t.as_nullable()
 
     return t
 
@@ -90,11 +88,11 @@ def _execute(state: State, struct_def: ast.StructDef):
     resolve(state, struct_def)
 
 
-def db_query(state: State, sql, subqueries=None):
+def db_query(state: State, sql_code, subqueries=None):
     try:
-        return state.db.query(sql, subqueries, state=state)
+        return state.db.query(sql_code, subqueries, state=state)
     except exc.DatabaseQueryError as e:
-        raise exc.pql_DatabaseQueryError.make(state, None, e.args[0])
+        raise Signal.make(T.DbQueryError, state, None, e.args[0]) from e
 
 
 @dy
@@ -106,37 +104,38 @@ def _execute(state: State, table_def: ast.TableDef):
 
     if any(isinstance(c, ast.Ellipsis) for c in table_def.columns):
         # XXX why must it? just ensure it appears once
-        raise exc.pql_SyntaxError.make(state, table_def, "Ellipsis must appear at the end")
+        raise Signal.make(T.SyntaxError, state, table_def, "Ellipsis must appear at the end")
 
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
 
-    exists = table_exists(state, table_def.name)
+    # exists = table_exists(state, table_def.name)
+    exists = state.db.table_exists(table_def.name)
     if exists:
-        cur_type = import_table_type(state, table_def.name, None if ellipsis else set(t.elems))
+        cur_type = state.db.import_table_type(state, table_def.name, None if ellipsis else set(t.elems))
 
         if ellipsis:
-            elems_to_add = {n: v for n, v in cur_type.elems.items() if n not in t.elems}
-            t = t(**t.elems, **elems_to_add)
+            elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
+            t = t({**t.elems, **elems_to_add})
 
         # Auto-add id only if it exists already and not defined by user
         if 'id' in cur_type.elems and 'id' not in t.elems:
-            t = t(id=T.t_id, **t.elems).set_options(pk=[['id']])
+            t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
 
         for e_name, e1_type in t.elems.items():
 
             if e_name not in cur_type.elems:
-                raise exc.pql_TypeError.make(state, table_def, f"Column '{e_name}' defined, but doesn't exist in database.")
+                raise Signal.make(T.TypeError, state, table_def, f"Column '{e_name}' defined, but doesn't exist in database.")
 
             e2_type = cur_type.elems[e_name]
             # XXX use can_cast() instead of hardcoding it
             # if not (e1_type <= e2_type or (e1_type <= T.t_id and e2_type <= T.int)):
-            #     raise exc.pql_TypeError.make(state, table_def, f"Cannot cast column '{e_name}' from type '{e2_type}' to '{e1_type}'")
+            #     raise Signal.make(T.TypeError, state, table_def, f"Cannot cast column '{e_name}' from type '{e2_type}' to '{e1_type}'")
 
         inst = objects.new_table(t, table_def.name, select_fields=True)
     else:
         # Auto-add id by default
-        t = t(id=T.t_id, **t.elems).set_options(pk=[['id']])
+        t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
         inst = objects.new_table(t, table_def.name)
 
     state.set_var(table_def.name, inst)
@@ -151,7 +150,7 @@ def _set_value(state: State, name: ast.Name, value):
 
 @dy
 def _set_value(state: State, attr: ast.Attr, value):
-    raise exc.pql_NotImplementedError.make(state, attr, f"Cannot set attribute for {attr.expr.repr(state)}")
+    raise Signal.make(T.NotImplementedError, state, attr, f"Cannot set attribute for {attr.expr.repr(state)}")
 
 @dy
 def _execute(state: State, var_def: ast.SetValue):
@@ -172,11 +171,11 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
     params = dict(table_params(target.type))
     for p in params:
         if p not in source.type.elems:
-            raise exc.pql_TypeError.make(state, source, f"Missing column '{p}' in {source.type}")
+            raise Signal.make(T.TypeError, state, source, f"Missing column '{p}' in {source.type}")
 
     primary_keys, columns = table_flat_for_insert(target.type)
 
-    source = exclude_fields(state, source, primary_keys)
+    source = exclude_fields(state, source, set(primary_keys) & set(source.type.elems))
 
     code = sql.Insert(target.type.options['name'], columns, source.code)
     db_query(state, code, source.subqueries)
@@ -186,7 +185,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
 def _execute(state: State, insert_rows: ast.InsertRows):
     if not isinstance(insert_rows.name, ast.Name):
         # TODO support Attr
-        raise pql_SyntaxError.make(state, insert_rows, "L-value must be table name")
+        raise Signal.make(T.SyntaxError, state, insert_rows, "L-value must be table name")
 
     rval = evaluate(state, insert_rows.value)
     return _copy_rows(state, insert_rows.name, rval)
@@ -195,25 +194,38 @@ def _execute(state: State, insert_rows: ast.InsertRows):
 def _execute(state: State, func_def: ast.FuncDef):
     func = func_def.userfunc
     assert isinstance(func, objects.UserFunction)
-    state.set_var(func.name, func)
 
+    new_params = []
+    for p in func.params:
+        if p.type:
+            t = evaluate(state, p.type)
+            p = p.replace(type=t)
+        new_params.append(p)
+
+    state.set_var(func.name, func.replace(params=new_params))
+
+import rich.console
 @dy
 def _execute(state: State, p: ast.Print):
+    # TODO Can be done better. Maybe cast to ReprText?
     inst = evaluate(state, p.value)
-    res = localize(state, inst)
-    print(res)
+    repr_ = inst.repr(state)
+    if isinstance(repr_, rich.table.Table):
+        console = rich.console.Console()
+        console.print(repr_)
+    else:
+        print(repr_)
 
 @dy
 def _execute(state: State, p: ast.Assert):
-    inst = evaluate(state, p.cond)
-    res = localize(state, inst)
+    res = cast_to_python(state, p.cond)
     if not res:
         # TODO pretty print values
         if isinstance(p.cond, ast.Compare):
             s = (' %s '%p.cond.op).join(evaluate(state, a).repr(state) for a in p.cond.args)
         else:
-            s = str(p.cond)
-        raise exc.pql_AssertionError.make(state, p.cond, f"Assertion failed: {s}")
+            s = p.cond.repr(state)
+        raise Signal.make(T.AssertError, state, p.cond, f"Assertion failed: {s}")
 
 @dy
 def _execute(state: State, cb: ast.CodeBlock):
@@ -221,9 +233,11 @@ def _execute(state: State, cb: ast.CodeBlock):
         execute(state, stmt)
     return objects.null
 
+
 @dy
 def _execute(state: State, i: ast.If):
-    cond = localize(state, evaluate(state, i.cond))
+    cond = cast_to_python(state, i.cond)
+
     if cond:
         execute(state, i.then)
     elif i.else_:
@@ -231,7 +245,7 @@ def _execute(state: State, i: ast.If):
 
 @dy
 def _execute(state: State, f: ast.For):
-    expr = localize(state, evaluate(state, f.iterable))
+    expr = cast_to_python(state, f.iterable)
     for i in expr:
         with state.use_scope({f.var: objects.from_python(i)}):
             execute(state, f.do)
@@ -240,12 +254,51 @@ def _execute(state: State, f: ast.For):
 def _execute(state: State, t: ast.Try):
     try:
         execute(state, t.try_)
-    except PreqlError as e:
+    except Signal as e:
         exc_type = localize(state, evaluate(state, t.catch_expr))
         if isinstance(e, exc_type):
             execute(state, t.catch_block)
         else:
             raise
+
+def import_module(state, r):
+    paths = [Path(__file__).parent, Path.cwd()]
+    for path in paths:
+        module_path =  (path / r.module_path).with_suffix(".pql")
+        if module_path.exists():
+            # with open(module_path, encoding='utf8') as f:
+            #     text = f.read()
+            break
+    else:
+        raise Signal.make(T.ImportError, state, r, "Cannot find module")
+
+    from .interpreter import Interpreter    # XXX state.new_interp() ?
+    i = Interpreter(state.db, state.fmt, use_core=r.use_core)
+    i.state.stacktrace = state.stacktrace   # XXX proper interface
+
+    # Give the module access to active database
+    i.state.db = state.db
+
+    state.stacktrace.append(r.text_ref)
+    try:
+        i.include(module_path)
+    finally:
+        assert state.stacktrace[-1] is r.text_ref
+        state.stacktrace.pop()
+
+    # Inherit module db (in case it called connect())
+    state.db = i.state.db
+
+    ns = i.state.ns.ns
+    assert len(ns) == 1
+    return objects.Module(r.module_path, i.state.ns.ns[0])
+
+
+@dy
+def _execute(state: State, r: ast.Import):
+    module = import_module(state, r)
+    state.set_var(r.as_name or r.module_path, module)
+    return module
 
 @dy
 def _execute(state: State, r: ast.Return):
@@ -265,7 +318,7 @@ def execute(state, stmt):
         if isinstance(stmt, ast.Statement):
             return _execute(state, stmt) or objects.null
         return evaluate(state, stmt)
-    except PreqlError as e:
+    except Signal as e:
         # assert e.text_refs    # TODO ensure?
         raise
 
@@ -274,12 +327,23 @@ def execute(state, stmt):
 
 # Simplify performs local operations before any db-specific compilation occurs
 # Technically not super useful at the moment, but makes conceptual sense.
+
 @dy
 def simplify(state: State, cb: ast.CodeBlock):
-    if len(cb.statements) == 1:
-        s ,= cb.statements
-        return simplify(state, s)
-    return _execute(state, cb)
+    # if len(cb.statements) == 1:
+    #     s ,= cb.statements
+    #     return simplify(state, s)
+    try:
+        return _execute(state, cb)
+    except ReturnSignal as r:
+        # XXX is this correct?
+        return r.value
+    except Signal as e:
+        # Failed to run it, so try to cast as instance
+        # XXX order should be other way around!
+        if e.type <= T.CastError:
+            return compile_to_inst(state, cb)
+        raise
 
 @dy
 def simplify(state: State, n: ast.Name):
@@ -356,7 +420,7 @@ def simplify(state: State, funccall: ast.FuncCall):
 
     if isinstance(func, objects.UnknownInstance):
         evaluate(state, [a.value for a in funccall.args])
-        raise pql_TypeError.make(state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
+        raise Signal.make(T.TypeError, state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
 
     args = funccall.args
     if isinstance(func, Type):
@@ -365,7 +429,7 @@ def simplify(state: State, funccall: ast.FuncCall):
         func = state.get_var('cast')
 
     if not isinstance(func, objects.Function):
-        raise pql_TypeError.make(state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
+        raise Signal.make(T.TypeError, state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
 
     state.stacktrace.append(funccall.text_ref)
     try:
@@ -373,7 +437,8 @@ def simplify(state: State, funccall: ast.FuncCall):
     finally:
         assert state.stacktrace[-1] is funccall.text_ref
         state.stacktrace.pop()
-    # assert isinstance(res, types.PqlObject), (type(res), res) # TODO this should work
+
+    assert isinstance(res, Object), (type(res), res)
     return res
 
 
@@ -381,8 +446,6 @@ def eval_func_call(state, func, args):
     assert isinstance(func, objects.Function)
 
     matched_args = func.match_params(state, args)
-
-
 
     if isinstance(func, objects.MethodInstance):
         args = {'this': func.parent}
@@ -392,15 +455,25 @@ def eval_func_call(state, func, args):
 
     # XXX simplify destroys text_ref, so it harms error messages.
     # TODO Can I get rid of it, or make it preserve the text_ref somehow?
-    args.update( {p.name:simplify(state, a) for p,a in matched_args} )
+    # Don't I need an instance to ensure I have type?
+    # args.update( {p.name:evaluate(state, a) for p,a in matched_args} )
     # args.update( {p.name:a for p,a in matched_args} )
+
+    for i, (p, a) in enumerate(matched_args):
+        a = evaluate(state, a)
+        # TODO cast?
+        if p.type and not a.type <= p.type:
+            raise Signal.make(T.TypeError, state, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
+        args[p.name] = a
 
 
     # if isinstance(func, objects.UserFunction):
     if isinstance(func, objects.InternalFunction):
         # TODO ensure pure function?
         # TODO Ensure correct types
-        return func.func(state, *args.values())
+        args = list(args.values())
+        # args = evaluate(state, args)
+        return func.func(state, *args)
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:
@@ -415,9 +488,16 @@ def eval_func_call(state, func, args):
                         logging.info(f"Compiling.. {func}")
                         expr = _call_expr(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
                         logging.info("Compiled successfully")
+                        if isinstance(expr, objects.Instance):
+                            # XXX a little ugly
+                            qb = sql.QueryBuilder(state.db.target, True)
+                            x = expr.code.compile(qb)
+                            x = x.optimize()
+                            expr = expr.replace(code=x)
                         state._cache[sig] = expr
 
                 expr = ast.ResolveParameters(None, expr, args)
+
             except exc.InsufficientAccessLevel:
                 # Don't cache
                 expr = func.expr
@@ -425,8 +505,7 @@ def eval_func_call(state, func, args):
             expr = func.expr
 
         with state.use_scope(args):
-            with benchmark.measure('call_expr'):
-                res = _call_expr(state, expr)
+            res = _call_expr(state, expr)
 
             if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
                 raise exc.InsufficientAccessLevel()
@@ -440,109 +519,25 @@ def _call_expr(state, expr):
     except ReturnSignal as r:
         return r.value
 
-@dy
-def resolve_parameters(state: State, x):
-    return x
-
-@dy
-def resolve_parameters(state: State, res: ast.ResolveParameters):
-
-    # XXX use a different mechanism??
-    if isinstance(res.obj, objects.Instance):
-        obj = res.obj
-    else:
-        with state.use_scope(res.values):
-            obj = evaluate(state, res.obj)
-
-    state.require_access(state.AccessLevels.WRITE_DB)
-
-    if not isinstance(obj, objects.Instance):
-        if isinstance(obj, objects.Function):
-            return obj
-        return res.replace(obj=obj)
-
-    code = _resolve_sql_parameters(state, obj.code)
-
-    return obj.replace(code=code)
-
 # TODO fix these once we have proper types
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
     count = call_pql_func(state, "count", [table])
-    return localize(state, evaluate(state, count))
-
-@dy
-def test_nonzero(state: State, inst: objects.ValueInstance):
-    return bool(inst.local_value)
+    return bool(cast_to_python(state, count))
 
 @dy
 def test_nonzero(state: State, inst: objects.Instance):
-    return localize(state, inst)
+    return bool(cast_to_python(state, inst))
 
 @dy
 def test_nonzero(state: State, inst: Type):
     return True
 
-def _raw_sql_callback(state: State, var: str, instances):
-    var = var.group()
-    assert var[0] == '$'
-    var_name = var[1:]
-    obj = state.get_var(var_name)
-
-    # if isinstance(obj, types.TableType):
-    if isinstance(obj, Type) and obj.issubtype(T.table):
-        # This branch isn't strictly necessary
-        # It exists to create nicer SQL code output
-        inst = objects.new_table(obj)
-    else:
-        inst = evaluate(state, obj)
-
-    instances.append(inst)
-
-    qb = sql.QueryBuilder(state.db.target, False)
-    code = _resolve_sql_parameters(state, inst.code)
-    return '%s' % code.compile(qb).text
 
 
 
-@dy
-def resolve_parameters(state: State, p: ast.Parameter):
-    return state.get_var(p.name)
 
 
-# TODO move this to SQL compilation??
-@dy
-def apply_database_rw(state: State, rps: ast.ResolveParametersString):
-    # TODO if this is still here, it should be in evaluate, not db_rw
-    state.catch_access(state.AccessLevels.EVALUATE)
-
-    sql_code = localize(state, evaluate(state, rps.string))
-    assert isinstance(sql_code, str)
-
-    type_ = evaluate(state, rps.type)
-    if isinstance(type_, objects.Instance):
-        type_ = type_.type
-    assert isinstance(type_, Type), type_
-
-    instances = []
-    expanded = re.sub(r"\$\w+", lambda m: _raw_sql_callback(state, m, instances), sql_code)
-    code = sql.RawSql(type_, expanded)
-    # code = sql.ResolveParameters(sql_code)
-
-    # TODO validation!!
-    if type_ <= T.table:
-        name = state.unique_name("subq_")
-
-        # TODO this isn't in the tests!
-        fields = [sql.Name(c, path) for path, c in flatten_type(type_)]
-
-        subq = sql.Subquery(name, fields, code)
-
-        inst = objects.new_table(type_, name, instances)
-        inst.subqueries[name] = subq
-        return inst
-
-    return objects.Instance.make(code, type_, instances)
 
 
 @dy
@@ -551,7 +546,7 @@ def apply_database_rw(state: State, o: ast.One):
     obj = evaluate(state, o.expr)
     if obj.type <= T.struct:
         if len(obj.attrs) != 1:
-            raise pql_ValueError.make(state, o, f"'one' expected a struct with a single attribute, got {len(obj.attrs)}")
+            raise Signal.make(T.ValueError, state, o, f"'one' expected a struct with a single attribute, got {len(obj.attrs)}")
         x ,= obj.attrs.values()
         return x
 
@@ -561,18 +556,18 @@ def apply_database_rw(state: State, o: ast.One):
     rows = localize(state, table) # Must be 1 row
     if len(rows) == 0:
         if not o.nullable:
-            raise pql_ValueError.make(state, o, "'one' expected a single result, got an empty expression")
+            raise Signal.make(T.ValueError, state, o, "'one' expected a single result, got an empty expression")
         return objects.null
     elif len(rows) > 1:
-        raise pql_ValueError.make(state, o, "'one' expected a single result, got more")
+        raise Signal.make(T.ValueError, state, o, "'one' expected a single result, got more")
 
     row ,= rows
     rowtype = T.row[table.type]
 
-    if (table.type <= T.list):
+    if table.type <= T.list:
         return new_value_instance(row)
 
-    assert (table.type <= T.table)
+    assert table.type <= T.table
     assert_type(table.type, T.table, state, o, 'one')
     d = {k: new_value_instance(v, table.type.elems[k], True) for k, v in row.items()}
     return objects.RowInstance(rowtype, d)
@@ -585,12 +580,12 @@ def apply_database_rw(state: State, d: ast.Delete):
 
     cond_table = ast.Selection(d.text_ref, d.table, d.conds)
     table = evaluate(state, cond_table)
-    assert (table.type <= T.table)
+    assert table.type <= T.table
 
     rows = list(localize(state, table))
     if rows:
         if 'id' not in rows[0]:
-            raise pql_ValueError.make(state, d, "Delete error: Table does not contain id")
+            raise Signal.make(T.TypeError, state, d, "Delete error: Table does not contain id")
 
         ids = [row['id'] for row in rows]
 
@@ -607,11 +602,11 @@ def apply_database_rw(state: State, u: ast.Update):
     table = evaluate(state, u.table)
 
     if not (table.type <= T.table):
-        raise pql_TypeError.make(state, u.table, f"Expected a table. Got: {table.type}")
+        raise Signal.make(T.TypeError, state, u.table, f"Expected a table. Got: {table.type}")
 
     for f in u.fields:
         if not f.name:
-            raise pql_SyntaxError.make(state, f, f"Update requires that all fields have a name")
+            raise Signal.make(T.SyntaxError, state, f, f"Update requires that all fields have a name")
 
     # TODO verify table is concrete (i.e. lvalue, not a transitory expression)
 
@@ -622,9 +617,9 @@ def apply_database_rw(state: State, u: ast.Update):
     rows = list(localize(state, table))
     if rows:
         if 'id' not in rows[0]:
-            raise pql_ValueError.make(state, u, "Update error: Table does not contain id")
+            raise Signal.make(T.TypeError, state, u, "Update error: Table does not contain id")
         if not set(proj) < set(rows[0]):
-            raise pql_ValueError.make(state, u, "Update error: Not all keys exist in table")
+            raise Signal.make(T.TypeError, state, u, "Update error: Not all keys exist in table")
 
         ids = [row['id'] for row in rows]
 
@@ -642,7 +637,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     obj = state.get_var(new.type)
 
     if len(new.args) > 1:
-        raise exc.pql_NotImplementedError.make(state, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
+        raise Signal.make(T.NotImplementedError, state, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
 
     if isinstance(obj, objects.UnknownInstance):
         arg ,= new.args
@@ -659,7 +654,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     arg ,= new.args
 
     # TODO postgres can do it better!
-    field = arg.name
+    # field = arg.name
     table = evaluate(state, arg.value)
     rows = localize(state, table)
 
@@ -678,7 +673,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
 
 
 @listgen
-def _destructure_param_match(state, ast, param_match):
+def _destructure_param_match(state, ast_node, param_match):
     # TODO use cast rather than a ad-hoc hardwired destructure
     for k, v in param_match:
         if isinstance(v, objects.RowInstance):
@@ -688,9 +683,9 @@ def _destructure_param_match(state, ast, param_match):
         if (k.type <= T.struct):
             names = [name for name, t in flatten_type(k.orig, [k.name])]
             if not isinstance(v, list):
-                raise pql_TypeError.make(state, ast, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
+                raise Signal.make(T.TypeError, state, ast_node, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
             if len(v) != len(names):
-                raise pql_TypeError.make(state, ast, f"Parameter {k.name} received a bad value (size of {len(names)})")
+                raise Signal.make(T.TypeError, state, ast_node, f"Parameter {k.name} received a bad value (size of {len(names)})")
             yield from safezip(names, v)
         else:
             yield k.name, v
@@ -700,7 +695,7 @@ def _new_row(state, new_ast, table, matched):
     destructured_pairs = _destructure_param_match(state, new_ast, matched)
 
     keys = [name for (name, _) in destructured_pairs]
-    values = [sql.value(v) for (_,v) in destructured_pairs]
+    values = [sql.make_value(v) for (_,v) in destructured_pairs]
     assert keys and values
     # XXX use regular insert?
     q = sql.InsertConsts(new_ast.type, keys, [values])
@@ -717,17 +712,15 @@ def _new_row(state, new_ast, table, matched):
 def apply_database_rw(state: State, new: ast.New):
     state.catch_access(state.AccessLevels.WRITE_DB)
 
-    # XXX This function has side-effects.
-    # Perhaps it belongs in resolve, rather than simplify?
     obj = state.get_var(new.type)
 
     # XXX Assimilate this special case
-    if isinstance(obj, type) and issubclass(obj, PreqlError):
+    if isinstance(obj, Type) and obj <= T.Exception:
         def create_exception(state, msg):
-            msg = localize(state, evaluate(state, msg))
+            msg = cast_to_python(state, msg)
             assert new.text_ref is state.stacktrace[-1]
-            return obj(list(state.stacktrace), msg)    # TODO move this to `throw`?
-        f = objects.InternalFunction(obj.__name__, [objects.Param(None, 'message')], create_exception)
+            return Signal(obj, list(state.stacktrace), msg)    # TODO move this to `throw`?
+        f = objects.InternalFunction(obj.typename, [objects.Param(None, 'message')], create_exception)
         res = evaluate(state, ast.FuncCall(new.text_ref, f, new.args))
         return res
 
@@ -762,6 +755,15 @@ def add_as_subquery(state: State, inst: objects.Instance):
 
 
 @dy
+def resolve_parameters(state: State, x):
+    return x
+
+@dy
+def resolve_parameters(state: State, p: ast.Parameter):
+    return state.get_var(p.name)
+
+
+@dy
 def evaluate(state, obj: list):
     return [evaluate(state, item) for item in obj]
 
@@ -784,6 +786,7 @@ def evaluate(state, obj_):
         return obj
 
     # - Resolve parameters to "instanciate" the cached code
+    # TODO necessary?
     obj = resolve_parameters(state, obj)
 
     if state.access_level < state.AccessLevels.READ_DB:
@@ -807,31 +810,6 @@ def apply_database_rw(state, x):
 #
 # Return the local value of the expression. Only requires computation if the value is an instance.
 #
-from copy import copy
-@dy
-def __resolve_sql_parameters(ns, param: sql.Parameter):
-    inst = ns.get_var(param.name)
-    assert isinstance(inst, objects.Instance)
-    assert inst.type == param.type
-    ns = type(ns)(ns.ns[-1])
-    return __resolve_sql_parameters(ns, inst.code)
-
-@dy
-def __resolve_sql_parameters(ns, l: list):
-    return [__resolve_sql_parameters(ns, n) for n in l]
-
-@dy
-def __resolve_sql_parameters(ns, node):
-    resolved = {k:__resolve_sql_parameters(ns, v) for k, v in node
-                if isinstance(v, Sql) or isinstance(v, list) and all(isinstance(i, Sql) for i in v)}
-    return node.replace(**resolved)
-
-def _resolve_sql_parameters(state, node):
-    # 1. Resolve parameters while compiling
-    return sql.ResolveParameters(node, (state, copy(state.ns)))
-    # 2. Resolve parameters before compiling. Eqv to (1) but slower
-    # return __resolve_sql_parameters(state.ns, node)
-
 
 @dy
 def localize(state, inst: objects.AbsInstance):
@@ -844,8 +822,6 @@ def localize(state, inst: objects.AbsStructInstance):
 @dy
 def localize(state, inst: objects.Instance):
     state.require_access(state.AccessLevels.WRITE_DB)
-
-    # code = _resolve_sql_parameters(state, inst.code)
 
     return db_query(state, inst.code, inst.subqueries)
 
@@ -868,26 +844,31 @@ def localize(state, x):
 ### Added functions
 
 def function_help_str(self, state):
-    from .evaluate import evaluate, localize    # XXX refactor this
-    params = [p.name if p.default is None else f'{p.name}={localize(state, evaluate(state, p.default))}' for p in self.params]
+    params = []
+    for p in self.params:
+        s = p.name
+        if p.type:
+            s += f": {p.type}"
+        if p.default:
+            s += f"={cast_to_python(state, p.default)}"
+        params.append(s)
+
     if self.param_collector is not None:
         params.append(f"...{self.param_collector.name}")
     param_str = ', '.join(params)
     return f"func {self.name}({param_str}) = ..."
 
 def function_localize_keys(self, state, struct):
-    return localize(state, evaluate(state, struct))
+    return cast_to_python(state, struct)
 
 objects.Function.help_str = function_help_str
 objects.Function._localize_keys = function_localize_keys
 
 
 def instance_repr(self, state):
-    return repr(localize(state, self))
+    return pql_repr(state, self.type, localize(state, self))
 
 objects.Instance.repr = instance_repr
-
-
 
 
 
@@ -896,91 +877,37 @@ def new_table_from_rows(state, name, columns, rows):
     # TODO check table doesn't exist
 
     tuples = [
-        [sql.value(i) for i in row[1:]] # XXX Without index?
+        [sql.make_value(i) for i in row[1:]] # XXX Without index?
         for row in rows
     ]
 
     # TODO refactor into function?
-    table = T.table.set_options(temporary=True)
-    table.columns['id'] = T.t_id #[table]
-    for c,v in zip(columns, tuples[0]):
-        table.columns[c] = v.type
+    elems = {c:v.type for c,v in zip(columns, tuples[0])}
+    elems['id'] = T.t_id
+    table = T.table(elems, temporary=True, pk=[['id']], name=name)
 
-    db_query(state, sql.compile_type_def(state, table))
+    db_query(state, sql.compile_type_def(state, name, table))
 
     code = sql.InsertConsts(name, columns, tuples)
     db_query(state, code)
 
     x = objects.new_table(table)
-    state.set_var(table.name, x)
+    state.set_var(name, x)
 
 
 
 
-# XXX These don't belong in evaluate.py
-# =========================================
-
-def table_exists(state, name):
-    # XXX TODO sqlit
-    if state.db.target != 'postgres':
-        return False
-
-    return db_query(state, sql.RawSql(T.int, "SELECT count(*) FROM information_schema.tables where table_name='%s'" % name)) > 0
 
 
-def _bool_from_sql(n):
-    if n == 'NO':
-        n = False
-    assert isinstance(n, bool)
-    return n
+@dy
+def cast_to_python(state, obj: ast.Ast):
+    inst = cast_to_instance(state, obj)
+    return cast_to_python(state, inst)
 
-def _type_from_sql(type, nullable):
-    d = {
-        'integer': T.int,
-        'serial': T.t_id,
-        'bigserial': T.t_id,
-        'smallint': T.int,  # TODO smallint / bigint?
-        'bigint': T.int,
-        'character varying': T.string,
-        'character': T.string,  # TODO char?
-        'real': T.float,
-        'double precision': T.float,    # double on 32-bit?
-        'boolean': T.bool,
-        'timestamp': T.datetime,
-        'timestamp without time zone': T.datetime,
-        'text': T.text,
-    }
-    try:
-        v = d[type]
-    except KeyError:
-        return T.string.replace(nullable=True)
-
-    nullable = _bool_from_sql(nullable)
-
-    return v.replace(nullable=nullable)
-
-def import_table_type(state, name, columns_whitelist):
-
-    columns_t = T.table(
-        schema=T.string,
-        table=T.string,
-        name=T.string,
-        pos=T.int,
-        nullable=T.bool,
-        type=T.string,
-    )
-    columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
-           FROM information_schema.columns
-           WHERE table_name = '%s'
-        """ % name
-    sql_columns = db_query(state, sql.RawSql(columns_t, columns_q))
-
-    if columns_whitelist:
-        wl = set(columns_whitelist)
-        sql_columns = [c for c in sql_columns if c['name'] in wl]
-
-    cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
-    cols.sort()
-    cols = dict(c[1:] for c in cols)
-
-    return T.table(**cols).set_options(name=name)
+@dy
+def cast_to_python(state, obj: objects.AbsInstance):
+    if obj.type <= T.vectorized:
+        raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
+    res = localize(state, obj)
+    assert isinstance(res, (int, str, float, dict, list, type(None))), res
+    return res

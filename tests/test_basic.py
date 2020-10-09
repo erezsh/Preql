@@ -1,18 +1,40 @@
-from unittest import TestCase, skip
-from copy import copy
+from preql.sql import mysql
+from unittest import skip
 
 from parameterized import parameterized_class
 
 from preql import Preql
 from preql.pql_objects import UserFunction
-from preql.exceptions import PreqlError, pql_TypeError, pql_SyntaxError, pql_ValueError, pql_NameNotFound
-from preql.interp_common import pql_TypeError
+from preql.exceptions import Signal
 from preql import sql, settings
 from preql.pql_types import T
 
-from .common import PreqlTests, SQLITE_URI, POSTGRES_URI
+from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI
 
 
+def uses_tables(*names):
+    def decorator(decorated):
+        def wrapper(self):
+            if self.uri != MYSQL_URI:
+                return decorated(self)
+
+            p = self.Preql()
+            tables = p.interp.state.db.list_tables()
+            if tables:
+                print("@@ Deleting", tables, decorated)
+            p._drop_tables(*tables)
+            # assert not tables
+            try:
+                return decorated(self)
+            finally:
+                p = self.preql
+                if p.interp.state.db.target is mysql:
+                    p._drop_tables(*names)
+                tables = p.interp.state.db.list_tables()
+                assert not tables, tables
+
+        return wrapper
+    return decorator
 
 def is_eq(a, b):
     a = [tuple(row.values()) for row in a]
@@ -21,13 +43,15 @@ def is_eq(a, b):
 @parameterized_class(("name", "uri", "optimized"), [
     ("Normal_Lt", SQLITE_URI, True),
     ("Normal_Pg", POSTGRES_URI, True),
+    ("Normal_My", MYSQL_URI, True),
+    # ("Normal_Dk", DUCK_URI, True),
     ("Unoptimized_Lt", SQLITE_URI, False),
     ("Unoptimized_Pg", POSTGRES_URI, False),
 ])
 class BasicTests(PreqlTests):
-    def Preql(self):
+    def Preql(self, **kw):
         settings.optimize = self.optimized
-        preql = Preql(self.uri)
+        preql = Preql(self.uri, **kw)
         self.preql = preql
         return preql
 
@@ -36,13 +60,12 @@ class BasicTests(PreqlTests):
 
     def tearDown(self):
         if self.preql:
-            self.preql.engine.rollback()
+            self.preql.interp.state.db.rollback()
 
+    @uses_tables('Person', 'Country')
     def test_basic1(self):
         preql = self.Preql()
         preql.load('country_person.pql', rel_to=__file__)
-        res = preql('[1,2,3]{=>sum(value*value)}')
-        assert res == [{'sum': 14}], list(res)
 
         self._test_basic(preql)
         self._test_ellipsis(preql)
@@ -84,7 +107,7 @@ class BasicTests(PreqlTests):
 
     def _test_ellipsis(self, preql):
 
-        assert preql('Person {name, ...}[name=="Erez Shinan"]') == [{'name': 'Erez Shinan', 'id': 1, 'country': 1}]
+        assert preql('Person {name, ...}[name=="Erez Shinan"]{name}') == [{'name': 'Erez Shinan'}]
 
         self.assertEqual( list(preql('Person {name, ...}')[0].keys()) , ['name', 'id', 'country'])
         assert list(preql('Person {country, ...}')[0].keys()) == ['country', 'id', 'name']
@@ -99,39 +122,56 @@ class BasicTests(PreqlTests):
         self.assertEqual( list(preql('Person {name2: name+"!", ..., name3: name+"!"}')[0].keys()), ['name2', 'id', 'name', 'country', 'name3'])
         self.assertEqual( list(preql('Person {name2: name+"!", ..., name3: name}')[0].keys()), ['name2', 'id', 'country', 'name3'])
 
-        self.assertRaises( pql_SyntaxError, preql, 'Person {x: ...}')
-        self.assertRaises( pql_SyntaxError, preql, 'Person {...+"a", 2}')
+        self._assertSignal(T.SyntaxError, preql, 'Person {x: ...}')
+        self._assertSignal(T.SyntaxError, preql, 'Person {...+"a", 2}')
 
     def _test_ellipsis_exclude(self, preql):
-        self.assertEqual( preql('Person {name, ... !id}[name=="Erez Shinan"]'), [{'name': 'Erez Shinan', 'country': 1}] )
+        self.assertEqual( preql('Person {name, ... !id !country}[name=="Erez Shinan"]'), [{'name': 'Erez Shinan'}] )
 
         assert list(preql('Person {name, ... !id !country}')[0].keys()) == ['name']
         assert list(preql('Person {country, ... !name}')[0].keys()) == ['country', 'id']
         assert list(preql('Person {... !name, id}')[0].keys()) == ['country', 'id']
         assert list(preql('Person {country, ... !name, id}')[0].keys()) == ['country', 'id']
 
+
+        self._assertSignal(T.NameError, preql, '[3]{... !hello}')
+        self._assertSignal(T.TypeError, preql, '[3]{... !value}')
+
         # TODO exception when name doesn't exist
+
+    def test_empty_count(self):
+        # TODO with nulls
+
+        preql = self.Preql()
+        assert preql("one one [1,2,3] { => count()} ") == 3
+        assert preql(" [1,2,3] { value /~ 2 => count()} {count} ") == [{'count': 1}, {'count': 2}]
+
+    def test_assert(self):
+        preql = self.Preql()
+        self._assertSignal(T.AssertError, preql, 'assert 0')
 
     def test_arith(self):
         preql = self.Preql()
+
         assert preql("1 + 2 / 4") == 1.5
         assert preql("1 + 2 /~ 4 + 1") == 2
         assert preql('"a" + "b"') == "ab"
         assert preql('"a" * 3') == "aaa"
         assert preql('"ab" * 3') == "ababab"
-        assert preql('"a" + "b"*2 + "c"') == 'abbc'
+        self.assertEqual( preql('"a" + "b"*2 + "c"'), 'abbc' )
         assert preql('"a" ~ "a%"')
         assert preql('"abc" ~ "a%"')
         assert preql('"abc" ~ "a%c"')
         assert not preql('"ab" ~ "a%c"')
 
-        self.assertRaises(pql_TypeError, preql, '"a" + 3')
-        self.assertRaises(pql_TypeError, preql, '"a" ~ 3')
-        self.assertRaises(pql_TypeError, preql, '"a" - "b"')
-        self.assertRaises(pql_TypeError, preql, '"a" % "b"')
-        self.assertRaises(pql_TypeError, preql, '3 ~ 3')
+        self._assertSignal(T.TypeError, preql, '"a" + 3')
+        self._assertSignal(T.TypeError, preql, '"a" ~ 3')
+        self._assertSignal(T.TypeError, preql, '"a" - "b"')
+        self._assertSignal(T.TypeError, preql, '"a" % "b"')
+        self._assertSignal(T.TypeError, preql, '3 ~ 3')
 
 
+    @uses_tables('Point')
     def test_update_basic(self):
         preql = self.Preql()
         preql("""
@@ -144,14 +184,16 @@ class BasicTests(PreqlTests):
 
         const table backup = Point
 
-        func p() = Point[x==3] update{y: y + 13}
+        func p2() = Point[x==3] update{y: y + 13}
+        func p() = p2() {...!id}
         """)
-        assert preql.p() == [{'id': 3, 'x': 3, 'y': 14}]
-        assert preql.p() == [{'id': 3, 'x': 3, 'y': 27}]
+        assert preql.p() == [{'x': 3, 'y': 14}]
+        assert preql.p() == [{'x': 3, 'y': 27}]
         assert preql('backup[x==3]{y}') == [{'y': 1}]
         res = preql('backup[x==3] update {y: x+y}')
-        assert res == [{'id': 3, 'x': 3, 'y': 4}], res
+        assert res == [{'id': res[0]['id'], 'x': 3, 'y': 4}], res
         assert preql('backup[x==3]{y}') == [{'y': 4}]
+
 
     def _test_user_functions(self, preql):
         preql("""
@@ -182,6 +224,13 @@ class BasicTests(PreqlTests):
         preql("func languages() = Country{language}")
         # res = preql("distinct(languages())")
         # assert is_eq(res, [("he",), ("en",)])
+
+    def test_user_functions2(self):
+        p = self.Preql()
+        p("""
+            func f(x: int, y:list[string]) = 0
+        """)
+        assert p('type(f)') == T.function[T.int, T.list[T.string]]
 
     def _test_joins(self, preql):
         nonenglish_speakers = [
@@ -250,6 +299,7 @@ class BasicTests(PreqlTests):
         assert list(preql.q2) == [{'value': 3}]
         # assert list(preql.q3) == [{'a': {'value': 3}}]    # TODO
 
+    @uses_tables('Point')
     def test_update(self):
         preql = self.Preql()
         preql("""
@@ -266,6 +316,9 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql.p().to_json()[0]['y'], 14)
         self.assertEqual( preql.p().to_json()[0]['y'], 27)
 
+
+
+    @uses_tables('Point')
     def test_SQL(self):
         preql = self.Preql()
         preql("""
@@ -287,12 +340,10 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql.f1(), 9)
         self.assertEqual( len(preql.f2()), 2)
         self.assertEqual( len(preql.f3()), 3)
-        if preql.engine.target == sql.sqlite:
-            self.assertEqual( preql.f3().to_json()[0]['y'], '3' )
-        else:
-            self.assertEqual( preql.f3().to_json()[0]['y'], [3] )
+        self.assertEqual( preql.f3().to_json()[0]['y'], [3] )
         self.assertEqual( len(preql.f4()), 1)
         self.assertEqual( preql.f4().to_json(), [{'y': 7}])
+
 
     def test_nested_projections(self):
         preql = self.Preql()
@@ -302,19 +353,11 @@ class BasicTests(PreqlTests):
         self.assertEqual( res1, res2 )
 
         # TODO make these work, or at least throw a graceful error
-        if preql.engine.target == sql.sqlite:
-            res = [{'a': {'value': 1}, 'b': '3|4'}, {'a': {'value': 2}, 'b': '3|4'}]
-        else:
-            res = [{'a': {'value': 1}, 'b': [3, 4]}, {'a': {'value': 2}, 'b': [3, 4]}]
-
+        res = [{'a': {'value': 1}, 'b': [3, 4]}, {'a': {'value': 2}, 'b': [3, 4]}]
         self.assertEqual(preql("joinall(a:[1,2], b:[3, 4]) {a => b}" ), res)
 
-        if preql.engine.target == sql.sqlite:
-            res = [{'b': '2|3', 'a': '1|2'}]
-        else:
-            res = [{'b': [2, 3], 'a': [1, 2]}]
-
-        self.assertEqual(preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {b => a}"), res)
+        res = [{'b': 5, 'a': [1, 2]}]
+        self.assertEqual(preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: sum(b.value)} {b => a}"), res)
         # preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {count(b) => a}")
 
         res = preql("one joinall(a:[1,2], b:[2, 3]) {a: a.value => b: count(b.value)} {b => a: count(a)}")
@@ -339,6 +382,13 @@ class BasicTests(PreqlTests):
 
         res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab {b: b.value, a: a.value}, c}[..1]")
         self.assertEqual(res1.to_json(), [{'ab': {'b': 2, 'a': 1}, 'c': {'value': 4}}])
+
+    def test_nested2(self):
+        preql = self.Preql()
+
+        assert preql(" [1] {a:{b:{value}}} ") == [{'a': {'b': {'value': 1}}}]
+        assert preql("[1] {a:{value}}") == preql("[1] {a:{value}} {a}")
+        assert preql("[1] {value}") == preql("([1] {a:{value}}) {a.value}")
 
 
     def test_agg_funcs(self):
@@ -366,9 +416,10 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql('"bak" in "kabab"'), False )
         self.assertEqual( preql('"bak" !in "kabab"'), True )
 
-        self.assertEqual( preql('"hello"[1..4]'), "hel" )
-        self.assertEqual( preql('"hello"[2..]'), "ello" )
-        self.assertEqual( preql('"hello"[..2]'), "h" )
+        self.assertEqual( preql('"hello"[0..3]'), "hel" )
+        self.assertEqual( preql('"hello"[1..]'), "ello" )
+        self.assertEqual( preql('"hello"[..1]'), "h" )
+        self.assertEqual( preql('"hello"[2..4]'), "ll" )
 
     def test_casts(self):
         preql = self.Preql()
@@ -388,8 +439,32 @@ class BasicTests(PreqlTests):
         ''')
         self.assertEqual( list(preql.test()), [{'_':x} for x in [0, 1, 1]])
 
+    def test_range(self):
+        preql = self.Preql()
+        preql('''
+            func to20() = [..20]
+            func abc() = [1..3]
+            func adult() = [18..]
+        ''')
+
+        assert preql.to20() == list(range(20))
+        assert preql.abc() == list(range(1,3))
+
+        try:
+            assert preql('adult()[..10]') == list(range(18, 28))
+        except Signal as e:
+            assert e.type <= T.NotImplementedError
+            assert preql.interp.state.db.target == mysql   # Not supported
+            return
+
+        assert preql('adult()[..10]') == list(range(18, 28))
+        assert preql('adult()[..10] + adult()[..1]') == list(range(18, 28)) + [18]
+        self.assertEqual( preql('list( (adult()[..10] + adult()[..1]) {value + 1} )') , list(range(19, 29)) + [19] )
+
+
+    @uses_tables('B', 'A')
     def test_rowtype(self):
-        preql = Preql()
+        preql = self.Preql()
         preql('''
             table A { x: int }
             a = new A(4)
@@ -411,6 +486,7 @@ class BasicTests(PreqlTests):
         self.assertEqual(preql.eq2, True)
         # self.assertEqual(preql.eq3, False)    # TODO check table type
 
+
     def test_vararg(self):
         preql = self.Preql()
         preql('''
@@ -429,6 +505,7 @@ class BasicTests(PreqlTests):
         # self.assertEqual(preql('x1 == x2'), True) # TODO
 
 
+    @uses_tables('Node', 'Square', 'a')
     def test_methods(self):
         preql = self.Preql()
         assert not T.table.methods
@@ -449,7 +526,7 @@ class BasicTests(PreqlTests):
         ''')
 
         assert not T.table.methods
-        self.assertRaises(pql_NameNotFound, preql, 'a{area()}')
+        self.assertRaises(Signal, preql, 'a{area()}')
 
         # self.assertEqual( preql('s.area()'), 16 ) # TODO
         # self.assertEqual( preql('Square[size==4].area()'), 16 )
@@ -474,13 +551,16 @@ class BasicTests(PreqlTests):
         ''')
         self.assertEqual( preql('count(Node[parent==null].children())'), 2 )
 
+
     def _test_groupby(self, preql):
-        res = preql("Country {language => count(id)}")
-        assert is_eq(res, [("en", 2), ("he", 1)])
+        assert preql('one one [1,2,3]{=>sum(value*value)}') == 14
+
+        res = preql("Country {language => count(id)} order {language}")
+        assert is_eq(res, [("en", 2), ("he", 1)]), res
 
         assert len(preql("Country {=> first(id)}")) == 1
 
-        res = preql("join(p:Person, c:Country) {country:c.name => population:count(p.id)}")
+        res = preql("join(p:Person, c:Country) {country:c.name => population:count(p.id)} order {country}")
         assert is_eq(res, [
             ("England", 2),
             ("Israel", 2),
@@ -488,41 +568,25 @@ class BasicTests(PreqlTests):
         ])
 
         res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name}")
-        # TODO Array, not string
-
-        if preql.engine.target == sql.sqlite:
-            assert is_eq(res, [
-                ("England", "Eric Blaire|H.G. Wells"),
-                ("Israel", "Erez Shinan|Ephraim Kishon"),
-                ("United States", "John Steinbeck"),
-            ]), list(res)
-        else:
-            assert is_eq(res, [
-                ("England", ["Eric Blaire", "H.G. Wells"]),
-                ("Israel", ["Erez Shinan", "Ephraim Kishon"]),
-                ("United States", ["John Steinbeck"]),
-            ]), list(res)
+        assert is_eq(res, [
+            ("England", ["Eric Blaire", "H.G. Wells"]),
+            ("Israel", ["Erez Shinan", "Ephraim Kishon"]),
+            ("United States", ["John Steinbeck"]),
+        ]), list(res)
 
         res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name, count(p.id)}")
-        # TODO Array, not string
-        if preql.engine.target == sql.sqlite:
-            assert is_eq(res, [
-                ("England", "Eric Blaire|H.G. Wells", 2),
-                ("Israel", "Erez Shinan|Ephraim Kishon", 2),
-                ("United States", "John Steinbeck", 1),
-            ])
-        else:
-            assert is_eq(res, [
-                ("England", ["Eric Blaire", "H.G. Wells"], 2),
-                ("Israel", ["Erez Shinan", "Ephraim Kishon"], 2),
-                ("United States", ["John Steinbeck"], 1),
-            ])
+        assert is_eq(res, [
+            ("England", ["Eric Blaire", "H.G. Wells"], 2),
+            ("Israel", ["Erez Shinan", "Ephraim Kishon"], 2),
+            ("United States", ["John Steinbeck"], 1),
+        ])
 
         res = preql('[1,2,3]{=>sum(value*value)}')
         assert res == [{'sum': 14}], list(res)
 
     def test_compare(self):
         preql = self.Preql()
+        self.assertEqual( preql("""null != 1"""), True )
 
         self.assertEqual( preql("""1 == 1"""), True )
         self.assertEqual( preql("""1 != 1"""), False )
@@ -540,11 +604,12 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql("""1 !in [1,2,3]"""), False )
         self.assertEqual( preql("""4 in [1,2,3]"""), False )
 
+        # TODO
         # self.assertRaises( pql_TypeError, preql, """2 > "a" """)
         # self.assertRaises( pql_TypeError, preql, """2 == "a" """)
         # self.assertRaises( pql_TypeError, preql, """ 1 == [2] """)
-        self.assertRaises( pql_TypeError, preql, """ [1] in [2] """)
-        self.assertRaises( pql_TypeError, preql, """ "a" in [2] """)
+        self._assertSignal(T.TypeError, preql, """ [1] in [2] """)
+        self._assertSignal(T.TypeError, preql, """ "a" in [2] """)
         # self.assertRaises( pql_TypeError, preql, """ 4 in ["a", "B"] """) # TODO good or bad?
 
         self.assertEqual( preql("""null == null"""), True )
@@ -555,7 +620,8 @@ class BasicTests(PreqlTests):
 
     def test_list_ops(self):
         # TODO should be consistent - always table, or always array
-        preql = self.Preql()
+        preql = self.Preql(print_sql=True)
+
         res = preql("""[1,2,3]""")
         assert res == [1,2,3], res
         res = preql("""[1,2,3] + [5,6]""")
@@ -564,8 +630,13 @@ class BasicTests(PreqlTests):
         res = preql("""[1,2,3] | [3,4]""")
         self.assertEqual(set(res), {1,2,3,4})
 
-        res = preql("""[1,2,3] - [3,4]""")
-        assert res == [1,2]
+        # XXX not supported by mysql, but can be done using NOT IN
+        try:
+            res = preql("""[1,2,3] - [3,4]""")
+            assert res == [1,2]
+        except Signal as e:
+            assert e.type <= T.NotImplementedError
+            assert preql.interp.state.db.target is mysql
 
         res = preql("""[1,2,3]{v:value*2}[v < 5]""")
         assert res == [{'v': 2}, {'v': 4}], res
@@ -590,9 +661,9 @@ class BasicTests(PreqlTests):
 
         self.assertEqual( preql("""[1,2,3][1..1]"""), [])
         self.assertEqual( preql("[] {x:0}"), [])
-        self.assertRaises( pql_TypeError, preql, """["a", 1]""")
-        self.assertRaises( pql_TypeError, preql, """[1] {a: 1, a: 2} """)
-        self.assertRaises( pql_TypeError, preql, """[1] {a: 1 => a: 2} """)
+        self._assertSignal(T.TypeError, preql, """["a", 1]""")
+        self._assertSignal(T.TypeError, preql, """[1] {a: 1, a: 2} """)
+        self._assertSignal(T.TypeError, preql, """[1] {a: 1 => a: 2} """)
 
         res ,= preql("""[1] {null, null => null, null}""")
         self.assertEqual(list(res.values()) , [None, None, None, None])
@@ -625,6 +696,7 @@ class BasicTests(PreqlTests):
         res = preql(""" temptable(temptable(Person, true)[name=="Erez Shinan"], true){name} """) # 2 temp tables
         assert is_eq(res, [("Erez Shinan",)])
 
+    @uses_tables("A", "B", "Person", "Country")
     def test_copy_rows(self):
         preql = self.Preql()
         preql('''
@@ -671,13 +743,23 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql('one A{x}'), {'x': 2} )
         self.assertEqual( preql('one? A{x}'), {'x': 2} )
         self.assertEqual( preql('one? B'), None )
-        self.assertRaises(pql_ValueError, preql, 'one B')
+
+        # XXX ValueError
+        self._assertSignal(T.ValueError, preql, 'one B')
 
         self.assertEqual( preql('one [2]'), 2 )
         self.assertEqual( preql('one? []'), None )
-        self.assertRaises(pql_ValueError, preql, 'one [1,2]')
-        self.assertRaises(pql_ValueError, preql, 'one? [1,2]')
-        self.assertRaises(pql_ValueError, preql, 'one []')
+        self._assertSignal(T.ValueError, preql, 'one [1,2]')
+        self._assertSignal(T.ValueError, preql, 'one? [1,2]')
+        self._assertSignal(T.ValueError, preql, 'one []')
+
+    def _assertSignal(self, sig_type, f, *args):
+        try:
+            return f(*args)
+        except Signal as e:
+            assert e.type <= sig_type, e
+        else:
+            assert False
 
     def _test_new(self):
         preql = self.Preql()
@@ -691,6 +773,7 @@ class BasicTests(PreqlTests):
         # TODO
         # assert preql('a == A[x==1]')
 
+    @uses_tables('A')
     def test_delete(self):
         preql = self.Preql()
         preql('''
@@ -712,6 +795,8 @@ class BasicTests(PreqlTests):
         assert len(res) == 0
         assert preql('count(A)') == 0
 
+
+    @uses_tables('A')
     def test_text(self):
         preql = self.Preql()
         preql(r'''
@@ -725,6 +810,8 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql("one A[id==2]{x}"), {'x': "hello\nworld"} )
 
 
+
+    @uses_tables('A')
     def test_column_default(self):
         preql = self.Preql()
         preql('''
@@ -740,51 +827,59 @@ class BasicTests(PreqlTests):
         assert preql('A{y}') == [{'y': 2}, {'y': 1}]
         assert preql('a2.y') == 1
 
+
+    @uses_tables('Circle', 'Box', 'NamedLine')
     def test_structs(self):
         preql = self.Preql()
         preql.load('box_circle.pql', rel_to=__file__)
 
         res1 = preql.circles_contained1()
         res2 = preql.circles_contained2()
-        res3 = preql("temptable(circles_contained2()) {... !id}")
+        res3 = preql("temptable(circles_contained2()) {...!id}")
 
         assert res1 == res2, (res1, res2)
         assert res2 == res3, (list(res2), list(res3))
 
 
+
+    @uses_tables('a')
     def test_names(self):
         p = self.Preql()
         try:
             p.a
-        except PreqlError:
+        except Signal as s:
+            assert s.type <= T.NameError
             pass
 
         p('''
             table a {x: int}
         ''')
 
-        self.assertEqual( p('names(a)'), ['id', 'x'] )
+        self.assertEqual( p('list(names(a){name})'), ['id', 'x'] )
         self.assertEqual( p('columns(a)'), {'id': p.t_id, 'x': p.int} )
 
 
+
+    @uses_tables('Person')
     def test_simple1(self):
         # TODO uncomment these tests
         preql = self.Preql()
         preql.load('simple1.pql', rel_to=__file__)
 
-        self.assertEqual(preql.english, [{'id': 2, 'name': 'Eric Blaire'}, {'id': 3, 'name': 'H.G. Wells'}])
-        assert preql.by_country('Israel') == [{'id': 1, 'name': 'Erez Shinan', 'country': 'Israel'}]
+        self.assertEqual([x['name'] for x in preql.english], ['Eric Blaire', 'H.G. Wells'])
+        assert [x['name'] for x in preql.by_country('Israel')] == ['Erez Shinan']
 
         assert preql.english2 == [{'name': 'H.G. Wells'}, {'name': 'Eric Blaire'}]
         # assert preql.english3().json() == [{'n': 'H.G. Wells'}, {'n': 'Eric Blaire'}] # TODO
 
         # assert preql.person1() == [{'id': 1, 'name': 'Erez Shinan', 'country': 'Israel'}]
         # assert preql.person1b() == [{'id': 2, 'name': 'Eric Blaire', 'country': 'England'}]
-        assert preql.demography == [{'country': 'England', 'population': 2}, {'country': 'Israel', 'population': 1}]
+        assert preql.demography == [{'country': 'England', 'population': 2}, {'country': 'Israel', 'population': 1}], list(preql.demography)
 
         # expected = [{'country': 'England', 'population': ['Eric Blaire', 'H.G. Wells']}, {'country': 'Israel', 'population': ['Erez Shinan']}]
         # res = preql('Person {country => population: name}')
         # assert expected == res, (res, expected)
+
 
 
     @skip("Not ready yet")
@@ -795,10 +890,10 @@ class BasicTests(PreqlTests):
         preql.load('simple2.pql', rel_to=__file__)
 
         res = [
-                {'id': 3, 'name': 'Eric Blaire', 'country': 2},
-                {'id': 4, 'name': 'H.G. Wells', 'country': 2},
-                {'id': 5, 'name': 'John Steinbeck', 'country': 3}
-            ]
+            {'id': 3, 'name': 'Eric Blaire', 'country': 2},
+            {'id': 4, 'name': 'H.G. Wells', 'country': 2},
+            {'id': 5, 'name': 'John Steinbeck', 'country': 3}
+        ]
         assert preql.english_speakers().json() == res   # TODO country should probably be a dict?
 
         res = [
@@ -891,6 +986,7 @@ class BasicTests(PreqlTests):
         assert (preql('A_B {a, b} {a.value, b.value}').json() ) == res
 
 
+    @uses_tables('A')
     def test_partial_table(self):
         p = self.Preql()
         p("""
@@ -921,6 +1017,7 @@ class BasicTests(PreqlTests):
             assert count(A[c ~ "hell"]) == 0
             assert (one one A{d}) == 3.14
         """)
+
 
     @skip("Not ready yet")
     def test_self_reference(self):
@@ -1022,3 +1119,70 @@ class BasicTests(PreqlTests):
 
 
         # print( preql('new B:a_set', b1=b1) )
+
+    @uses_tables('A')
+    def test_import_table(self):
+        preql = self.Preql()
+        preql("""
+            table A {
+                a: int
+                b: int?
+                c: string
+                d: float
+                e: bool
+                f: datetime
+                g: text
+            }
+        """)
+        a_type = preql('type(A{...!id})')   # TODO convert 'id' to t_id
+        preql._reset_interpreter()
+        self.assertRaises(Signal, preql, 'A')
+
+        preql("""
+            table A {...}
+        """)
+        t = preql('type(A{...!id})')
+        assert a_type == t, (a_type, t)
+
+        preql._reset_interpreter()
+        preql("""
+            table A {c: int, ...}
+        """)
+        t = preql('type(A{...!id})')
+        assert a_type != t
+
+        preql._reset_interpreter()
+        preql("""
+            table A {c: string, ...}
+        """)
+        t = preql('type(A{...!id})')
+        assert a_type != t  # different order
+        assert a_type.elems == t.elems
+
+class TestTypes(PreqlTests):
+    def test_types(self):
+        assert T.int == T.int
+        assert T.int != T.number
+        assert T.int <= T.number
+        assert T.int <= T.union[T.number, T.string]
+        assert T.union[T.int, T.string] != T.union[T.bool, T.text]
+
+        assert T.struct(dict(n=T.int)) == T.struct(dict(n=T.int))
+        assert T.struct(dict(n=T.int)) != T.struct(dict(m=T.int))
+        assert T.struct(dict(n=T.int)) != T.struct(dict(n=T.string))
+
+        assert T.list[T.number] <= T.list
+        assert T.list[T.any] <= T.list
+
+        assert T.nulltype <= T.int.as_nullable()
+        assert T.int.type <= T.type
+        assert T.table(x=T.int, y=T.string).type <= T.type
+
+
+from pandas import DataFrame
+class TestPandas(PreqlTests):
+    def test_pandas(self):
+        f = DataFrame([[1,2,"a"], [4,5,"b"], [7,8,"c"]], columns=['x', 'y', 'z'])
+        p = self.Preql()
+        p.import_pandas(x=f)
+        assert (p('x{... !id}').to_pandas() == f).all().all()

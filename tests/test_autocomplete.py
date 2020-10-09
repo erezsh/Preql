@@ -1,8 +1,6 @@
 import re
 import time
-import logging
 
-from preql import Preql
 from preql.autocomplete import autocomplete
 from preql.loggers import test_log
 
@@ -80,6 +78,46 @@ class AutocompleteTests(PreqlTests):
         """
         progressive_test(state, s)
 
+    def test_expr(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        table x {
+            a: int
+            two: int
+            three: int
+        }
+        <<<x>>>{<<<three>>>}
+        <<<x>>>{ => min(<<<two>>>), max(<<<three>>>)}
+        """
+        progressive_test(state, s)
+
+    def test_exclude_columns(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        table x {
+            a: int
+            two: int
+            three: int
+        }
+        a = <<<x>>>{... !<<<a>>> !<<<two>>>}{<<<three>>>}
+        """
+        progressive_test(state, s)
+
+    def test_assert(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        hello = 10
+        assert <<<hello>>>
+        """
+        progressive_test(state, s)
+
+
     def test_attr(self):
         p = self.Preql()
         state = p.interp.state
@@ -113,7 +151,7 @@ def _parse_autocomplete_requirements(s):
         offset -= 6
         return x
 
-    new_s = re.sub("<<<(\w+)>>>", g, s)
+    new_s = re.sub(r"<<<(\w+)>>>", g, s)
     for k, v in matches.items():
         assert new_s[k:k+len(v)] == v, (k, v)
     return new_s, matches
@@ -130,6 +168,10 @@ def progressive_test(state, s, test_partial=False):
             names = autocomplete(state, ps)
             total += 1
             if i in d:
+                # if d[i] not in names:
+                #     breakpoint()
+                #     names = autocomplete(state, ps)
+
                 assert d[i] in names, (i, d[i])
 
     duration = time.time() - start

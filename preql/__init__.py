@@ -1,3 +1,6 @@
-from .api import Interface as Preql
+from . import _base_imports
 
-__version__ = "0.1.4a"
+from .api import Interface as Preql
+from .exceptions import Signal
+
+__version__ = "0.1.5a"

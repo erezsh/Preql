@@ -3,7 +3,7 @@ from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 
-from typing import _GenericAlias as TypeBase, Any, Union, Callable, Optional
+from typing import Optional
 from functools import wraps
 from operator import getitem
 
@@ -164,7 +164,7 @@ class TextReference:
         text_after = self.text[pos:end].split('\n', 1)[0]
         return expand_tab(text_before), expand_tab(text_after)
 
-    def get_pinpoint_text(self, span=80):
+    def get_pinpoint_text(self, span=80, rich=False):
         text_before, text_after = self.get_surrounding_line(span)
 
         MARK_CHAR = '-'
@@ -176,11 +176,22 @@ class TextReference:
             assert mark_before >= 0 and mark_after >= 0
 
         source = Path(self.source_file)
-        return ''.join([
-            "~~~ At '%s' line %d, column %d:\n" % (source.name, self.ref.start.line, self.ref.start.column),
+
+        if rich:
+            start = self.ref.start
+            return [
+                (True, f"  [red]~~~[/red] At '{source.name}' line {start.line}, column {start.column}"),
+                (False, text_before + text_after),
+                (False, ' ' * (len(text_before)-mark_before) + MARK_CHAR*mark_before + '^' + MARK_CHAR*mark_after),
+            ]
+
+        res = [
+            "  ~~~ At '%s' line %d, column %d:\n" % (source.name, self.ref.start.line, self.ref.start.column),
             text_before, text_after, '\n',
             ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
-        ])
+        ]
+
+        return ''.join(res)
 
     def __str__(self):
         return '<text-ref>'
@@ -197,3 +208,17 @@ def bfs(initial, expand):
             if next_node not in visited:
                 visited.add(next_node)
                 open_q.append(next_node)
+
+
+
+def memoize(f, memo=None):
+    if memo is None:
+        memo = {}
+
+    @wraps(f)
+    def inner(*args):
+        if args not in memo:
+            memo[args] = f(*args)
+        return memo[args]
+
+    return inner
