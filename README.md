@@ -14,6 +14,8 @@ It is designed for use by data engineers, analyists and data scientists.
 
 * Support for Postgres, MySQL and Sqlite. (more planned!)
 
+(Preql is currently at the alpha stage, and isn't ready for production use yet)
+
 # Get started
 
 Simply install via pip:
