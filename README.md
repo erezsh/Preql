@@ -1,58 +1,47 @@
 ![alt text](logo_small.png "Logo")
 
-# A relational query language for engineers and scientists
-
 Preql (pronounced: Prequel) is an interpreted relational query language.
 
-It takes the best parts of SQL, Pandas and GraphQL, and combines them into a single Typescript-like language that compiles into SQL at run-time.
+It is designed for use by data engineers, analyists and data scientists.
 
-* Has the performance and abilities of SQL, and much more (* performance still needs work)
-* Programmer friendly syntax and semantics, inspired by Python and Javascript
-* Human-friendly errors, with gradual type-checking
-* Interface through Python, HTTP or a REPL environment with autocompletion
+* Preql compiles to SQL at runtime. It has the performance and abilities of SQL, and much more.
 
-# Alternative to SQL
+* Programmer-friendly syntax and semantics, with gradual type-checking, inspired by Typescript and Python
 
-* Client-side first-order functions
-* Better errors
-* Saner syntax and type-system
+* Interface through Python, HTTP or a terminal environment with autocompletion
 
-SQL() escape-hatch
+* Escape hatch to SQL, for all those databse-specific features we didn't think to include
 
-# Alterative to an ORM
+* Support for Postgres, MySQL and Sqlite. (more planned!)
 
-* Express yourself without syntax hacks and weird limitations
-* Use the full power and speed of SQL
-* Get your data already structured as a json (with nesting)
+# Get started
 
-# Alternative to GraphQL, when it's applied a single SQL database
+Simply install via pip:
 
-* More expressive
+```bash
+    pip install -U preql
+```
 
-# Limitations
+Then just run the interpeter:
 
-Limited by capabilities of database engine, performance & features
+```bash
+    preql
+```
 
-SQL() escape-hatch allows smart utilization of plugins
+Requires Python 3.8+
 
+# Contributions
 
-# Plans
+Code contributions are welcome!
 
-* Mongo backend?
-* Support for multiple concurrent backends?
-* Clever query optimizations
-* JSON support
+By submitting a contribution, you assign to Preql all right, title and interest in any copyright you have in the Contribution, and you waive any rights, including any moral rights, that may affect our ownership of the copyright in the Contribution.
 
+# License
 
--------------
+Preql uses an “Interface-Protection Clause” on top of the MIT license.
 
-Performance penalty is constant for each query
+See: [LICENSE](LICENSE)
 
-You always want your data to be as annotated as possible
+In simple words, it can be used for any commercial or non-commercial purpose, as long as your product doesn't base its value on exposing the Preql language itself to your users.
 
-
-# Notes
-
-* Reqruires Python 3.8+
-
-* Preql, PreQL, or PQL?
+If you want to add the Preql language interface as a user-facing part of your commercial product, contact us for a commercial license.
