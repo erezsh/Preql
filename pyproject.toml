@@ -16,7 +16,7 @@ packages = [{ include = "preql" }]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-lark-parser = "^0.9.0"
+lark-parser = "^0.10.0"
 runtype = "^0.1.4"
 dsnparse = "*"
 tqdm = "*"
