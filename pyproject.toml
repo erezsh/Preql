@@ -1,0 +1,41 @@
+[tool.poetry]
+name = "prql"
+version = "0.1.6"
+description = "An interpreted relational query language that compiles to SQL"
+authors = ["Erez Shin <erezshin@gmail.com>"]
+license = "Interface-Protection Clause + MIT"
+readme = "README.md"
+repository = "https://github.com/erezsh/Preql"
+documentation = "https://preql.readthedocs.io/en/latest/"
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+packages = [{ include = "preql" }]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+lark-parser = "^0.9.0"
+runtype = "^0.1.4"
+dsnparse = "*"
+tqdm = "*"
+prompt-toolkit = "*"
+pygments = "*"
+rich = "*"
+
+psycopg2 = { version = "*", optional = true }
+mysqlclient = { version = "*", optional = true }
+
+[tool.poetry.extras]
+mysql = ["mysqlclient"]
+pgsql = ["psycopg2"]
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+preql = 'preql.__main__:main'

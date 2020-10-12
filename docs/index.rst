@@ -39,7 +39,7 @@ Welcome to the Preql documentation!
    api
 
 
-Preql is a relational programming language that compiles to SQL.
+Preql (*pronounced: Prequel*) is an interpreted relational query language, that compiles to SQL.
 
 
 Install Preql
@@ -47,7 +47,7 @@ Install Preql
 
 .. code:: bash
 
-   $ pip install -U preql
+   $ pip install -U prql
 
 Resources
 ---------

@@ -15,7 +15,7 @@ We'll soon dive into the language itself, but first let's install and learn how 
 You can install preql by running this in your shell/command prompt:
 
 ```sh
-$ pip install -U preql
+$ pip install -U prql
 ```
 
 Usually, you would connect Preql to a database, or load an existing module.

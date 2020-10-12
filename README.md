@@ -1,6 +1,6 @@
 ![alt text](logo_small.png "Logo")
 
-Preql (pronounced: Prequel) is an interpreted relational query language.
+Preql (*pronounced: Prequel*) is an interpreted relational query language.
 
 It is designed for use by data engineers, analyists and data scientists.
 
@@ -21,7 +21,7 @@ It is designed for use by data engineers, analyists and data scientists.
 Simply install via pip:
 
 ```bash
-    pip install -U preql
+    pip install -U prql
 ```
 
 Then just run the interpeter:
@@ -31,6 +31,10 @@ Then just run the interpeter:
 ```
 
 Requires Python 3.8+
+
+# Documentation
+
+[Read here](https://preql.readthedocs.io/en/latest/)
 
 # Contributions
 

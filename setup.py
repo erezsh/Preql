@@ -20,7 +20,7 @@ setup(
     author = "Erez Shinan",
     author_email = "erezshin@gmail.com",
     description = "Pretty Query Language",
-    license = "MIT",
+    license = "Interface-Protection Clause + MIT",
     keywords = "Preql SQL",
     url = "",
     # scripts=['bin/preql'],

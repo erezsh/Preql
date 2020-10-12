@@ -7,7 +7,7 @@ Ensure you have, or install, Python 3.8 or up.
 Install using pip:
 
 ```bash
-    pip install -U preql
+    pip install -U prql
 ```
 
 ## Run interpreter
