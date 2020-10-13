@@ -41,13 +41,7 @@ Welcome to the Preql documentation!
 
 Preql (*pronounced: Prequel*) is an interpreted relational query language, that compiles to SQL.
 
-
-Install Preql
---------------
-
-.. code:: bash
-
-   $ pip install -U prql
+It is designed for use by data engineers, analyists and data scientists.
 
 Resources
 ---------

@@ -620,7 +620,7 @@ class BasicTests(PreqlTests):
 
     def test_list_ops(self):
         # TODO should be consistent - always table, or always array
-        preql = self.Preql(print_sql=True)
+        preql = self.Preql()
 
         res = preql("""[1,2,3]""")
         assert res == [1,2,3], res

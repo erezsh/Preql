@@ -16,25 +16,48 @@ It is designed for use by data engineers, analyists and data scientists.
 
 (Preql is currently at the alpha stage, and isn't ready for production use yet)
 
+# Documentation
+
+[Read here](https://preql.readthedocs.io/en/latest/)
+
 # Get started
 
 Simply install via pip:
 
-```bash
+```sh
     pip install -U prql
 ```
 
 Then just run the interpeter:
 
-```bash
+```sh
     preql
 ```
 
 Requires Python 3.8+
 
-# Documentation
+# Quick Example
 
-[Read here](https://preql.readthedocs.io/en/latest/)
+```javascript
+// Sum up all the squares of an aggregated list
+ >> func sqrsum(x) = sum(x*x)
+ >> [1..100]{ => sqrsum(value)}
+table  =1
+┌────────┐
+│ sqrsum │
+├────────┤
+│ 328350 │
+└────────┘
+```
+
+In the background, this was run by executing the following SQL code (reformatted):
+
+```sql
+WITH range1         AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM range1 WHERE value+1<100)
+   , subq_3(sqrsum) AS (SELECT SUM(value * value) AS sqrsum FROM range1)
+SELECT * FROM subq_3
+```
+
 
 # Contributions
 

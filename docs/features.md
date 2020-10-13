@@ -1,20 +1,40 @@
 # Features
 
-- Programming language
-    - Interpreted
-    - Modern syntax and semantics
-    - Strong type system with both type validation and duck-typing
+Preql is a programming language, a library, an interactive shell, and a set of tools.
+
+## Programming Language
+
+- **Modern syntax and semantics**
+    - Interpreted, everything is an object
+    - Strong type system with gradual type validation and duck-typing
     - Modules, functions, exceptions, tables, structs
+- **SQL integration**
     - Compiles to SQL whenever possible (guaranteed for all table operations)
-- Support for multiple SQL targets
-    - Sqlite
-    - Postgres
-    - MySQL
-    - Askgit :)
-- Python integration
+    - Escape hatch to SQL (write raw SQL expression within Preql code)
+    - Support for multiple SQL targets
+        - **Sqlite**
+        - **Postgres**
+        - **MySQL**
+        - Askgit :)
+        - More to come!
+
+- **Python integration**
     - Use from Python as a library
     - Call Python from Preql
     - Pandas integration
-- Escape hatch to SQL (write raw SQL expression within Preql code)
-- Interactive prompt (REPL) with autocompletion
-- Automatically generate REST+JSON server
+
+- **Interactive shell** (REPL) with autocompletion
+- REST+JSON server, automatically generated
+
+
+## Planned features (for near future)
+- Support for more databases
+- Automatic GraphQL integration
+- Multiple Dispatch (multimethods)
+- Cached JIT compilation (PoC working!)
+- JSON operations in SQL
+- Compile control flow to SQL
+- API for Graph computation over SQL
+- IDE support via language server (WIP)
+- Migrations
+- Automatic joins via attribute access

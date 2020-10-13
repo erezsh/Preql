@@ -1,6 +1,8 @@
 import re
 import operator
 
+from runtype import DispatchError
+
 from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
 from .exceptions import Signal
 from . import exceptions as exc
@@ -246,7 +248,10 @@ def compile_to_inst(state: State, like: ast.Like):
     s = cast_to_instance(state, like.str)
     p = cast_to_instance(state, like.pattern)
 
-    return _compile_arith(state, like, s, p)
+    try:
+        return _compile_arith(state, like, s, p)
+    except DispatchError as e:
+        raise Signal.make(T.TypeError, state, like, f"Like not implemented for {s.type} and {p.type}")
 
 
 ## Contains
@@ -407,7 +412,11 @@ def compile_to_inst(state: State, neg: ast.Neg):
 def compile_to_inst(state: State, arith: ast.Arith):
     args = evaluate(state, arith.args)
 
-    return _compile_arith(state, arith, *args)
+    try:
+        return _compile_arith(state, arith, *args)
+    except DispatchError as e:
+        a, b = args
+        raise Signal.make(T.TypeError, state, arith, f"Like not implemented for {a.type} and {b.type}")
 
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):

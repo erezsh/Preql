@@ -4,26 +4,73 @@
 
 Inspired by Javascript
 
-- Comments are //
-- Functions defined with `func`
+- Comments start with `//`
+- Functions are defined with `func`
 
-- Literals
-    - Numbers, strings
-    - null
-    - List [item1, item2, ...]
-    - Range [start..end]
+### Literals
 
-### Construction
+Numbers are written as integers or floats.
+
+```javascript
+ >> type(10)
+int
+ >> type(3.14)
+float
+```
+
+Operations between ints and floats result in a float:
+```javscript
+ >> type(10 + 3.14)
+float
+```
+
+Division always returns a float. For "floordiv", use the `/~` operator:
+```javascript
+ >> 10 / 3
+3.3333333333333335
+ >> 10 /~ 3
+3
+```
+
+Null values are specified with `null`. Null is only ever equal to itself:
+```javascript
+ >> null == null
+true
+```
+
+Lists can be specified using the `[item1, item2, ...]` syntax. They are equivalent to a table with a single `value` column.
+
+```javascript
+ >> ["a", "b", "c"]
+table  =3
+┌───────┐
+│ value │
+├───────┤
+│ a     │
+│ b     │
+│ c     │
+└───────┘
+```
+
+Ranges can be specified using the `[start..end]` syntax. They are equivalent to a list of numbers.
+
+```javascript
+ >> type([1..10])
+list[int]
+```
+
+### Keywords
 
 table
 struct
-func
-if
+func .. return
+if .. else
 while
 import
-return
 throw
 try .. catch
+one
+new
 
 ### Operators
 
