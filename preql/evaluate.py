@@ -882,7 +882,7 @@ def new_table_from_rows(state, name, columns, rows):
     ]
 
     # TODO refactor into function?
-    elems = {c:v.type for c,v in zip(columns, tuples[0])}
+    elems = {c:v.type.as_nullable() for c,v in zip(columns, tuples[0])}
     elems['id'] = T.t_id
     table = T.table(elems, temporary=True, pk=[['id']], name=name)
 

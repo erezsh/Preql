@@ -14,7 +14,7 @@ It is designed for use by data engineers, analyists and data scientists.
 
 * Support for Postgres, MySQL and Sqlite. (more planned!)
 
-(Preql is currently at the alpha stage, and isn't ready for production use yet)
+**Note: Preql is still work in progress, and isn't ready for production use, or any serious use yet**
 
 # Documentation
 
