@@ -12,9 +12,9 @@ class PreqlTests(TestCase):
     optimized = True
     uri = SQLITE_URI
 
-    def Preql(self):
+    def Preql(self, **kw):
         settings.optimize = self.optimized
-        preql = Preql(self.uri)
+        preql = Preql(self.uri, **kw)
         self.preql = preql
         return preql
 

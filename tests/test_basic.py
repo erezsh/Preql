@@ -49,19 +49,6 @@ def is_eq(a, b):
     ("Unoptimized_Pg", POSTGRES_URI, False),
 ])
 class BasicTests(PreqlTests):
-    def Preql(self, **kw):
-        settings.optimize = self.optimized
-        preql = Preql(self.uri, **kw)
-        self.preql = preql
-        return preql
-
-    def setUp(self):
-        self.preql = None
-
-    def tearDown(self):
-        if self.preql:
-            self.preql.interp.state.db.rollback()
-
     @uses_tables('Person', 'Country')
     def test_basic1(self):
         preql = self.Preql()
