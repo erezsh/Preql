@@ -272,6 +272,10 @@ class For(Statement):
     iterable: Object
     do: CodeBlock
 
+@dataclass
+class While(Statement):
+    cond: Object
+    do: Statement
 
 
 

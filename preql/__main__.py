@@ -54,6 +54,8 @@ def main():
             else:
                 print(line)
         res = -1
+    except KeyboardInterrupt:
+        print("Interrupted (Ctrl+C)")
 
 
     if interactive:

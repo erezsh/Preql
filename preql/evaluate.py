@@ -112,7 +112,7 @@ def _execute(state: State, table_def: ast.TableDef):
     # exists = table_exists(state, table_def.name)
     exists = state.db.table_exists(table_def.name)
     if exists:
-        cur_type = state.db.import_table_type(state, table_def.name, None if ellipsis else set(t.elems))
+        cur_type = state.db.import_table_type(state, table_def.name, None if ellipsis else set(t.elems) | {'id'})
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -209,7 +209,10 @@ import rich.console
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
     inst = evaluate(state, p.value)
-    repr_ = inst.repr(state)
+    if inst.type <= T.string:
+        repr_ = cast_to_python(state, inst)
+    else:
+        repr_ = inst.repr(state)
     if isinstance(repr_, rich.table.Table):
         console = rich.console.Console()
         console.print(repr_)
@@ -242,6 +245,11 @@ def _execute(state: State, i: ast.If):
         execute(state, i.then)
     elif i.else_:
         execute(state, i.else_)
+
+@dy
+def _execute(state: State, w: ast.While):
+    while(cast_to_python(state, w.cond)):
+        execute(state, w.do)
 
 @dy
 def _execute(state: State, f: ast.For):
@@ -795,7 +803,7 @@ def evaluate(state, obj_):
     # - Apply operations that read or write the database (delete, insert, update, one, etc.)
     obj = apply_database_rw(state, obj)
 
-    assert not isinstance(obj, (ast.ResolveParameters, ast.ResolveParametersString))
+    assert not isinstance(obj, (ast.ResolveParameters, ast.ResolveParametersString)), obj
 
     return obj
 

@@ -1,4 +1,5 @@
 import time
+import re
 from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
@@ -222,3 +223,13 @@ def memoize(f, memo=None):
         return memo[args]
 
     return inner
+
+
+@listgen
+def re_split(r, s):
+    offset = 0
+    for m in re.finditer(r, s):
+        yield None, s[offset:m.start()]
+        yield m, s[m.start():m.end()]
+        offset = m.end()
+    yield None, s[offset:]

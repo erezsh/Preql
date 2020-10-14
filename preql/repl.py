@@ -213,13 +213,3 @@ def start_repl(p, prompt=' >> '):
     except (KeyboardInterrupt, EOFError):
         repl_log.info('Exiting Preql interaction')
 
-
-# def main(script=None):
-#     # p = Preql(db)
-#     p = Preql()
-#     if script:
-#         p.load(script)
-#     start_repl(p)
-
-# if __name__ == '__main__':
-#     main(*sys.argv[1:])

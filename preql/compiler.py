@@ -3,7 +3,7 @@ import operator
 
 from runtype import DispatchError
 
-from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict
+from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict, re_split
 from .exceptions import Signal
 from . import exceptions as exc
 
@@ -486,6 +486,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
             '*': operator.mul,
             '/': operator.truediv,
             '/~': operator.floordiv,
+            '%': operator.mod,
         }[arith.op]
     except KeyError:
         raise Signal.make(T.TypeError, state, arith, f"Operator {arith.op} not supported between types '{a.type}' and '{b.type}'")
@@ -621,15 +622,6 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
         res = res.wrap(qb)
     return res
 
-
-@listgen
-def re_split(r, s):
-    offset = 0
-    for m in re.finditer(r, s):
-        yield None, s[offset:m.start()]
-        yield m, s[m.start():m.end()]
-        offset = m.end()
-    yield None, s[offset:]
 
 
 
