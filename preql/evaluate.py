@@ -160,7 +160,6 @@ def _execute(state: State, var_def: ast.SetValue):
     return res
 
 
-@dy
 def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstance):
 
     if source is objects.EmptyList: # Nothing to add
@@ -188,6 +187,9 @@ def _execute(state: State, insert_rows: ast.InsertRows):
         raise Signal.make(T.SyntaxError, state, insert_rows, "L-value must be table name")
 
     rval = evaluate(state, insert_rows.value)
+
+    assert_type(rval.type, T.collection, state, insert_rows, '+=')
+
     return _copy_rows(state, insert_rows.name, rval)
 
 @dy

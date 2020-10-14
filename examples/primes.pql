@@ -16,6 +16,7 @@ table primes {
     num: int
 }
 
+// Return highest prime number, or null if empty
 func get_last_prime() = one? primes order {^num}[..1]
 
 func find_primes() {
