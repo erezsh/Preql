@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func
-from .exceptions import ReturnSignal, Signal
+from .exceptions import CannotEvaluateVectorized, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -394,32 +394,40 @@ def simplify(state: State, x):
 #             return if_.else_
 #     return if_
 
+# TODO Optimize these, right now failure to evaluate will lose all work
 @dy
 def simplify(state: State, obj: ast.Or):
-    # XXX is simplify the right place for this? It attempts to access the db (count table size)
-    # TODO treat this differenty if in projection or outside of it.
     for expr in obj.args:
         inst = evaluate(state, expr)
-        nz = test_nonzero(state, inst)
+        try:
+            nz = test_nonzero(state, inst)
+        except CannotEvaluateVectorized:
+            return obj
         if nz:
-            return inst
-    return inst
+            return objects.new_value_instance(True)
+
+    return objects.new_value_instance(False)
 
 @dy
 def simplify(state: State, obj: ast.And):
-    # XXX is simplify the right place for this? It attempts to access the db (count table size)
     for expr in obj.args:
         inst = evaluate(state, expr)
-        nz = test_nonzero(state, inst)
+        try:
+            nz = test_nonzero(state, inst)
+        except CannotEvaluateVectorized:
+            return obj
         if not nz:
-            return inst
-    return inst
+            return objects.new_value_instance(False)
+
+    return objects.new_value_instance(True)
 
 @dy
 def simplify(state: State, obj: ast.Not):
-    # XXX is simplify the right place for this? It attempts to access the db (count table size)
     inst = evaluate(state, obj.expr)
-    nz = test_nonzero(state, inst)
+    try:
+        nz = test_nonzero(state, inst)
+    except CannotEvaluateVectorized:
+        return obj
     return objects.new_value_instance(not nz)
 
 
@@ -831,7 +839,9 @@ def localize(state, inst: objects.AbsStructInstance):
 
 @dy
 def localize(state, inst: objects.Instance):
-    state.require_access(state.AccessLevels.WRITE_DB)
+    # TODO This protection doesn't work for unoptimized code
+    # Cancel unoptimized mode? Or leave this unprotected?
+    # state.require_access(state.AccessLevels.WRITE_DB)
 
     return db_query(state, inst.code, inst.subqueries)
 
@@ -917,7 +927,8 @@ def cast_to_python(state, obj: ast.Ast):
 @dy
 def cast_to_python(state, obj: objects.AbsInstance):
     if obj.type <= T.vectorized:
-        raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
+        raise exc.CannotEvaluateVectorized()
+        # raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
     res = localize(state, obj)
     assert isinstance(res, (int, str, float, dict, list, type(None))), res
     return res

@@ -157,6 +157,21 @@ class BasicTests(PreqlTests):
         self._assertSignal(T.TypeError, preql, '"a" % "b"')
         self._assertSignal(T.TypeError, preql, '3 ~ 3')
 
+    def test_logical(self):
+        # TODO null values
+        preql = self.Preql()
+        assert preql('1==0 or isa(1, int)')
+        assert not preql('1==0 or isa(1, float)')
+        res = preql('[0,1,2,3][value < 2]{r: value or ""}')
+        assert res == [{'r': 0}, {'r': 1}], res
+        res = preql('[0,1,2,3][value < 2]{r: value or "a"}')
+        assert res == [{'r': 1}, {'r': 1}], res
+
+        res = preql('[0,1,2,3]{r: value > 1 and value < 3}[r]')
+        assert res == [{'r': 1}], res
+        res = preql('[0,1,2,3]{r: value < 3, value}[not r]')
+        assert res == [{'r': 0, 'value': 3}], res
+
 
     @uses_tables('Point')
     def test_update_basic(self):

@@ -359,6 +359,27 @@ class Like(Scalar):
         return s.code + [' like '] + p.code
 
 @dataclass
+class LogicalBinOp(Scalar):
+    op: str
+    exprs: List[Sql]
+
+    def _compile(self, qb):
+        x = join_sep([e.compile_wrap(qb).code for e in self.exprs], f' {self.op} ')
+        return parens(x)
+
+    type = T.bool
+
+@dataclass
+class LogicalNot(Scalar):
+    expr: Sql
+
+    def _compile(self, qb):
+        x = ['NOT '] + self.expr.compile_wrap(qb).code
+        return parens(x)
+
+    type = T.bool
+
+@dataclass
 class Arith(Scalar):
     op: str
     exprs: List[Sql]

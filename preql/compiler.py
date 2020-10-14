@@ -31,6 +31,7 @@ def cast_to_instance(state, x):
     try:
         x = simplify(state, x)  # just compile Name?
         inst = compile_to_inst(state, x)
+        # inst = evaluate(state, x)
     except exc.ReturnSignal:
         raise Signal.make(T.CompileError, state, None, f"Bad compilation of {x}")
 
@@ -145,7 +146,8 @@ def compile_to_inst(state: State, proj: ast.Projection):
     attrs = table.all_attrs()
 
     with state.use_scope({n:vectorized(c) for n, c in attrs.items()}):
-        fields = _process_fields(state, fields)
+        query_state = state.reduce_access(state.AccessLevels.QUERY)
+        fields = _process_fields(query_state, fields)
 
     for name, f in fields:
         t = T.union[T.primitive, T.struct, T.nulltype, T.unknown]
@@ -159,7 +161,8 @@ def compile_to_inst(state: State, proj: ast.Projection):
     agg_fields = []
     if proj.agg_fields:
         with state.use_scope({n:objects.aggregate(c) for n, c in attrs.items()}):
-            agg_fields = _process_fields(state, proj.agg_fields)
+            query_state = state.reduce_access(state.AccessLevels.QUERY)
+            agg_fields = _process_fields(query_state, proj.agg_fields)
 
     all_fields = fields + agg_fields
 
@@ -224,7 +227,8 @@ def compile_to_inst(state: State, order: ast.Order):
     assert_type(table.type, T.table, state, order, "'order'")
 
     with state.use_scope(table.all_attrs()):
-        fields = cast_to_instance(state, order.fields)
+        query_state = state.reduce_access(state.AccessLevels.QUERY)
+        fields = cast_to_instance(query_state, order.fields)
 
     code = sql.table_order(table, [c.code for c in fields])
 
@@ -240,6 +244,26 @@ def compile_to_inst(state: State, expr: ast.DescOrder):
 @dy
 def compile_to_inst(state: State, lst: list):
     return [evaluate(state, e) for e in lst]
+
+
+@dy
+def compile_to_inst(state: State, o: ast.Or):
+    args = cast_to_instance(state, o.args)
+    args_bool = [_cast(state, a.type, T.bool, a) for a in args]
+    code = sql.LogicalBinOp("OR", [a.code for a in args_bool])
+    return objects.make_instance(code, T.bool, args)
+
+@dy
+def compile_to_inst(state: State, o: ast.And):
+    args = cast_to_instance(state, o.args)
+    code = sql.LogicalBinOp("AND", [a.code for a in args])
+    return objects.make_instance(code, T.bool, args)
+
+@dy
+def compile_to_inst(state: State, o: ast.Not):
+    expr = cast_to_instance(state, o.expr)
+    code = sql.LogicalNot(expr.code)
+    return objects.make_instance(code, T.bool, [expr])
 
 
 @dy
@@ -719,7 +743,8 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     # with state.use_scope(table.all_attrs()):
     with state.use_scope({n:vectorized(c) for n, c in table.all_attrs().items()}):
-        conds = cast_to_instance(state, sel.conds)
+        query_state = state.reduce_access(state.AccessLevels.QUERY)
+        conds = cast_to_instance(query_state, sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):
         code = sql.unknown
