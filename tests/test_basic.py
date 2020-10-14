@@ -1180,6 +1180,11 @@ class TestTypes(PreqlTests):
         assert T.int.type <= T.type
         assert T.table(x=T.int, y=T.string).type <= T.type
 
+        u = T.union[T.int, T.string]
+        assert T.int <= u
+        assert T.string <= u
+        assert not (u <= T.int)
+
 
 from pandas import DataFrame
 class TestPandas(PreqlTests):

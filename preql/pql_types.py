@@ -115,7 +115,7 @@ class Type(Object):
         if t.typename == 'union':   # XXX a little hacky. Change to issupertype?
             return any(self.issubtype(t2) for t2 in t.elem_types)
         elif self.typename == 'union':
-            return any(t2.issubtype(t) for t2 in self.elem_types)
+            return all(t2.issubtype(t) for t2 in self.elem_types)
 
         if self is T.nulltype:
             if t.maybe_null():
@@ -155,6 +155,9 @@ class Type(Object):
         assert attr not in self.methods
 
         return super().get_attr(attr)
+
+    def all_attrs(self):
+        return {'elem': self.elem}
 
     def repr(self, state):
         return repr(self)
