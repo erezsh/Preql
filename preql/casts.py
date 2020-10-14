@@ -5,6 +5,8 @@ from .exceptions import Signal
 
 @dp_type
 def _cast(state, inst_type, target_type, inst):
+    if inst_type == target_type:
+        return inst
     raise Signal.make(T.TypeError, state, None, f"Cast not implemented for {inst_type}->{target_type}")
 
 @dp_type
