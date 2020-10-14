@@ -112,10 +112,10 @@ class Type(Object):
 
     def issubtype(self, t):
         assert isinstance(t, Type), t
-        if t.typename == 'union':   # XXX a little hacky. Change to issupertype?
-            return any(self.issubtype(t2) for t2 in t.elem_types)
-        elif self.typename == 'union':
+        if self.typename == 'union':
             return all(t2.issubtype(t) for t2 in self.elem_types)
+        elif t.typename == 'union':   # XXX a little hacky. Change to issupertype?
+            return any(self.issubtype(t2) for t2 in t.elem_types)
 
         if self is T.nulltype:
             if t.maybe_null():

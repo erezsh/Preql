@@ -450,10 +450,10 @@ def _compile_arith(state, arith, a: T.any, b: T.any):
 def _compile_arith(state, arith, a: T.collection, b: T.collection):
     # TODO validate types
     ops = {
-        "+": 'concat',
-        "&": 'intersect',
-        "|": 'union',
-        "-": 'subtract',
+        "+": 'table_concat',
+        "&": 'table_intersect',
+        "|": 'table_union',
+        "-": 'table_subtract',
     }
     # TODO compile preql funccall?
     try:
@@ -790,6 +790,9 @@ def _apply_type_generics(state, gen_type, type_names):
             raise Signal.make(T.TypeError, state, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:
+        if gen_type in (T.union,):
+            return gen_type(tuple(type_objs))
+
         raise Signal.make(T.TypeError, state, None, "Union types not yet supported!")
     else:
         t ,= type_objs

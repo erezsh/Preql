@@ -229,21 +229,21 @@ def sql_bin_op(state, op, t1, t2, name):
     # t = T.list[union_types([t1.type.elem, t2.type.elem])]
     return type(t1).make(code, t1.type, [t1, t2])
 
-def pql_intersect(state: State, t1: T.collection, t2: T.collection):
+def pql_table_intersect(state: State, t1: T.collection, t2: T.collection):
     "Intersect two tables. Used for `t1 & t2`"
     return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
 
-def pql_subtract(state: State, t1: T.collection, t2: T.collection):
+def pql_table_substract(state: State, t1: T.collection, t2: T.collection):
     "Substract two tables (except). Used for `t1 - t2`"
     if state.db.target is sql.mysql:
         raise Signal.make(T.NotImplementedError, state, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
-def pql_union(state: State, t1: T.collection, t2: T.collection):
+def pql_table_union(state: State, t1: T.collection, t2: T.collection):
     "Union two tables. Used for `t1 | t2`"
     return sql_bin_op(state, "UNION", t1, t2, "union")
 
-def pql_concat(state: State, t1: T.collection, t2: T.collection):
+def pql_table_concat(state: State, t1: T.collection, t2: T.collection):
     "Concatenate two tables (union all). Used for `t1 + t2`"
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
 
@@ -626,10 +626,10 @@ internal_funcs = create_internal_funcs({
     'import_table': pql_import_table,
     'count': pql_count,
     'temptable': pql_temptable,
-    'concat': pql_concat,
-    'intersect': pql_intersect,
-    'union': pql_union,
-    'subtract': pql_subtract,
+    'table_concat': pql_table_concat,
+    'table_intersect': pql_table_intersect,
+    'table_union': pql_table_union,
+    'table_subtract': pql_table_substract,
     'SQL': pql_SQL,
     'PY': pql_PY,
     'isa': pql_isa,

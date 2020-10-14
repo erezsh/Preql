@@ -1184,6 +1184,7 @@ class TestTypes(PreqlTests):
         assert T.int <= u
         assert T.string <= u
         assert not (u <= T.int)
+        assert u <= u
 
 
 from pandas import DataFrame
