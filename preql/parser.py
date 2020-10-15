@@ -246,17 +246,17 @@ class TreeToAst(Transformer):
 
 class Postlexer:
     def process(self, stream):
-        paren_level = 0
+        paren_level = []
         for token in stream:
-            if not (paren_level and token.type == '_NL'):
+            if not (paren_level and paren_level[-1] == 'LPAR' and token.type == '_NL'):
                 assert token.end_pos is not None
                 yield token
 
-            if token.type == 'LPAR':
-                paren_level += 1
-            elif token.type == 'RPAR':
-                paren_level -= 1
-                assert paren_level >= 0
+            if token.type in ('LPAR', 'LSQB', 'LBRACE'):
+                paren_level.append(token.type)
+            elif token.type in ('RPAR', 'RSQB', 'RBRACE'):
+                p = paren_level.pop()
+                assert p == 'L' + token.type[1:]
 
     # XXX Hack for ContextualLexer. Maybe there's a more elegant solution?
     @property
