@@ -38,13 +38,13 @@ Null values are specified with `null`. Null is only ever equal to itself:
 true
 ```
 
-Lists can be specified using the `[item1, item2, ...]` syntax. They are equivalent to a table with a single `value` column.
+Lists can be specified using the `[item1, item2, ...]` syntax. They are equivalent to a table with a single `item` column.
 
 ```javascript
  >> ["a", "b", "c"]
 table  =3
 ┌───────┐
-│ value │
+│ item  │
 ├───────┤
 │ a     │
 │ b     │

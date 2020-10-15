@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func
-from .exceptions import ReturnSignal, Signal
+from .exceptions import CannotEvaluateVectorized, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -112,7 +112,7 @@ def _execute(state: State, table_def: ast.TableDef):
     # exists = table_exists(state, table_def.name)
     exists = state.db.table_exists(table_def.name)
     if exists:
-        cur_type = state.db.import_table_type(state, table_def.name, None if ellipsis else set(t.elems))
+        cur_type = state.db.import_table_type(state, table_def.name, None if ellipsis else set(t.elems) | {'id'})
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -160,7 +160,6 @@ def _execute(state: State, var_def: ast.SetValue):
     return res
 
 
-@dy
 def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstance):
 
     if source is objects.EmptyList: # Nothing to add
@@ -188,6 +187,9 @@ def _execute(state: State, insert_rows: ast.InsertRows):
         raise Signal.make(T.SyntaxError, state, insert_rows, "L-value must be table name")
 
     rval = evaluate(state, insert_rows.value)
+
+    assert_type(rval.type, T.collection, state, insert_rows, '+=')
+
     return _copy_rows(state, insert_rows.name, rval)
 
 @dy
@@ -209,7 +211,10 @@ import rich.console
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
     inst = evaluate(state, p.value)
-    repr_ = inst.repr(state)
+    if inst.type <= T.string:
+        repr_ = cast_to_python(state, inst)
+    else:
+        repr_ = inst.repr(state)
     if isinstance(repr_, rich.table.Table):
         console = rich.console.Console()
         console.print(repr_)
@@ -242,6 +247,11 @@ def _execute(state: State, i: ast.If):
         execute(state, i.then)
     elif i.else_:
         execute(state, i.else_)
+
+@dy
+def _execute(state: State, w: ast.While):
+    while(cast_to_python(state, w.cond)):
+        execute(state, w.do)
 
 @dy
 def _execute(state: State, f: ast.For):
@@ -384,32 +394,40 @@ def simplify(state: State, x):
 #             return if_.else_
 #     return if_
 
+# TODO Optimize these, right now failure to evaluate will lose all work
 @dy
 def simplify(state: State, obj: ast.Or):
-    # XXX is simplify the right place for this? It attempts to access the db (count table size)
-    # TODO treat this differenty if in projection or outside of it.
     for expr in obj.args:
         inst = evaluate(state, expr)
-        nz = test_nonzero(state, inst)
+        try:
+            nz = test_nonzero(state, inst)
+        except CannotEvaluateVectorized:
+            return obj
         if nz:
-            return inst
-    return inst
+            return objects.new_value_instance(True)
+
+    return objects.new_value_instance(False)
 
 @dy
 def simplify(state: State, obj: ast.And):
-    # XXX is simplify the right place for this? It attempts to access the db (count table size)
     for expr in obj.args:
         inst = evaluate(state, expr)
-        nz = test_nonzero(state, inst)
+        try:
+            nz = test_nonzero(state, inst)
+        except CannotEvaluateVectorized:
+            return obj
         if not nz:
-            return inst
-    return inst
+            return objects.new_value_instance(False)
+
+    return objects.new_value_instance(True)
 
 @dy
 def simplify(state: State, obj: ast.Not):
-    # XXX is simplify the right place for this? It attempts to access the db (count table size)
     inst = evaluate(state, obj.expr)
-    nz = test_nonzero(state, inst)
+    try:
+        nz = test_nonzero(state, inst)
+    except CannotEvaluateVectorized:
+        return obj
     return objects.new_value_instance(not nz)
 
 
@@ -795,7 +813,7 @@ def evaluate(state, obj_):
     # - Apply operations that read or write the database (delete, insert, update, one, etc.)
     obj = apply_database_rw(state, obj)
 
-    assert not isinstance(obj, (ast.ResolveParameters, ast.ResolveParametersString))
+    assert not isinstance(obj, (ast.ResolveParameters, ast.ResolveParametersString)), obj
 
     return obj
 
@@ -821,7 +839,9 @@ def localize(state, inst: objects.AbsStructInstance):
 
 @dy
 def localize(state, inst: objects.Instance):
-    state.require_access(state.AccessLevels.WRITE_DB)
+    # TODO This protection doesn't work for unoptimized code
+    # Cancel unoptimized mode? Or leave this unprotected?
+    # state.require_access(state.AccessLevels.WRITE_DB)
 
     return db_query(state, inst.code, inst.subqueries)
 
@@ -882,7 +902,7 @@ def new_table_from_rows(state, name, columns, rows):
     ]
 
     # TODO refactor into function?
-    elems = {c:v.type for c,v in zip(columns, tuples[0])}
+    elems = {c:v.type.as_nullable() for c,v in zip(columns, tuples[0])}
     elems['id'] = T.t_id
     table = T.table(elems, temporary=True, pk=[['id']], name=name)
 
@@ -907,7 +927,8 @@ def cast_to_python(state, obj: ast.Ast):
 @dy
 def cast_to_python(state, obj: objects.AbsInstance):
     if obj.type <= T.vectorized:
-        raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
+        raise exc.CannotEvaluateVectorized()
+        # raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
     res = localize(state, obj)
     assert isinstance(res, (int, str, float, dict, list, type(None))), res
     return res

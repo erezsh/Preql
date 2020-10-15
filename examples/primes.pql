@@ -1,0 +1,42 @@
+//
+//    Fault-tolerant Primes Calculator
+//----------------------------------------
+//
+//  This example will produce an ever-growing list of prime numbers.
+//  If run on a persistent database, it will resume running from the last point it stopped.
+//
+//  For example, run this:
+//
+//      preql -f primes.pql sqlite:///primes.sqlite
+//
+//  Then stop it (using Ctrl+C, or any other method), and run it again.
+//
+
+table primes {
+    num: int
+}
+
+// Return highest prime number, or null if empty
+func get_last_prime() = one? primes order {^num}[..1]
+
+func find_primes() {
+    // Init primes if empty
+    if (get_last_prime() == null) {
+        new primes(2)
+    }
+
+    // Search for primes, starting with the last one found
+    n = get_last_prime().num
+    while (true) {
+        n = n + 1
+        // Can 'n' be divided by any other prime?
+        if (is_empty(primes[n % num == 0])) {
+            new primes(n)
+            commit()
+            cnt = count(primes)
+            print fmt("Found prime: $n, total of $cnt known primes")
+        }
+    }
+}
+
+find_primes()

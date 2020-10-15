@@ -86,7 +86,7 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
         table.add_column(k, footer=k, **kw)
 
     for r in rows:
-        table.add_row(*[rich.markup.escape(str(x)) for x in r.values()])
+        table.add_row(*[rich.markup.escape(str(x) if x is not None else '-') for x in r.values()])
 
     if has_more:
         table.add_row(*['...' for x in rows[0]])
@@ -196,7 +196,7 @@ class Interface:
     Example:
         >>> import preql
         >>> p = preql.Preql()
-        >>> p('[1, 2]{value+1}')
+        >>> p('[1, 2]{item+1}')
         [2, 3]
     """
 
@@ -287,9 +287,16 @@ class Interface:
         Example:
             >>> pql.import_pandas(a=df_a, b=df_b)
         """
+        import pandas as pd
+        def normalize_item(i):
+            if pd.isna(i):
+                return None
+            i = i.item() if hasattr(i, 'item') else i
+            return i
+
         for name, df in dfs.items():
             cols = list(df)
-            rows = [[i.item() if hasattr(i, 'item') else i for i in rec]
+            rows = [[normalize_item(i) for i in rec]
                     for rec in df.to_records()]
             new_table_from_rows(self.interp.state, name, cols, rows)
 

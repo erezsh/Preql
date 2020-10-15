@@ -34,9 +34,10 @@ def cast_to_python(state, obj: type(NotImplemented)) -> object:
 class AccessLevels:
     COMPILE = 1
     # COMPILE_TEXT
-    EVALUATE = 2
-    READ_DB = 3
-    WRITE_DB = 4
+    QUERY = 2
+    EVALUATE = 3
+    READ_DB = 4
+    WRITE_DB = 5
 
 class State:
     AccessLevels = AccessLevels
@@ -75,7 +76,7 @@ class State:
 
     def require_access(self, level):
         if self.access_level < level:
-            raise InsufficientAccessLevel()
+            raise InsufficientAccessLevel(level)
     def catch_access(self, level):
         if self.access_level < level:
             raise Exception("Bad access. Security risk.")

@@ -5,6 +5,8 @@ from .exceptions import Signal
 
 @dp_type
 def _cast(state, inst_type, target_type, inst):
+    if inst_type == target_type:
+        return inst
     raise Signal.make(T.TypeError, state, None, f"Cast not implemented for {inst_type}->{target_type}")
 
 @dp_type
@@ -51,6 +53,16 @@ def _cast(state, inst_type: T.union[T.float, T.bool], target_type: T.int, inst):
         t = "int"
     code = sql.Cast(T.int, t, inst.code)
     return objects.Instance.make(code, T.int, [inst])
+
+@dp_type
+def _cast(state, inst_type: T.number, target_type: T.bool, inst):
+    code = sql.Compare('!=', [inst.code, sql.make_value(0)])
+    return objects.Instance.make(code, T.bool, [inst])
+
+@dp_type
+def _cast(state, inst_type: T.string, target_type: T.bool, inst):
+    code = sql.Compare('!=', [inst.code, sql.make_value('')])
+    return objects.Instance.make(code, T.bool, [inst])
 
 @dp_type
 def _cast(state, inst_type: T.union[T.int, T.bool], target_type: T.float, inst):

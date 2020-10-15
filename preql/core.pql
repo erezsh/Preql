@@ -17,7 +17,7 @@ func _sql_agg_func(name, obj, t=null) {
     } else {
         obj = list(obj)
         if (isa(obj, list)) {
-            return one one obj{ => value: _sql_agg_func(name, value, t) }     // Recursive
+            return one one obj{ => item: _sql_agg_func(name, item, t) }     // Recursive
         }
     }
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
@@ -59,7 +59,7 @@ func first(obj: collection) {
     } else {
         obj = list(obj)
         if (isa(obj, list)) {
-            return one one obj{ => value: first(value) }     // Recursive
+            return one one obj{ => item: first(item) }     // Recursive
         }
     }
 }
@@ -113,13 +113,26 @@ func dict(...x) {
 }
 
 func _zipjoin(join_func, table1, table2) {
-	// Add index to each table, and then join
+	"Add index to each table, and then join"
 	return join_func(a: enum(table1).index, b: enum(table2).index) {
 			// Remove index from nested structs
 			a {... !index}
 			b {... !index}
 		}
 }
+
+func commit() {
+    "Commit the current transaction"
+    force_eval(SQL(nulltype, "COMMIT"))
+}
+
+func is_empty(tbl) {
+    "Returns whether a table expression is empty or not"
+    // count(t) would also work, but it will evaluate all the elements of `tbl`
+    // We only care if there is at least one.
+    return count(tbl[..1]) == 0
+}
+
 
 "Join two tables into one by matching rows with the same index"
 func zipjoin(a: collection, b: collection) = _zipjoin(join, a, b)

@@ -1,4 +1,5 @@
 import inspect
+from preql.compiler import cast_to_instance
 import re
 import csv
 import inspect
@@ -6,7 +7,7 @@ from typing import Optional
 
 from tqdm import tqdm
 
-from .utils import safezip, listgen
+from .utils import safezip, listgen, re_split
 from .exceptions import Signal, ExitInterp
 
 from . import pql_objects as objects
@@ -61,6 +62,37 @@ def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: 
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     # .. why not just compile with parameters? the types are already known
     return ast.ResolveParametersString(None, result_type, sql_code)
+
+def pql_force_eval(state: State, expr: T.object):
+    "Force evaluation of expression. Execute any db queries necessary."
+    return objects.new_value_instance( cast_to_python(state, expr) )
+
+def pql_fmt(state: State, s: T.string):
+    "Format given string using interpolation on variables marked as `$var`"
+    _s = cast_to_python(state, s)
+
+    tokens = re_split(r"\$\w+", _s)
+    string_parts = []
+    for m, t in tokens:
+        if m:
+            assert t[0] == '$'
+            obj = state.get_var(t[1:])
+            inst = cast_to_instance(state, obj)
+            as_str = _cast(state, inst.type, T.string, inst)
+            string_parts.append(as_str)
+        elif t:
+            string_parts.append(objects.new_value_instance(t))
+
+    if not string_parts:
+        return objects.new_value_instance('')
+    elif len(string_parts) == 1:
+        return string_parts[0]
+
+    a = string_parts[0]
+    for b in string_parts[1:]:
+        a = ast.Arith(None, "+", [a,b])
+
+    return cast_to_instance(state, a)
 
 
 
@@ -197,21 +229,21 @@ def sql_bin_op(state, op, t1, t2, name):
     # t = T.list[union_types([t1.type.elem, t2.type.elem])]
     return type(t1).make(code, t1.type, [t1, t2])
 
-def pql_intersect(state: State, t1: T.collection, t2: T.collection):
+def pql_table_intersect(state: State, t1: T.collection, t2: T.collection):
     "Intersect two tables. Used for `t1 & t2`"
     return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
 
-def pql_subtract(state: State, t1: T.collection, t2: T.collection):
+def pql_table_substract(state: State, t1: T.collection, t2: T.collection):
     "Substract two tables (except). Used for `t1 - t2`"
     if state.db.target is sql.mysql:
         raise Signal.make(T.NotImplementedError, state, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
-def pql_union(state: State, t1: T.collection, t2: T.collection):
+def pql_table_union(state: State, t1: T.collection, t2: T.collection):
     "Union two tables. Used for `t1 | t2`"
     return sql_bin_op(state, "UNION", t1, t2, "union")
 
-def pql_concat(state: State, t1: T.collection, t2: T.collection):
+def pql_table_concat(state: State, t1: T.collection, t2: T.collection):
     "Concatenate two tables (union all). Used for `t1 + t2`"
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
 
@@ -594,10 +626,10 @@ internal_funcs = create_internal_funcs({
     'import_table': pql_import_table,
     'count': pql_count,
     'temptable': pql_temptable,
-    'concat': pql_concat,
-    'intersect': pql_intersect,
-    'union': pql_union,
-    'subtract': pql_subtract,
+    'table_concat': pql_table_concat,
+    'table_intersect': pql_table_intersect,
+    'table_union': pql_table_union,
+    'table_subtract': pql_table_substract,
     'SQL': pql_SQL,
     'PY': pql_PY,
     'isa': pql_isa,
@@ -611,6 +643,8 @@ internal_funcs = create_internal_funcs({
     'columns': pql_columns,
     'import_csv': pql_import_csv,
     'serve_rest': pql_serve_rest,
+    'force_eval': pql_force_eval,
+    'fmt': pql_fmt,
 })
 
 joins = {

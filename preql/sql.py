@@ -359,6 +359,27 @@ class Like(Scalar):
         return s.code + [' like '] + p.code
 
 @dataclass
+class LogicalBinOp(Scalar):
+    op: str
+    exprs: List[Sql]
+
+    def _compile(self, qb):
+        x = join_sep([e.compile_wrap(qb).code for e in self.exprs], f' {self.op} ')
+        return parens(x)
+
+    type = T.bool
+
+@dataclass
+class LogicalNot(Scalar):
+    expr: Sql
+
+    def _compile(self, qb):
+        x = ['NOT '] + self.expr.compile_wrap(qb).code
+        return parens(x)
+
+    type = T.bool
+
+@dataclass
 class Arith(Scalar):
     op: str
     exprs: List[Sql]
@@ -661,6 +682,10 @@ class Select(TableOperation):
                 s = s1.replace(conds=list(s1.conds) + list(s2.conds), table=s2.table)
                 return s._compile(qb)
 
+            # elif s1._is_limit_only() and not (s2.offset or s2.limit):
+            #     s = s2.replace(limit=s1.limit, offset=s1.offset)
+            #     return s._compile(qb)
+
         #
         # Compile
         #
@@ -676,6 +701,9 @@ class Select(TableOperation):
         if self.group_by:
             sql += [' GROUP BY '] + join_comma(e.compile_wrap(qb).code for e in self.group_by)
 
+        if self.order:
+            sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
+
         if self.limit is not None:
             sql += [' LIMIT ', str(self.limit)]
         elif self.offset is not None:
@@ -688,9 +716,6 @@ class Select(TableOperation):
 
         if self.offset is not None:
             sql += [' OFFSET ', str(self.offset)]
-
-        if self.order:
-            sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
 
         return sql
 
