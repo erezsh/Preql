@@ -833,7 +833,7 @@ def compile_to_inst(state: State, range: ast.Range):
     start = cast_to_python(state, range.start) if range.start else 0
     if range.stop:
         stop = cast_to_python(state, range.stop)
-        stop_str = f" WHERE value+1<{stop}"
+        stop_str = f" WHERE item+1<{stop}"
     else:
         if state.db.target is sql.mysql:
             raise Signal.make(T.NotImplementedError, state, range, "MySQL doesn't support infinite recursion!")
@@ -842,7 +842,7 @@ def compile_to_inst(state: State, range: ast.Range):
     type_ = T.list[T.int]
     name = state.unique_name("range")
     skip = 1
-    code = f"SELECT {start} AS value UNION ALL SELECT value+{skip} FROM {name}{stop_str}"
+    code = f"SELECT {start} AS item UNION ALL SELECT item+{skip} FROM {name}{stop_str}"
     subq = sql.Subquery(name, [], sql.RawSql(type_, code))
     code = sql.TableName(type_, name)
     return objects.ListInstance(code, type_, SafeDict({name: subq}))

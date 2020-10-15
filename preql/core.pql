@@ -17,7 +17,7 @@ func _sql_agg_func(name, obj, t=null) {
     } else {
         obj = list(obj)
         if (isa(obj, list)) {
-            return one one obj{ => value: _sql_agg_func(name, value, t) }     // Recursive
+            return one one obj{ => item: _sql_agg_func(name, item, t) }     // Recursive
         }
     }
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
@@ -59,7 +59,7 @@ func first(obj: collection) {
     } else {
         obj = list(obj)
         if (isa(obj, list)) {
-            return one one obj{ => value: first(value) }     // Recursive
+            return one one obj{ => item: first(item) }     // Recursive
         }
     }
 }

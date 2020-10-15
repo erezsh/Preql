@@ -59,7 +59,7 @@ Here's a small example demonstrating this:
 ```javascript
 >> func my_upper(s) = SQL(string, "upper($s) || '!'")
 >> foo_bar = ["foo", "bar"]   // define a list
->> foo_bar{my_upper(value)}   // apply 'my_upper' to each element
+>> foo_bar{my_upper(item)}   // apply 'my_upper' to each item
 ["FOO!", "BAR!"]
 ```
 

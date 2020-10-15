@@ -27,7 +27,7 @@ def _repr_type(t, depth=2):
         elems = ''
     return f'{t._typename_with_q}{elems}'
 
-ITEM_NAME = 'value'
+ITEM_NAME = 'item'
 
 @dataclass
 class Type(Object):

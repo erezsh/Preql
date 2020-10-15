@@ -73,8 +73,8 @@ class BasicTests(PreqlTests):
         assert preql("type(10/3) == float")
 
         # GroupBy will use the old value if TableTypes aren't versioned
-        self.assertEqual( preql("[1,2,3]{v: value/~2 => sum(value)}").to_json(), [{'v':0, 'sum': 1}, {'v':1, 'sum':5}])
-        self.assertEqual( preql("[1,2,3]{value: value/~2 => sum(value)}").to_json(), [{'value':0, 'sum': 1}, {'value':1, 'sum':5}])
+        self.assertEqual( preql("[1,2,3]{v: item/~2 => sum(item)}").to_json(), [{'v':0, 'sum': 1}, {'v':1, 'sum':5}])
+        self.assertEqual( preql("[1,2,3]{item: item/~2 => sum(item)}").to_json(), [{'item':0, 'sum': 1}, {'item':1, 'sum':5}])
 
 
         preql("""func query1() = Country[language=="en"]{name}""")
@@ -122,7 +122,7 @@ class BasicTests(PreqlTests):
 
 
         self._assertSignal(T.NameError, preql, '[3]{... !hello}')
-        self._assertSignal(T.TypeError, preql, '[3]{... !value}')
+        self._assertSignal(T.TypeError, preql, '[3]{... !item}')
 
         # TODO exception when name doesn't exist
 
@@ -131,7 +131,7 @@ class BasicTests(PreqlTests):
 
         preql = self.Preql()
         assert preql("one one [1,2,3] { => count()} ") == 3
-        assert preql(" [1,2,3] { value /~ 2 => count()} {count} ") == [{'count': 1}, {'count': 2}]
+        assert preql(" [1,2,3] { item /~ 2 => count()} {count} ") == [{'count': 1}, {'count': 2}]
 
     def test_assert(self):
         preql = self.Preql()
@@ -162,15 +162,15 @@ class BasicTests(PreqlTests):
         preql = self.Preql()
         assert preql('1==0 or isa(1, int)')
         assert not preql('1==0 or isa(1, float)')
-        res = preql('[0,1,2,3][value < 2]{r: value or ""}')
+        res = preql('[0,1,2,3][item < 2]{r: item or ""}')
         assert res == [{'r': 0}, {'r': 1}], res
-        res = preql('[0,1,2,3][value < 2]{r: value or "a"}')
+        res = preql('[0,1,2,3][item < 2]{r: item or "a"}')
         assert res == [{'r': 1}, {'r': 1}], res
 
-        res = preql('[0,1,2,3]{r: value > 1 and value < 3}[r]')
+        res = preql('[0,1,2,3]{r: item > 1 and item < 3}[r]')
         assert res == [{'r': 1}], res
-        res = preql('[0,1,2,3]{r: value < 3, value}[not r]')
-        assert res == [{'r': 0, 'value': 3}], res
+        res = preql('[0,1,2,3]{r: item < 3, item}[not r]')
+        assert res == [{'r': 0, 'item': 3}], res
 
 
     @uses_tables('Point')
@@ -290,16 +290,16 @@ class BasicTests(PreqlTests):
         preql("""
             l1 = [1, 2, 3]
             l2 = [1, 2, 4]
-            t = temptable(leftjoin(a: l1.value, b: l2.value))
+            t = temptable(leftjoin(a: l1.item, b: l2.item))
 
-            q1 = t[a.value == 1] {a.value}
-            q2 = t[b.value==null] {a.value}
+            q1 = t[a.item == 1] {a.item}
+            q2 = t[b.item==null] {a.item}
             #q3 = t[b==null] {a}
         """)
 
-        assert list(preql.q1) == [{'value': 1}]
-        assert list(preql.q2) == [{'value': 3}]
-        # assert list(preql.q3) == [{'a': {'value': 3}}]    # TODO
+        assert list(preql.q1) == [{'item': 1}]
+        assert list(preql.q2) == [{'item': 3}]
+        # assert list(preql.q3) == [{'a': {'item': 3}}]    # TODO
 
     @uses_tables('Point')
     def test_update(self):
@@ -350,25 +350,25 @@ class BasicTests(PreqlTests):
     def test_nested_projections(self):
         preql = self.Preql()
 
-        res1 = preql("joinall(a:[1,2], b:[2, 3]) {a.value => count(b.value)}")
-        res2 = preql("joinall(a:[1,2], b:[2, 3]) {a.value => count(b)}")
+        res1 = preql("joinall(a:[1,2], b:[2, 3]) {a.item => count(b.item)}")
+        res2 = preql("joinall(a:[1,2], b:[2, 3]) {a.item => count(b)}")
         self.assertEqual( res1, res2 )
 
         # TODO make these work, or at least throw a graceful error
-        res = [{'a': {'value': 1}, 'b': [3, 4]}, {'a': {'value': 2}, 'b': [3, 4]}]
+        res = [{'a': {'item': 1}, 'b': [3, 4]}, {'a': {'item': 2}, 'b': [3, 4]}]
         self.assertEqual(preql("joinall(a:[1,2], b:[3, 4]) {a => b}" ), res)
 
         res = [{'b': 5, 'a': [1, 2]}]
-        self.assertEqual(preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: sum(b.value)} {b => a}"), res)
-        # preql("joinall(a:[1,2], b:[2, 3]) {a: a.value => b: b.value} {count(b) => a}")
+        self.assertEqual(preql("joinall(a:[1,2], b:[2, 3]) {a: a.item => b: sum(b.item)} {b => a}"), res)
+        # preql("joinall(a:[1,2], b:[2, 3]) {a: a.item => b: b.item} {count(b) => a}")
 
-        res = preql("one joinall(a:[1,2], b:[2, 3]) {a: a.value => b: count(b.value)} {b => a: count(a)}")
+        res = preql("one joinall(a:[1,2], b:[2, 3]) {a: a.item => b: count(b.item)} {b => a: count(a)}")
         self.assertEqual( res, {'b':2, 'a':2} )
 
-        res1 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value}, a}")
-        res2 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value}, a{value}}")
+        res1 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:item}, a}")
+        res2 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:item}, a{item}}")
         self.assertEqual( res1, res2 )
-        res3 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:value, ...}, a{...}}")
+        res3 = preql("joinall(a:[1,2], b:[2, 3]) {b{v:item, ...}, a{...}}")
         self.assertEqual( res1, res3 )
 
         res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) ")
@@ -379,23 +379,23 @@ class BasicTests(PreqlTests):
         res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab.a, ab.b, c}")
         assert len(res1) == 8
 
-        res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab.a.value, ab.b.value, c}")
+        res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab.a.item, ab.b.item, c}")
         assert len(res1) == 8
 
-        res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab {b: b.value, a: a.value}, c}[..1]")
-        self.assertEqual(res1.to_json(), [{'ab': {'b': 2, 'a': 1}, 'c': {'value': 4}}])
+        res1 = preql("joinall(ab: joinall(a:[1,2], b:[2,3]), c: [4,5]) {ab {b: b.item, a: a.item}, c}[..1]")
+        self.assertEqual(res1.to_json(), [{'ab': {'b': 2, 'a': 1}, 'c': {'item': 4}}])
 
     def test_nested2(self):
         preql = self.Preql()
 
-        assert preql(" [1] {a:{b:{value}}} ") == [{'a': {'b': {'value': 1}}}]
-        assert preql("[1] {a:{value}}") == preql("[1] {a:{value}} {a}")
-        assert preql("[1] {value}") == preql("([1] {a:{value}}) {a.value}")
+        assert preql(" [1] {a:{b:{item}}} ") == [{'a': {'b': {'item': 1}}}]
+        assert preql("[1] {a:{item}}") == preql("[1] {a:{item}} {a}")
+        assert preql("[1] {item}") == preql("([1] {a:{item}}) {a.item}")
 
 
     def test_agg_funcs(self):
         preql = self.Preql()
-        r = preql('[0, 2, 0, 0, 3, 4, 0] { => count_true(value), count_false(value) }')
+        r = preql('[0, 2, 0, 0, 3, 4, 0] { => count_true(item), count_false(item) }')
         assert r == [{'count_true': 3, 'count_false': 4}], r
 
         preql("""
@@ -403,7 +403,7 @@ class BasicTests(PreqlTests):
         """)
         # self.assertEqual( preql.sqsum(2), 4 )
 
-        self.assertEqual( preql('one [2, 4]{=> sqsum(value)}')['sqsum'], 20)
+        self.assertEqual( preql('one [2, 4]{=> sqsum(item)}')['sqsum'], 20)
         self.assertEqual( preql('sum([2, 4])'), 6)
         self.assertEqual( preql.sum([2, 4]), 6 )
         # TODO sqsum([2,4])  -->  sum([2,4]*[2,4]) --> sum([4, 16])
@@ -430,13 +430,13 @@ class BasicTests(PreqlTests):
         self.assertEqual( type(preql('list[float]([1,2])')[0]), float)
         self.assertEqual( type(preql('list[int](list[float]([1,2]))')[0]), int)
         self.assertEqual( preql('list[int]([1.2, 3.4])'), [1,3])
-        self.assertEqual( preql('type(list(list([1,2]{value+1}){value+1}))'), T.list[T.int])
-        self.assertEqual( preql('list(list([1,2]{value+1}){value+1})'), [3,4])
+        self.assertEqual( preql('type(list(list([1,2]{item+1}){item+1}))'), T.list[T.int])
+        self.assertEqual( preql('list(list([1,2]{item+1}){item+1})'), [3,4])
 
     def test_lists2(self):
         preql = self.Preql()
         preql('''
-            func in_list(x) = [1,2,3] {value in x{value}}
+            func in_list(x) = [1,2,3] {item in x{item}}
             func test() = in_list([2, 3])
         ''')
         self.assertEqual( list(preql.test()), [{'_':x} for x in [0, 1, 1]])
@@ -461,7 +461,7 @@ class BasicTests(PreqlTests):
 
         assert preql('adult()[..10]') == list(range(18, 28))
         assert preql('adult()[..10] + adult()[..1]') == list(range(18, 28)) + [18]
-        self.assertEqual( preql('list( (adult()[..10] + adult()[..1]) {value + 1} )') , list(range(19, 29)) + [19] )
+        self.assertEqual( preql('list( (adult()[..10] + adult()[..1]) {item + 1} )') , list(range(19, 29)) + [19] )
 
 
     @uses_tables('B', 'A')
@@ -555,7 +555,7 @@ class BasicTests(PreqlTests):
 
 
     def _test_groupby(self, preql):
-        assert preql('one one [1,2,3]{=>sum(value*value)}') == 14
+        assert preql('one one [1,2,3]{=>sum(item*item)}') == 14
 
         res = preql("Country {language => count(id)} order {language}")
         assert is_eq(res, [("en", 2), ("he", 1)]), res
@@ -583,7 +583,7 @@ class BasicTests(PreqlTests):
             ("United States", ["John Steinbeck"], 1),
         ])
 
-        res = preql('[1,2,3]{=>sum(value*value)}')
+        res = preql('[1,2,3]{=>sum(item*item)}')
         assert res == [{'sum': 14}], list(res)
 
     def test_compare(self):
@@ -640,17 +640,17 @@ class BasicTests(PreqlTests):
             assert e.type <= T.NotImplementedError
             assert preql.interp.state.db.target is mysql
 
-        res = preql("""[1,2,3]{v:value*2}[v < 5]""")
+        res = preql("""[1,2,3]{v:item*2}[v < 5]""")
         assert res == [{'v': 2}, {'v': 4}], res
 
-        res = preql("""[1,2,3]{v:value*2}[v in [2,6]]""")
+        res = preql("""[1,2,3]{v:item*2}[v in [2,6]]""")
         assert res == [{'v': 2}, {'v': 6}], res
 
-        res = preql("""[1,2,3]{v:value*2}[v !in [2,6]]""")
+        res = preql("""[1,2,3]{v:item*2}[v !in [2,6]]""")
         assert res == [{'v': 4}], res
 
-        res = preql("""enum([1,8,4,4])[index==value]{value}""")
-        assert res == [{'value': 1}, {'value': 4}]
+        res = preql("""enum([1,8,4,4])[index==item]{item}""")
+        assert res == [{'item': 1}, {'item': 4}]
 
         res = preql("""[1,2,3][..2]""")
         assert res == [1,2]
@@ -716,7 +716,7 @@ class BasicTests(PreqlTests):
         preql(''' B += A ''')
         assert len(preql.B) == 3
 
-        preql(''' B += [2, 3] {x: value} ''')
+        preql(''' B += [2, 3] {x: item} ''')
         assert len(preql.B) == 5
 
         preql(''' A += B ''')
@@ -945,10 +945,10 @@ class BasicTests(PreqlTests):
         preql = self.Preql()
         preql('''
             table A:
-                value: integer
+                item: integer
 
             table B:
-                value: integer
+                item: integer
 
             table A_B:
                 a: A -> ab
@@ -967,25 +967,25 @@ class BasicTests(PreqlTests):
 
         res = [{'a': 0, 'b': 0}, {'a': 1, 'b': 2}, {'a': 2, 'b': 4}, {'a': 3, 'b': 6}, {'a': 4, 'b': 8}]
 
-        assert (preql('A_B {a: a.value, b: b.value}').json()) == res
+        assert (preql('A_B {a: a.item, b: b.item}').json()) == res
 
         res = [{'a': 0, 'b': 0}, {'a': 1, 'b': 2}, {'a': 2, 'b': 4}, {'a': 3, 'b': 6}, {'a': 4, 'b': 8},
                {'a': 5, 'b': None}, {'a': 6, 'b': None}, {'a': 7, 'b': None}, {'a': 8, 'b': None}, {'a': 9, 'b': None}]
-        assert (preql('A {a: value, b: ab.b.value}').json()) == res
+        assert (preql('A {a: item, b: ab.b.item}').json()) == res
 
         res = [{'a': 0, 'b': 0}, {'a': None, 'b': 1}, {'a': 1, 'b': 2}, {'a': None, 'b': 3}, {'a': 2, 'b': 4},
                {'a': None, 'b': 5}, {'a': 3, 'b': 6}, {'a': None, 'b': 7}, {'a': 4, 'b': 8}, {'a': None, 'b': 9}]
-        assert (preql('B {a: ab.a.value, b: value}').json()) == res
+        assert (preql('B {a: ab.a.item, b: item}').json()) == res
 
-        assert (preql('B [ab.a.value=2] {value}').json()) == [{'value': 4}]
+        assert (preql('B [ab.a.item=2] {item}').json()) == [{'item': 4}]
 
-        assert (preql('A_B [a.value=2] {v:b.value}').json()) == [{'v': 4}]
+        assert (preql('A_B [a.item=2] {v:b.item}').json()) == [{'v': 4}]
 
-        res = [{'a.value': 0, 'b.value': 0}, {'a.value': 1, 'b.value': 2},
-            {'a.value': 2, 'b.value': 4}, {'a.value': 3, 'b.value': 6},
-            {'a.value': 4, 'b.value': 8}]
-        assert (preql('A_B {a.value, b.value}').json() ) == res
-        assert (preql('A_B {a, b} {a.value, b.value}').json() ) == res
+        res = [{'a.item': 0, 'b.item': 0}, {'a.item': 1, 'b.item': 2},
+            {'a.item': 2, 'b.item': 4}, {'a.item': 3, 'b.item': 6},
+            {'a.item': 4, 'b.item': 8}]
+        assert (preql('A_B {a.item, b.item}').json() ) == res
+        assert (preql('A_B {a, b} {a.item, b.item}').json() ) == res
 
 
     @uses_tables('A')

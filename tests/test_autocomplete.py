@@ -14,9 +14,9 @@ class AutocompleteTests(PreqlTests):
         p = self.Preql()
         state = p.interp.state
 
-        assert "value" in autocomplete(state, "func d(){ [1]{")
-        assert "value" in autocomplete(state, "func d(){ [1][")
-        assert "value" not in autocomplete(state, "func d(){ [1]")
+        assert "item" in autocomplete(state, "func d(){ [1]{")
+        assert "item" in autocomplete(state, "func d(){ [1][")
+        assert "item" not in autocomplete(state, "func d(){ [1]")
 
         res = autocomplete(state, """
         func x(param1) {
@@ -31,7 +31,7 @@ class AutocompleteTests(PreqlTests):
 
         res = autocomplete(state, """
         func x(param1) {
-            hello = [1] {value, value+2}
+            hello = [1] {item, item+2}
         """)
         assert "hello" in res, res.keys()
 
@@ -53,10 +53,10 @@ class AutocompleteTests(PreqlTests):
 
         s1 = """
         func get_users(logins) {
-            const table matched_logins = <<<leftjoin>>>(l:logins.value, u:User.login)
+            const table matched_logins = <<<leftjoin>>>(l:logins.item, u:User.login)
 
             existing_users = <<<matched_logins>>>[<<<u>>>!=null] {<<<u>>>.id}
-            new_users = new[] User(login: <<<matched_logins>>>[<<<u>>>==null] {<<<l>>>.value})
+            new_users = new[] User(login: <<<matched_logins>>>[<<<u>>>==null] {<<<l>>>.item})
 
             return <<<existing_users>>> + <<<new_users>>>
         }
@@ -127,11 +127,11 @@ class AutocompleteTests(PreqlTests):
 
         c = <<<Country>>>
         c = f(<<<Country>>>)
-        a = join(c: <<<Country>>>.<<<name>>>, n:["Palau", "Nauru"].<<<value>>>) {c.<<<id>>>, c.<<<name>>>}
+        a = join(c: <<<Country>>>.<<<name>>>, n:["Palau", "Nauru"].<<<item>>>) {c.<<<id>>>, c.<<<name>>>}
         """
         s ="""
         table Country {name: string}
-        a = join(c: Country.<<<name>>>, n:["Palau", "Nauru"].<<<value>>>) {n.<<<value>>> => c.<<<name>>>}
+        a = join(c: Country.<<<name>>>, n:["Palau", "Nauru"].<<<item>>>) {n.<<<item>>> => c.<<<name>>>}
         """
         progressive_test(state, s)
 

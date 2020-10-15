@@ -196,7 +196,7 @@ class Interface:
     Example:
         >>> import preql
         >>> p = preql.Preql()
-        >>> p('[1, 2]{value+1}')
+        >>> p('[1, 2]{item+1}')
         [2, 3]
     """
 

@@ -228,12 +228,12 @@ We can also use functions inside table expressions, as long as they don't change
 ```javascript
 >> func startswith(s, p) = s ~ (p + "%")    // Pattern match the string (LIKE)
 >> my_list = ["cat", "dog", "car"]          // Define a list
->> new_list = my_list[startswith(value, "c")]  // Apply selection. `value` refers to the list's elements
+>> new_list = my_list[startswith(item, "c")]  // Apply selection. `item` refers to the list's items
 >> print new_list                           // Execute SQL query
 ["cat", "car"]
 ```
 
-Lists are basically tables with a single column named `value`.
+Lists are basically tables with a single column named `item`.
 
 **Projection** lets us create new tables, with columns of our own choice:
 
@@ -288,7 +288,7 @@ table Country_proj11, count=1
 
 // Create an even-odd histogram
 >> [1,2,3,4,5,6,7] {
-      odd: value % 2 => count(value)
+      odd: item % 2 => count(item)
    }
 table list_int_proj37, count=2
   odd    count
@@ -298,7 +298,7 @@ table list_int_proj37, count=2
 
 // Sum up all the squares
 >> func sqrsum(x) = sum(x*x)
->> [1,2,3,4]{ => sqrsum(value)}
+>> [1,2,3,4]{ => sqrsum(item)}
 30
 ```
 
@@ -409,19 +409,19 @@ It is possible to omit the attributes when there is a predefined relationship be
 >> table primes = [2, 3, 5, 7, 11]
 
 // Creates columns `o` and `p`, which are structures containing the original rows.
->> join(o: odds.value, p: primes.value)
+>> join(o: odds.item, p: primes.item)
 table join9, count=4
 o                       p
 ----------------------  ----------------------
-{'value': 3, 'id': 2}   {'value': 3, 'id': 2}
-{'value': 5, 'id': 3}   {'value': 5, 'id': 3}
-{'value': 7, 'id': 4}   {'value': 7, 'id': 4}
-{'value': 11, 'id': 6}  {'value': 11, 'id': 5}
+{'item': 3, 'id': 2}   {'item': 3, 'id': 2}
+{'item': 5, 'id': 3}   {'item': 5, 'id': 3}
+{'item': 7, 'id': 4}   {'item': 7, 'id': 4}
+{'item': 11, 'id': 6}  {'item': 11, 'id': 5}
 
 // We can then destructure it into a regular table
->> join(o: odds.value, p: primes.value) {o.value, o_id: o.id, p_id: p.id}
+>> join(o: odds.item, p: primes.item) {o.item, o_id: o.id, p_id: p.id}
 table join33_proj34, count=4
-  value    o_id    p_id
+  item    o_id    p_id
 -------  ------  ------
       3       2       2
       5       3       3
@@ -429,7 +429,7 @@ table join33_proj34, count=4
      11       6       5
 
 // We can filter countries by name, by joining on their name:
->> join(c: Country.name, n:["Palau", "Nauru"].value) {c.id, c.name}
+>> join(c: Country.name, n:["Palau", "Nauru"].item) {c.id, c.name}
 table join30_proj31, count=2
   id  name
 ----  ------
@@ -464,7 +464,7 @@ The first argument is the type of the result, and the second argument is a strin
 
 ```javascript
 >> func do_sql_stuff(x) = SQL(string, "lower($x) || '!'")   // Runs in Sqlite
->> ["UP", "Up", "up"]{ do_sql_stuff(value) }
+>> ["UP", "Up", "up"]{ do_sql_stuff(item) }
 table list_string_proj70, count=3
 do_sql_stuff
 --------------
@@ -533,11 +533,11 @@ Then, just start working by calling the object with Preql code:
 
 ```python
 # Use the result like in an ORM
->>> len(p('[1,2,3][value>=2]'))
+>>> len(p('[1,2,3][item>=2]'))
 2
 
 # Turn the result to JSON (lists and dicts)
->>> p('[1,2]{type: "example", values: {v1: value, v2: value*2}}').to_json()
+>>> p('[1,2]{type: "example", values: {v1: item, v2: item*2}}').to_json()
 [{'type': 'example', 'values': {'v1': 1, 'v2': 2}}, {'type': 'example', 'values': {'v1': 2, 'v2': 4}}]
 
 # Run Preql code file

@@ -63,7 +63,7 @@ lucky_numbers {n in [13, 27, 42]}
 The closest equivalent in SQL:
 
 ```SQL
-WITH my_list(value) AS (VALUES(13),(27),(42))
+WITH my_list(item) AS (VALUES(13),(27),(42))
 SELECT n in my_list FROM lucky_numbers
 ```
 
@@ -80,7 +80,7 @@ Preql:
 SQL:
 
 ```SQL
-WITH RECURSIVE range AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM range WHERE value+1<10)
+WITH RECURSIVE range AS (SELECT 1 AS item UNION ALL SELECT item+1 FROM range WHERE item+1<10)
 SELECT * FROM range
 ```
 
