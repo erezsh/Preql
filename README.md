@@ -39,23 +39,29 @@ Requires Python 3.8+
 # Quick Example
 
 ```javascript
-// Sum up all the squares of an aggregated list
- >> func sqrsum(x) = sum(x*x)
- >> [1..100]{ => sqrsum(value)}
-table  =1
-┌────────┐
-│ sqrsum │
-├────────┤
-│ 328350 │
-└────────┘
+// Sum up all the squares of an aggregated list of numbers
+// Grouped by whether they are odd or even
+func sqrsum(x) = sum(x * x)
+func is_even(x) = x % 2 == 0
+
+print [1..100]{
+        is_even(item) => sqrsum(item)
+      }
+// Result is:
+┏━━━━━━━━━┳━━━━━━━━┓
+┃ is_even ┃ sqrsum ┃
+┡━━━━━━━━━╇━━━━━━━━┩
+│       0 │ 166650 │
+│       1 │ 161700 │
+└─────────┴────────┘
 ```
 
 In the background, this was run by executing the following SQL code (reformatted):
 
 ```sql
-WITH range1         AS (SELECT 1 AS value UNION ALL SELECT value+1 FROM range1 WHERE value+1<100)
-   , subq_3(sqrsum) AS (SELECT SUM(value * value) AS sqrsum FROM range1)
-SELECT * FROM subq_3
+  WITH range1 AS (SELECT 1 AS item UNION ALL SELECT item+1 FROM range1 WHERE item+1<100)
+     , subq_3(is_even, sqrsum) AS (SELECT ((item % 2) = 0) AS is_even, SUM(item * item) AS sqrsum FROM range1 GROUP BY 1)
+  SELECT * FROM subq_3
 ```
 
 
