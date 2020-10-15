@@ -190,7 +190,7 @@ def promise(state, inst):
     return localize(state, inst)
 
 
-class Interface:
+class Preql:
     """Provides an API to run Preql code from Python
 
     Example:

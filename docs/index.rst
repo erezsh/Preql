@@ -56,6 +56,7 @@ Resources
 -  Guides
 
    -  :doc:`comparison`
+   -  :doc:`comparison_sql`
 
 -  Reference
 

@@ -19,7 +19,7 @@ float
 ```
 
 Operations between ints and floats result in a float:
-```javscript
+```javascript
  >> type(10 + 3.14)
 float
 ```

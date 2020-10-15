@@ -6,13 +6,13 @@ Ensure you have, or install, Python 3.8 or up.
 
 Install using pip:
 
-```bash
+```sh
     pip install -U prql
 ```
 
 ## Run interpreter
 
-```bash
+```sh
     preql
 ```
 
@@ -20,7 +20,7 @@ Preql will use Sqlite's memory database by default.
 
 ## Explore an existing database
 
-```bash
+```sh
     # Postgresql
     preql postgres://user:pass@host/dbname
 

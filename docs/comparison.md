@@ -1,4 +1,4 @@
-# Comparison between Preql, SQL, and Pandas
+# Code comparison between Preql, Pandas, and SQL
 
 // TODO show table results of Preql
 
