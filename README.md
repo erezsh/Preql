@@ -4,15 +4,16 @@ Preql (*pronounced: Prequel*) is an interpreted relational query language.
 
 It is designed for use by data engineers, analyists and data scientists.
 
-* Preql compiles to SQL at runtime. It has the performance and abilities of SQL, and much more.
+* Compiles to SQL at runtime. It has the performance and abilities of SQL, and much more.
+
+    * Support for Postgres, MySQL and Sqlite. (more planned!)
+
+    * Escape hatch to SQL, for all those databse-specific features we didn't think to include
 
 * Programmer-friendly syntax and semantics, with gradual type-checking, inspired by Typescript and Python
 
 * Interface through Python, HTTP or a terminal environment with autocompletion
 
-* Escape hatch to SQL, for all those databse-specific features we didn't think to include
-
-* Support for Postgres, MySQL and Sqlite. (more planned!)
 
 **Note: Preql is still work in progress, and isn't ready for production use, or any serious use yet**
 
@@ -35,6 +36,8 @@ Then just run the interpeter:
 ```
 
 Requires Python 3.8+
+
+[Read more](https://preql.readthedocs.io/en/latest/getting-started.html)
 
 # Quick Example
 
@@ -63,13 +66,6 @@ In the background, this was run by executing the following SQL code (reformatted
      , subq_3(is_even, sqrsum) AS (SELECT ((item % 2) = 0) AS is_even, SUM(item * item) AS sqrsum FROM range1 GROUP BY 1)
   SELECT * FROM subq_3
 ```
-
-
-# Contributions
-
-Code contributions are welcome!
-
-By submitting a contribution, you assign to Preql all right, title and interest in any copyright you have in the Contribution, and you waive any rights, including any moral rights, that may affect our ownership of the copyright in the Contribution.
 
 # License
 
