@@ -1186,6 +1186,27 @@ class TestTypes(PreqlTests):
         assert not (u <= T.int)
         assert u <= u
 
+class TestFunctions(PreqlTests):
+    def test_fmt(self):
+         p = self.Preql()
+         p("""
+            a = "hello"
+            b = "world"
+
+            f1 = fmt("")
+            f2 = fmt("a")
+            f3 = fmt("a b c $a")
+            f4 = fmt("a b c $a $b!")
+            f5 = fmt("$a my $b!")
+         """)
+
+         assert p.f1 == ''
+         assert p.f2 == 'a'
+         assert p.f3 == 'a b c hello'
+         assert p.f4 == 'a b c hello world!'
+         assert p.f5 == 'hello my world!'
+
+
 
 from pandas import DataFrame
 class TestPandas(PreqlTests):
