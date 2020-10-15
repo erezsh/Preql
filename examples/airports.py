@@ -13,6 +13,7 @@ airports = pd.read_json(AIRPORTS_JSON_URL)
 p = Preql()
 p.import_pandas(airports_full=airports)
 p('''
+    // Remove unhelpful fields
     airports = airports_full{... !url !tz !phone !email !type}
 
     // All airports sorted by elevation (highest first)
