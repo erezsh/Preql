@@ -133,6 +133,14 @@ func is_empty(tbl) {
     return count(tbl[..1]) == 0
 }
 
+func list_median(x) {
+    "Find the median of a list"
+    cnt = count(x)
+    middle_item_offset = (cnt-1)/~2
+    middle_item_count = (2-cnt%2)   // 1 for odd count, 2 for even
+    mid_items = x order {item} [middle_item_offset..][..middle_item_count]
+    return mean(mid_items)
+}
 
 "Join two tables into one by matching rows with the same index"
 func zipjoin(a: collection, b: collection) = _zipjoin(join, a, b)

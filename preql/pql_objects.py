@@ -11,7 +11,7 @@ from . import pql_ast as ast
 from . import sql
 
 from .pql_types import ITEM_NAME, T, Type, Object
-from .types_impl import repr_value, flatten_type, join_names
+from .types_impl import repr_value, flatten_type, join_names, elem_dict
 
 # Functions
 @dataclass
@@ -278,16 +278,16 @@ class CollectionInstance(Instance):
 @dataclass
 class TableInstance(CollectionInstance):
     def __post_init__(self):
-        assert self.type <= T.table and not self.type <= T.list, self.type
+        assert self.type <= T.table #and not self.type <= T.list, self.type
 
     @property
     def __columns(self):
-        return {n:self.get_column(n) for n in self.type.elems}
+        return {n:self.get_column(n) for n in elem_dict(self.type)}
 
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
-        t = self.type
-        return make_instance_from_name(t.elems[name], name) #t.column_codename(name))
+        t = elem_dict(self.type)
+        return make_instance_from_name(t[name], name) #t.column_codename(name))
 
     def all_attrs(self):
         # XXX hacky way to write it
@@ -296,7 +296,7 @@ class TableInstance(CollectionInstance):
 
     def get_attr(self, name):
         try:
-            v = self.type.elems[name]
+            v = elem_dict(self.type)[name]
             return SelectedColumnInstance(self, v, name)
         except KeyError:
             try:
@@ -559,7 +559,7 @@ def new_table(type_, name=None, instances=None, select_fields=False):
     inst = cls.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
 
     if select_fields:
-        code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in type_.elems.items()])
+        code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in elem_dict(type_).items()])
         inst = inst.replace(code=code)
 
     return inst

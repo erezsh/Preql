@@ -135,6 +135,16 @@ class AutocompleteTests(PreqlTests):
         """
         progressive_test(state, s)
 
+    def test_range(self):
+        p = self.Preql()
+        state = p.interp.state
+
+        s = """
+        x=[1,2,3,3,10]
+        x order {<<<item>>>} [(<<<count>>>(<<<x>>>/~2))..]
+        """
+        progressive_test(state, s)
+
 
 
 
