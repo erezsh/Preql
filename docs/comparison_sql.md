@@ -1,4 +1,4 @@
-# Code comparison between Preql and SQL
+# Advantages of Preql over SQL, in code examples
 
 ## Comparing to null
 

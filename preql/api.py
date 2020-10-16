@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from datetime import datetime
 
 import rich.table
 import rich.markup
@@ -202,7 +203,7 @@ class Preql:
 
     __name__ = "Preql"
 
-    def __init__(self, db_uri=None, print_sql=settings.print_sql):
+    def __init__(self, db_uri: str=None, print_sql: bool=settings.print_sql):
         if db_uri is None:
             db_uri = 'sqlite://:memory:'
 
@@ -242,12 +243,12 @@ class Preql:
         assert not isinstance(res, ast.Ast), res
         return promise(self.interp.state, res)  # TODO session, not state
 
-    def run_code(self, pq, source_file, **args):
+    def _run_code(self, pq: str, source_file: str, **args):
         pql_args = {name: objects.from_python(value) for name, value in args.items()}
         return self.interp.execute_code(pq + "\n", source_file, pql_args)
 
     def __call__(self, pq, **args):
-        res = self.run_code(pq, '<inline>', **args)
+        res = self._run_code(pq, '<inline>', **args)
         if res:
             return self._wrap_result(res)
 
@@ -295,9 +296,16 @@ class Preql:
             return i
 
         for name, df in dfs.items():
-            cols = list(df)
-            rows = [[normalize_item(i) for i in rec]
-                    for rec in df.to_records()]
+            if isinstance(df, pd.Series):
+                cols = 'key', 'value'
+                rows = [(dt.to_pydatetime() if isinstance(dt, datetime) else dt,v) for dt, v in df.items()]
+            else:
+                assert isinstance(df, pd.DataFrame)
+                cols = list(df)
+                rows = [[normalize_item(i) for i in rec]
+                        for rec in df.to_records()]
+                rows = [ row[1:] for row in rows ]    # drop index
+
             new_table_from_rows(self.interp.state, name, cols, rows)
 
     def load_all_tables(self):

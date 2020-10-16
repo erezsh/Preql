@@ -30,7 +30,7 @@ class PreqlKernel(Kernel):
 
             # Evaluate (Really just compile)
             try:
-                res = pql.run_code(code, '<jupyter>')
+                res = pql._run_code(code, '<jupyter>')
 
                 # Print
                 if res is not None:

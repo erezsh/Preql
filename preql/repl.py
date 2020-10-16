@@ -168,7 +168,7 @@ def start_repl(p, prompt=' >> '):
                         continue
 
                     # Evaluate (Really just compile)
-                    res = p.run_code(code, '<repl>')
+                    res = p._run_code(code, '<repl>')
 
                     # Print
                     if res is not None and res is not objects.null:

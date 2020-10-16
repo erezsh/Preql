@@ -347,7 +347,7 @@ def _type_from_sql(type, nullable):
         elif type.startswith('varchar('): # TODO actually parse it
             return T.string
 
-        return T.string.replace(nullable=True)
+        return T.string.as_nullable()
 
     nullable = _bool_from_sql(nullable)
 

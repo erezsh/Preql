@@ -58,6 +58,3 @@ class InsufficientAccessLevel(Exception):
     pass
 class DatabaseQueryError(Exception):
     pass
-
-class CannotEvaluateVectorized(Exception):
-    pass

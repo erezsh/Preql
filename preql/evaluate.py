@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func
-from .exceptions import CannotEvaluateVectorized, ReturnSignal, Signal
+from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -401,7 +401,7 @@ def simplify(state: State, obj: ast.Or):
         inst = evaluate(state, expr)
         try:
             nz = test_nonzero(state, inst)
-        except CannotEvaluateVectorized:
+        except InsufficientAccessLevel:
             return obj
         if nz:
             return objects.new_value_instance(True)
@@ -414,7 +414,7 @@ def simplify(state: State, obj: ast.And):
         inst = evaluate(state, expr)
         try:
             nz = test_nonzero(state, inst)
-        except CannotEvaluateVectorized:
+        except InsufficientAccessLevel:
             return obj
         if not nz:
             return objects.new_value_instance(False)
@@ -426,7 +426,7 @@ def simplify(state: State, obj: ast.Not):
     inst = evaluate(state, obj.expr)
     try:
         nz = test_nonzero(state, inst)
-    except CannotEvaluateVectorized:
+    except InsufficientAccessLevel:
         return obj
     return objects.new_value_instance(not nz)
 
@@ -897,7 +897,7 @@ def new_table_from_rows(state, name, columns, rows):
     # TODO check table doesn't exist
 
     tuples = [
-        [sql.make_value(i) for i in row[1:]] # XXX Without index?
+        [sql.make_value(i) for i in row]
         for row in rows
     ]
 
@@ -926,8 +926,9 @@ def cast_to_python(state, obj: ast.Ast):
 
 @dy
 def cast_to_python(state, obj: objects.AbsInstance):
+    # if state.access_level <= state.AccessLevels.QUERY:
     if obj.type <= T.vectorized:
-        raise exc.CannotEvaluateVectorized()
+        raise exc.InsufficientAccessLevel(state.access_level)
         # raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
     res = localize(state, obj)
     assert isinstance(res, (int, str, float, dict, list, type(None))), res

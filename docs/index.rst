@@ -28,6 +28,7 @@ Welcome to the Preql documentation!
 
    getting-started
    comparison
+   comparison_sql
 
 
 .. toctree::

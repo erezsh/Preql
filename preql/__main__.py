@@ -44,7 +44,7 @@ def main():
             dot_preql = find_dot_preql()
             if dot_preql:
                 print("Auto-running", dot_preql)
-                p.run_code(dot_preql.read_text(), dot_preql)
+                p._run_code(dot_preql.read_text(), dot_preql)
 
             interactive = True
     except Signal as e:
