@@ -14,6 +14,7 @@
 #         execute remote queries
 #         simplify (compute) into the final result
 
+from preql.pql_objects import vectorized
 from typing import List, Optional
 import logging
 from pathlib import Path
@@ -29,7 +30,7 @@ from . import settings
 from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
-from .compiler import compile_to_instance, cast_to_instance
+from .compiler import compile_to_instance, cast_to_instance, unvectorize_args
 from .pql_types import T, Type, Object
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
 
@@ -491,7 +492,11 @@ def eval_func_call(state, func, args):
         # TODO Ensure correct types
         args = list(args.values())
         # args = evaluate(state, args)
-        return func.func(state, *args)
+        was_vec, args = unvectorize_args(args)
+        res = func.func(state, *args)
+        if was_vec:
+            res = vectorized(res)
+        return res
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:

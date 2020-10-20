@@ -45,29 +45,29 @@ def cast_to_instance(state, x):
 
 
 @dy
-def compile_to_instance(state, obj: objects.AbsInstance):
-    return obj
-
-
-@dy
-def compile_to_instance(state, obj: ast.TableOperation):
-    return compile_to_inst(state, obj)
-
-
-@dy
-def _unvectorize(x: list):
-    was_vec, objs = zip(*[_unvectorize(i) for i in x])
+def unvectorize_args(x: list):
+    if not x:
+        return False, x
+    was_vec, objs = zip(*[unvectorize_args(i) for i in x])
     return any(was_vec), list(objs)
 
 @dy
-def _unvectorize(x: objects.AbsInstance):
+def unvectorize_args(x: objects.AbsInstance):
     if x.type <= T.vectorized:
         return True, unvectorized(x)
     return False, x
 
 @dy
-def _unvectorize(x):
+def unvectorize_args(x):
     return False, x
+
+@dy
+def compile_to_instance(state, obj: objects.AbsInstance):
+    return obj
+
+@dy
+def compile_to_instance(state, obj: ast.TableOperation):
+    return compile_to_inst(state, obj)
 
 @dy
 def compile_to_instance(state, obj: ast.Expr):
@@ -77,7 +77,7 @@ def compile_to_instance(state, obj: ast.Expr):
     for k, v in attrs.items():
         if k in obj._args:
             if v:
-                was_vec, args_attrs[k] = _unvectorize( evaluate(state, v) )
+                was_vec, args_attrs[k] = unvectorize_args( evaluate(state, v) )
                 if was_vec:
                     any_was_vec = True
     attrs.update(args_attrs)

@@ -80,10 +80,10 @@ def _cast(state, inst_type: T.primitive, target_type: T.string, inst):
     code = sql.Cast(T.string, "varchar", inst.code)
     return objects.Instance.make(code, T.string, [inst])
 
-@dp_type
-def _cast(state, inst_type: T.vectorized, target_type: T.any, inst):
-    x = objects.unvectorized(inst)
-    return _cast(state, x.type, target_type, x)
+# @dp_type
+# def _cast(state, inst_type: T.vectorized, target_type: T.any, inst):
+#     x = objects.unvectorized(inst)
+#     return _cast(state, x.type, target_type, x)
 
 @dp_type
 def _cast(state, inst_type: T.t_relation, target_type: T.t_id, inst):
