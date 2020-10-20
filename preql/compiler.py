@@ -15,7 +15,7 @@ from .interp_common import dy, State, assert_type, new_value_instance, evaluate,
 from .pql_types import T, Object, Type, union_types
 from .types_impl import dp_inst, flatten_type, elem_dict
 from .casts import _cast
-from .pql_objects import vectorized, unvectorized, make_instance
+from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
 
 @dataclass
 class Table(Object):
@@ -30,7 +30,7 @@ def cast_to_instance(state, x: list):
 def cast_to_instance(state, x):
     try:
         x = simplify(state, x)  # just compile Name?
-        inst = compile_to_inst(state, x)
+        inst = compile_to_instance(state, x)
         # inst = evaluate(state, x)
     except exc.ReturnSignal:
         raise Signal.make(T.CompileError, state, None, f"Bad compilation of {x}")
@@ -42,6 +42,55 @@ def cast_to_instance(state, x):
         raise Signal.make(T.TypeError, state, None, f"Could not compile {inst}")
 
     return inst
+
+
+@dy
+def compile_to_instance(state, obj: objects.AbsInstance):
+    return obj
+
+
+@dy
+def compile_to_instance(state, obj: ast.TableOperation):
+    return compile_to_inst(state, obj)
+
+
+@dy
+def _unvectorize(x: list):
+    was_vec, objs = zip(*[_unvectorize(i) for i in x])
+    return any(was_vec), list(objs)
+
+@dy
+def _unvectorize(x: objects.AbsInstance):
+    if x.type <= T.vectorized:
+        return True, unvectorized(x)
+    return False, x
+
+@dy
+def _unvectorize(x):
+    return False, x
+
+@dy
+def compile_to_instance(state, obj: ast.Expr):
+    attrs = dict(obj)
+    args_attrs = {}
+    any_was_vec = False
+    for k, v in attrs.items():
+        if k in obj._args:
+            if v:
+                was_vec, args_attrs[k] = _unvectorize( evaluate(state, v) )
+                if was_vec:
+                    any_was_vec = True
+    attrs.update(args_attrs)
+
+    # attrs = {k: evaluate(state, v) if k in obj._args else v for k, v in dict(obj).items()}
+    res = compile_to_inst(state, type(obj)(**attrs))
+    if any_was_vec:
+        res = vectorized(res)
+    return res
+
+@dy
+def compile_to_instance(state, obj):
+    return compile_to_inst(state, obj)
 
 
 
@@ -287,10 +336,10 @@ def _contains(state, op, a: T.string, b: T.string):
     }[op]
     return call_pql_func(state, f, [a, b])
 
-@dp_inst
-def _contains(state, op, a: T.vectorized, b: T.collection):
-    res = _contains(state, op, unvectorized(a), b)
-    return vectorized(res)
+# @dp_inst
+# def _contains(state, op, a: T.vectorized, b: T.collection):
+#     res = _contains(state, op, unvectorized(a), b)
+#     return vectorized(res)
 
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.collection):
@@ -376,14 +425,14 @@ def _compare(state, ast_node, a: T.aggregate, b: T.int):
     res = _compare(state, ast_node, a.elem, b)
     return objects.aggregate(res)
 
-@dp_inst
-def _compare(state, ast_node, a: T.vectorized, b: T.primitive):
-    res = _compare(state, ast_node, unvectorized(a), b)
-    return vectorized(res)
-@dp_inst
-def _compare(state, ast_node, a: T.vectorized, b: T.vectorized):
-    res = _compare(state, ast_node, unvectorized(a), unvectorized(b))
-    return vectorized(res)
+# @dp_inst
+# def _compare(state, ast_node, a: T.vectorized, b: T.primitive):
+#     res = _compare(state, ast_node, unvectorized(a), b)
+#     return vectorized(res)
+# @dp_inst
+# def _compare(state, ast_node, a: T.vectorized, b: T.vectorized):
+#     res = _compare(state, ast_node, unvectorized(a), unvectorized(b))
+#     return vectorized(res)
 
 @dp_inst
 def _compare(state, ast_node, a: T.int, b: T.aggregate):
@@ -396,10 +445,10 @@ def _compare(state, op, a: T.type, b: T.type):
 @dp_inst
 def _compare(state, op, a: T.number, b: T.row):
     return _compare(state, op, a, b.primary_key())
-@dp_inst
-def _compare(state, ast_node, a: T.vectorized[T.number], b: T.row):
-    res = _compare(state, ast_node, unvectorized(a), b)
-    return vectorized(res)
+# @dp_inst
+# def _compare(state, ast_node, a: T.vectorized[T.number], b: T.row):
+#     res = _compare(state, ast_node, unvectorized(a), b)
+#     return vectorized(res)
 
 @dp_inst
 def _compare(state, op, a: T.row, b: T.number):
@@ -440,7 +489,7 @@ def compile_to_inst(state: State, arith: ast.Arith):
         return _compile_arith(state, arith, *args)
     except DispatchError as e:
         a, b = args
-        raise Signal.make(T.TypeError, state, arith, f"Like not implemented for {a.type} and {b.type}")
+        raise Signal.make(T.TypeError, state, arith, f"Arith not implemented for {a.type} and {b.type}")
 
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
@@ -464,18 +513,18 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
     return state.get_var(op).func(state, a, b)
 
 
-@dp_inst
-def _compile_arith(state, arith, a: T.vectorized, b: T.primitive):
-    res = _compile_arith(state, arith, unvectorized(a), b)
-    return vectorized(res)
-@dp_inst
-def _compile_arith(state, arith, a: T.primitive, b: T.vectorized):
-    res = _compile_arith(state, arith, a, unvectorized(b))
-    return vectorized(res)
-@dp_inst
-def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
-    res = _compile_arith(state, arith, unvectorized(a), unvectorized(b))
-    return vectorized(res)
+# @dp_inst
+# def _compile_arith(state, arith, a: T.vectorized, b: T.primitive):
+#     res = _compile_arith(state, arith, unvectorized(a), b)
+#     return vectorized(res)
+# @dp_inst
+# def _compile_arith(state, arith, a: T.primitive, b: T.vectorized):
+#     res = _compile_arith(state, arith, a, unvectorized(b))
+#     return vectorized(res)
+# @dp_inst
+# def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
+#     res = _compile_arith(state, arith, unvectorized(a), unvectorized(b))
+#     return vectorized(res)
 
 @dp_inst
 def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
@@ -702,7 +751,7 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
 
 @dy
 def compile_to_inst(state: State, s: ast.Slice):
-    obj = cast_to_instance(state, s.table)
+    obj = cast_to_instance(state, s.obj)
 
     assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
 
