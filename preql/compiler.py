@@ -38,7 +38,7 @@ def cast_to_instance(state, x):
     if isinstance(inst, ast.ResolveParametersString):
         raise exc.InsufficientAccessLevel(inst)
 
-    if not isinstance(inst, objects.AbsInstance):
+    if not isinstance(inst, AbsInstance):
         raise Signal.make(T.TypeError, state, None, f"Could not compile {inst}")
 
     return inst
@@ -52,7 +52,7 @@ def unvectorize_args(x: list):
     return any(was_vec), list(objs)
 
 @dy
-def unvectorize_args(x: objects.AbsInstance):
+def unvectorize_args(x: AbsInstance):
     if x.type <= T.vectorized:
         return True, unvectorized(x)
     return False, x
@@ -62,7 +62,7 @@ def unvectorize_args(x):
     return False, x
 
 @dy
-def compile_to_instance(state, obj: objects.AbsInstance):
+def compile_to_instance(state, obj: AbsInstance):
     return obj
 
 @dy
@@ -219,7 +219,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     elems = {}
     # codename = state.unique_name('proj')
     for name_, inst in all_fields:
-        assert isinstance(inst, objects.AbsInstance)
+        assert isinstance(inst, AbsInstance)
 
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
@@ -336,11 +336,6 @@ def _contains(state, op, a: T.string, b: T.string):
     }[op]
     return call_pql_func(state, f, [a, b])
 
-# @dp_inst
-# def _contains(state, op, a: T.vectorized, b: T.collection):
-#     res = _contains(state, op, unvectorized(a), b)
-#     return vectorized(res)
-
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.collection):
     b_list = _cast(state, b.type, T.list, b)
@@ -425,15 +420,6 @@ def _compare(state, ast_node, a: T.aggregate, b: T.int):
     res = _compare(state, ast_node, a.elem, b)
     return objects.aggregate(res)
 
-# @dp_inst
-# def _compare(state, ast_node, a: T.vectorized, b: T.primitive):
-#     res = _compare(state, ast_node, unvectorized(a), b)
-#     return vectorized(res)
-# @dp_inst
-# def _compare(state, ast_node, a: T.vectorized, b: T.vectorized):
-#     res = _compare(state, ast_node, unvectorized(a), unvectorized(b))
-#     return vectorized(res)
-
 @dp_inst
 def _compare(state, ast_node, a: T.int, b: T.aggregate):
     return _compare(state, ast_node, b, a)
@@ -445,10 +431,6 @@ def _compare(state, op, a: T.type, b: T.type):
 @dp_inst
 def _compare(state, op, a: T.number, b: T.row):
     return _compare(state, op, a, b.primary_key())
-# @dp_inst
-# def _compare(state, ast_node, a: T.vectorized[T.number], b: T.row):
-#     res = _compare(state, ast_node, unvectorized(a), b)
-#     return vectorized(res)
 
 @dp_inst
 def _compare(state, op, a: T.row, b: T.number):
@@ -512,19 +494,6 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
 
     return state.get_var(op).func(state, a, b)
 
-
-# @dp_inst
-# def _compile_arith(state, arith, a: T.vectorized, b: T.primitive):
-#     res = _compile_arith(state, arith, unvectorized(a), b)
-#     return vectorized(res)
-# @dp_inst
-# def _compile_arith(state, arith, a: T.primitive, b: T.vectorized):
-#     res = _compile_arith(state, arith, a, unvectorized(b))
-#     return vectorized(res)
-# @dp_inst
-# def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
-#     res = _compile_arith(state, arith, unvectorized(a), unvectorized(b))
-#     return vectorized(res)
 
 @dp_inst
 def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
