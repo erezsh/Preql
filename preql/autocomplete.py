@@ -91,9 +91,8 @@ def _search_puppet(puppet):
         for choice in p.choices():
             if choice in _closing_tokens:
                 t = Token(choice, _closing_tokens[choice], 1, 1, 1, 1, 2, 2)
-                new_p = p.copy()
                 try:
-                    new_p.feed_token(t)
+                    new_p = p.feed_token(t)
                 except ParseError:    # Illegal
                     pass
                 else:
@@ -121,7 +120,7 @@ def autocomplete_tree(puppet):
     assert not res, res # XXX changed in new lark versions
 
     # Search nearest solution
-    return _search_puppet(puppet)
+    return _search_puppet(puppet.as_immutable())
 
 
 class AcState(State):
