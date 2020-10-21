@@ -145,12 +145,18 @@ objects.CollectionInstance.repr = table_repr
 
 
 class TablePromise:
+    """Returned by Preql whenever the result is a table
+
+    Fetching values creates queries to database engine
+    """
+
     def __init__(self, state, inst):
         self._state = state
         self._inst = inst
         self._rows = None
 
     def to_json(self):
+        "Returns table as a list of rows, i.e. [{col1: value, col2: value, ...}, ...]"
         if self._rows is None:
             self._rows = cast_to_python(self._state, self._inst)
         assert self._rows is not None
@@ -203,10 +209,13 @@ class Preql:
 
     __name__ = "Preql"
 
-    def __init__(self, db_uri: str=None, print_sql: bool=settings.print_sql):
-        if db_uri is None:
-            db_uri = 'sqlite://:memory:'
+    def __init__(self, db_uri: str='sqlite://:memory:', print_sql: bool=settings.print_sql):
+        """Initialize a new Preql instance
 
+        Parameters:
+            db_uri (str, optional): URI of database. Defaults to using a non-persistent memory database.
+            print_sql (bool, optional): Whether or not to print every SQL query that is executed (default defined in settings)
+        """
         self._db_uri = db_uri
         self._print_sql = print_sql
         # self.engine.ping()
