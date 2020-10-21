@@ -66,6 +66,10 @@ def compile_to_instance(state, obj: AbsInstance):
     return obj
 
 @dy
+def compile_to_instance(state, obj):
+    return compile_to_inst(state, obj)
+
+@dy
 def compile_to_instance(state, obj: ast.TableOperation):
     return compile_to_inst(state, obj)
 
@@ -82,15 +86,11 @@ def compile_to_instance(state, obj: ast.Expr):
                     any_was_vec = True
     attrs.update(args_attrs)
 
-    # attrs = {k: evaluate(state, v) if k in obj._args else v for k, v in dict(obj).items()}
     res = compile_to_inst(state, type(obj)(**attrs))
     if any_was_vec:
         res = vectorized(res)
     return res
 
-@dy
-def compile_to_instance(state, obj):
-    return compile_to_inst(state, obj)
 
 
 
@@ -279,6 +279,12 @@ def compile_to_inst(state: State, order: ast.Order):
         query_state = state.reduce_access(state.AccessLevels.QUERY)
         fields = cast_to_instance(query_state, order.fields)
 
+    for f in fields:
+        if not f.type <= T.primitive:
+            # TODO Support 'ordering' trait?
+            raise Signal.make(T.TypeError, state, order, f"Arguments to 'order' must be primitive")
+
+
     code = sql.table_order(table, [c.code for c in fields])
 
     return objects.TableInstance.make(code, table.type, [table] + fields)
@@ -305,13 +311,15 @@ def compile_to_inst(state: State, o: ast.Or):
 @dy
 def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
-    code = sql.LogicalBinOp("AND", [a.code for a in args])
+    args_bool = [_cast(state, a.type, T.bool, a) for a in args]
+    code = sql.LogicalBinOp("AND", [a.code for a in args_bool])
     return objects.make_instance(code, T.bool, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.Not):
     expr = cast_to_instance(state, o.expr)
-    code = sql.LogicalNot(expr.code)
+    expr_bool = _cast(state, expr.type, T.bool, expr)
+    code = sql.LogicalNot(expr_bool.code)
     return objects.make_instance(code, T.bool, [expr])
 
 

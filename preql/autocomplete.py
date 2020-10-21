@@ -4,7 +4,7 @@ from .exceptions import Signal, ReturnSignal, pql_SyntaxError
 from .loggers import ac_log
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .utils import bfs
+from .utils import bfs_all_unique
 from .interp_common import State, dy
 from .evaluate import evaluate, resolve
 from .compiler import AutocompleteSuggestions
@@ -98,7 +98,7 @@ def _search_puppet(puppet):
                 else:
                     yield new_p
 
-    for p in bfs([puppet], expand):
+    for p in bfs_all_unique([puppet], expand):
         if p.result:
             return p.result
 

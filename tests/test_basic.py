@@ -177,6 +177,10 @@ class BasicTests(PreqlTests):
         assert preql(' ["hello"]{item[..1]} ') == [{'_': 'h'}]
         res = preql('["hello"]{string(item) or 1}')
         assert res == [{'_': True}], res
+        res = preql('["hello"]{string(item) and 1}')
+        assert res == [{'_': True}], res
+        res = preql('["hello"]{string(item) and 0}')
+        assert res == [{'_': False}], res
         res = preql('[""]{string(item) or 0}')
         assert res == [{'_': False}], res
 
