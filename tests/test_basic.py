@@ -172,6 +172,20 @@ class BasicTests(PreqlTests):
         res = preql('[0,1,2,3]{r: item < 3, item}[not r]')
         assert res == [{'r': 0, 'item': 3}], res
 
+    def test_vectorized(self):
+        preql = self.Preql()
+        assert preql(' ["hello"]{item[..1]} ') == [{'_': 'h'}]
+        res = preql('["hello"]{string(item) or 1}')
+        assert res == [{'_': True}], res
+        res = preql('["hello"]{string(item) and 1}')
+        assert res == [{'_': True}], res
+        res = preql('["hello"]{string(item) and 0}')
+        assert res == [{'_': False}], res
+        res = preql('[""]{string(item) or 0}')
+        assert res == [{'_': False}], res
+
+
+
 
     @uses_tables('Point')
     def test_update_basic(self):

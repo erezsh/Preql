@@ -15,7 +15,7 @@ from .interp_common import dy, State, assert_type, new_value_instance, evaluate,
 from .pql_types import T, Object, Type, union_types
 from .types_impl import dp_inst, flatten_type, elem_dict
 from .casts import _cast
-from .pql_objects import vectorized, unvectorized, make_instance
+from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
 
 @dataclass
 class Table(Object):
@@ -30,7 +30,7 @@ def cast_to_instance(state, x: list):
 def cast_to_instance(state, x):
     try:
         x = simplify(state, x)  # just compile Name?
-        inst = compile_to_inst(state, x)
+        inst = compile_to_instance(state, x)
         # inst = evaluate(state, x)
     except exc.ReturnSignal:
         raise Signal.make(T.CompileError, state, None, f"Bad compilation of {x}")
@@ -38,10 +38,59 @@ def cast_to_instance(state, x):
     if isinstance(inst, ast.ResolveParametersString):
         raise exc.InsufficientAccessLevel(inst)
 
-    if not isinstance(inst, objects.AbsInstance):
+    if not isinstance(inst, AbsInstance):
         raise Signal.make(T.TypeError, state, None, f"Could not compile {inst}")
 
     return inst
+
+
+@dy
+def unvectorize_args(x: list):
+    if not x:
+        return False, x
+    was_vec, objs = zip(*[unvectorize_args(i) for i in x])
+    return any(was_vec), list(objs)
+
+@dy
+def unvectorize_args(x: AbsInstance):
+    if x.type <= T.vectorized:
+        return True, unvectorized(x)
+    return False, x
+
+@dy
+def unvectorize_args(x):
+    return False, x
+
+@dy
+def compile_to_instance(state, obj: AbsInstance):
+    return obj
+
+@dy
+def compile_to_instance(state, obj):
+    return compile_to_inst(state, obj)
+
+@dy
+def compile_to_instance(state, obj: ast.TableOperation):
+    return compile_to_inst(state, obj)
+
+@dy
+def compile_to_instance(state, obj: ast.Expr):
+    attrs = dict(obj)
+    args_attrs = {}
+    any_was_vec = False
+    for k, v in attrs.items():
+        if k in obj._args:
+            if v:
+                was_vec, args_attrs[k] = unvectorize_args( evaluate(state, v) )
+                if was_vec:
+                    any_was_vec = True
+    attrs.update(args_attrs)
+
+    res = compile_to_inst(state, type(obj)(**attrs))
+    if any_was_vec:
+        res = vectorized(res)
+    return res
+
 
 
 
@@ -170,7 +219,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     elems = {}
     # codename = state.unique_name('proj')
     for name_, inst in all_fields:
-        assert isinstance(inst, objects.AbsInstance)
+        assert isinstance(inst, AbsInstance)
 
         # TODO what happens if automatic name preceeds and collides with user-given name?
         name = name_
@@ -230,6 +279,12 @@ def compile_to_inst(state: State, order: ast.Order):
         query_state = state.reduce_access(state.AccessLevels.QUERY)
         fields = cast_to_instance(query_state, order.fields)
 
+    for f in fields:
+        if not f.type <= T.primitive:
+            # TODO Support 'ordering' trait?
+            raise Signal.make(T.TypeError, state, order, f"Arguments to 'order' must be primitive")
+
+
     code = sql.table_order(table, [c.code for c in fields])
 
     return objects.TableInstance.make(code, table.type, [table] + fields)
@@ -256,13 +311,15 @@ def compile_to_inst(state: State, o: ast.Or):
 @dy
 def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
-    code = sql.LogicalBinOp("AND", [a.code for a in args])
+    args_bool = [_cast(state, a.type, T.bool, a) for a in args]
+    code = sql.LogicalBinOp("AND", [a.code for a in args_bool])
     return objects.make_instance(code, T.bool, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.Not):
     expr = cast_to_instance(state, o.expr)
-    code = sql.LogicalNot(expr.code)
+    expr_bool = _cast(state, expr.type, T.bool, expr)
+    code = sql.LogicalNot(expr_bool.code)
     return objects.make_instance(code, T.bool, [expr])
 
 
@@ -286,11 +343,6 @@ def _contains(state, op, a: T.string, b: T.string):
         '!in': 'str_notcontains',
     }[op]
     return call_pql_func(state, f, [a, b])
-
-@dp_inst
-def _contains(state, op, a: T.vectorized, b: T.collection):
-    res = _contains(state, op, unvectorized(a), b)
-    return vectorized(res)
 
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.collection):
@@ -377,15 +429,6 @@ def _compare(state, ast_node, a: T.aggregate, b: T.int):
     return objects.aggregate(res)
 
 @dp_inst
-def _compare(state, ast_node, a: T.vectorized, b: T.primitive):
-    res = _compare(state, ast_node, unvectorized(a), b)
-    return vectorized(res)
-@dp_inst
-def _compare(state, ast_node, a: T.vectorized, b: T.vectorized):
-    res = _compare(state, ast_node, unvectorized(a), unvectorized(b))
-    return vectorized(res)
-
-@dp_inst
 def _compare(state, ast_node, a: T.int, b: T.aggregate):
     return _compare(state, ast_node, b, a)
 
@@ -396,10 +439,6 @@ def _compare(state, op, a: T.type, b: T.type):
 @dp_inst
 def _compare(state, op, a: T.number, b: T.row):
     return _compare(state, op, a, b.primary_key())
-@dp_inst
-def _compare(state, ast_node, a: T.vectorized[T.number], b: T.row):
-    res = _compare(state, ast_node, unvectorized(a), b)
-    return vectorized(res)
 
 @dp_inst
 def _compare(state, op, a: T.row, b: T.number):
@@ -440,7 +479,7 @@ def compile_to_inst(state: State, arith: ast.Arith):
         return _compile_arith(state, arith, *args)
     except DispatchError as e:
         a, b = args
-        raise Signal.make(T.TypeError, state, arith, f"Like not implemented for {a.type} and {b.type}")
+        raise Signal.make(T.TypeError, state, arith, f"Arith not implemented for {a.type} and {b.type}")
 
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
@@ -463,19 +502,6 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
 
     return state.get_var(op).func(state, a, b)
 
-
-@dp_inst
-def _compile_arith(state, arith, a: T.vectorized, b: T.primitive):
-    res = _compile_arith(state, arith, unvectorized(a), b)
-    return vectorized(res)
-@dp_inst
-def _compile_arith(state, arith, a: T.primitive, b: T.vectorized):
-    res = _compile_arith(state, arith, a, unvectorized(b))
-    return vectorized(res)
-@dp_inst
-def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
-    res = _compile_arith(state, arith, unvectorized(a), unvectorized(b))
-    return vectorized(res)
 
 @dp_inst
 def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
@@ -702,7 +728,7 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
 
 @dy
 def compile_to_inst(state: State, s: ast.Slice):
-    obj = cast_to_instance(state, s.table)
+    obj = cast_to_instance(state, s.obj)
 
     assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
 

@@ -14,6 +14,7 @@
 #         execute remote queries
 #         simplify (compute) into the final result
 
+from preql.pql_objects import vectorized
 from typing import List, Optional
 import logging
 from pathlib import Path
@@ -29,7 +30,7 @@ from . import settings
 from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
-from .compiler import compile_to_inst, cast_to_instance
+from .compiler import compile_to_instance, cast_to_instance, unvectorize_args
 from .pql_types import T, Type, Object
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
 
@@ -352,7 +353,7 @@ def simplify(state: State, cb: ast.CodeBlock):
         # Failed to run it, so try to cast as instance
         # XXX order should be other way around!
         if e.type <= T.CastError:
-            return compile_to_inst(state, cb)
+            return compile_to_instance(state, cb)
         raise
 
 @dy
@@ -491,7 +492,11 @@ def eval_func_call(state, func, args):
         # TODO Ensure correct types
         args = list(args.values())
         # args = evaluate(state, args)
-        return func.func(state, *args)
+        was_vec, args = unvectorize_args(args)
+        res = func.func(state, *args)
+        if was_vec:
+            res = vectorized(res)
+        return res
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:
@@ -798,7 +803,7 @@ def evaluate(state, obj_):
     # . Compilation may fail (e.g. due to lack of DB access)
     # . Objects are generic within the same database, and can be cached
     # obj = compile_to_inst(state.reduce_access(state.AccessLevels.COMPILE), obj)
-    obj = compile_to_inst(state, obj)
+    obj = compile_to_instance(state, obj)
 
     if state.access_level < state.AccessLevels.EVALUATE:
         return obj

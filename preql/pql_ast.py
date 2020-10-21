@@ -13,7 +13,8 @@ from .types_impl import repr_value
 class Ast(Object):
     text_ref: Optional[TextReference]
 
-class Expr(Ast): pass
+class Expr(Ast):
+    _args = ()
 
 @dataclass
 class Marker(Expr):
@@ -57,6 +58,8 @@ class Attr(Expr):
     expr: Optional[Object] #Expr
     name: Union[str, Marker]
 
+    _args = 'expr',
+
 @dataclass
 class Const(Expr):
     type: Type
@@ -69,52 +72,72 @@ class Const(Expr):
 class Ellipsis(Expr):
     exclude: List[Union[str, Marker]]
 
+class BinOpExpr(Expr):
+    _args = 'args',
+class UnaryOpExpr(Expr):
+    _args = 'expr',
+
+
 @dataclass
-class Compare(Expr):
+class Compare(BinOpExpr):
+    op: str
+    args: List[Object]
+
+
+@dataclass
+class Arith(BinOpExpr):
     op: str
     args: List[Object]
 
 @dataclass
-class Arith(Expr):
-    op: str
+class Or(BinOpExpr):
     args: List[Object]
 
 @dataclass
-class Or(Expr):
+class And(BinOpExpr):
     args: List[Object]
 
 @dataclass
-class And(Expr):
-    args: List[Object]
+class Not(UnaryOpExpr):
+    expr: Object
 
 @dataclass
-class Not(Expr):
-    expr: Expr
+class Neg(UnaryOpExpr):
+    expr: Object
 
 @dataclass
-class Neg(Expr):
-    expr: Expr
-
-@dataclass
-class Contains(Expr):
+class Contains(BinOpExpr):
     op: str
     args: List[Object]
 
 @dataclass
 class DescOrder(Expr):
-    value: Expr # Column
+    value: Object
+
+    _args = 'value',
 
 @dataclass
 class Like(Expr):
-    str: Expr
-    pattern: Expr
+    str: Object
+    pattern: Object
 
     op = "~"
+
+    _args = 'str', 'pattern'
+
+@dataclass
+class Range(Expr):
+    start: Optional[Object]
+    stop: Optional[Object]
+
+    _args = 'start', 'stop'
 
 @dataclass
 class NamedField(Expr):
     name: Optional[str]
     value: Object #(Expr, types.PqlType)
+
+    _args = 'value',
 
 @dataclass
 class InlineStruct(Expr):
@@ -157,6 +180,13 @@ class Delete(TableOperation):
     conds: List[Expr]
 
 @dataclass
+class Slice(Expr):
+    obj: Object
+    range: Range
+
+    _args = 'obj',
+
+@dataclass
 class New(Expr):
     type: str
     args: list   # Func args
@@ -172,20 +202,12 @@ class FuncCall(Expr):
     args: list   # Func args
 
 
-@dataclass
-class Range(Expr):
-    start: Optional[Expr]
-    stop: Optional[Expr]
 
 @dataclass
 class One(Expr):
     expr: Object
     nullable: bool = False
 
-@dataclass
-class Slice(TableOperation):
-    table: Object
-    range: Range
 
 @dataclass
 class Type(Ast):

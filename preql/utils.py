@@ -210,6 +210,12 @@ def bfs(initial, expand):
                 visited.add(next_node)
                 open_q.append(next_node)
 
+def bfs_all_unique(initial, expand):
+    open_q = deque(list(initial))
+    while open_q:
+        node = open_q.popleft()
+        yield node
+        open_q += expand(node)
 
 
 def memoize(f, memo=None):
