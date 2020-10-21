@@ -156,26 +156,33 @@ class TablePromise:
         self._rows = None
 
     def to_json(self):
-        "Returns table as a list of rows, i.e. [{col1: value, col2: value, ...}, ...]"
+        "Returns table as a list of rows, i.e. ``[{col1: value, col2: value, ...}, ...]``"
         if self._rows is None:
             self._rows = cast_to_python(self._state, self._inst)
         assert self._rows is not None
         return self._rows
 
     def to_pandas(self):
+        "Returns table as a Pandas dataframe (requires pandas installed)"
         from pandas import DataFrame
         return DataFrame(self)
 
     def __eq__(self, other):
+        """Compare the table to a JSON representation of it as list of objects
+
+        Essentially: ``return self.to_json() == other``
+        """
         return self.to_json() == other
 
     def __len__(self):
+        "Run a count query on table"
         return _call_pql_func(self._state, 'count', [self._inst])
 
     def __iter__(self):
         return iter(self.to_json())
 
     def __getitem__(self, index):
+        "Run a slice query on table"
         if isinstance(index, slice):
             offset = index.start or 0
             limit = index.stop - offset

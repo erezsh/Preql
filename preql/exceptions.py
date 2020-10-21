@@ -18,6 +18,7 @@ class Signal(Object, Exception):
         return cls(type, refs, message)
 
     def __str__(self):
+        "Returns the exception with a traceback"
         texts = ['Exception traceback:\n']
         texts += [ref.get_pinpoint_text() if ref else '  ~~~ ???\n' for ref in self.text_refs]
         texts += [
@@ -26,6 +27,7 @@ class Signal(Object, Exception):
         return ''.join(texts)
 
     def get_rich_lines(self):
+        "Yields colorful styled lines to print by the ``rich`` library"
         yield True, '[bold]Exception traceback:[/bold]'
         for ref in self.text_refs:
             yield from ref.get_pinpoint_text(rich=True) if ref else ['???']
