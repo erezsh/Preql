@@ -195,7 +195,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     attrs = table.all_attrs()
 
     with state.use_scope({n:vectorized(c) for n, c in attrs.items()}):
-        query_state = state.reduce_access(state.AccessLevels.QUERY)
+        query_state = state.limit_access(state.AccessLevels.QUERY)
         fields = _process_fields(query_state, fields)
 
     for name, f in fields:
@@ -210,7 +210,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     agg_fields = []
     if proj.agg_fields:
         with state.use_scope({n:objects.aggregate(c) for n, c in attrs.items()}):
-            query_state = state.reduce_access(state.AccessLevels.QUERY)
+            query_state = state.limit_access(state.AccessLevels.QUERY)
             agg_fields = _process_fields(query_state, proj.agg_fields)
 
     all_fields = fields + agg_fields
@@ -276,7 +276,7 @@ def compile_to_inst(state: State, order: ast.Order):
     assert_type(table.type, T.table, state, order, "'order'")
 
     with state.use_scope(table.all_attrs()):
-        query_state = state.reduce_access(state.AccessLevels.QUERY)
+        query_state = state.limit_access(state.AccessLevels.QUERY)
         fields = cast_to_instance(query_state, order.fields)
 
     for f in fields:
@@ -769,7 +769,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     # with state.use_scope(table.all_attrs()):
     with state.use_scope({n:vectorized(c) for n, c in table.all_attrs().items()}):
-        query_state = state.reduce_access(state.AccessLevels.QUERY)
+        query_state = state.limit_access(state.AccessLevels.QUERY)
         conds = cast_to_instance(query_state, sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):

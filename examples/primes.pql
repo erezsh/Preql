@@ -5,9 +5,9 @@
 //  This example will produce an ever-growing list of prime numbers.
 //  If run on a persistent database, it will resume running from the last point it stopped.
 //
-//  For example, run this:
+//  For example, run this from the examples folder:
 //
-//      preql -f primes.pql sqlite:///primes.sqlite
+//      preql -m primes sqlite:///primes.sqlite
 //
 //  Then stop it (using Ctrl+C, or any other method), and run it again.
 //

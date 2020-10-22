@@ -68,6 +68,9 @@ class State:
     def __copy__(self):
         return self.clone(self)
 
+    def limit_access(self, new_level):
+        return self.reduce_access(min(new_level, self.access_level))
+
     def reduce_access(self, new_level):
         assert new_level <= self.access_level
         s = copy(self)
