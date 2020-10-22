@@ -32,7 +32,7 @@ MAX_AUTO_COUNT = 10000
 
 
 def table_limit(self, state, limit, offset=0):
-    return call_pql_func(state, '_core_limit_offset', [self, _make_const(limit), _make_const(offset)])
+    return call_pql_func(state, 'limit_offset', [self, _make_const(limit), _make_const(offset)])
 
 
 def _html_table(name, count_str, rows, offset):
@@ -186,7 +186,7 @@ class TablePromise:
         if isinstance(index, slice):
             offset = index.start or 0
             limit = index.stop - offset
-            return call_pql_func(self._state, '_core_limit_offset', [self._inst, _make_const(limit), _make_const(offset)])
+            return call_pql_func(self._state, 'limit_offset', [self._inst, _make_const(limit), _make_const(offset)])
 
         # TODO different debug log level / mode
         # inst = evaluate(self._state,

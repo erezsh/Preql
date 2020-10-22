@@ -23,14 +23,6 @@ func _sql_agg_func(name, obj, t=null) {
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
 }
 
-// func count(field) {
-//     "Count a column, a list, or a table"
-//     if (isa(field, table)) {
-//         return SQL(int, "SELECT COUNT(*) FROM $field")
-//     }
-//     return _sql_agg_func("COUNT", field)
-// }
-
 func sum(field: collection) {
     "Sum up a column or a list"
     return _sql_agg_func("SUM", field)
@@ -147,22 +139,17 @@ func zipjoin(a: collection, b: collection) = _zipjoin(join, a, b)
 func zipjoin_left(a: collection, b: collection) = _zipjoin(leftjoin, a, b)
 func zipjoin_longest(a: collection, b: collection) = _zipjoin(outerjoin, a, b)
 
-
-// Builtins hack, so they won't collide with locals. Just put them in a module
-_core_limit = limit
-_core_limit_offset = limit_offset
-//
-
 func distinct(t: collection) {
     "Remove identical rows"
     return SQL(t, "SELECT distinct * FROM $t")
 }
 
+func pi() = SQL(float, "PI()")
+func now() = SQL(datetime, "NOW()")
+func repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")
+
 if (get_db_type() == "postgres") {
-    func repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")
-    func now() = SQL(datetime, "NOW()")
     func random() = SQL(float, "RANDOM()")
-    func pi() = SQL(float, "PI()")
 
     func str_index(a, b) = SQL(int, "POSITION($a in $b)")
 } else {
@@ -185,11 +172,8 @@ if (get_db_type() == "postgres") {
 
     } else {
         if (get_db_type() == "mysql") {
-            func pi() = SQL(float, "PI()")
-            func now() = SQL(datetime, "NOW()")
             func random() = SQL(float, "RAND()")
 
-            func repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")   // same as postgres
             func str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)")    // same as sqlite
 
             // TODO use AST interface instead?

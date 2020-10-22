@@ -106,10 +106,10 @@ class State:
         try:
             return self.ns.get_var(name)
         except NameNotFound:
-            core = self.ns.get_var('__builtins__')
-            assert isinstance(core, objects.Module)
+            builtins = self.ns.get_var('__builtins__')
+            assert isinstance(builtins, objects.Module)
             try:
-                return core.namespace[name]
+                return builtins.namespace[name]
             except KeyError:
                 pass
 
@@ -213,7 +213,11 @@ def exclude_fields(state, table, fields):
     return evaluate(state, proj)
 
 def call_pql_func(state, name, args):
-    expr = ast.FuncCall(None, ast.Name(None, name), args)
+    "Call a builtin pql function"
+    builtins = state.ns.get_var('__builtins__')
+    assert isinstance(builtins, objects.Module)
+
+    expr = ast.FuncCall(None, builtins.namespace[name], args)
     return evaluate(state, expr)
 
 
