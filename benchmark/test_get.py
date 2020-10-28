@@ -52,7 +52,7 @@ def pql_get(id_):
 def raw_get(id_):
     cur.execute('SELECT v FROM Vector WHERE id=%s' % id_)
     res = cur.fetchall()
-    assert len(res) == 1, res
+    assert len(res) == 1, (res, id_)
 
 
 def sqlalchemy_get_2(id_):
@@ -71,7 +71,7 @@ def run_benchmark(fs, count):
         print('.. ', f)
         start = time.time()
         for i in range(count):
-            f(i % VECTOR_COUNT + 1)
+            f(i % (VECTOR_COUNT//2) + 1)
         else:
             end = time.time()
             res.append((end - start, f))
