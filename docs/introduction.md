@@ -4,7 +4,7 @@
 
 Relational databases are a common and powerful approach to storing and processing information. Based on the solid foundation of relational algebra, they are efficient, resilient, well-tested, and full of useful features.
 
-However, they all share the same weakness: They all use an antequated programming interface called SQL.
+However, they all share the same weakness: They all use an antiquated programming interface called SQL.
 
 While SQL was clever and innovative at the time of its conception, today we can look back on its design and see it has many fundamental mistakes, which make SQL incompatible with our contemporary notions of how a programming language should look and work.
 

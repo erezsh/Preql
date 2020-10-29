@@ -2,13 +2,13 @@
 
 Preql (*pronounced: Prequel*) is an interpreted relational query language.
 
-It is designed for use by data engineers, analyists and data scientists.
+It is designed for use by data engineers, analysts and data scientists.
 
 * Compiles to SQL at runtime. It has the performance and abilities of SQL, and much more.
 
     * Support for Postgres, MySQL and Sqlite. (more planned!)
 
-    * Escape hatch to SQL, for all those databse-specific features we didn't think to include
+    * Escape hatch to SQL, for all those database-specific features we didn't think to include
 
 * Programmer-friendly syntax and semantics, with gradual type-checking, inspired by Typescript and Python
 
@@ -29,7 +29,7 @@ Simply install via pip:
     pip install -U prql
 ```
 
-Then just run the interpeter:
+Then just run the interpreter:
 
 ```sh
     preql

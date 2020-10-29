@@ -42,7 +42,7 @@ Welcome to the Preql documentation!
 
 Preql (*pronounced: Prequel*) is an interpreted relational query language, that compiles to SQL.
 
-It is designed for use by data engineers, analyists and data scientists.
+It is designed for use by data engineers, analysts and data scientists.
 
 Resources
 ---------
