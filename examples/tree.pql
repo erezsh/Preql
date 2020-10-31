@@ -1,0 +1,100 @@
+//
+//    Tree Search with BFS
+//----------------------------------------
+//
+//  This example demonstrate how to perform a breadth-first search, up and down a tree structure.
+//  It uses the built-in `bfs()` function, which is defined in `core.pql`
+//
+//  For example, run this from the examples folder:
+//
+//      preql -m tree
+//
+
+
+// Define Tree table
+table Tree {
+    value: string
+    parent: Tree?
+}
+
+// Initialize tree table with values
+animal = new Tree("Animal", null)
+mammal = new Tree("Mammal", animal)
+dog = new Tree("Dog", mammal)
+new Tree("Golden Retriever", dog)
+new Tree("Lion", mammal)
+new Tree("Fish", animal)
+
+
+// Define generic search function 'bfs' (copied from core.pql)
+func bfs(edges: table, initial: table) {
+    bfs = SQL(list[int], "SELECT * FROM $initial UNION SELECT e.dst FROM $edges e JOIN $self bfs ON e.src = bfs.item")
+    return SQL(list[int], "SELECT bfs.item FROM $bfs bfs")
+}
+
+// Define Tree-specific search functions
+func path_to_root(initial: table) {
+    "Find all nodes connecting the given nodes to the root (all ancestors)"
+    search_results = bfs(Tree{src: id, dst: parent}, initial{id})
+    return join(_: search_results.item, t: Tree.id){t.id, t.value}
+}
+
+func tree_bfs(initial: table) {
+    "Find all descendants of given nodes"
+    search_results = bfs(Tree{src: parent, dst: id}, initial{id})
+    return join(_: search_results.item, t: Tree.id){t.id, t.value}
+}
+
+func is_a(a: string, b: string) {
+    "Return whether or not 'a' is a descendant of 'b'"
+    initial = Tree[value==a]
+    return b in path_to_root(initial){value}
+}
+
+func common_ancestors(a: string, b: string) {
+    "Find the common ancestors of 'a' and 'b'"
+    path_a = path_to_root(Tree[value==a])
+    path_b = path_to_root(Tree[value==b])
+    return join( a: path_a.id, b: path_b.id ){a.id, a.value}
+}
+
+
+// Define test and print functions
+
+func print_isa(a, b) {
+    if (is_a(a, b)) {
+        print fmt("A $a is a $b")
+    } else {
+        print fmt("A $a is not a $b")
+    }
+}
+
+func print_most_common_ancestor(a, b) {
+    mca = first_or_null(common_ancestors(a, b){value})
+    if (not mca) {
+        mca = "<not found>"
+    }
+    print fmt("The common ancestors of $a and $b is $mca")
+}
+
+
+func test() {
+    print_isa("Dog", "Animal")
+    print_isa("Dog", "Mammal")
+    print_isa("Fish", "Mammal")
+    print_isa("Dog", "Lion")
+
+    print ""
+    print "List of mammals:"
+    for (m in tree_bfs(Tree[value=="Mammal"])[1..]) {
+        print "  * " + m.value
+    }
+
+    print ""
+    print_most_common_ancestor("Dog", "Lion")
+    print_most_common_ancestor("Dog", "Mammal")
+    print_most_common_ancestor("Dog", "Fish")
+    print_most_common_ancestor("Dog", "Alien")
+}
+
+test()
