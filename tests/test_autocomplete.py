@@ -35,6 +35,12 @@ class AutocompleteTests(PreqlTests):
         """)
         assert "hello" in res, res.keys()
 
+        res = autocomplete(state, """a = [1,2,3]{.""")
+        assert res == {}
+
+        res = autocomplete(state, """table a""")
+        assert all(isinstance(v, tuple) for v in res.values())
+
     def test_progressive1(self):
         p = self.Preql()
         state = p.interp.state

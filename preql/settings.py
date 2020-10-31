@@ -3,6 +3,7 @@ import sys
 
 optimize = True
 cache = False
+debug = False
 
 print_sql = False
 typecheck = False # not sys.flags.optimize

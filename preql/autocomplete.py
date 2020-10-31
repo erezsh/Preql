@@ -1,3 +1,4 @@
+from preql import settings
 from lark import Token, UnexpectedCharacters, UnexpectedToken, ParseError
 
 from .exceptions import Signal, ReturnSignal, pql_SyntaxError
@@ -47,6 +48,12 @@ def eval_autocomplete(state, cb: ast.CodeBlock, go_inside):
 
     for s in cb.statements[-1:]:
         eval_autocomplete(state, s, go_inside)
+
+@dy
+def eval_autocomplete(state, td: ast.TableDefFromExpr, go_inside):
+    expr = evaluate(state, td.expr)
+    assert isinstance(td.name, str)
+    state.set_var(td.name, expr)
 
 @dy
 def eval_autocomplete(state, td: ast.TableDef, go_inside):
@@ -123,6 +130,9 @@ def autocomplete_tree(puppet):
     return _search_puppet(puppet.as_immutable())
 
 
+KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true return !in'.split()
+KEYWORDS = {k:(100000, None) for k in KEYWORDS}
+
 class AcState(State):
     def get_var(self, name):
         try:
@@ -131,9 +141,15 @@ class AcState(State):
             assert s.type <= T.NameError
             return objects.UnknownInstance()
 
-    def get_all_vars(self):
-        all_vars = dict(self.get_var('__builtins__').namespace)
-        all_vars.update( self.ns.get_all_vars() )
+    # def get_all_vars(self):
+    #     all_vars = dict(self.get_var('__builtins__').namespace)
+    #     all_vars.update( self.ns.get_all_vars() )
+    #     return all_vars
+
+    def get_all_vars_with_rank(self):
+        all_vars = {k:(10000, v) for k, v in self.get_var('__builtins__').namespace.items()}
+        all_vars.update( self.ns.get_all_vars_with_rank() )
+        all_vars.update(KEYWORDS)
         return all_vars
 
     def replace(self, **kw):
@@ -173,4 +189,4 @@ def autocomplete(state, code, source='<autocomplete>'):
     else:
         _eval_autocomplete(ac_state, stmts)
 
-    return ac_state.get_all_vars()
+    return ac_state.get_all_vars_with_rank()

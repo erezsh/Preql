@@ -234,3 +234,15 @@ func page(table, index, page_size=20) {
     offset = index*page_size
     return table[offset..(offset+page_size)]
 }
+
+func remove_table(table) {
+    SQL(nulltype, "DROP TABLE $table")
+}
+
+func remove_tables(tables) {
+    "TODO"
+
+    for (table in tables) {
+        SQL(nulltype, "DROP TABLE $table")
+    }
+}

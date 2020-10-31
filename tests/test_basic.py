@@ -11,8 +11,8 @@ from preql.pql_types import T
 
 from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI
 
-
 def uses_tables(*names):
+    names = [n.lower() for n in names]  # Table names are case insensitive
     def decorator(decorated):
         def wrapper(self):
             if self.uri != MYSQL_URI:
@@ -20,6 +20,12 @@ def uses_tables(*names):
 
             p = self.Preql()
             tables = p.interp.state.db.list_tables()
+            def _key(t):
+                try:
+                    return names.index(t.lower())
+                except ValueError:
+                    return -1
+            tables.sort(key=_key)
             if tables:
                 print("@@ Deleting", tables, decorated)
             p._drop_tables(*tables)
@@ -187,7 +193,7 @@ class BasicTests(PreqlTests):
 
 
 
-    @uses_tables('Point')
+    @uses_tables('backup', 'Point')
     def test_update_basic(self):
         preql = self.Preql()
         preql("""
@@ -712,7 +718,7 @@ class BasicTests(PreqlTests):
         res = preql(""" temptable(temptable(Person, true)[name=="Erez Shinan"], true){name} """) # 2 temp tables
         assert is_eq(res, [("Erez Shinan",)])
 
-    @uses_tables("A", "B", "Person", "Country")
+    @uses_tables("p", "A", "B", "Person", "Country")
     def test_copy_rows(self):
         preql = self.Preql()
         preql('''
@@ -844,7 +850,7 @@ class BasicTests(PreqlTests):
         assert preql('a2.y') == 1
 
 
-    @uses_tables('Circle', 'Box', 'NamedLine')
+    @uses_tables('Circle', 'Box', 'NamedLine', 'tmp1', 'tmp2')
     def test_structs(self):
         preql = self.Preql()
         preql.load('box_circle.pql', rel_to=__file__)
@@ -1000,6 +1006,15 @@ class BasicTests(PreqlTests):
             {'a.item': 4, 'b.item': 8}]
         assert (preql('A_B {a.item, b.item}').json() ) == res
         assert (preql('A_B {a, b} {a.item, b.item}').json() ) == res
+
+    @uses_tables('a')
+    def test_table_from_expr(self):
+        p = self.Preql()
+        p("""
+            table a = [1..3]
+            new a(5)
+        """)
+        assert [x['item'] for x in p.a] == [1,2,5], p.a
 
 
     @uses_tables('A')

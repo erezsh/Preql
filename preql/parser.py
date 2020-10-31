@@ -228,9 +228,10 @@ class TreeToAst(Transformer):
     def marker(self, meta, _marker):
         return ast.Marker(meta)
 
-    def table_def_by_expr(self, meta, const, name, table_expr):
-        c = objects.from_python(bool(const == 'const'))
-        return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, c]))
+    def table_def_from_expr(self, meta, const, name, table_expr):
+        # c = objects.from_python(bool(const == 'const'))
+        # return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, c]))
+        return ast.TableDefFromExpr(meta, name, table_expr, const == 'const')
 
     def ellipsis(self, meta, *exclude):
         return ast.Ellipsis(meta, list(exclude))
@@ -319,7 +320,7 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
             expected = e.accepts or e.expected
             if expected and len(expected) < 5:
                 accepts = terminal_list_desc(expected)
-                msg += '. Expected: %s' % ', '.join(accepts)
+                msg += '. Expected: %s' % ' or '.join(accepts)
         else:
             msg = "Unexpected character: %r" % s[e.pos_in_stream]
 

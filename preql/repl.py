@@ -34,10 +34,6 @@ from .autocomplete import autocomplete
 from .utils import memoize
 
 
-KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true return !in'.split()
-KEYWORDS = {k:None for k in KEYWORDS}
-
-
 
 def is_name(s):
     return s.isalnum() or s in ('_', '!')
@@ -57,21 +53,34 @@ class Autocompleter(Completer):
     def __init__(self, state):
         self.state = state
 
-    def get_completions(self, document, complete_event):
+    def _get_completions(self, document):
         context, fragment = last_word(document.text_before_cursor)
 
         if not settings.autocomplete:
             return
 
-        if not fragment:
+        if context:
+            open_complete = context.rstrip()[-1] in '.{['
+        else:
+            open_complete = False
+        if not fragment and not open_complete:
             return
 
-        assert is_name(fragment[-1])
+        assert open_complete or is_name(fragment[-1]), fragment
 
-        all_vars = dict(autocomplete(self.state, context))
-        all_vars.update(KEYWORDS)
+        try:
+            all_vars = dict(autocomplete(self.state, context))
+        except:
+            if settings.debug:
+                raise
+            all_vars = {}
 
-        for k, v in all_vars.items():
+        # all_vars.update(KEYWORDS)
+        assert all(isinstance(v, tuple) for v in all_vars.values())
+        all_vars = list(all_vars.items())
+        all_vars.sort(key=lambda item: (item[1][0], item[0]))
+
+        for k, (_rank, v) in all_vars:
             if k.startswith(fragment):
                 a, b = k[:len(fragment)], k[len(fragment):]
                 if v is None:
@@ -86,6 +95,9 @@ class Autocompleter(Completer):
                     b, start_position=0,
                     display=HTML('<b>%s</b>%s: <blue>%s</blue>' % (a, b, html_escape(t))),
                     )
+
+    def get_completions(self, document, complete_event):
+        return self._get_completions(document)
 
 class MyValidator(Validator):
     def validate(self, document):

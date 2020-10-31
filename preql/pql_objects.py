@@ -550,6 +550,7 @@ def alias_table_columns(t, prefix):
 
 
 def new_table(type_, name=None, instances=None, select_fields=False):
+    "Create new table instance"
     if type_ <= T.list:
         cls = ListInstance
     else:
@@ -569,6 +570,7 @@ def new_const_table(state, table_type, tuples):
     inst = TableInstance.make(table_code, table_type, [])
     inst.subqueries[name] = subq
     return inst
+
 
 
 

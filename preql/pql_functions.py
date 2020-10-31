@@ -15,9 +15,9 @@ from . import pql_ast as ast
 from . import sql
 
 from .interp_common import State, call_pql_func, new_value_instance, dy, exclude_fields, assert_type
-from .evaluate import evaluate, cast_to_python, db_query, TableConstructor
+from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr
 from .pql_types import T, Type, union_types
-from .types_impl import table_flat_for_insert, join_names
+from .types_impl import Object_repr, table_flat_for_insert, join_names
 from .casts import _cast
 
 def new_str(x):
@@ -174,29 +174,10 @@ def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() 
     const = cast_to_python(state, const)
     assert_type(expr.type, T.collection, state, expr, 'temptable')
 
-    # elems = dict(expr.type.elems)
-    elems = expr.type.elem_dict
-
-    if any(t <= T.unknown for t in elems.values()):
-        return objects.TableInstance.make(sql.null, expr.type, [])
-
     name = state.unique_name("temp")    # TODO get name from table options
 
-    if 'id' in elems and not const:
-        raise Signal.make(T.NameError, state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
+    return new_table_from_expr(state, name, expr, const, True)
 
-    table = T.table(elems, name=name, pk=[] if const else [['id']], temporary=True)
-
-    if not const:
-        table.elems['id'] = T.t_id
-
-    db_query(state, sql.compile_type_def(state, name, table))
-
-    read_only, flat_columns = table_flat_for_insert(table)
-    expr = exclude_fields(state, expr, set(read_only) & set(elems))
-    db_query(state, sql.Insert(name, flat_columns, expr.code), expr.subqueries)
-
-    return objects.new_table(table)
 
 def pql_get_db_type(state: State):
     """

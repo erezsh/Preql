@@ -96,6 +96,13 @@ def db_query(state: State, sql_code, subqueries=None):
         raise Signal.make(T.DbQueryError, state, None, e.args[0]) from e
 
 
+from .types_impl import elem_dict
+@dy
+def _execute(state: State, table_def: ast.TableDefFromExpr):
+    expr = cast_to_instance(state, table_def.expr)
+    t = new_table_from_expr(state, table_def.name, expr, table_def.const, False)
+    state.set_var(table_def.name, t)
+
 @dy
 def _execute(state: State, table_def: ast.TableDef):
     if table_def.columns and isinstance(table_def.columns[-1], ast.Ellipsis):
@@ -768,7 +775,7 @@ class TableConstructor(objects.Function):
 
     @classmethod
     def make(cls, table):
-        return cls([objects.Param(name.text_ref, name, p, p.options.get('default'), orig=p) for name, p in table_params(table)])
+        return cls([objects.Param(getattr(name, 'text_ref', None), name, p, p.options.get('default'), orig=p) for name, p in table_params(table)])
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
@@ -920,6 +927,30 @@ def new_table_from_rows(state, name, columns, rows):
     state.set_var(name, x)
 
 
+def new_table_from_expr(state, name, expr, const, temporary):
+    elems = expr.type.elem_dict
+
+    if any(t <= T.unknown for t in elems.values()):
+        return objects.TableInstance.make(sql.null, expr.type, [])
+
+
+    if 'id' in elems and not const:
+        raise Signal.make(T.NameError, state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
+
+    table = T.table(dict(elems), name=name, pk=[] if const else [['id']], temporary=temporary)
+
+    if not const:
+        table.elems['id'] = T.t_id
+
+    db_query(state, sql.compile_type_def(state, name, table))
+
+    read_only, flat_columns = table_flat_for_insert(table)
+    expr = exclude_fields(state, expr, set(read_only) & set(elems))
+    db_query(state, sql.Insert(name, flat_columns, expr.code), expr.subqueries)
+
+    return objects.new_table(table)
+
+
 
 
 
@@ -938,3 +969,4 @@ def cast_to_python(state, obj: objects.AbsInstance):
     res = localize(state, obj)
     assert isinstance(res, (int, str, float, dict, list, type(None))), res
     return res
+

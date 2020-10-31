@@ -234,6 +234,14 @@ class TableDef(Statement, Definition):
     columns: List[Union[ColumnDef, Ellipsis]]
     methods: list
 
+
+@dataclass
+class TableDefFromExpr(Statement, Definition):
+    name: str
+    expr: Expr
+    const: bool
+
+
 @dataclass
 class StructDef(Statement, Definition):
     name: str

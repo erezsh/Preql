@@ -17,10 +17,13 @@ from .types_impl import dp_inst, flatten_type, elem_dict
 from .casts import _cast
 from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
 
-@dataclass
-class Table(Object):
-    type: Type
-    name: str
+class AutocompleteSuggestions(Exception):
+    pass
+
+# @dataclass
+# class Table(Object):
+#     type: Type
+#     name: str
 
 @dy
 def cast_to_instance(state, x: list):
@@ -131,7 +134,7 @@ def _expand_ellipsis(state, table, fields):
                 elems = elem_dict(table.type)
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
-                        raise AutocompleteSuggestions({k:v for k, v in elems.items()
+                        raise AutocompleteSuggestions({k:(0, v) for k, v in elems.items()
                                                       if k not in direct_names
                                                       and k not in f.value.exclude})
 
@@ -795,11 +798,15 @@ def compile_to_inst(state: State, param: ast.Parameter):
 
 @dy
 def compile_to_inst(state: State, attr: ast.Attr):
-    inst = evaluate(state, attr.expr)
-
     if isinstance(attr.name, ast.Marker):
-        raise AutocompleteSuggestions(inst.all_attrs())
+        if attr.expr:
+            inst = evaluate(state, attr.expr)
+            attrs = {k:(0,v) for k, v in inst.all_attrs().items()}
+        else:
+            attrs = {}
+        raise AutocompleteSuggestions(attrs)
 
+    inst = evaluate(state, attr.expr)
     try:
         return evaluate(state, inst.get_attr(attr.name))
     except exc.pql_AttributeError as e:
@@ -847,12 +854,10 @@ def guess_field_name(f: ast.FuncCall):
     return guess_field_name(f.func)
 
 
-class AutocompleteSuggestions(Exception):
-    pass
 @dy
 def compile_to_inst(state: State, marker: ast.Marker):
-    ns = state.get_all_vars()
-    raise AutocompleteSuggestions(ns)
+    all_vars = state.get_all_vars_with_rank()   # Uses overridden version of AcState
+    raise AutocompleteSuggestions(all_vars)
 
 @dy
 def compile_to_inst(state: State, range: ast.Range):

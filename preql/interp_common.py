@@ -102,6 +102,9 @@ class State:
     def get_all_vars(self):
         return self.ns.get_all_vars()
 
+    def get_all_vars_with_rank(self):
+        return self.ns.get_all_vars_with_rank()
+
     def get_var(self, name):
         try:
             return self.ns.get_var(name)
@@ -170,6 +173,14 @@ class Namespace:
         d = {}
         for scope in reversed(self.ns):
             d.update(scope) # Overwrite upper scopes
+        return d
+
+    def get_all_vars_with_rank(self):
+        d = {}
+        for i, scope in enumerate(reversed(self.ns)):
+            for k, v in scope.items():
+                if k not in d:
+                    d[k] = i, v
         return d
 
 
