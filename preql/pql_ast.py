@@ -44,7 +44,7 @@ class ResolveParameters(Expr):
     type = Ast  # XXX Not the place!
 
 @dataclass
-class ResolveParametersString(Expr):
+class ParameterizedSqlCode(Expr):
     type: Object
     string: Object
     # values: Dict[str, Object]

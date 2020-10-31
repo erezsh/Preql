@@ -124,11 +124,14 @@ def _execute(state: State, table_def: ast.TableDef):
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
-            t = t({**t.elems, **elems_to_add})
+            # TODO what is primary key isn't included?
+            t = t({**t.elems, **elems_to_add}, **cur_type.options)
 
         # Auto-add id only if it exists already and not defined by user
-        if 'id' in cur_type.elems and 'id' not in t.elems:
-            t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
+        if 'id' in cur_type.elems: #and 'id' not in t.elems:
+            # t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
+            assert cur_type.elems['id'] <= T.int
+            t.elems['id'] = T.t_id
 
         for e_name, e1_type in t.elems.items():
 
@@ -825,7 +828,7 @@ def evaluate(state, obj_):
     # - Apply operations that read or write the database (delete, insert, update, one, etc.)
     obj = apply_database_rw(state, obj)
 
-    assert not isinstance(obj, (ast.ResolveParameters, ast.ResolveParametersString)), obj
+    assert not isinstance(obj, (ast.ResolveParameters, ast.ParameterizedSqlCode)), obj
 
     return obj
 

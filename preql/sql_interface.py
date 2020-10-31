@@ -211,7 +211,6 @@ class SqliteInterface(SqlInterface):
     ))
 
     def import_table_type(self, state, name, columns_whitelist=None):
-
         columns_q = """pragma table_info('%s')""" % name
         sql_columns = self._execute_sql(self.table_schema_type, columns_q, state)
 
@@ -223,7 +222,9 @@ class SqliteInterface(SqlInterface):
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
-        return T.table(cols, name=name)
+        pk = [[c['name']] for c in sql_columns if c['pk']]
+
+        return T.table(cols, name=name, pk=pk)
 
 class DuckInterface(SqliteInterface):
     target = duck

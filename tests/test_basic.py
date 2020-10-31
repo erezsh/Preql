@@ -1049,6 +1049,21 @@ class BasicTests(PreqlTests):
             assert (one one A{d}) == 3.14
         """)
 
+    @uses_tables('A')
+    def test_partial_table2(self):
+        p = self.Preql()
+        p("""
+            table A = [1, 2, 3]
+
+            A = null
+        """)
+        assert p.A is None
+
+        p("""
+            table A {...}
+            new A(10)
+        """)
+
 
     @skip("Not ready yet")
     def test_self_reference(self):

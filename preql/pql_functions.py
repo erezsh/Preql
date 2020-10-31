@@ -61,7 +61,7 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     # .. why not just compile with parameters? the types are already known
-    return ast.ResolveParametersString(None, result_type, sql_code)
+    return ast.ParameterizedSqlCode(None, result_type, sql_code)
 
 def pql_force_eval(state: State, expr: T.object):
     "Force evaluation of expression. Execute any db queries necessary."
@@ -177,6 +177,27 @@ def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() 
     name = state.unique_name("temp")    # TODO get name from table options
 
     return new_table_from_expr(state, name, expr, const, True)
+
+# def pql_bfs(state: State, edges: T.collection, initial: T.collection):
+#     edges = cast_to_instance(state, edges)
+#     initial = cast_to_instance(state, initial)
+#     breakpoint()
+
+    # from = edges.columns["src"]
+    # to = edges.columns["dst"]
+
+    # t = TableType(get_alias(state, "bfs"))
+    # add_column(t, ColumnType("edge", PrimitiveType(Int)))
+    # results = instanciate_table(state, t, sql"<<dummy>>", [edges, initial])  # XXX need a better method for this
+    # idx_inst = results.columns["edge"]
+
+    # with_sql = Sql("SELECT * FROM ($(initial.code.text)) UNION SELECT e.$(to.code.text) FROM ($(edges.code.text)) e JOIN bfs ON e.$(from.code.text) = bfs.node")
+    # select_sql = Sql("SELECT bfs.node AS $(idx_inst.code.text) FROM bfs")
+
+    # results = alias_instance(select_sql, results)
+
+    # push!(results.with_queries, ("bfs(node)", Instance(with_sql, PrimitiveType(Int), [initial, edges]))) # XXX slightly hacky
+    # add_with!(state, results)
 
 
 def pql_get_db_type(state: State):

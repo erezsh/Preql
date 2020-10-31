@@ -17,7 +17,7 @@ table primes {
 }
 
 // Return highest prime number, or null if empty
-func get_last_prime() = one? primes order {^num}[..1]
+func get_last_prime() = first_or_null(primes{num} order {^num})
 
 func find_primes() {
     // Init primes if empty
@@ -26,7 +26,7 @@ func find_primes() {
     }
 
     // Search for primes, starting with the last one found
-    n = get_last_prime().num
+    n = get_last_prime()
     while (true) {
         n = n + 1
         // Can 'n' be divided by any other prime?

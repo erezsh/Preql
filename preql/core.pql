@@ -56,6 +56,24 @@ func first(obj: collection) {
     }
 }
 
+func first_or_null(obj: collection) {
+    "Return the first member of a column or a list, or null if it's empty"
+
+    if (isa(obj, aggregate)) {
+        return SQL(type(obj).elem, "($obj)")
+    } else {
+        obj = list(obj)
+        if (isa(obj, list)) {
+            row = one? obj{ => item: first(item) }     // Recursive
+            if (row == null) {
+                return null
+            }
+            return one row
+        }
+    }
+}
+
+
 
 func count_false(field: collection) {
     "Count how many values in the field are false or zero"
@@ -245,4 +263,15 @@ func remove_tables(tables) {
     for (table in tables) {
         SQL(nulltype, "DROP TABLE $table")
     }
+}
+
+func bfs(edges: table, initial: table) {
+    """Performs a breadth-first search on a graph
+
+        Parameters:
+            edges - a table of type {src: int, dst: int}, defining the edges of the graph
+            initial - list[int], specifies from which nodes to start
+    """
+    bfs = SQL(list[int], "SELECT * FROM $initial UNION SELECT e.dst FROM $edges e JOIN $self bfs ON e.src = bfs.item")
+    return SQL(list[int], "SELECT bfs.item FROM $bfs bfs")
 }

@@ -38,7 +38,7 @@ def cast_to_instance(state, x):
     except exc.ReturnSignal:
         raise Signal.make(T.CompileError, state, None, f"Bad compilation of {x}")
 
-    if isinstance(inst, ast.ResolveParametersString):
+    if isinstance(inst, ast.ParameterizedSqlCode):
         raise exc.InsufficientAccessLevel(inst)
 
     if not isinstance(inst, AbsInstance):
@@ -679,9 +679,7 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
 
 
 @dy
-def compile_to_inst(state: State, rps: ast.ResolveParametersString):
-    # TODO Create CompiledSQL
-
+def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
     sql_code = cast_to_python(state, rps.string)
     if not isinstance(sql_code, str):
         raise Signal.make(T.TypeError, state, rps, f"Expected string, got '{rps.string}'")
@@ -690,6 +688,11 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
     if isinstance(type_, objects.Instance):
         type_ = type_.type
     assert isinstance(type_, Type), type_
+    name = state.unique_name("subq_")
+    if type_ <= T.table:
+        self_table = objects.new_table(type_, name)
+    else:
+        self_table = None
 
     instances = []
     subqueries = SafeDict()
@@ -698,13 +701,18 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
     for m, t in tokens:
         if m:
             assert t[0] == '$'
-            obj = state.get_var(t[1:])
-            if isinstance(obj, Type) and obj.issubtype(T.table):
-                # This branch isn't strictly necessary
-                # It exists to create nicer SQL code output
-                inst = objects.new_table(obj)
+            if t == '$self':
+                if self_table is None:
+                    raise exc.Signal.make(T.TypeError, state, rps, f"$self is only available for queries that return a table")
+                inst = self_table
             else:
-                inst = cast_to_instance(state, obj)
+                obj = state.get_var(t[1:])
+                if isinstance(obj, Type) and obj <= T.table:
+                    # This branch isn't strictly necessary
+                    # It exists to create nicer SQL code output
+                    inst = objects.new_table(obj)
+                else:
+                    inst = cast_to_instance(state, obj)
 
             instances.append(inst)
             new_code += _resolve_sql_parameters(state, inst.code, wrap=bool(new_code), subqueries=subqueries).code
@@ -715,7 +723,6 @@ def compile_to_inst(state: State, rps: ast.ResolveParametersString):
     # TODO validation!!
     if type_ <= T.table:
         code = sql.CompiledSQL(type_, new_code, None, True, False)
-        name = state.unique_name("subq_")
 
         # TODO this isn't in the tests!
         fields = [sql.Name(c, path) for path, c in flatten_type(type_)]

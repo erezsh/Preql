@@ -276,7 +276,7 @@ class CollectionInstance(Instance):
 @dataclass
 class TableInstance(CollectionInstance):
     def __post_init__(self):
-        assert self.type <= T.table #and not self.type <= T.list, self.type
+        assert self.type <= T.table, self.type #and not self.type <= T.list, self.type
 
     @property
     def __columns(self):
@@ -444,7 +444,11 @@ class MapInstance(AbsStructInstance):
 
 class RowInstance(StructInstance):
     def primary_key(self):
-        return self.attrs['id']
+        try:
+            return self.attrs['id']
+        except KeyError:
+            # XXX this is a hack!
+            return list(self.attrs.values())[0]
 
     def repr(self, state):
         inner = [f'{name}: {v.repr(state)}' for name, v in self.attrs.items()]

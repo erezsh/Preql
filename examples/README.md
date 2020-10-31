@@ -3,6 +3,7 @@
 ## Basic
 
 - [primes.pql](primes.pql) - Fault-tolerant Primes Calculator
+- [tree.pql](tree.pql) - Recursive tree search using BFS
 
 
 ## Python integration
