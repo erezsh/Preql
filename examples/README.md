@@ -3,6 +3,9 @@
 ## Basic
 
 - [primes.pql](primes.pql) - Fault-tolerant Primes Calculator
+
+## Advanced
+
 - [tree.pql](tree.pql) - Recursive tree search using BFS
 
 

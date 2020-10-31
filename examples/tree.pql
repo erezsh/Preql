@@ -3,7 +3,7 @@
 //----------------------------------------
 //
 //  This example demonstrate how to perform a breadth-first search, up and down a tree structure.
-//  It uses the built-in `bfs()` function, which is defined in `core.pql`
+//  To do so, it defines a bfs() function
 //
 //  For example, run this from the examples folder:
 //
@@ -26,8 +26,15 @@ new Tree("Lion", mammal)
 new Tree("Fish", animal)
 
 
-// Define generic search function 'bfs' (copied from core.pql)
+// Define a generic graph search function 'bfs' (copied from core.pql)
 func bfs(edges: table, initial: table) {
+    """Performs a breadth-first search on a graph
+
+        Parameters:
+            edges - a table of type {src: int, dst: int}, defining the edges of the graph
+            initial - list[int], specifies from which nodes to start
+    """
+    // Use SQL's native recursion syntax, using the special $self variable
     bfs = SQL(list[int], "SELECT * FROM $initial UNION SELECT e.dst FROM $edges e JOIN $self bfs ON e.src = bfs.item")
     return SQL(list[int], "SELECT bfs.item FROM $bfs bfs")
 }
