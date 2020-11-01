@@ -40,29 +40,49 @@ func bfs(edges: table, initial: table) {
 }
 
 // Define Tree-specific search functions
-func path_to_root(initial: table) {
-    "Find all nodes connecting the given nodes to the root (all ancestors)"
-    search_results = bfs(Tree{src: id, dst: parent}, initial{id})
-    return join(_: search_results.item, t: Tree.id){t.id, t.value}
+
+func get_trees(ids: list[int]) {
+    "Return a list of tree rows from a given list of ids"
+    return join(_: ids.item, t: Tree.id){
+        t.id
+        t.value
+    }
 }
 
-func tree_bfs(initial: table) {
+func find_path_to_root(initial: table) {
+    "Find all nodes connecting the given nodes to the root (all ancestors)"
+    edges = Tree{
+        src: id
+        dst: parent
+    }
+    path_to_root = bfs(edges, initial{id})
+    return get_trees(path_to_root)
+}
+
+func find_descendants(initial: table) {
     "Find all descendants of given nodes"
-    search_results = bfs(Tree{src: parent, dst: id}, initial{id})
-    return join(_: search_results.item, t: Tree.id){t.id, t.value}
+    edges = Tree{
+        src: parent
+        dst: id
+    }
+    descendants_ids = bfs(edges, initial{id})[item !in initial{id}]
+    return get_trees(descendants_ids)
 }
 
 func is_a(a: string, b: string) {
     "Return whether or not 'a' is a descendant of 'b'"
     initial = Tree[value==a]
-    return b in path_to_root(initial){value}
+    return b in find_path_to_root(initial){value}
 }
 
 func common_ancestors(a: string, b: string) {
     "Find the common ancestors of 'a' and 'b'"
-    path_a = path_to_root(Tree[value==a])
-    path_b = path_to_root(Tree[value==b])
-    return join( a: path_a.id, b: path_b.id ){a.id, a.value}
+    path_a = find_path_to_root(Tree[value==a])
+    path_b = find_path_to_root(Tree[value==b])
+    return join( a: path_a.id, b: path_b.id ){
+        a.id
+        a.value
+    }
 }
 
 
@@ -81,11 +101,23 @@ func print_most_common_ancestor(a, b) {
     if (not mca) {
         mca = "<not found>"
     }
-    print fmt("The common ancestors of $a and $b is $mca")
+    print fmt("The common root of $a and $b is $mca")
 }
 
+func print_hierarchy() {
+    // Uses the builtin `walk_tree()` function, which is defined similarly to `bfs()`
+    // This is all done with a single SQL statement.
+    roots = Tree[parent==null]
+    edges = Tree{src: parent, dst: id}
+    nodes_by_rank = walk_tree(edges, roots{id}, 1000)
+    print join(r: nodes_by_rank.id, t: Tree.id) {
+        hierarchy: repeat(" ", r.rank*2) + t.value
+    }
+}
 
 func test() {
+    print_hierarchy()
+
     print_isa("Dog", "Animal")
     print_isa("Dog", "Mammal")
     print_isa("Fish", "Mammal")
@@ -93,7 +125,7 @@ func test() {
 
     print ""
     print "List of mammals:"
-    for (m in tree_bfs(Tree[value=="Mammal"])[1..]) {
+    for (m in find_descendants(Tree[value=="Mammal"])) {
         print "  * " + m.value
     }
 
@@ -105,3 +137,33 @@ func test() {
 }
 
 test()
+
+
+//         Output
+//--------------------------
+//
+//         table  =6
+// ┌────────────────────────┐
+// │ hierarchy              │
+// ├────────────────────────┤
+// │ Animal                 │
+// │   Mammal               │
+// │     Dog                │
+// │       Golden Retriever │
+// │     Lion               │
+// │   Fish                 │
+// └────────────────────────┘
+// A Dog is a Animal
+// A Dog is a Mammal
+// A Fish is not a Mammal
+// A Dog is not a Lion
+
+// List of mammals:
+//   * Dog
+//   * Golden Retriever
+//   * Lion
+
+// The common root of Dog and Lion is Mammal
+// The common root of Dog and Mammal is Mammal
+// The common root of Dog and Fish is Animal
+// The common root of Dog and Alien is <not found>

@@ -46,6 +46,10 @@ def _cast(state, inst_type: T.t_id, target_type: T.int, inst):
     return inst.replace(type=T.int)
 
 @dp_type
+def _cast(state, inst_type: T.int, target_type: T.t_id, inst):
+    return inst.replace(type=target_type)
+
+@dp_type
 def _cast(state, inst_type: T.union[T.float, T.bool], target_type: T.int, inst):
     if state.db.target is sql.mysql:
         t = "signed integer"
