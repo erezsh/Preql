@@ -903,8 +903,7 @@ def compile_type_def(state, table_name, table) -> Sql:
 
     pks = {join_names(pk) for pk in table.options['pk']}
     for name, c in flatten_type(table):
-        if name in pks:
-            assert c <= T.t_id
+        if name in pks and c <= T.t_id:
             if target == postgres:
                 type_ = "SERIAL" # Postgres
             elif target == mysql:

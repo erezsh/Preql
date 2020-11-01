@@ -146,7 +146,10 @@ def _execute(state: State, table_def: ast.TableDef):
         inst = objects.new_table(t, table_def.name, select_fields=True)
     else:
         # Auto-add id by default
-        t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
+        elems = dict(t.elems)
+        if 'id' not in elems:
+            elems = {'id': T.t_id, **elems}
+        t = t(elems, pk=[['id']])
         inst = objects.new_table(t, table_def.name)
 
     state.set_var(table_def.name, inst)
@@ -491,12 +494,11 @@ def eval_func_call(state, func, args):
     for i, (p, a) in enumerate(matched_args):
         a = evaluate(state, a)
         # TODO cast?
-        if p.type and not a.type <= p.type:
+        if p.type and not a.type <= T.union[p.type, T.vectorized[p.type]]:
             raise Signal.make(T.TypeError, state, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
         args[p.name] = a
 
 
-    # if isinstance(func, objects.UserFunction):
     if isinstance(func, objects.InternalFunction):
         # TODO ensure pure function?
         # TODO Ensure correct types
@@ -540,10 +542,10 @@ def eval_func_call(state, func, args):
         with state.use_scope(args):
             res = _call_expr(state, expr)
 
-            if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
-                raise exc.InsufficientAccessLevel()
+        if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
+            raise exc.InsufficientAccessLevel()
 
-            return res
+        return res
 
 
 def _call_expr(state, expr):

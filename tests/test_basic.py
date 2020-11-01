@@ -1205,6 +1205,12 @@ class BasicTests(PreqlTests):
         assert a_type != t  # different order
         assert a_type.elems == t.elems
 
+    def test_repeat(self):
+        p = self.Preql()
+        res = p('[1,2,3]{repeat("a", item)}')
+        assert res == [{'repeat': "a"*i} for i in range(1,4)], res
+
+
 class TestTypes(PreqlTests):
     def test_types(self):
         assert T.int == T.int
