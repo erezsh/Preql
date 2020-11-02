@@ -1,5 +1,7 @@
 .. image:: logo.png
 
+|
+
 .. toctree::
    :maxdepth: 2
    :caption: Overview
