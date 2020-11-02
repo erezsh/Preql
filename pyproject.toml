@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "prql"
-version = "0.1.8"
+version = "0.1.11"
 description = "An interpreted relational query language that compiles to SQL"
 authors = ["Erez Shin <erezshin@gmail.com>"]
 license = "Interface-Protection Clause + MIT"
@@ -24,7 +24,7 @@ packages = [{ include = "preql" }]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-lark-parser = "^0.10.0"
+lark-parser = "^0.11.0rc1"
 runtype = "^0.1.4"
 dsnparse = "*"
 tqdm = "*"
@@ -34,6 +34,7 @@ rich = "*"
 
 psycopg2 = { version = "*", optional = true }
 mysqlclient = { version = "*", optional = true }
+starlette = { version = "*", optional = true }
 
 [tool.poetry.extras]
 mysql = ["mysqlclient"]

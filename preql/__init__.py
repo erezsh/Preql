@@ -4,4 +4,4 @@ from .api import Preql
 from .exceptions import Signal
 
 import importlib.metadata as importlib_metadata
-__version__ = importlib_metadata.version("preql")
+__version__ = importlib_metadata.version("prql")
