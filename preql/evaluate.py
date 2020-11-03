@@ -368,6 +368,8 @@ def simplify(state: State, cb: ast.CodeBlock):
         if e.type <= T.CastError:
             return compile_to_instance(state, cb)
         raise
+    except InsufficientAccessLevel:
+        return cb
 
 @dy
 def simplify(state: State, n: ast.Name):

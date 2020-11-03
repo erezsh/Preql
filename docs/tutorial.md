@@ -115,6 +115,34 @@ int
 type
 ```
 
+Preql also has lists, which are essentially a table with a single column called `item`:
+
+```javascript
+ >> my_list = [1,2,3]
+ table
+   =3
+┏━━━━━━┓
+┃ item ┃
+┡━━━━━━┩
+│    1 │
+│    2 │
+│    3 │
+└──────┘
+ >> count(my_list + [4,5,6])
+6
+ >> names(my_list)
+   table  =1
+┏━━━━━━┳━━━━━━┓
+┃ name ┃ type ┃
+┡━━━━━━╇━━━━━━┩
+│ item │ int  │
+└──────┴──────┘
+ >> type(my_list)
+list[int]
+ >> type(["a", "b", "c"])
+list[string]
+```
+
 ## Functions
 
 Declare functions using func:
@@ -129,12 +157,36 @@ func sign(x) {
     return -1
   }
 }
-
+>> sign(-100)
+-1
 >> sign(100)
 1
 ```
 
-!!!!! TODO  !!!!!  doesn't work when vectorized!
+You can also use them in table operations!
+
+```javascript
+ >> [-20, 0, 30]{ sign(item) }
+ table
+   =3
+┏━━━━━━┓
+┃ sign ┃
+┡━━━━━━┩
+│   -1 │
+│    0 │
+│    1 │
+└──────┘
+```
+
+Here is the SQL that was executed:
+
+```SQL
+WITH list_12([item]) AS (VALUES (-20), (0), (30))
+   , subq_14([sign]) AS (SELECT CASE WHEN ([item] = 0) THEN 0 ELSE CASE WHEN ([item] > 0) THEN 1 ELSE -1 END  END  AS [sign] FROM [list_12])
+SELECT * FROM [subq_14]
+```
+
+Note: Functions with side-effects or I/O operations aren't allowed as table operations, due to SQL's limitations.
 
 There's also a shorthand for "one-liners":
 

@@ -1210,6 +1210,29 @@ class BasicTests(PreqlTests):
         res = p('[1,2,3]{repeat("a", item)}')
         assert res == [{'repeat': "a"*i} for i in range(1,4)], res
 
+    def test_vectorized_logic(self):
+        p = self.Preql()
+        p("""
+        func sign(x) {
+            if (x == 0) {
+                return 0
+            } else if (x > 0) {
+                return 1
+            } else {
+                return -1
+            }
+        }
+
+        """)
+        assert p.sign(-1) == -1
+        assert p.sign(0) == 0
+        assert p.sign(1) == 1
+
+        res = p('list([-2..3]{sign(item)})')
+        assert res == [-1, -1, 0, 1, 1], res
+
+
+
 
 class TestTypes(PreqlTests):
     def test_types(self):
