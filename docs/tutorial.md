@@ -52,6 +52,21 @@ Hello World!
 
 Alternatively, we could do `preql -f helloworld.pql`.
 
+We can also use Preql as a Python library:
+
+```python
+# In the Python interpreter
+from preql import Preql
+p = Preql()
+p('''
+  func my_range(x) = [1..x]
+''')
+print(p.my_range(8))
+# Output:
+# [1, 2, 3, 4, 5, 6, 7]
+```
+
+
 ## Basic Expressions
 
 Preql has integers, floats and strings. They behave similarly to Python
@@ -149,7 +164,13 @@ table Point {
 }
 ```
 
-This statement creates a persistent table in your database (if you are connected to one. The default database resides in memory and isn't persistent)
+This statement creates a persistent table named `Point` in your database (if you are connected to one. The default database resides in memory and isn't persistent). The executed SQL looks like this:
+
+```SQL
+CREATE TABLE IF NOT EXISTS "Point" ("id" INTEGER, "x" FLOAT NOT NULL, "y" FLOAT NOT NULL, PRIMARY KEY (id))
+```
+
+If the table `Point` already exists, it will instead verify that the new definition is a subset of the existing one. That is, that all the columns defined in it exist in the current table, and with the correct type.
 
 For this tutorial, let's create a table that's little more meaningful, and populate it with values:
 
@@ -164,7 +185,9 @@ nauru = new Country("Nauru", 11000)
 new Country("Tuvalu", 10200)
 ```
 
-We assigned the newly created rows to variables, but they also exist independently.
+`new` accepts its parameters in the order that they were defined in the table. However, it's also possible to use named arguments, such as `new Point(y:10, x:1)`.
+
+In the above example, we assigned the newly created rows to variables. But they also exist independently in the table.
 
 We can see that the `Country` table has three rows:
 
@@ -175,7 +198,7 @@ We can see that the `Country` table has three rows:
 
 The `new` statements inserted our values into an SQL table, and `count()` ran the following query: `SELECT COUNT(*) FROM Country`
 
-(Note: You can see every SQL statement that's executed by starting the REPL with the `-d` switch.)
+(Note: You can see every SQL statement that's executed by starting the REPL with the `--print-sql` switch.)
 
 We can also observe the variables, or the entire table:
 
@@ -262,9 +285,14 @@ table Country_proj58, count=3
    3  Tuvalu         10201  5100.5
 ```
 
-Notice that Preql creates a new table type for each projection.
+Notice that Preql creates a new table type for each projection. Therefore, the fields that aren't included in the projection, won't be available afterwards.
 
-Therefor, the fields that aren't included in the projection, won't be available afterwards.
+However these are only types, and not actual tables. To create a persistent table, we can write:
+
+```javascript
+table half_population = Country{..., half(population)}
+```
+
 
 **Aggregation** looks a lot like projection, and lets us aggregate information:
 
@@ -305,7 +333,7 @@ table list_int_proj37, count=2
 **Ordering** lets us sort the rows into a new table.
 
 ```javascript
->> Country order {population}
+>> Country order {population} // Sort ascending
 table Country, count=3
   id  name      population
 ----  ------  ------------
@@ -313,7 +341,7 @@ table Country, count=3
    2  Nauru          11000
    1  Palau          17900
 
->> Country order {^name}
+>> Country order {^name}      // Sort descending (^)
 table Country, count=3
   id  name      population
 ----  ------  ------------
