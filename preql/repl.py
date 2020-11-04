@@ -59,10 +59,8 @@ class Autocompleter(Completer):
         if not settings.autocomplete:
             return
 
-        if context:
-            open_complete = context.rstrip()[-1] in '.{['
-        else:
-            open_complete = False
+        context = context.rstrip()
+        open_complete = context and context[-1] in '.{['
         if not fragment and not open_complete:
             return
 
@@ -144,6 +142,25 @@ def _code_is_valid(code):
     return True
 
 
+from pygments.style import Style
+from pygments.token import Keyword, Name, Comment, String, Error, Number, Operator, Generic
+from prompt_toolkit.styles.pygments import style_from_pygments_cls
+
+class PreqlStyle(Style):
+    default_style = ""
+    styles = {
+        Generic:                'ansigray',
+        Comment:                'italic #888',
+        Keyword:                'bold #005',
+        Name:                   '#fff',
+        Name.Function:          'bold #8f8',
+        Name.Class:             'bold #0f0',
+        String:                 'ansigreen',
+        Number:                 'ansicyan',
+        Operator:               'ansigray',
+        Error:                  'bg:ansired ansigray',
+    }
+
 def start_repl(p, prompt=' >> '):
     save_last = '_'   # XXX A little hacky
 
@@ -154,6 +171,7 @@ def start_repl(p, prompt=' >> '):
 
     try:
         session = PromptSession(
+            style=style_from_pygments_cls(PreqlStyle),
             lexer=PygmentsLexer(GoLexer),
             completer=Autocompleter(p.interp.state),
             # key_bindings=kb

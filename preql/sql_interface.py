@@ -1,11 +1,11 @@
 from decimal import Decimal
-from .utils import dataclass
+from .utils import classify, dataclass
 from .loggers import sql_log
 
 from .sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck
 from . import exceptions
 
-from .pql_types import T, Type, Object
+from .pql_types import T, Type, Object, Id
 from .types_impl import from_sql
 
 
@@ -73,6 +73,12 @@ class SqlInterface:
     def close(self):
         self._conn.close()
 
+    def import_table_types(self, state):
+        tables = self.list_tables()
+        for table_name in tables:
+            table_type = self.import_table_type(state, table_name)
+            yield None, table_name, table_type
+
 
 
 def log_sql(sql):
@@ -130,7 +136,7 @@ class MysqlInterface(SqlInterface):
 
         cols = {c['name']: _type_from_sql(c['type'].decode(), c['nullable']) for c in sql_columns}
 
-        return T.table(cols, name=name)
+        return T.table(cols, name=Id(name))
 
 
 class PostgresInterface(SqlInterface):
@@ -138,6 +144,8 @@ class PostgresInterface(SqlInterface):
 
     def __init__(self, host, port, database, user, password, print_sql=False):
         import psycopg2
+        import psycopg2.extras
+        psycopg2.extensions.set_wait_callback(psycopg2.extras.wait_select)
         try:
             self._conn = psycopg2.connect(host=host, port=port, database=database, user=user, password=password)
         except psycopg2.OperationalError as e:
@@ -156,21 +164,22 @@ class PostgresInterface(SqlInterface):
         return self._execute_sql(T.list[T.string], sql_code, None)
 
 
+    _schema_columns_t = T.table(dict(
+        schema=T.string,
+        table=T.string,
+        name=T.string,
+        pos=T.int,
+        nullable=T.bool,
+        type=T.string,
+    ))
+
     def import_table_type(self, state, name, columns_whitelist=None):
 
-        columns_t = T.table(dict(
-            schema=T.string,
-            table=T.string,
-            name=T.string,
-            pos=T.int,
-            nullable=T.bool,
-            type=T.string,
-        ))
         columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
             FROM information_schema.columns
             WHERE table_name = '%s'
             """ % name
-        sql_columns = self._execute_sql(columns_t, columns_q, state)
+        sql_columns = self._execute_sql(self._schema_columns_t, columns_q, state)
 
         if columns_whitelist:
             wl = set(columns_whitelist)
@@ -180,7 +189,24 @@ class PostgresInterface(SqlInterface):
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
-        return T.table(cols, name=name)
+        return T.table(cols, name=Id(name))
+
+    def import_table_types(self, state):
+        columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
+            FROM information_schema.columns
+            """
+        sql_columns = self._execute_sql(self._schema_columns_t, columns_q, state)
+
+        columns_by_table = classify(sql_columns, lambda c: (c['schema'], c['table']))
+
+        for (schema, table_name), columns in columns_by_table.items():
+            cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in columns]
+            cols.sort()
+            cols = dict(c[1:] for c in cols)
+
+            # name = '%s.%s' % (schema, table_name)
+            yield schema, table_name, T.table(cols, name=Id(schema, table_name))
+
 
 
 class SqliteInterface(SqlInterface):
@@ -224,7 +250,7 @@ class SqliteInterface(SqlInterface):
 
         pk = [[c['name']] for c in sql_columns if c['pk']]
 
-        return T.table(cols, name=name, pk=pk)
+        return T.table(cols, name=Id(name), pk=pk)
 
 class DuckInterface(SqliteInterface):
     target = duck
@@ -300,7 +326,7 @@ class GitInterface(SqliteInterface):
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
-        return T.table(cols, name=name)
+        return T.table(cols, name=Id(name))
 
     def list_tables(self):
         # TODO merge with superclass?

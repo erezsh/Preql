@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from datetime import datetime
+from rich import table
 
 import rich.table
 import rich.markup
@@ -9,6 +10,7 @@ from . import pql_ast as ast
 from . import pql_types as types
 from . import pql_objects as objects
 from . import exceptions as exc
+from .utils import classify
 from .interpreter import Interpreter
 from .evaluate import cast_to_python, localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
@@ -129,7 +131,10 @@ def table_repr(self, state, offset=0):
 
     has_more = offset + len(rows) < count
 
-    table_name = self.type.options.get('name', '')
+    try:
+        table_name = self.type.options['name'].repr_name
+    except KeyError:
+        table_name = ''
 
     if state.fmt == 'html':
         return _html_table(table_name, count_str, rows, offset)
@@ -325,12 +330,23 @@ class Preql:
             new_table_from_rows(self.interp.state, name, cols, rows)
 
     def load_all_tables(self):
-        tables = self.interp.state.db.list_tables()
-        for table_name in tables:
-            table_type = self.interp.state.db.import_table_type(self.interp.state, table_name)
-            inst = objects.new_table(table_type, table_name)
-            if not self.interp.has_var(table_name):
-                self.interp.set_var(table_name, inst)
+        table_types = self.interp.state.db.import_table_types(self.interp.state)
+        table_types_by_schema = classify(table_types, lambda x: x[0], lambda x: x[1:])
+
+        for schema_name, table_types in table_types_by_schema.items():
+            if schema_name:
+                schema = objects.Module(schema_name, {})
+                self.interp.set_var(schema_name, schema)
+
+            for table_name, table_type in table_types:
+                db_name = table_type.options['name']
+                inst = objects.new_table(table_type, db_name)
+
+                if schema_name:
+                    schema.namespace[table_name] = inst
+                else:
+                    if not self.interp.has_var(table_name):
+                        self.interp.set_var(table_name, inst)
 
 
 

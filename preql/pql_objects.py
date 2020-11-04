@@ -559,7 +559,8 @@ def new_table(type_, name=None, instances=None, select_fields=False):
         cls = ListInstance
     else:
         cls = TableInstance
-    inst = cls.make(sql.TableName(type_, name or type_.options.get('name', 'anon')), type_, instances or [])
+    name = name if name else type_.options.get('name', sql.Id('anon'))
+    inst = cls.make(sql.TableName(type_, name), type_, instances or [])
 
     if select_fields:
         code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in elem_dict(type_).items()])

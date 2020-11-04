@@ -12,7 +12,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Object, Type, union_types
+from .pql_types import T, Object, Type, union_types, Id
 from .types_impl import dp_inst, flatten_type, elem_dict
 from .casts import _cast
 from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
@@ -690,7 +690,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
     assert isinstance(type_, Type), type_
     name = state.unique_name("subq_")
     if type_ <= T.table:
-        self_table = objects.new_table(type_, name)
+        self_table = objects.new_table(type_, Id(name))
     else:
         self_table = None
 
@@ -729,7 +729,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
 
         subq = sql.Subquery(name, fields, code)
 
-        inst = objects.new_table(type_, name, instances)
+        inst = objects.new_table(type_, Id(name), instances)
         inst.subqueries[name] = subq
         return inst
 
@@ -882,5 +882,5 @@ def compile_to_inst(state: State, range: ast.Range):
     skip = 1
     code = f"SELECT {start} AS item UNION ALL SELECT item+{skip} FROM {name}{stop_str}"
     subq = sql.Subquery(name, [], sql.RawSql(type_, code))
-    code = sql.TableName(type_, name)
+    code = sql.TableName(type_, Id(name))
     return objects.ListInstance(code, type_, SafeDict({name: subq}))

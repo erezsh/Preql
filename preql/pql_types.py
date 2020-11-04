@@ -11,6 +11,19 @@ from .utils import dataclass
 
 global_methods = {}
 
+class Id:
+    def __init__(self, *parts):
+        assert all(isinstance(p, str) for p in parts), parts
+        self.parts = parts
+    def __str__(self):
+        raise Exception("Operation not allowed!")
+    def __hash__(self):
+        raise Exception("Operation not allowed!")
+    @property
+    def repr_name(self):
+        return self.parts[-1]
+
+
 def _repr_type_elem(t, depth):
     return _repr_type(t, depth-1) if isinstance(t, Type) else repr(t)
 

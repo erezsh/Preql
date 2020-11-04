@@ -58,7 +58,8 @@ def eval_autocomplete(state, td: ast.TableDefFromExpr, go_inside):
 @dy
 def eval_autocomplete(state, td: ast.TableDef, go_inside):
     t = resolve(state, td)
-    state.set_var(t.options['name'], objects.TableInstance.make(sql.unknown, t, []))
+    n ,= t.options['name'].parts
+    state.set_var(n, objects.TableInstance.make(sql.unknown, t, []))
 
 @dy
 def eval_autocomplete(state, fd: ast.FuncDef, go_inside):

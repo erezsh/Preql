@@ -137,6 +137,17 @@ def classify_bool(seq, pred):
 benchmark = Benchmark()
 
 
+def classify(seq, key=None, value=None):
+    d = {}
+    for item in seq:
+        k = key(item) if (key is not None) else item
+        v = value(item) if (value is not None) else item
+        if k in d:
+            d[k].append(v)
+        else:
+            d[k] = [v]
+    return d
+
 
 
 @dataclass

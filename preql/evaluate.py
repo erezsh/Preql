@@ -31,9 +31,8 @@ from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
 from .compiler import compile_to_instance, cast_to_instance, unvectorize_args
-from .pql_types import T, Type, Object
+from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
-
 
 
 @dy
@@ -45,7 +44,7 @@ def resolve(state: State, struct_def: ast.StructDef):
 
 @dy
 def resolve(state: State, table_def: ast.TableDef):
-    t = T.table({}, name=table_def.name)
+    t = T.table({}, name=Id(table_def.name))
 
     with state.use_scope({table_def.name: t}):  # For self-reference
         elems = {c.name: resolve(state, c) for c in table_def.columns}
@@ -143,14 +142,14 @@ def _execute(state: State, table_def: ast.TableDef):
             # if not (e1_type <= e2_type or (e1_type <= T.t_id and e2_type <= T.int)):
             #     raise Signal.make(T.TypeError, state, table_def, f"Cannot cast column '{e_name}' from type '{e2_type}' to '{e1_type}'")
 
-        inst = objects.new_table(t, table_def.name, select_fields=True)
+        inst = objects.new_table(t, Id(table_def.name), select_fields=True)
     else:
         # Auto-add id by default
         elems = dict(t.elems)
         if 'id' not in elems:
             elems = {'id': T.t_id, **elems}
         t = t(elems, pk=[['id']])
-        inst = objects.new_table(t, table_def.name)
+        inst = objects.new_table(t, Id(table_def.name))
 
     state.set_var(table_def.name, inst)
 
@@ -923,7 +922,7 @@ def new_table_from_rows(state, name, columns, rows):
     # TODO refactor into function?
     elems = {c:v.type.as_nullable() for c,v in zip(columns, tuples[0])}
     elems['id'] = T.t_id
-    table = T.table(elems, temporary=True, pk=[['id']], name=name)
+    table = T.table(elems, temporary=True, pk=[['id']], name=Id(name))
 
     db_query(state, sql.compile_type_def(state, name, table))
 
@@ -944,7 +943,7 @@ def new_table_from_expr(state, name, expr, const, temporary):
     if 'id' in elems and not const:
         raise Signal.make(T.NameError, state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
 
-    table = T.table(dict(elems), name=name, pk=[] if const else [['id']], temporary=temporary)
+    table = T.table(dict(elems), name=Id(name), pk=[] if const else [['id']], temporary=temporary)
 
     if not const:
         table.elems['id'] = T.t_id
@@ -953,7 +952,7 @@ def new_table_from_expr(state, name, expr, const, temporary):
 
     read_only, flat_columns = table_flat_for_insert(table)
     expr = exclude_fields(state, expr, set(read_only) & set(elems))
-    db_query(state, sql.Insert(name, flat_columns, expr.code), expr.subqueries)
+    db_query(state, sql.Insert(Id(name), flat_columns, expr.code), expr.subqueries)
 
     return objects.new_table(table)
 

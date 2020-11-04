@@ -14,10 +14,10 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 
-from .interp_common import State, call_pql_func, new_value_instance, dy, exclude_fields, assert_type
+from .interp_common import State, new_value_instance, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr
-from .pql_types import T, Type, union_types
-from .types_impl import Object_repr, table_flat_for_insert, join_names
+from .pql_types import T, Type, union_types, Id
+from .types_impl import join_names
 from .casts import _cast
 
 def new_str(x):
@@ -298,7 +298,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
                     for name, t in safezip(exprs, tables)
                     for pk in t.type.options.get('pk', [])
                 ]
-    table_type = T.table(structs, name=state.unique_name("joinall" if joinall else "join"), pk=primary_keys)
+    table_type = T.table(structs, name=Id(state.unique_name("joinall" if joinall else "join")), pk=primary_keys)
 
     conds = [] if joinall else [sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip(structs, cols)])]
 

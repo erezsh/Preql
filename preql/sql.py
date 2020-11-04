@@ -2,7 +2,7 @@ from typing import List, Optional, Dict
 
 from .utils import dataclass, X, listgen, field_list
 from . import pql_types
-from .pql_types import ITEM_NAME, T, Type, dp_type
+from .pql_types import ITEM_NAME, T, Type, dp_type, Id
 from .types_impl import join_names, flatten_type
 
 
@@ -37,12 +37,11 @@ class QueryBuilder:
 
     def safe_name(self, base):
         "Return a name that is safe for use as variable. Must be consistent (pure func)"
-        # if base.lower() in _reserved:
-        if self.target == sqlite:
-            return '[%s]' % base
-        else:
-            # return '"%s"' % base
-            return _quote(self.target, base)
+        return _quote(self.target, base)
+
+    def quote(self, id_):
+        assert isinstance(id_, Id)
+        return '.'.join(self.safe_name(n) for n in id_.parts)
 
 
 
@@ -202,14 +201,13 @@ class EmptyList(Table):
     def _compile(self, qb):
         return ['SELECT NULL AS VALUE LIMIT 0']
 
-
 @dataclass
 class TableName(Table):
     type: Type
-    name: str
+    name: Id
 
     def _compile(self, qb):
-        return [qb.safe_name(self.name)]
+        return [qb.quote(self.name)]
 
     _needs_select = True
 
@@ -480,17 +478,17 @@ class ColumnAlias(SqlTree):
 
 @dataclass
 class Insert(SqlTree):
-    table_name: str
+    table_name: Id
     columns: List[str]
     query: Sql
     type = T.nulltype
 
     def _compile(self, qb):
-        return [f'INSERT INTO {_quote(qb.target, self.table_name)}({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
+        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
         if qb.target is mysql:
-            sql_code = f'INSERT INTO {_quote(qb.target, self.table_name)}({", ".join(self.columns)}) '
+            sql_code = f'INSERT INTO {qb.quote(self.table_name)}({", ".join(self.columns)}) '
             sql_code += self.query.finalize_with_subqueries(qb, subqueries)
             return ''.join(sql_code)
 
@@ -783,13 +781,13 @@ def updates_by_ids(table, proj, ids):
 def create_list(list_type, name, elems):
     fields = [Name(list_type.elem, ITEM_NAME)]
     subq = Subquery(name, fields, Values(list_type, elems))
-    table = TableName(list_type, name)
+    table = TableName(list_type, Id(name))
     return table, subq
 
 def create_table(table_type, name, rows):
     fields = [Name(col_type, col_name) for col_name, col_type in table_type.elems.items()]
     subq = Subquery(name, fields, Values(table_type, rows))
-    table = TableName(table_type, name)
+    table = TableName(table_type, Id(name))
     return table, subq
 
 def table_slice(table, start, stop):
@@ -887,7 +885,10 @@ def add_one(x):
     return Arith('+', [x, make_value(1)])
 
 def _quote(target, name):
-    if target is mysql:
+    assert isinstance(name, str)
+    if target is sqlite:
+        return f'[{name}]'
+    elif target is mysql:
         return f'`{name}`'
     else:
         return f'"{name}"'
