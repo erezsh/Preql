@@ -437,6 +437,10 @@ def _compare(state, ast_node, a: T.int, b: T.aggregate):
 
 @dp_inst
 def _compare(state, op, a: T.type, b: T.type):
+    if op == '<=':
+        return call_pql_func(state, "issubclass", [a, b])
+    if op != '=':
+        raise exc.Signal.make(T.NotImplementedError, state, op, f"Cannot compare types using: {op}")
     return new_value_instance(a == b)
 
 @dp_inst

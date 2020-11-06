@@ -72,11 +72,13 @@ def pql_repr(state, t: T.decimal, value):
 
 @dp_type
 def pql_repr(state, t: T.string, value):
+    assert isinstance(value, str), value
     value = value.replace('"', r'\"')
     return f'"{value}"'
 
 @dp_type
 def pql_repr(state, t: T.text, value):
+    assert isinstance(value, str), value
     return str(value)
 
 @dp_type

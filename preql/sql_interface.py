@@ -40,9 +40,9 @@ class SqlInterface:
             return from_sql(state, Const(sql_type, res))
 
     def _execute_sql(self, sql_type, sql_code, state):
-        c = self._conn.cursor()
 
         try:
+            c = self._conn.cursor()
             c.execute(sql_code)
             # c.execute(sql_code, qargs)    # XXX messes up when sql_code contains '%', like for LIKE
         except Exception as e:
