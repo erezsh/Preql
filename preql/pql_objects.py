@@ -4,7 +4,7 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
-from .utils import dataclass, SafeDict, X, listgen
+from .utils import dataclass, SafeDict, X, listgen, dy
 from .exceptions import pql_AttributeError, Signal
 from . import settings
 from . import pql_ast as ast
@@ -528,6 +528,24 @@ def unvectorized(inst):
     return inst.replace(type=inst.type.elem)
 
 
+@dy
+def unvectorize_args(x: list):
+    if not x:
+        return False, x
+    was_vec, objs = zip(*[unvectorize_args(i) for i in x])
+    return any(was_vec), list(objs)
+
+@dy
+def unvectorize_args(x: AbsInstance):
+    if x.type <= T.vectorized:
+        return True, unvectorized(x)
+    return False, x
+
+@dy
+def unvectorize_args(x):
+    return False, x
+
+
 null = ValueInstance.make(sql.null, T.nulltype, [], None)
 
 @dataclass
@@ -595,3 +613,4 @@ def from_python(value):
         elems = {k:from_python(v) for k,v in value.items()}
         return ast.Dict_(None, elems)
     assert False, value
+

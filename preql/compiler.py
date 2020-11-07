@@ -14,8 +14,8 @@ from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
 from .pql_types import T, Object, Type, union_types, Id
 from .types_impl import dp_inst, flatten_type, elem_dict
-from .casts import _cast
-from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
+from .casts import cast
+from .pql_objects import AbsInstance, vectorized, make_instance
 
 class AutocompleteSuggestions(Exception):
     pass
@@ -47,22 +47,6 @@ def cast_to_instance(state, x):
     return inst
 
 
-@dy
-def unvectorize_args(x: list):
-    if not x:
-        return False, x
-    was_vec, objs = zip(*[unvectorize_args(i) for i in x])
-    return any(was_vec), list(objs)
-
-@dy
-def unvectorize_args(x: AbsInstance):
-    if x.type <= T.vectorized:
-        return True, unvectorized(x)
-    return False, x
-
-@dy
-def unvectorize_args(x):
-    return False, x
 
 @dy
 def compile_to_instance(state, obj: AbsInstance):
@@ -84,7 +68,7 @@ def compile_to_instance(state, obj: ast.Expr):
     for k, v in attrs.items():
         if k in obj._args:
             if v:
-                was_vec, args_attrs[k] = unvectorize_args( evaluate(state, v) )
+                was_vec, args_attrs[k] = objects.unvectorize_args( evaluate(state, v) )
                 if was_vec:
                     any_was_vec = True
     attrs.update(args_attrs)
@@ -170,7 +154,7 @@ def compile_to_inst(state: State, cb: ast.CodeBlock):
     raise Signal.make(T.CompileError, state, cb, "Cannot compile this code block")
 @dy
 def compile_to_inst(state: State, i: ast.If):
-    cond = cast_to_instance(state, i.cond)
+    cond = cast(state, cast_to_instance(state, i.cond), T.bool)
     then = cast_to_instance(state, i.then)
     else_ = cast_to_instance(state, i.else_)
     code = sql.Case(cond.code, then.code, else_.code)
@@ -307,21 +291,21 @@ def compile_to_inst(state: State, lst: list):
 @dy
 def compile_to_inst(state: State, o: ast.Or):
     args = cast_to_instance(state, o.args)
-    args_bool = [_cast(state, a.type, T.bool, a) for a in args]
+    args_bool = [cast(state, a, T.bool) for a in args]
     code = sql.LogicalBinOp("OR", [a.code for a in args_bool])
     return objects.make_instance(code, T.bool, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
-    args_bool = [_cast(state, a.type, T.bool, a) for a in args]
+    args_bool = [cast(state, a, T.bool) for a in args]
     code = sql.LogicalBinOp("AND", [a.code for a in args_bool])
     return objects.make_instance(code, T.bool, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.Not):
     expr = cast_to_instance(state, o.expr)
-    expr_bool = _cast(state, expr.type, T.bool, expr)
+    expr_bool = cast(state, expr, T.bool)
     code = sql.LogicalNot(expr_bool.code)
     return objects.make_instance(code, T.bool, [expr])
 
@@ -349,9 +333,9 @@ def _contains(state, op, a: T.string, b: T.string):
 
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.collection):
-    b_list = _cast(state, b.type, T.list, b)
+    b_list = cast(state, b, T.list)
     if not (a.type <= b_list.type.elem):
-        a = _cast(state, a.type, b_list.type.elem, a)
+        a = cast(state, a, b_list.type.elem)
         # raise Signal.make(T.TypeError, state, op, f"Error in contains: Mismatch between {a.type} and {b.type}")
 
     if op == '!in':

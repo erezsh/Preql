@@ -89,3 +89,10 @@ def _cast(state, inst_type: T.t_relation, target_type: T.t_id, inst):
     # TODO verify same table? same type?
     return inst.replace(type=target_type)
 
+
+def cast(state, obj, t):
+    was_vec, [obj, t] = objects.unvectorize_args([obj, t])
+    res = _cast(state, obj.type, t, obj)
+    if was_vec:
+        res = objects.vectorized(res)
+    return res

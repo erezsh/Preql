@@ -4,16 +4,13 @@ from logging import getLogger
 
 import dsnparse
 
-from runtype import Dispatch
-
 from . import pql_ast as ast
 from . import pql_objects as objects
+from .utils import dy
 from .exceptions import Signal
 from .exceptions import InsufficientAccessLevel
 from .pql_types import Type, T
 from .sql_interface import (ConnectError, DuckInterface, GitInterface, MysqlInterface, PostgresInterface, SqliteInterface)
-
-dy = Dispatch()
 
 logger = getLogger('interp')
 
@@ -233,3 +230,4 @@ def call_pql_func(state, name, args):
 
 
 new_value_instance = objects.new_value_instance
+

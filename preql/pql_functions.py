@@ -18,7 +18,7 @@ from .interp_common import State, new_value_instance, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr
 from .pql_types import T, Type, union_types, Id
 from .types_impl import join_names
-from .casts import _cast
+from .casts import cast
 
 def new_str(x):
     return new_value_instance(str(x), T.string)
@@ -78,7 +78,7 @@ def pql_fmt(state: State, s: T.string):
             assert t[0] == '$'
             obj = state.get_var(t[1:])
             inst = cast_to_instance(state, obj)
-            as_str = _cast(state, inst.type, T.string, inst)
+            as_str = cast(state, inst, T.string)
             string_parts.append(as_str)
         elif t:
             string_parts.append(objects.new_value_instance(t))
@@ -383,7 +383,7 @@ def pql_cast(state: State, inst: T.any, type: T.type):
     if inst.type is type_:
         return inst
 
-    return _cast(state, inst.type, type_, inst)
+    return cast(state, inst, type_)
 
 
 def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = objects.null):

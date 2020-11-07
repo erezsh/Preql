@@ -832,6 +832,28 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql("one A[id==2]{x}"), {'x': "hello\nworld"} )
 
 
+    def test_nonzero(self):
+        preql = self.Preql()
+        preql(r'''
+            func f(x) {
+                if (x) {
+                    return "YES"
+                } else {
+                    return "NO"
+                }
+            }
+
+            func apply_to_list(lst) = list(lst{f(item)})
+        ''')
+
+        assert preql.f(1) == "YES"
+        assert preql.f(0) == "NO"
+        assert preql.f("a") == "YES"
+        assert preql.f("") == "NO"
+
+        assert preql.apply_to_list([0, 1]) == ["NO", "YES"]
+        self.assertEqual( preql.apply_to_list(["", "a"]) , ["NO", "YES"] )
+
 
     @uses_tables('A')
     def test_column_default(self):
