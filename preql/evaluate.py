@@ -412,29 +412,31 @@ def simplify(state: State, x):
 # TODO Optimize these, right now failure to evaluate will lose all work
 @dy
 def simplify(state: State, obj: ast.Or):
-    for expr in obj.args:
-        inst = evaluate(state, expr)
-        try:
-            nz = test_nonzero(state, inst)
-        except InsufficientAccessLevel:
-            return obj
-        if nz:
-            return objects.new_value_instance(True)
+    a, b = evaluate(state, obj.args)
+    _, (ta, tb) = objects.unvectorize_args([a,b])
+    if ta.type != tb.type:
+        raise Signal.make(T.TypeError, state, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
+    try:
+        if test_nonzero(state, a):
+            return a
+    except InsufficientAccessLevel:
+        return obj
+    return b
 
-    return objects.new_value_instance(False)
 
 @dy
 def simplify(state: State, obj: ast.And):
-    for expr in obj.args:
-        inst = evaluate(state, expr)
-        try:
-            nz = test_nonzero(state, inst)
-        except InsufficientAccessLevel:
-            return obj
-        if not nz:
-            return objects.new_value_instance(False)
+    a, b = evaluate(state, obj.args)
+    _, (ta, tb) = objects.unvectorize_args([a,b])
+    if ta.type != tb.type:
+        raise Signal.make(T.TypeError, state, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
+    try:
+        if not test_nonzero(state, a):
+            return a
+    except InsufficientAccessLevel:
+        return obj
+    return b
 
-    return objects.new_value_instance(True)
 
 @dy
 def simplify(state: State, obj: ast.Not):

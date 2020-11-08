@@ -291,16 +291,22 @@ def compile_to_inst(state: State, lst: list):
 @dy
 def compile_to_inst(state: State, o: ast.Or):
     args = cast_to_instance(state, o.args)
-    args_bool = [cast(state, a, T.bool) for a in args]
-    code = sql.LogicalBinOp("OR", [a.code for a in args_bool])
-    return objects.make_instance(code, T.bool, args)
+    a, b = args
+    if a.type != b.type:
+        raise Signal.make(T.TypeError, state, o, f"'or' operator requires both arguments to be of the same type")
+    cond = cast(state, a, T.bool)
+    code = sql.Case(cond.code, a.code, b.code)
+    return objects.make_instance(code, a.type, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
-    args_bool = [cast(state, a, T.bool) for a in args]
-    code = sql.LogicalBinOp("AND", [a.code for a in args_bool])
-    return objects.make_instance(code, T.bool, args)
+    a, b = args
+    if a.type != b.type:
+        raise Signal.make(T.TypeError, state, o, f"'and' operator requires both arguments to be of the same type")
+    cond = cast(state, a, T.bool)
+    code = sql.Case(cond.code, b.code, a.code)
+    return objects.make_instance(code, a.type, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.Not):

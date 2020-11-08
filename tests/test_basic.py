@@ -168,28 +168,57 @@ class BasicTests(PreqlTests):
         preql = self.Preql()
         assert preql('1==0 or isa(1, int)')
         assert not preql('1==0 or isa(1, float)')
-        res = preql('[0,1,2,3][item < 2]{r: item or ""}')
+        res = preql('[0,1,2,3][item < 2]{r: item or 0}')
         assert res == [{'r': 0}, {'r': 1}], res
-        res = preql('[0,1,2,3][item < 2]{r: item or "a"}')
-        assert res == [{'r': 1}, {'r': 1}], res
+        res = preql('[0,1,2,3][item < 2]{r: item or 10}')
+        assert res == [{'r': 10}, {'r': 1}], res
 
         res = preql('[0,1,2,3]{r: item > 1 and item < 3}[r]')
         assert res == [{'r': 1}], res
         res = preql('[0,1,2,3]{r: item < 3, item}[not r]')
         assert res == [{'r': 0, 'item': 3}], res
 
-    def test_vectorized(self):
+        self.assertRaises(Signal, preql, '"hello" or 1') # XXX TypeError
+
+        assert preql('"hello" or "a"') == "hello"
+        assert preql('"hello" and "a"') == "a"
+        assert preql('"hello" and ""') == ""
+        assert preql('"" and "hello"') == ""
+        assert preql('"" or "hello"') == "hello"
+        assert preql('"" or "hello"') == "hello"
+        assert preql('"bla" and "hello"') == "hello"
+
+        assert preql('1 or 2 or 3') == 1
+        assert preql('1 and 2 and 3') == 3
+        assert preql('1 and 2 or 3') == 2
+        assert preql('1 or 2 and 3') == 1
+
+
+    def test_vectorized_logic2(self):
         preql = self.Preql()
         assert preql(' ["hello"]{item[..1]} ') == [{'_': 'h'}]
-        res = preql('["hello"]{string(item) or 1}')
-        assert res == [{'_': True}], res
-        res = preql('["hello"]{string(item) and 1}')
-        assert res == [{'_': True}], res
-        res = preql('["hello"]{string(item) and 0}')
-        assert res == [{'_': False}], res
-        res = preql('[""]{string(item) or 0}')
-        assert res == [{'_': False}], res
 
+        self.assertRaises(Signal, preql, '["hello"]{item or 1}')    # XXX TypeError
+
+        res = preql('["hello"]{item or "a"}')
+        assert res == [{'_': "hello"}], res
+        res = preql('["hello"]{item and "a"}')
+        assert res == [{'_': "a"}], res
+        res = preql('["hello"]{item and ""}')
+        assert res == [{'_': ""}], res
+        res = preql('[""]{item or "a"}')
+        assert res == [{'_': "a"}], res
+        res = preql('[""]{item and "a"}')
+        assert res == [{'_': ""}], res
+        res = preql('[""]{item or ""}')
+        assert res == [{'_': ""}], res
+        res = preql('[""]{item and ""}')
+        assert res == [{'_': ""}], res
+
+        res = preql('["hello"]{item or "a" and "b"}')
+        assert res == [{'_': "hello"}], res
+        res = preql('["hello"]{item and "a" or "b"}')
+        assert res == [{'_': "a"}], res
 
 
 
