@@ -4,7 +4,7 @@ from .exceptions import Signal, pql_AttributeError
 
 from .base import Object
 from .utils import dataclass, listgen, concat_for, classify_bool
-from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst
+from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst, from_python
 
 
 def Object_repr(self, state):
@@ -116,6 +116,9 @@ def from_sql(state, res: T.primitive):
         item ,= row
     except ValueError:
         raise Signal.make(T.TypeError, state, None, "Expected primitive. Got: '%s'" % res.value)
+    # t = from_python(type(item))
+    # if not (t <= res.type):
+    #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
     return item
 
 def _from_datetime(state, s):

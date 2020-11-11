@@ -16,7 +16,7 @@ from . import sql
 
 from .interp_common import State, new_value_instance, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr
-from .pql_types import T, Type, union_types, Id
+from .pql_types import T, Type, union_types, Id, common_type
 from .types_impl import join_names
 from .casts import cast
 
@@ -213,23 +213,34 @@ def pql_get_db_type(state: State):
 
 
 
-def sql_bin_op(state, op, t1, t2, name):
+def sql_bin_op(state, op, t1, t2, name, additive=False):
 
     if not isinstance(t1, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, state, table1, f"First argument isn't a table, it's a {t1.type}")
+        raise Signal.make(T.TypeError, state, t1, f"First argument isn't a table, it's a {t1.type}")
     if not isinstance(t2, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, state, table2, f"Second argument isn't a table, it's a {t2.type}")
+        raise Signal.make(T.TypeError, state, t2, f"Second argument isn't a table, it's a {t2.type}")
 
-    # TODO Smarter matching
+    # TODO Smarter matching?
     l1 = len(t1.type.elems)
     l2 = len(t2.type.elems)
     if l1 != l2:
         raise Signal.make(T.TypeError, state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
     code = sql.TableArith(op, [t1.code, t2.code])
-    # TODO union_types([t1.type, t2.type]) should take care of everything
-    # t = T.list[union_types([t1.type.elem, t2.type.elem])]
-    return type(t1).make(code, t1.type, [t1, t2])
+
+    # TODO Make this generic, instead of ad-hoc and patchy
+    if additive:
+        assert len(t1.type.elems) == len(t1.type.elems)
+        t_elems = tuple(map(union_types, zip(t1.type.elems, t2.type.elems)))
+        if t1.type.typename == t2.type.typename == 'list':
+            t = T.list
+            assert len(t_elems) == 1
+        else:
+            t = T.table
+        t = t(elems=t_elems)
+    else:
+        t = t1.type
+    return type(t1).make(code, t, [t1, t2])
 
 def pql_table_intersect(state: State, t1: T.collection, t2: T.collection):
     "Intersect two tables. Used for `t1 & t2`"
@@ -243,11 +254,11 @@ def pql_table_substract(state: State, t1: T.collection, t2: T.collection):
 
 def pql_table_union(state: State, t1: T.collection, t2: T.collection):
     "Union two tables. Used for `t1 | t2`"
-    return sql_bin_op(state, "UNION", t1, t2, "union")
+    return sql_bin_op(state, "UNION", t1, t2, "union", True)
 
 def pql_table_concat(state: State, t1: T.collection, t2: T.collection):
     "Concatenate two tables (union all). Used for `t1 + t2`"
-    return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
+    return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate", True)
 
 
 
