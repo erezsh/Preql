@@ -95,7 +95,6 @@ def db_query(state: State, sql_code, subqueries=None):
         raise Signal.make(T.DbQueryError, state, None, e.args[0]) from e
 
 
-from .types_impl import elem_dict
 @dy
 def _execute(state: State, table_def: ast.TableDefFromExpr):
     expr = cast_to_instance(state, table_def.expr)
@@ -936,7 +935,7 @@ def new_table_from_rows(state, name, columns, rows):
 
 
 def new_table_from_expr(state, name, expr, const, temporary):
-    elems = expr.type.elem_dict
+    elems = expr.type.elems
 
     if any(t <= T.unknown for t in elems.values()):
         return objects.TableInstance.make(sql.null, expr.type, [])

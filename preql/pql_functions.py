@@ -226,21 +226,13 @@ def sql_bin_op(state, op, t1, t2, name, additive=False):
     if l1 != l2:
         raise Signal.make(T.TypeError, state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
+    for e1, e2 in zip(t1.type.elems.values(), t2.type.elems.values()):
+        if not (e2 <= e1):
+            raise Signal.make(T.TypeError, state, None, f"Cannot {name}. Column types don't match: '{e1}' and '{e2}'")
+
     code = sql.TableArith(op, [t1.code, t2.code])
 
-    # TODO Make this generic, instead of ad-hoc and patchy
-    if additive:
-        assert len(t1.type.elems) == len(t1.type.elems)
-        t_elems = tuple(map(union_types, zip(t1.type.elems, t2.type.elems)))
-        if t1.type.typename == t2.type.typename == 'list':
-            t = T.list
-            assert len(t_elems) == 1
-        else:
-            t = T.table
-        t = t(elems=t_elems)
-    else:
-        t = t1.type
-    return type(t1).make(code, t, [t1, t2])
+    return type(t1).make(code, t1.type, [t1, t2])
 
 def pql_table_intersect(state: State, t1: T.collection, t2: T.collection):
     "Intersect two tables. Used for `t1 & t2`"
@@ -296,7 +288,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     assert all((t.type <= T.collection) for t in tables)
 
-    structs = {name: T.struct(table.type.elem_dict) for name, table in safezip(exprs, tables)}
+    structs = {name: T.struct(table.type.elems) for name, table in safezip(exprs, tables)}
 
     # Update nullable for left/right/outer joins
     if nullable:
@@ -352,7 +344,7 @@ def _auto_join(state, join, ta, tb):
 @listgen
 def _find_table_reference(t1, t2):
     # XXX TODO need to check TableType too (owner)?
-    for name, c in t1.type.elem_dict.items():
+    for name, c in t1.type.elems.items():
         if (c <= T.t_relation):
             if c.elem == t2.type:
                 # TODO depends on the query XXX

@@ -115,14 +115,6 @@ class Type(Object):
             return self.elems.values()
         return self.elems
 
-    @property
-    def elem_dict(self):
-        elems = self.elems
-        if isinstance(elems, tuple):
-            assert len(elems) == 1, self
-            elems = {ITEM_NAME: elems[0]}
-        return elems
-
     def issubtype(self, t):
         assert isinstance(t, Type), t
         if self.typename == 'union':
@@ -143,9 +135,12 @@ class Type(Object):
         return self.issubtype(other)
 
     def __getitem__(self, elems):
-        if not isinstance(elems, tuple):
-            elems = elems,
-        return self.replace(elems=tuple(elems))
+        if self is T.union or self is T.function:
+            elems = tuple(elems)
+        else:
+            assert not isinstance(elems, tuple), (self, elems)
+            elems = {ITEM_NAME: elems}
+        return self.replace(elems=elems)
 
     def __call__(self, elems=None, **options):
         return self.replace(elems=elems or self.elems, methods=dict(self.methods), options={**self.options, **options})

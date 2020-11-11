@@ -11,7 +11,7 @@ from . import pql_ast as ast
 from . import sql
 
 from .pql_types import ITEM_NAME, T, Type, Object
-from .types_impl import repr_value, flatten_type, join_names, elem_dict
+from .types_impl import repr_value, flatten_type, join_names
 
 # Functions
 @dataclass
@@ -280,11 +280,11 @@ class TableInstance(CollectionInstance):
 
     @property
     def __columns(self):
-        return {n:self.get_column(n) for n in elem_dict(self.type)}
+        return {n:self.get_column(n) for n in self.type.elems}
 
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
-        t = elem_dict(self.type)
+        t = self.type.elems
         return make_instance_from_name(t[name], name) #t.column_codename(name))
 
     def all_attrs(self):
@@ -294,7 +294,7 @@ class TableInstance(CollectionInstance):
 
     def get_attr(self, name):
         try:
-            v = elem_dict(self.type)[name]
+            v = self.type.elems[name]
             return SelectedColumnInstance(self, v, name)
         except KeyError:
             try:
@@ -333,7 +333,7 @@ class ListInstance(CollectionInstance):
 
 def make_instance_from_name(t, cn):
     if t <= T.struct:
-        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elem_dict.items()})
+        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elems.items()})
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
@@ -581,7 +581,7 @@ def new_table(type_, name=None, instances=None, select_fields=False):
     inst = cls.make(sql.TableName(type_, name), type_, instances or [])
 
     if select_fields:
-        code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in elem_dict(type_).items()])
+        code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in type_.elems.items()])
         inst = inst.replace(code=code)
 
     return inst

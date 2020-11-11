@@ -12,8 +12,8 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Object, Type, union_types, Id
-from .types_impl import dp_inst, flatten_type, elem_dict
+from .pql_types import T, Object, Type, union_types, Id, ITEM_NAME
+from .types_impl import dp_inst, flatten_type
 from .casts import cast
 from .pql_objects import AbsInstance, vectorized, make_instance
 
@@ -115,7 +115,13 @@ def _expand_ellipsis(state, table, fields):
             if f.name:
                 raise Signal.make(T.SyntaxError, state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
-                elems = elem_dict(table.type)
+                t = table.type
+                if t <= T.vectorized:
+                    # FIXME why is this needed here? probably shouldn't be
+                    elems = t.elem.elems
+                else:
+                    elems = t.elems
+
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
                         raise AutocompleteSuggestions({k:(0, v) for k, v in elems.items()
@@ -597,7 +603,7 @@ def compile_to_inst(state: State, lst: ast.List_):
     # return Instance(Sql(sql), ArrayType(type, false))
     # Or just evaluate?
 
-    if not lst.elems and tuple(lst.type.elems) == (T.any,):
+    if not lst.elems and tuple(lst.type.elems.values()) == (T.any,):
         # XXX a little awkward
         return objects.EmptyList
 
@@ -608,7 +614,7 @@ def compile_to_inst(state: State, lst: ast.List_):
     if not (elem_type <= T.union[T.primitive, T.nulltype]):
         raise Signal.make(T.TypeError, state, lst, "Cannot create lists of type %s" % elem_type)
 
-    assert elem_type <= lst.type.elems[0]
+    assert elem_type <= lst.type.elems[ITEM_NAME]
 
     list_type = T.list[elem_type]
     name = state.unique_name("list_")
