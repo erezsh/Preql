@@ -468,8 +468,8 @@ class ColumnAlias(SqlTree):
         alias = qb.safe_name(self.alias)
         value = self.value.compile_wrap(qb).code
         assert alias and value, (alias, value)
-        if value == alias:  # TODO disable when unoptimized?
-            return alias  # This is just for beauty, it's not necessary for function
+        if value == [alias]:  # TODO disable when unoptimized?
+            return value  # This is just for beauty, it's not necessary for function
 
         return value + [f' AS {alias}']
 

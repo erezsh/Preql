@@ -288,6 +288,9 @@ class GitInterface(SqliteInterface):
     def _execute_sql(self, sql_type, sql_code, state):
         try:
             res = subprocess.check_output(['askgit', '--format', 'json', sql_code])
+        except FileNotFoundError:
+            msg = "Could not find executable 'askgit'. Make sure it's installed, and try again."
+            raise exceptions.DatabaseQueryError(msg)
         except subprocess.CalledProcessError as e:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
             raise exceptions.DatabaseQueryError(msg%(sql_code, e))

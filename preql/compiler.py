@@ -13,7 +13,7 @@ from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
 from .pql_types import T, Object, Type, union_types, Id, ITEM_NAME
-from .types_impl import dp_inst, flatten_type
+from .types_impl import dp_inst, flatten_type, pql_repr
 from .casts import cast
 from .pql_objects import AbsInstance, vectorized, make_instance
 
@@ -42,7 +42,9 @@ def cast_to_instance(state, x):
         raise exc.InsufficientAccessLevel(inst)
 
     if not isinstance(inst, AbsInstance):
-        raise Signal.make(T.TypeError, state, None, f"Could not compile {inst}")
+        # TODO compile error? cast error?
+        # TODO need to be able to catch this above, and provide better errors
+        raise Signal.make(T.TypeError, state, None, f"Could not compile {pql_repr(state, inst.type, inst)}")
 
     return inst
 
@@ -84,7 +86,12 @@ def compile_to_instance(state, obj: ast.Expr):
 @listgen
 def _process_fields(state: State, fields):
     for f in fields:
-        v = cast_to_instance(state, f.value)
+        try:
+            v = cast_to_instance(state, f.value)
+        except Signal as e:
+            if e.type <= T.TypeError:
+                raise e.replace(message=f"Cannot use object of type '{evaluate(state, f.value).type}' in projection.")
+            raise
 
         # TODO proper error message
         # if not isinstance(v, objects.AbsInstance):

@@ -75,7 +75,7 @@ def pql_repr(state, t: T.function, value):
             s += ": %s" % p.type
         params.append(s)
 
-    return f'func {value.name}({", ".join(params)})'
+    return f'{{func {value.name}({", ".join(params)})}}'
 
 @dp_type
 def pql_repr(state, t: T.decimal, value):
