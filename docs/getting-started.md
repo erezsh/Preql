@@ -10,7 +10,7 @@ Install using pip:
     pip install -U prql
 ```
 
-## Run interpreter
+## Run interpreter in the console
 
 ```sh
     preql
@@ -18,7 +18,25 @@ Install using pip:
 
 Preql will use Sqlite's memory database by default.
 
+## Run in Jupyter Notebook
+
+First you need to install the plugin, using the following command:
+
+```sh
+    preql --install-jupyter
+```
+
+Then just run Jupyter Notebook as usual:
+```sh
+    jupyter notebook
+```
+
+And create a new notebook with the `Preql` kernel.
+
+
 ## Explore an existing database
+
+When you start the interpreter, you can specify which database to connect to.
 
 ```sh
     # Postgresql
@@ -28,10 +46,16 @@ Preql will use Sqlite's memory database by default.
     preql mysql://user:pass@host/dbname
 
     # Sqlite
-    preql sqlite://path/to/file'
+    preql sqlite:///path/to/file'
 ```
 
-When inside the Preql interactive prompt:
+When already inside the Preql interactive prompt, or in a Jupyter Notebook, use the `connect()` method.:
+
+```go
+    connect("sqlite:///path/to/file")
+```
+
+Use introspective methods to see a list of the tables, and of the available functions:
 
 ```go
     // Get a list of all tables in database
