@@ -193,6 +193,15 @@ class BasicTests(PreqlTests):
         assert preql('1 and 2 or 3') == 2
         assert preql('1 or 2 and 3') == 1
 
+    def test_basic2(self):
+        # More basic tests
+        preql = self.Preql()
+        z = preql('''
+            x = [1..4]
+            x[item == max(x)]
+        ''')
+        assert z == [3]
+
 
     def test_vectorized_logic2(self):
         preql = self.Preql()
