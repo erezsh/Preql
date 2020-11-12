@@ -808,11 +808,14 @@ def compile_to_inst(state: State, attr: ast.Attr):
             attrs = {}
         raise AutocompleteSuggestions(attrs)
 
+    if not attr.expr:
+        raise Signal.make(T.NotImplementedError, state, attr, "Implicit attribute syntax not supported")
+
     inst = evaluate(state, attr.expr)
     try:
         return evaluate(state, inst.get_attr(attr.name))
     except exc.pql_AttributeError as e:
-        raise Signal.make(T.AttributeError, state, attr, e.message) from e
+        raise Signal.make(T.AttributeError, state, attr, e.message)
 
 
 
@@ -864,8 +867,12 @@ def compile_to_inst(state: State, marker: ast.Marker):
 @dy
 def compile_to_inst(state: State, range: ast.Range):
     start = cast_to_python(state, range.start) if range.start else 0
+    if not isinstance(start, int):
+        raise Signal.make(T.TypeError, state, range, "Range must be between integers")
     if range.stop:
         stop = cast_to_python(state, range.stop)
+        if not isinstance(stop, int):
+            raise Signal.make(T.TypeError, state, range, "Range must be between integers")
         stop_str = f" WHERE item+1<{stop}"
     else:
         if state.db.target is sql.mysql:

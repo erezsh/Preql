@@ -202,6 +202,14 @@ class BasicTests(PreqlTests):
         ''')
         assert z == [3]
 
+        try:
+            assert preql('["a".."c"]') == ['a', 'b', 'c']
+        except Signal:
+            # TypeError for now
+            pass
+
+        self.assertRaises(Signal, preql, '[min..]')    # XXX TypeError
+
 
     def test_vectorized_logic2(self):
         preql = self.Preql()

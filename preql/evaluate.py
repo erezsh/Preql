@@ -961,6 +961,10 @@ def new_table_from_expr(state, name, expr, const, temporary):
 
 
 
+@dy
+def cast_to_python(state, obj):
+    raise Signal.make(T.TypeError, state, None, f"Unexpected value: {pql_repr(state, obj.type, obj)}")
+
 
 @dy
 def cast_to_python(state, obj: ast.Ast):

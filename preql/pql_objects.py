@@ -383,7 +383,7 @@ class AbsStructInstance(AbsInstance):
         if name in self.attrs:
             return self.attrs[name]
         else:
-            raise pql_AttributeError(attr)
+            raise pql_AttributeError(name)
 
     @property
     def code(self):

@@ -108,7 +108,7 @@ func lower(s: string) {
 
 func length(s: string) {
     "Return the length of the string"
-    return SQL(string, "length($s)")
+    return SQL(int, "length($s)")
 }
 
 func round(n: number) {
@@ -293,4 +293,33 @@ func walk_tree(edges: table, initial: table, max_rank: int) {
     }
     bfs = SQL(node, "SELECT *, 0 FROM $initial UNION ALL SELECT e.dst, bfs.rank+1 FROM $edges e JOIN $self bfs ON e.src = bfs.id WHERE bfs.rank < $max_rank")
     return SQL(node, "SELECT bfs.id, bfs.rank FROM $bfs bfs")
+}
+
+
+func range(lst: list, start: union[int, function], end: union[int, function]) {
+    "Produce a range of numbers as rows for each item in the list, based on `start` and `end`"
+	if (isa(start, int)) {
+		s = start
+	} else if (isa(start, function)) {
+		s = min(lst{start(item)})
+	}
+
+	if (isa(end, int)) {
+		e = end
+	} else if (isa(end, function)) {
+		e = max(lst{end(item)}) + 1
+	}
+	r = [s..e]
+
+	mul = joinall(l: lst, i: r) {i: i.item, l.item }
+
+	if (isa(start, function)) {
+		mul = mul[i >= start(item)]
+	}
+
+	if (isa(end, function)) {
+		mul = mul[i <= end(item)]
+	}
+
+	return mul
 }

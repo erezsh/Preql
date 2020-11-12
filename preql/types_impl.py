@@ -67,6 +67,17 @@ def pql_repr(state, t: T.object, value):
     return repr(value)
 
 @dp_type
+def pql_repr(state, t: T.function, value):
+    params = []
+    for p in value.params:
+        s = p.name
+        if p.type:
+            s += ": %s" % p.type
+        params.append(s)
+
+    return f'func {value.name}({", ".join(params)})'
+
+@dp_type
 def pql_repr(state, t: T.decimal, value):
     raise Signal.make(T.NotImplementedError, state, None, "Decimal not implemented")
 
