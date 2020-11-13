@@ -116,9 +116,6 @@ class TreeToAst(Transformer):
 
     @with_meta
     def pql_dict(self, meta, items):
-        # if not all(item.name for item in items):
-        #     # TODO autocomplete names in some situations, like in projection
-        #     raise pql_SyntaxError([meta], "Dict expects all items to have keys")
         d = {}
         for item in items:
             name = item.name or guess_field_name(item.value)
@@ -166,17 +163,14 @@ class TreeToAst(Transformer):
     def _arith_expr(self, a, op, b):
         return ast.Arith(op, [a,b])
 
-    def or_test(self, a, b):
-        return ast.Or([a, b])
-
-    def and_test(self, a, b):
-        return ast.And([a, b])
-
-    not_test = ast.Not
-
     add_expr = _arith_expr
     term = _arith_expr
     power = _arith_expr
+
+    and_test = no_inline(ast.And)
+    or_test = no_inline(ast.Or)
+
+    not_test = ast.Not
 
     neg = ast.Neg
     like = ast.Like
@@ -256,8 +250,6 @@ class TreeToAst(Transformer):
         return ast.Marker()
 
     def table_def_from_expr(self, const, name, table_expr):
-        # c = objects.from_python(bool(const == 'const'))
-        # return ast.SetValue(ast.Name(name), ast.FuncCall(ast.Name(meta, 'temptable'), [table_expr, c]))
         return ast.TableDefFromExpr(name, table_expr, const == 'const')
 
     codeblock = no_inline(ast.CodeBlock)
@@ -290,7 +282,7 @@ class Postlexer:
 
 # Prevent expressions like (1and1) or (1ina)
 # Changing these terminals in the grammar will prevent collision detection
-# Waiting on irregular!
+# Waiting on interregular!
 from lark.lexer import PatternRE
 _operators = ['IN', 'NOT_IN', 'AND', 'OR']
 def _edit_terminals(t):
@@ -307,7 +299,6 @@ parser = Lark.open(
     propagate_positions=True,
     cache=True,
     edit_terminals=_edit_terminals,
-    # transformer=T()
 )
 
 
