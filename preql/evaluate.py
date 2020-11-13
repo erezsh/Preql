@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 
 from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type, exclude_fields, call_pql_func
+from .interp_common import assert_type, exclude_fields, call_pql_func, is_global_scope
 from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
@@ -44,7 +44,14 @@ def resolve(state: State, struct_def: ast.StructDef):
 
 @dy
 def resolve(state: State, table_def: ast.TableDef):
-    t = T.table({}, name=Id(table_def.name))
+    name = table_def.name
+    if is_global_scope(state):
+        temporary = False
+    else:
+        name = '__local_' + state.unique_name(name)
+        temporary = True
+
+    t = T.table({}, name=Id(name), temporary=temporary)
 
     with state.use_scope({table_def.name: t}):  # For self-reference
         elems = {c.name: resolve(state, c) for c in table_def.columns}
@@ -98,7 +105,13 @@ def db_query(state: State, sql_code, subqueries=None):
 @dy
 def _execute(state: State, table_def: ast.TableDefFromExpr):
     expr = cast_to_instance(state, table_def.expr)
-    t = new_table_from_expr(state, table_def.name, expr, table_def.const, False)
+    name = table_def.name
+    if is_global_scope(state):
+        temporary = False
+    else:
+        name = '__local_' + state.unique_name(name)
+        temporary = True
+    t = new_table_from_expr(state, name, expr, table_def.const, temporary)
     state.set_var(table_def.name, t)
 
 @dy
@@ -939,7 +952,6 @@ def new_table_from_expr(state, name, expr, const, temporary):
 
     if any(t <= T.unknown for t in elems.values()):
         return objects.TableInstance.make(sql.null, expr.type, [])
-
 
     if 'id' in elems and not const:
         raise Signal.make(T.NameError, state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")

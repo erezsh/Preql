@@ -121,8 +121,6 @@ class State:
     def use_scope(self, scope: dict):
         return self.ns.use_scope(scope)
 
-
-
     def unique_name(self, obj):
         self.tick[0] += 1
         return obj + str(self.tick[0])
@@ -160,11 +158,11 @@ class Namespace:
             self.ns.pop()
             assert x == len(self.ns)
 
-    def push_scope(self):
-        self.ns.append({})
+    # def push_scope(self):
+    #     self.ns.append({})
 
-    def pop_scope(self):
-        return self.ns.pop()
+    # def pop_scope(self):
+    #     return self.ns.pop()
 
     def get_all_vars(self):
         d = {}
@@ -231,3 +229,7 @@ def call_pql_func(state, name, args):
 
 new_value_instance = objects.new_value_instance
 
+
+def is_global_scope(state):
+    assert len(state.ns.ns)
+    return len(state.ns.ns) == 1
