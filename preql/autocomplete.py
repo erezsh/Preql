@@ -75,7 +75,7 @@ def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
                     pass
 
     finally:
-        cb = ast.CodeBlock(None, [ast.Return(None, objects.unknown)])
+        cb = ast.CodeBlock([ast.Return(objects.unknown)])
         state.set_var(f.name, f.replace(expr=cb))
 
 @dy

@@ -1,4 +1,5 @@
 from typing import List, Any, Optional, Dict, Union
+from dataclasses import field
 
 from .utils import dataclass, TextReference, field_list
 from .pql_types import Type, Object
@@ -10,7 +11,11 @@ from .types_impl import repr_value
 
 @dataclass
 class Ast(Object):
-    text_ref: Optional[TextReference]
+    text_ref: Optional[TextReference] = field(init=False, default=None)
+
+    def set_text_ref(self, text_ref):
+        object.__setattr__(self, 'text_ref', text_ref)
+        return self
 
 class Expr(Ast):
     _args = ()

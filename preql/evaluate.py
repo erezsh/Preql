@@ -532,7 +532,7 @@ def eval_func_call(state, func, args):
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:
-            params = {name: ast.Parameter(None, name, value.type) for name, value in args.items()}
+            params = {name: ast.Parameter(name, value.type) for name, value in args.items()}
             sig = (func.name,) + tuple(a.type for a in args.values())
 
             try:
@@ -551,7 +551,7 @@ def eval_func_call(state, func, args):
                             expr = expr.replace(code=x)
                         state._cache[sig] = expr
 
-                expr = ast.ResolveParameters(None, expr, args)
+                expr = ast.ResolveParameters(expr, args)
 
             except exc.InsufficientAccessLevel:
                 # Don't cache
@@ -605,7 +605,8 @@ def apply_database_rw(state: State, o: ast.One):
         x ,= obj.attrs.values()
         return x
 
-    table = evaluate(state, ast.Slice(o.text_ref, obj, ast.Range(None, None, ast.Const(None, T.int, 2))))
+    slice_ast = ast.Slice(obj, ast.Range(None, ast.Const(T.int, 2))).set_text_ref(o.text_ref)
+    table = evaluate(state, slice_ast)
 
     assert (table.type <= T.collection), table
     rows = localize(state, table) # Must be 1 row
@@ -633,7 +634,7 @@ def apply_database_rw(state: State, d: ast.Delete):
     state.catch_access(state.AccessLevels.WRITE_DB)
     # TODO Optimize: Delete on condition, not id, when possible
 
-    cond_table = ast.Selection(d.text_ref, d.table, d.conds)
+    cond_table = ast.Selection(d.table, d.conds).set_text_ref(d.text_ref)
     table = evaluate(state, cond_table)
     assert table.type <= T.table
 
@@ -698,7 +699,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
         arg ,= new.args
         table = evaluate(state, arg.value)
         fakerows = [objects.RowInstance(T.row[table], {'id': T.t_id})]
-        return ast.List_(new.text_ref, T.list[T.int], fakerows)
+        return ast.List_(T.list[T.int], fakerows).set_text_ref(new.text_ref)
 
     if isinstance(obj, objects.TableInstance):
         # XXX Is it always TableInstance? Just sometimes? What's the transition here?
@@ -724,7 +725,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
         ids += [_new_row(state, new, obj, matched).primary_key()]   # XXX return everything, not just pk?
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
-    return ast.List_(new.text_ref, T.list[T.int], ids)
+    return ast.List_(T.list[T.int], ids).set_text_ref(new.text_ref)
 
 
 @listgen
@@ -775,8 +776,8 @@ def apply_database_rw(state: State, new: ast.New):
             msg = cast_to_python(state, msg)
             assert new.text_ref is state.stacktrace[-1]
             return Signal(obj, list(state.stacktrace), msg)    # TODO move this to `throw`?
-        f = objects.InternalFunction(obj.typename, [objects.Param(None, 'message')], create_exception)
-        res = evaluate(state, ast.FuncCall(new.text_ref, f, new.args))
+        f = objects.InternalFunction(obj.typename, [objects.Param('message')], create_exception)
+        res = evaluate(state, ast.FuncCall(f, new.args).set_text_ref(new.text_ref))
         return res
 
     assert isinstance(obj, objects.TableInstance), obj  # XXX always the case?
@@ -800,7 +801,8 @@ class TableConstructor(objects.Function):
 
     @classmethod
     def make(cls, table):
-        return cls([objects.Param(getattr(name, 'text_ref', None), name, p, p.options.get('default'), orig=p) for name, p in table_params(table)])
+        return cls([objects.Param(name, p, p.options.get('default'), orig=p).set_text_ref(getattr(name, 'text_ref', None))
+                    for name, p in table_params(table)])
 
 
 def add_as_subquery(state: State, inst: objects.Instance):

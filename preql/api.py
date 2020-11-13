@@ -21,7 +21,7 @@ from .pql_types import T, ITEM_NAME
 def _make_const(value):
     # t = types.Primitive.by_pytype[type(value)]
     t = types.from_python(type(value))
-    return ast.Const(None, t, value)
+    return ast.Const(t, value)
 
 def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)

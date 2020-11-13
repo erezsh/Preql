@@ -108,9 +108,9 @@ class Function(Object):
                 if not isinstance(d, dict):
                     raise Signal.make(T.TypeError, state, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
-                    inline_args.append(ast.NamedField(None, k, new_value_instance(v)))
+                    inline_args.append(ast.NamedField(k, new_value_instance(v)))
             else:
-                inline_args.append(ast.NamedField(None, None, a))
+                inline_args.append(ast.NamedField(None, a))
 
         args = inline_args
         named = [arg.name is not None for arg in args]
@@ -601,16 +601,16 @@ def from_python(value):
     if value is None:
         return null
     elif isinstance(value, str):
-        return ast.Const(None, T.string, value)
+        return ast.Const(T.string, value)
     elif isinstance(value, bool):
-        return ast.Const(None, T.bool, value)
+        return ast.Const(T.bool, value)
     elif isinstance(value, int):
-        return ast.Const(None, T.int, value)
+        return ast.Const(T.int, value)
     elif isinstance(value, list):
-        return ast.List_(None, T.list[T.any], list(map(from_python, value)))
+        return ast.List_(T.list[T.any], list(map(from_python, value)))
     elif isinstance(value, dict):
-        #return ast.Dict_(None, value)
+        #return ast.Dict_(value)
         elems = {k:from_python(v) for k,v in value.items()}
-        return ast.Dict_(None, elems)
+        return ast.Dict_(elems)
     assert False, value
 

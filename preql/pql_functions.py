@@ -61,7 +61,7 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     # .. why not just compile with parameters? the types are already known
-    return ast.ParameterizedSqlCode(None, result_type, sql_code)
+    return ast.ParameterizedSqlCode(result_type, sql_code)
 
 def pql_force_eval(state: State, expr: T.object):
     "Force evaluation of expression. Execute any db queries necessary."
@@ -90,7 +90,7 @@ def pql_fmt(state: State, s: T.string):
 
     a = string_parts[0]
     for b in string_parts[1:]:
-        a = ast.Arith(None, "+", [a,b])
+        a = ast.Arith("+", [a,b])
 
     return cast_to_instance(state, a)
 
@@ -102,7 +102,7 @@ def _canonize_default(d):
 def create_internal_func(fname, f):
     sig = inspect.signature(f)
     return objects.InternalFunction(fname, [
-        objects.Param(None, pname, type_ if isinstance(type_, Type) else T.any, _canonize_default(sig.parameters[pname].default))
+        objects.Param(pname, type_ if isinstance(type_, Type) else T.any, _canonize_default(sig.parameters[pname].default))
         for pname, type_ in list(f.__annotations__.items())[1:]
     ], f)
 
@@ -374,7 +374,7 @@ def pql_columns(state: State, table: T.collection):
     if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
         elems = {f't{i}':e for i, e in enumerate(elems)}
 
-    return ast.Dict_(None, elems)
+    return ast.Dict_(elems)
 
 
 def pql_cast(state: State, inst: T.any, type: T.type):
@@ -512,7 +512,7 @@ def pql_exit(state, value: T.int.as_nullable() = None):
 
 
 
-def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.bool = ast.Const(None, T.bool, False)):
+def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.bool = ast.Const(T.bool, False)):
     "Import a csv into an existing table"
     # TODO better error handling, validation
     filename = cast_to_python(state, filename)
@@ -561,7 +561,7 @@ def _rest_func_endpoint(state, func):
     from starlette.responses import JSONResponse
     async def callback(request):
         params = [objects.new_value_instance(v) for k, v in request.path_params.items()]
-        expr = ast.FuncCall(None, func, params)
+        expr = ast.FuncCall(func, params)
         res = evaluate(state, expr)
         res = cast_to_python(state, res)
         return JSONResponse(res)
@@ -573,9 +573,9 @@ def _rest_table_endpoint(state, table):
         tbl = table
         params = dict(request.query_params)
         if params:
-            conds = [ast.Compare(None, '=', [ast.Name(None, k), objects.new_value_instance(v)])
+            conds = [ast.Compare('=', [ast.Name(k), objects.new_value_instance(v)])
                      for k, v in params.items()]
-            expr = ast.Selection(None, tbl, conds)
+            expr = ast.Selection(tbl, conds)
             tbl = evaluate(state, expr)
         res = cast_to_python(state, tbl)
         return JSONResponse(res)
@@ -655,8 +655,8 @@ internal_funcs = create_internal_funcs({
 })
 
 joins = {
-    'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),
-    'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param(None, 'tables')),
-    'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param(None, 'tables')),
-    'outerjoin': objects.InternalFunction('outerjoin', [], pql_outerjoin, objects.Param(None, 'tables')),
+    'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
+    'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param('tables')),
+    'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param('tables')),
+    'outerjoin': objects.InternalFunction('outerjoin', [], pql_outerjoin, objects.Param('tables')),
 }

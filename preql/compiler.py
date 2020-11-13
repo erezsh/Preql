@@ -65,6 +65,7 @@ def compile_to_instance(state, obj: ast.TableOperation):
 @dy
 def compile_to_instance(state, obj: ast.Expr):
     attrs = dict(obj)
+    text_ref = attrs.pop('text_ref')
     args_attrs = {}
     any_was_vec = False
     for k, v in attrs.items():
@@ -75,7 +76,7 @@ def compile_to_instance(state, obj: ast.Expr):
                     any_was_vec = True
     attrs.update(args_attrs)
 
-    res = compile_to_inst(state, type(obj)(**attrs))
+    res = compile_to_inst(state, type(obj)(**attrs).set_text_ref(text_ref))
     if any_was_vec:
         res = vectorized(res)
     return res
@@ -145,7 +146,7 @@ def _expand_ellipsis(state, table, fields):
                 for name in elems:
                     assert isinstance(name, str)
                     if name not in exclude:
-                        yield ast.NamedField(f.text_ref, name, ast.Name(None, name))
+                        yield ast.NamedField(name, ast.Name(name)).set_text_ref(f.text_ref)
         else:
             yield f
 

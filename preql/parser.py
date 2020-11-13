@@ -11,13 +11,14 @@ from . import pql_objects as objects
 from .pql_types import T
 
 class Str(str):
-    def __new__(cls, value, text_ref):
+    def __new__(cls, value, text_ref=None):
         obj = str.__new__(cls, value)
         obj.text_ref = text_ref
         return obj
 
-def token_value(self, text_ref, t):
-    return Str(str(t), text_ref)
+    def set_text_ref(self, text_ref):
+        # Required for parity with Ast
+        self.text_ref = text_ref
 
 
 def make_text_reference(text, source_file, meta, children=()):
@@ -36,19 +37,14 @@ def make_text_reference(text, source_file, meta, children=()):
 
     for c in children:
         if hasattr(c, 'text_ref'):
-            assert c.text_ref.context is None
             assert c.text_ref.text is text
+            assert c.text_ref.context is None
             c.text_ref.context = ref
 
     assert isinstance(source_file, (str, Path)), source_file
     return TextReference(text, str(source_file), ref)
 
 
-
-def _args_wrapper(f, data, children, meta):
-    "Create meta with 'code' from transformer"
-    ref = make_text_reference(*f.__self__.code_ref, meta, children)
-    return f(ref, *children)
 
 
 # Taken from Lark (#TODO provide it in lark utils?)
@@ -77,7 +73,35 @@ def _fix_escaping(s):
 
     return s
 
-from .compiler import guess_field_name
+from .compiler import guess_field_name  # XXX a little out of place
+
+
+def _wrap_result(res, f, meta, children):
+    if isinstance(res, (Str, ast.Ast)):
+        ref = make_text_reference(*f.__self__.code_ref, meta, children)
+        res.set_text_ref(ref)
+    return res
+
+def _args_wrapper(f, data, children, meta):
+    "Create meta with 'code' from transformer"
+    res = f(*children)
+    return _wrap_result(res, f, meta, children)
+
+def _args_wrapper_meta(f, data, children, meta):
+    res = f(meta, *children)
+    return _wrap_result(res, f, meta, children)
+
+def _args_wrapper_list(f, data, children, meta):
+    res = f(children)
+    return _wrap_result(res, f, meta, children)
+
+with_meta = v_args(wrapper=_args_wrapper_meta)
+no_inline = v_args(wrapper=_args_wrapper_list)
+
+def token_value(self, t):
+    return Str(str(t))
+
+
 @v_args(wrapper=_args_wrapper)
 class TreeToAst(Transformer):
     def __init__(self, code_ref):
@@ -85,11 +109,12 @@ class TreeToAst(Transformer):
 
     name = token_value
 
-    def string(self, meta, s):
-        return ast.Const(meta, T.string, _fix_escaping( s.value[1:-1]) )
-    def long_string(self, meta, s):
-        return ast.Const(meta, T.string, _fix_escaping( s.value[3:-3]) )
+    def string(self, s):
+        return ast.Const(T.string, _fix_escaping( s.value[1:-1]) )
+    def long_string(self, s):
+        return ast.Const(T.string, _fix_escaping( s.value[3:-3]) )
 
+    @with_meta
     def pql_dict(self, meta, items):
         # if not all(item.name for item in items):
         #     # TODO autocomplete names in some situations, like in projection
@@ -101,51 +126,51 @@ class TreeToAst(Transformer):
                 raise pql_SyntaxError(meta, f"Dict key appearing more than once: {name}")
             d[name] = item.value
 
-        return ast.Dict_(meta, d)
+        return ast.Dict_(d)
 
-    def int(self, meta, i):
-        return ast.Const(meta, T.int, int(i))
+    def int(self, i):
+        return ast.Const(T.int, int(i))
 
-    def float(self, meta, f):
-        return ast.Const(meta, T.float, float(f))
+    def float(self, f):
+        return ast.Const(T.float, float(f))
 
-    def null(self, meta):
-        return ast.Const(meta, T.nulltype, None)
-    def false(self, meta):
-        return ast.Const(meta, T.bool, False)
-    def true(self, meta):
-        return ast.Const(meta, T.bool, True)
+    def null(self):
+        return ast.Const(T.nulltype, None)
+    def false(self):
+        return ast.Const(T.bool, False)
+    def true(self):
+        return ast.Const(T.bool, True)
 
-    @v_args(inline=False, meta=True)
-    def pql_list(self, items, meta):
-        return ast.List_(make_text_reference(*self.code_ref, meta), T.list[T.any], items)
+    @no_inline
+    def pql_list(self, items):
+        return ast.List_(T.list[T.any], items)
 
-    @v_args(inline=False)
+    @no_inline
     def as_list(self, args):
         return args
 
     # types
-    def typemod(self, meta, *args):
+    def typemod(self, *args):
         return [t.value for t in args]
-    def type(self, meta, name, mods):
+    def type(self, name, mods):
         # TODO pk
-        return ast.Type(meta, name, '?' in (mods or ''))
+        return ast.Type(name, '?' in (mods or ''))
 
     add_op = token_value
     mul_op = token_value
     comp_op = token_value
 
-    def compare(self, meta, a, op, b):
-        return ast.Compare(meta, op, [a,b])
+    def compare(self, a, op, b):
+        return ast.Compare(op, [a,b])
 
-    def _arith_expr(self, meta, a, op, b):
-        return ast.Arith(meta, op, [a,b])
+    def _arith_expr(self, a, op, b):
+        return ast.Arith(op, [a,b])
 
-    def or_test(self, meta, a, b):
-        return ast.Or(meta, [a, b])
+    def or_test(self, a, b):
+        return ast.Or([a, b])
 
-    def and_test(self, meta, a, b):
-        return ast.And(meta, [a, b])
+    def and_test(self, a, b):
+        return ast.And([a, b])
 
     not_test = ast.Not
 
@@ -171,31 +196,33 @@ class TreeToAst(Transformer):
     projection = ast.Projection
     slice = ast.Slice
 
-    def projection_grouped(self, meta, table, keys, values):
-        return ast.Projection(meta, table, keys, True, values)
+    def projection_grouped(self, table, keys, values):
+        return ast.Projection(table, keys, True, values)
 
-    def projection_grouped_nokeys(self, meta, table, values):
-        return ast.Projection(meta, table, [], True, values)
+    def projection_grouped_nokeys(self, table, values):
+        return ast.Projection(table, [], True, values)
 
-    def projection_grouped_novalues(self, meta, table, keys):
-        return ast.Projection(meta, table, keys, True, [])
+    def projection_grouped_novalues(self, table, keys):
+        return ast.Projection(table, keys, True, [])
 
     # Statements / Declarations
     param = objects.Param
     param_variadic = objects.ParamVariadic
 
+    @with_meta
     def func_def(self, meta, name, params, expr):
         collector = None
         for i, p in enumerate(params):
             if isinstance(p, objects.ParamVariadic):
                 if i != len(params)-1:
-                    raise pql_SyntaxError(meta, f"A variadic parameter must appear at the end of the function ({p.name})")
+                    raise pql_SyntaxError(meta, f"A variadic parameter may only appear at the end of the function ({p.name})")
 
                 collector = p
                 params = params[:-1]
 
-        return ast.FuncDef(meta, objects.UserFunction(name, params, expr, collector))
+        return ast.FuncDef(objects.UserFunction(name, params, expr, collector))
 
+    @with_meta
     def func_call(self, meta, func, args):
         for i, a in enumerate(args):
             if isinstance(a, ast.InlineStruct):
@@ -203,12 +230,12 @@ class TreeToAst(Transformer):
                     raise pql_SyntaxError(meta, f"An inlined struct must appear at the end of the function call ({a})")
 
 
-        return ast.FuncCall(meta, func, args)
+        return ast.FuncCall(func, args)
 
-    def set_value(self, meta, lval, rval):
+    def set_value(self, lval, rval):
         if not isinstance(lval, (ast.Name, ast.Attr)):
             raise pql_SyntaxError(lval.text_ref, f"{lval.type} is not a valid l-value")
-        return ast.SetValue(meta, lval, rval)
+        return ast.SetValue(lval, rval)
 
     insert_rows = ast.InsertRows
     struct_def = ast.StructDef
@@ -223,22 +250,18 @@ class TreeToAst(Transformer):
     while_stmt = ast.While
     for_stmt = ast.For
     try_catch = ast.Try
-    one = lambda self, meta, nullable, expr: ast.One(meta, expr, nullable is not None)
+    one = lambda self, nullable, expr: ast.One(expr, nullable is not None)
 
-    def marker(self, meta, _marker):
-        return ast.Marker(meta)
+    def marker(self, _marker):
+        return ast.Marker()
 
-    def table_def_from_expr(self, meta, const, name, table_expr):
+    def table_def_from_expr(self, const, name, table_expr):
         # c = objects.from_python(bool(const == 'const'))
-        # return ast.SetValue(meta, ast.Name(meta, name), ast.FuncCall(meta, ast.Name(meta, 'temptable'), [table_expr, c]))
-        return ast.TableDefFromExpr(meta, name, table_expr, const == 'const')
+        # return ast.SetValue(ast.Name(name), ast.FuncCall(ast.Name(meta, 'temptable'), [table_expr, c]))
+        return ast.TableDefFromExpr(name, table_expr, const == 'const')
 
-    def ellipsis(self, meta, *exclude):
-        return ast.Ellipsis(meta, list(exclude))
-
-    @v_args(inline=False, meta=True)
-    def codeblock(self, stmts, meta):
-        return ast.CodeBlock(make_text_reference(*self.code_ref, meta), stmts)
+    codeblock = no_inline(ast.CodeBlock)
+    ellipsis = no_inline(ast.Ellipsis)
 
 
     def __default__(self, data, children, meta):
