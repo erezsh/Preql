@@ -745,7 +745,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
 def compile_to_inst(state: State, s: ast.Slice):
     obj = cast_to_instance(state, s.obj)
 
-    assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
+    assert_type(obj.type, T.union[T.string, T.collection, T.vectorized[T.string]], state, s, "Slice")
 
     instances = [obj]
     if s.range.start:
@@ -777,8 +777,13 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     table = cast_to_instance(state, obj)
 
-    if table.type <= T.string:
-        raise exc.Signal.make(T.NotImplementedError, state, sel, "String indexing not implemented yet. Use slicing instead (s[start..stop])")
+    if table.type <= T.string or table.type <= T.vectorized[T.string]:
+        # raise exc.Signal.make(T.NotImplementedError, state, sel, "String indexing not implemented yet. Use slicing instead (s[start..stop])")
+        index ,= sel.conds
+        assert index.type <= T.int
+        table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
+        slice = ast.Slice(table, ast.Range(index, ast.Arith('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
+        return compile_to_inst(state, slice)
 
     assert_type(table.type, T.collection, state, sel, "Selection")
 

@@ -210,6 +210,12 @@ class BasicTests(PreqlTests):
 
         self.assertRaises(Signal, preql, '[min..]')    # XXX TypeError
 
+        assert preql('"hello"[1]') == 'e'
+        res = preql('list(["hello"]{item[1..2]})')
+        assert res == ["e"], res
+
+        res = preql('list(["hello"]{item[1]})')
+        assert res == ["e"], res
 
     def test_vectorized_logic2(self):
         preql = self.Preql()
