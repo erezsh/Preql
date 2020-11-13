@@ -318,7 +318,7 @@ class Preql:
 
         for name, df in dfs.items():
             if isinstance(df, pd.Series):
-                cols = 'key', 'value'
+                cols = ['key', 'value']
                 rows = [(dt.to_pydatetime() if isinstance(dt, datetime) else dt,v) for dt, v in df.items()]
             else:
                 assert isinstance(df, pd.DataFrame)
