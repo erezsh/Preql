@@ -232,7 +232,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         elems[name] = t
 
     # TODO inherit primary key? indexes?
-    new_table_type = T.table(elems, temporary=True)
+    new_table_type = T.table(elems, temporary=False)    # XXX abstract=True
 
     # Make code
     flat_codes = [code

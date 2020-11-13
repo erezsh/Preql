@@ -931,6 +931,10 @@ def compile_type_def(state, table_name, table) -> Sql:
     command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
     return RawSql(T.nulltype, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
 
+def compile_drop_table(state, table_name) -> Sql:
+    target = state.db.target
+    return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
+
 @dp_type
 def compile_type(type_: T.t_relation):
     # TODO might have a different type

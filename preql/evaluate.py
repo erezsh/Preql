@@ -101,6 +101,11 @@ def db_query(state: State, sql_code, subqueries=None):
     except exc.DatabaseQueryError as e:
         raise Signal.make(T.DbQueryError, state, None, e.args[0]) from e
 
+def drop_table(state, table_type):
+    name ,= table_type.options['name'].parts
+    code = sql.compile_drop_table(state, name)
+    return state.db.query(code, {}, state=state)
+
 
 @dy
 def _execute(state: State, table_def: ast.TableDefFromExpr):
@@ -297,7 +302,7 @@ def _execute(state: State, t: ast.Try):
             raise
 
 def import_module(state, r):
-    paths = [Path(__file__).parent, Path.cwd()]
+    paths = [Path(__file__).parent / 'modules', Path.cwd()]
     for path in paths:
         module_path =  (path / r.module_path).with_suffix(".pql")
         if module_path.exists():
@@ -324,9 +329,9 @@ def import_module(state, r):
     # Inherit module db (in case it called connect())
     state.db = i.state.db
 
-    ns = i.state.ns.ns
+    ns = i.state.ns
     assert len(ns) == 1
-    return objects.Module(r.module_path, i.state.ns.ns[0])
+    return objects.Module(r.module_path, ns._ns[0])
 
 
 @dy

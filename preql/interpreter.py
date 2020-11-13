@@ -28,8 +28,7 @@ class Interpreter:
     def __init__(self, sqlengine, fmt='text', use_core=True):
         self.state = State(self, sqlengine, fmt, initial_namespace())
         if use_core:
-            # self.include('core.pql', __file__) # TODO use an import mechanism instead
-            mns = import_module(self.state, ast.Import(None, 'core', use_core=False)).namespace
+            mns = import_module(self.state, ast.Import(None, '__builtins__', use_core=False)).namespace
             bns = self.state.get_var('__builtins__').namespace
             # safe-update
             for k, v in mns.items():
