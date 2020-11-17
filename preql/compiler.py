@@ -15,7 +15,7 @@ from .interp_common import dy, State, assert_type, new_value_instance, evaluate,
 from .pql_types import T, Object, Type, union_types, Id, ITEM_NAME
 from .types_impl import dp_inst, flatten_type, pql_repr
 from .casts import cast
-from .pql_objects import AbsInstance, vectorized, make_instance
+from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
 
 class AutocompleteSuggestions(Exception):
     pass
@@ -66,20 +66,7 @@ def compile_to_instance(state, obj: ast.TableOperation):
 def compile_to_instance(state, obj: ast.Expr):
     attrs = dict(obj)
     text_ref = attrs.pop('text_ref')
-    args_attrs = {}
-    any_was_vec = False
-    for k, v in attrs.items():
-        if k in obj._args:
-            if v:
-                was_vec, args_attrs[k] = objects.unvectorize_args( evaluate(state, v) )
-                if was_vec:
-                    any_was_vec = True
-    attrs.update(args_attrs)
-
-    res = compile_to_inst(state, type(obj)(**attrs).set_text_ref(text_ref))
-    if any_was_vec:
-        res = vectorized(res)
-    return res
+    return compile_to_inst(state, type(obj)(**attrs).set_text_ref(text_ref))
 
 
 
@@ -299,12 +286,17 @@ def compile_to_inst(state: State, lst: list):
     return [evaluate(state, e) for e in lst]
 
 
+def base_type(t):
+    if t <= T.vectorized:
+        return t.elem
+    return t
+
 @dy
 def compile_to_inst(state: State, o: ast.Or):
     args = cast_to_instance(state, o.args)
     a, b = args
-    if a.type != b.type:
-        raise Signal.make(T.TypeError, state, o, f"'or' operator requires both arguments to be of the same type")
+    if base_type(a.type) != base_type(b.type):
+        raise Signal.make(T.TypeError, state, o, f"'or' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
     cond = cast(state, a, T.bool)
     code = sql.Case(cond.code, a.code, b.code)
     return objects.make_instance(code, a.type, args)
@@ -313,8 +305,8 @@ def compile_to_inst(state: State, o: ast.Or):
 def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
     a, b = args
-    if a.type != b.type:
-        raise Signal.make(T.TypeError, state, o, f"'and' operator requires both arguments to be of the same type")
+    if base_type(a.type) != base_type(b.type):
+        raise Signal.make(T.TypeError, state, o, f"'and' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
     cond = cast(state, a, T.bool)
     code = sql.Case(cond.code, b.code, a.code)
     return objects.make_instance(code, a.type, args)
@@ -364,11 +356,28 @@ def _contains(state, op, a: T.primitive, b: T.collection):
 def _contains(state, op, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, state, op, f"Contains not implemented for {a.type} and {b.type}")
 
+@dp_inst
+def _contains(state, op, a: T.vectorized, b: T.any):
+    return vectorized(_contains(state, op, unvectorized(a), b))
 
 ## Compare
 @dp_inst
 def _compare(state, op, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, state, op, f"Compare not implemented for {a.type} and {b.type}")
+
+@dp_inst
+def _compare(state, op, a: T.vectorized, b: T.vectorized):
+    return vectorized(_compare(state, op, unvectorized(a), unvectorized(b)))
+
+@dp_inst
+def _compare(state, op, a: T.vectorized, b: T.any):
+    return vectorized(_compare(state, op, unvectorized(a), b))
+
+@dp_inst
+def _compare(state, op, a: T.any, b: T.vectorized):
+    return vectorized(_compare(state, op, a, unvectorized(b)))
+
+
 
 @dp_inst
 def _compare(state, op, a: T.nulltype, b: T.nulltype):
@@ -383,7 +392,7 @@ def _compare(state, op, a: T.nulltype, b: T.type):
     return _compare(state, op, b, a)
 
 @dp_inst
-def _compare(state, op, a: T.nulltype, b: T.object):
+def _compare(state, op, a: T.nulltype, b: T.primitive):
     # TODO Enable this type-based optimization:
     # if not b.type.nullable:
     #     return objects.new_value_instance(False)
@@ -392,7 +401,7 @@ def _compare(state, op, a: T.nulltype, b: T.object):
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 @dp_inst
-def _compare(state, op, a: T.object, b: T.nulltype):
+def _compare(state, op, a: T.primitive, b: T.nulltype):
     return _compare(state, op, b, a)
 
 
@@ -492,6 +501,20 @@ def compile_to_inst(state: State, arith: ast.Arith):
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, state, arith.op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
+
+@dp_inst
+def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
+    return vectorized(_compile_arith(state, arith, unvectorized(a), unvectorized(b)))
+
+@dp_inst
+def _compile_arith(state, arith, a: T.any, b: T.vectorized):
+    return vectorized(_compile_arith(state, arith, a, unvectorized(b)))
+
+@dp_inst
+def _compile_arith(state, arith, a: T.vectorized, b: T.any):
+    return vectorized(_compile_arith(state, arith, unvectorized(a), b))
+
+
 
 @dp_inst
 def _compile_arith(state, arith, a: T.collection, b: T.collection):
@@ -771,7 +794,7 @@ def compile_to_inst(state: State, s: ast.Slice):
     else:
         stop = None
 
-    if obj.type <= T.string:
+    if obj.type <= T.string or obj.type <= T.vectorized[T.string]:
         code = sql.StringSlice(obj.code, sql.add_one(start.code), stop and sql.add_one(stop.code))
     else:
         start_n = cast_to_python(state, start)

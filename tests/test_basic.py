@@ -196,6 +196,7 @@ class BasicTests(PreqlTests):
     def test_basic2(self):
         # More basic tests
         preql = self.Preql()
+
         z = preql('''
             x = [1..4]
             x[item == max(x)]
