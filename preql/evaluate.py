@@ -1,19 +1,3 @@
-# Steps for evaluation
-#         expand
-#         expand names
-#         expand function calls
-#     resolve types
-#         propagate types
-#         verify correctness
-#         adjust tree to accomodate type semantics
-#     simplify (opt)
-#         compute local operations (fold constants)
-#     compile
-#         generate sql for remote operations
-#     execute
-#         execute remote queries
-#         simplify (compute) into the final result
-
 from typing import List, Optional
 import logging
 from pathlib import Path
@@ -29,7 +13,7 @@ from . import settings
 from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
-from .compiler import compile_to_instance, cast_to_instance
+from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
 from .pql_objects import vectorized
@@ -236,6 +220,7 @@ def _execute(state: State, func_def: ast.FuncDef):
 
     state.set_var(func.name, func.replace(params=new_params))
 
+# TODO doesn't belong here!
 import rich.console
 @dy
 def _execute(state: State, p: ast.Print):
@@ -382,7 +367,7 @@ def simplify(state: State, cb: ast.CodeBlock):
         # Failed to run it, so try to cast as instance
         # XXX order should be other way around!
         if e.type <= T.CastError:
-            return compile_to_instance(state, cb)
+            return compile_to_inst(state, cb)
         raise
     except InsufficientAccessLevel:
         return cb
@@ -835,14 +820,14 @@ def evaluate(state, obj_):
 
     # - Compile to instances with db-specific code (sql)
     # . Compilation may fail (e.g. due to lack of DB access)
-    # . Objects are generic within the same database, and can be cached
+    # . Resulting code generic within the same database, and can be cached
     # obj = compile_to_inst(state.reduce_access(state.AccessLevels.COMPILE), obj)
-    obj = compile_to_instance(state, obj)
+    obj = compile_to_inst(state, obj)
 
     if state.access_level < state.AccessLevels.EVALUATE:
         return obj
 
-    # - Resolve parameters to "instanciate" the cached code
+    # - Resolve parameters to "instantiate" the cached code
     # TODO necessary?
     obj = resolve_parameters(state, obj)
 

@@ -15,6 +15,7 @@ from .interpreter import Interpreter
 from .evaluate import cast_to_python, localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
 from .pql_types import T, ITEM_NAME
+from .exceptions import Signal
 
 
 

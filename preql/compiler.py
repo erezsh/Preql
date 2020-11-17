@@ -20,11 +20,6 @@ from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
 class AutocompleteSuggestions(Exception):
     pass
 
-# @dataclass
-# class Table(Object):
-#     type: Type
-#     name: str
-
 @dy
 def cast_to_instance(state, x: list):
     return [cast_to_instance(state, i) for i in x]
@@ -33,7 +28,7 @@ def cast_to_instance(state, x: list):
 def cast_to_instance(state, x):
     try:
         x = simplify(state, x)  # just compile Name?
-        inst = compile_to_instance(state, x)
+        inst = compile_to_inst(state, x)
         # inst = evaluate(state, x)
     except exc.ReturnSignal:
         raise Signal.make(T.CompileError, state, None, f"Bad compilation of {x}")
@@ -47,27 +42,6 @@ def cast_to_instance(state, x):
         raise Signal.make(T.TypeError, state, None, f"Could not compile {pql_repr(state, inst.type, inst)}")
 
     return inst
-
-
-
-@dy
-def compile_to_instance(state, obj: AbsInstance):
-    return obj
-
-@dy
-def compile_to_instance(state, obj):
-    return compile_to_inst(state, obj)
-
-@dy
-def compile_to_instance(state, obj: ast.TableOperation):
-    return compile_to_inst(state, obj)
-
-@dy
-def compile_to_instance(state, obj: ast.Expr):
-    attrs = dict(obj)
-    text_ref = attrs.pop('text_ref')
-    return compile_to_inst(state, type(obj)(**attrs).set_text_ref(text_ref))
-
 
 
 
@@ -207,14 +181,14 @@ def compile_to_inst(state: State, proj: ast.Projection):
     for name_, inst in all_fields:
         assert isinstance(inst, AbsInstance)
 
-        # TODO what happens if automatic name preceeds and collides with user-given name?
+        # TODO what happens if automatic name precedes and collides with user-given name?
         name = name_
         i = 1
         while name in elems:
             name = name_ + str(i)
             i += 1
         t = inst.type
-        # Devectorize
+        # Unvectorize (XXX is this correct?)
         if t <= T.vectorized:
             t = t.elem
         elems[name] = t

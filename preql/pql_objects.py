@@ -122,11 +122,11 @@ class Function(Object):
         else:
             if not all(n for n in named[first_named:]):
                 # TODO meta
-                raise Signal.make(T.TypeError, state, None, f"Function {self.name} recieved a non-named argument after a named one!")
+                raise Signal.make(T.TypeError, state, None, f"Function {self.name} received a non-named argument after a named one!")
 
         if first_named > len(self.params):
             # TODO meta
-            raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
+            raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' takes {len(self.params)} parameters but received {first_named} arguments.")
 
         values = {p.name: p.default for p in self.params}
 
@@ -197,7 +197,7 @@ class AbsInstance(Object):
         if v <= T.function:
             return MethodInstance(self, v)
 
-        raise pql_AttributeError(attr)
+        raise pql_AttributeError(name)
 
 @dataclass
 class MethodInstance(AbsInstance, Function):

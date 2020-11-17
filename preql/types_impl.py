@@ -3,7 +3,7 @@ import json
 from .exceptions import Signal, pql_AttributeError
 
 from .base import Object
-from .utils import dataclass, listgen, concat_for, classify_bool
+from .utils import listgen, concat_for, classify_bool
 from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst, from_python
 
 
