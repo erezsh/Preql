@@ -9,9 +9,10 @@ from .exceptions import pql_AttributeError, Signal
 from . import settings
 from . import pql_ast as ast
 from . import sql
+from . import pql_types
 
 from .pql_types import ITEM_NAME, T, Type, Object
-from .types_impl import repr_value, flatten_type, join_names, elem_dict
+from .types_impl import repr_value, flatten_type, join_names
 
 # Functions
 @dataclass
@@ -108,9 +109,9 @@ class Function(Object):
                 if not isinstance(d, dict):
                     raise Signal.make(T.TypeError, state, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
-                    inline_args.append(ast.NamedField(None, k, new_value_instance(v)))
+                    inline_args.append(ast.NamedField(k, new_value_instance(v)))
             else:
-                inline_args.append(ast.NamedField(None, None, a))
+                inline_args.append(ast.NamedField(None, a))
 
         args = inline_args
         named = [arg.name is not None for arg in args]
@@ -121,11 +122,11 @@ class Function(Object):
         else:
             if not all(n for n in named[first_named:]):
                 # TODO meta
-                raise Signal.make(T.TypeError, state, None, f"Function {self.name} recieved a non-named argument after a named one!")
+                raise Signal.make(T.TypeError, state, None, f"Function {self.name} received a non-named argument after a named one!")
 
         if first_named > len(self.params):
             # TODO meta
-            raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' takes {len(self.params)} parameters but recieved {first_named} arguments.")
+            raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' takes {len(self.params)} parameters but received {first_named} arguments.")
 
         values = {p.name: p.default for p in self.params}
 
@@ -196,7 +197,7 @@ class AbsInstance(Object):
         if v <= T.function:
             return MethodInstance(self, v)
 
-        raise pql_AttributeError(attr)
+        raise pql_AttributeError(name)
 
 @dataclass
 class MethodInstance(AbsInstance, Function):
@@ -280,11 +281,11 @@ class TableInstance(CollectionInstance):
 
     @property
     def __columns(self):
-        return {n:self.get_column(n) for n in elem_dict(self.type)}
+        return {n:self.get_column(n) for n in self.type.elems}
 
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
-        t = elem_dict(self.type)
+        t = self.type.elems
         return make_instance_from_name(t[name], name) #t.column_codename(name))
 
     def all_attrs(self):
@@ -294,7 +295,7 @@ class TableInstance(CollectionInstance):
 
     def get_attr(self, name):
         try:
-            v = elem_dict(self.type)[name]
+            v = self.type.elems[name]
             return SelectedColumnInstance(self, v, name)
         except KeyError:
             try:
@@ -333,7 +334,7 @@ class ListInstance(CollectionInstance):
 
 def make_instance_from_name(t, cn):
     if t <= T.struct:
-        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elem_dict.items()})
+        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elems.items()})
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
@@ -383,7 +384,7 @@ class AbsStructInstance(AbsInstance):
         if name in self.attrs:
             return self.attrs[name]
         else:
-            raise pql_AttributeError(attr)
+            raise pql_AttributeError(name)
 
     @property
     def code(self):
@@ -581,7 +582,7 @@ def new_table(type_, name=None, instances=None, select_fields=False):
     inst = cls.make(sql.TableName(type_, name), type_, instances or [])
 
     if select_fields:
-        code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in elem_dict(type_).items()])
+        code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in type_.elems.items()])
         inst = inst.replace(code=code)
 
     return inst
@@ -596,21 +597,32 @@ def new_const_table(state, table_type, tuples):
 
 
 
+class PythonList(ast.Ast):
+    # TODO just a regular const?
+    def __init__(self, items):
+        types = set(type(i) for i in items)
+        # TODO if not one type, raise typeerror
+        type_ ,= types
+        self.type = T.list[pql_types.from_python(type_)]
+
+        # allow to compile it straight to SQL, no AST in the middle
+        self.items = items
 
 def from_python(value):
     if value is None:
         return null
     elif isinstance(value, str):
-        return ast.Const(None, T.string, value)
+        return ast.Const(T.string, value)
     elif isinstance(value, bool):
-        return ast.Const(None, T.bool, value)
+        return ast.Const(T.bool, value)
     elif isinstance(value, int):
-        return ast.Const(None, T.int, value)
+        return ast.Const(T.int, value)
     elif isinstance(value, list):
-        return ast.List_(None, T.list[T.any], list(map(from_python, value)))
+        # return ast.List_(T.list[T.any], list(map(from_python, value)))
+        return PythonList(value)
     elif isinstance(value, dict):
-        #return ast.Dict_(None, value)
+        #return ast.Dict_(value)
         elems = {k:from_python(v) for k,v in value.items()}
-        return ast.Dict_(None, elems)
+        return ast.Dict_(elems)
     assert False, value
 

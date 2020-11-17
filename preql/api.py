@@ -15,13 +15,14 @@ from .interpreter import Interpreter
 from .evaluate import cast_to_python, localize, evaluate, new_table_from_rows
 from .interp_common import create_engine, call_pql_func, State
 from .pql_types import T, ITEM_NAME
+from .exceptions import Signal
 
 
 
 def _make_const(value):
     # t = types.Primitive.by_pytype[type(value)]
     t = types.from_python(type(value))
-    return ast.Const(None, t, value)
+    return ast.Const(t, value)
 
 def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)
@@ -318,7 +319,7 @@ class Preql:
 
         for name, df in dfs.items():
             if isinstance(df, pd.Series):
-                cols = 'key', 'value'
+                cols = ['key', 'value']
                 rows = [(dt.to_pydatetime() if isinstance(dt, datetime) else dt,v) for dt, v in df.items()]
             else:
                 assert isinstance(df, pd.DataFrame)

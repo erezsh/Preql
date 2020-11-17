@@ -16,7 +16,7 @@ from . import sql
 
 from .interp_common import State, new_value_instance, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr
-from .pql_types import T, Type, union_types, Id
+from .pql_types import T, Type, union_types, Id, common_type
 from .types_impl import join_names
 from .casts import cast
 
@@ -55,13 +55,14 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
     except Exception as e:
         raise Signal.make(T.EvalError, state, code_expr, f"Python code provided returned an error: {e}")
 
-    return new_value_instance(res)
+    return objects.from_python(res)
+    # return new_value_instance(res)
 
 
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     # .. why not just compile with parameters? the types are already known
-    return ast.ParameterizedSqlCode(None, result_type, sql_code)
+    return ast.ParameterizedSqlCode(result_type, sql_code)
 
 def pql_force_eval(state: State, expr: T.object):
     "Force evaluation of expression. Execute any db queries necessary."
@@ -90,7 +91,7 @@ def pql_fmt(state: State, s: T.string):
 
     a = string_parts[0]
     for b in string_parts[1:]:
-        a = ast.Arith(None, "+", [a,b])
+        a = ast.Arith("+", [a,b])
 
     return cast_to_instance(state, a)
 
@@ -102,7 +103,7 @@ def _canonize_default(d):
 def create_internal_func(fname, f):
     sig = inspect.signature(f)
     return objects.InternalFunction(fname, [
-        objects.Param(None, pname, type_ if isinstance(type_, Type) else T.any, _canonize_default(sig.parameters[pname].default))
+        objects.Param(pname, type_ if isinstance(type_, Type) else T.any, _canonize_default(sig.parameters[pname].default))
         for pname, type_ in list(f.__annotations__.items())[1:]
     ], f)
 
@@ -213,22 +214,25 @@ def pql_get_db_type(state: State):
 
 
 
-def sql_bin_op(state, op, t1, t2, name):
+def sql_bin_op(state, op, t1, t2, name, additive=False):
 
     if not isinstance(t1, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, state, table1, f"First argument isn't a table, it's a {t1.type}")
+        raise Signal.make(T.TypeError, state, t1, f"First argument isn't a table, it's a {t1.type}")
     if not isinstance(t2, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, state, table2, f"Second argument isn't a table, it's a {t2.type}")
+        raise Signal.make(T.TypeError, state, t2, f"Second argument isn't a table, it's a {t2.type}")
 
-    # TODO Smarter matching
+    # TODO Smarter matching?
     l1 = len(t1.type.elems)
     l2 = len(t2.type.elems)
     if l1 != l2:
         raise Signal.make(T.TypeError, state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
+    for e1, e2 in zip(t1.type.elems.values(), t2.type.elems.values()):
+        if not (e2 <= e1):
+            raise Signal.make(T.TypeError, state, None, f"Cannot {name}. Column types don't match: '{e1}' and '{e2}'")
+
     code = sql.TableArith(op, [t1.code, t2.code])
-    # TODO union_types([t1.type, t2.type]) should take care of everything
-    # t = T.list[union_types([t1.type.elem, t2.type.elem])]
+
     return type(t1).make(code, t1.type, [t1, t2])
 
 def pql_table_intersect(state: State, t1: T.collection, t2: T.collection):
@@ -243,11 +247,11 @@ def pql_table_substract(state: State, t1: T.collection, t2: T.collection):
 
 def pql_table_union(state: State, t1: T.collection, t2: T.collection):
     "Union two tables. Used for `t1 | t2`"
-    return sql_bin_op(state, "UNION", t1, t2, "union")
+    return sql_bin_op(state, "UNION", t1, t2, "union", True)
 
 def pql_table_concat(state: State, t1: T.collection, t2: T.collection):
     "Concatenate two tables (union all). Used for `t1 + t2`"
-    return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate")
+    return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate", True)
 
 
 
@@ -285,7 +289,7 @@ def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
 
     assert all((t.type <= T.collection) for t in tables)
 
-    structs = {name: T.struct(table.type.elem_dict) for name, table in safezip(exprs, tables)}
+    structs = {name: T.struct(table.type.elems) for name, table in safezip(exprs, tables)}
 
     # Update nullable for left/right/outer joins
     if nullable:
@@ -341,7 +345,7 @@ def _auto_join(state, join, ta, tb):
 @listgen
 def _find_table_reference(t1, t2):
     # XXX TODO need to check TableType too (owner)?
-    for name, c in t1.type.elem_dict.items():
+    for name, c in t1.type.elems.items():
         if (c <= T.t_relation):
             if c.elem == t2.type:
                 # TODO depends on the query XXX
@@ -371,7 +375,7 @@ def pql_columns(state: State, table: T.collection):
     if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
         elems = {f't{i}':e for i, e in enumerate(elems)}
 
-    return ast.Dict_(None, elems)
+    return ast.Dict_(elems)
 
 
 def pql_cast(state: State, inst: T.any, type: T.type):
@@ -509,7 +513,7 @@ def pql_exit(state, value: T.int.as_nullable() = None):
 
 
 
-def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.bool = ast.Const(None, T.bool, False)):
+def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.bool = ast.Const(T.bool, False)):
     "Import a csv into an existing table"
     # TODO better error handling, validation
     filename = cast_to_python(state, filename)
@@ -558,7 +562,7 @@ def _rest_func_endpoint(state, func):
     from starlette.responses import JSONResponse
     async def callback(request):
         params = [objects.new_value_instance(v) for k, v in request.path_params.items()]
-        expr = ast.FuncCall(None, func, params)
+        expr = ast.FuncCall(func, params)
         res = evaluate(state, expr)
         res = cast_to_python(state, res)
         return JSONResponse(res)
@@ -570,9 +574,9 @@ def _rest_table_endpoint(state, table):
         tbl = table
         params = dict(request.query_params)
         if params:
-            conds = [ast.Compare(None, '=', [ast.Name(None, k), objects.new_value_instance(v)])
+            conds = [ast.Compare('=', [ast.Name(k), objects.new_value_instance(v)])
                      for k, v in params.items()]
-            expr = ast.Selection(None, tbl, conds)
+            expr = ast.Selection(tbl, conds)
             tbl = evaluate(state, expr)
         res = cast_to_python(state, tbl)
         return JSONResponse(res)
@@ -652,8 +656,8 @@ internal_funcs = create_internal_funcs({
 })
 
 joins = {
-    'join': objects.InternalFunction('join', [], pql_join, objects.Param(None, 'tables')),
-    'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param(None, 'tables')),
-    'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param(None, 'tables')),
-    'outerjoin': objects.InternalFunction('outerjoin', [], pql_outerjoin, objects.Param(None, 'tables')),
+    'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
+    'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param('tables')),
+    'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param('tables')),
+    'outerjoin': objects.InternalFunction('outerjoin', [], pql_outerjoin, objects.Param('tables')),
 }

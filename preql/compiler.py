@@ -12,18 +12,13 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Object, Type, union_types, Id
-from .types_impl import dp_inst, flatten_type, elem_dict
+from .pql_types import T, Object, Type, union_types, Id, ITEM_NAME
+from .types_impl import dp_inst, flatten_type, pql_repr
 from .casts import cast
-from .pql_objects import AbsInstance, vectorized, make_instance
+from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
 
 class AutocompleteSuggestions(Exception):
     pass
-
-# @dataclass
-# class Table(Object):
-#     type: Type
-#     name: str
 
 @dy
 def cast_to_instance(state, x: list):
@@ -33,7 +28,7 @@ def cast_to_instance(state, x: list):
 def cast_to_instance(state, x):
     try:
         x = simplify(state, x)  # just compile Name?
-        inst = compile_to_instance(state, x)
+        inst = compile_to_inst(state, x)
         # inst = evaluate(state, x)
     except exc.ReturnSignal:
         raise Signal.make(T.CompileError, state, None, f"Bad compilation of {x}")
@@ -42,49 +37,23 @@ def cast_to_instance(state, x):
         raise exc.InsufficientAccessLevel(inst)
 
     if not isinstance(inst, AbsInstance):
-        raise Signal.make(T.TypeError, state, None, f"Could not compile {inst}")
+        # TODO compile error? cast error?
+        # TODO need to be able to catch this above, and provide better errors
+        raise Signal.make(T.TypeError, state, None, f"Could not compile {pql_repr(state, inst.type, inst)}")
 
     return inst
-
-
-
-@dy
-def compile_to_instance(state, obj: AbsInstance):
-    return obj
-
-@dy
-def compile_to_instance(state, obj):
-    return compile_to_inst(state, obj)
-
-@dy
-def compile_to_instance(state, obj: ast.TableOperation):
-    return compile_to_inst(state, obj)
-
-@dy
-def compile_to_instance(state, obj: ast.Expr):
-    attrs = dict(obj)
-    args_attrs = {}
-    any_was_vec = False
-    for k, v in attrs.items():
-        if k in obj._args:
-            if v:
-                was_vec, args_attrs[k] = objects.unvectorize_args( evaluate(state, v) )
-                if was_vec:
-                    any_was_vec = True
-    attrs.update(args_attrs)
-
-    res = compile_to_inst(state, type(obj)(**attrs))
-    if any_was_vec:
-        res = vectorized(res)
-    return res
-
 
 
 
 @listgen
 def _process_fields(state: State, fields):
     for f in fields:
-        v = cast_to_instance(state, f.value)
+        try:
+            v = cast_to_instance(state, f.value)
+        except Signal as e:
+            if e.type <= T.TypeError:
+                raise e.replace(message=f"Cannot use object of type '{evaluate(state, f.value).type}' in projection.")
+            raise
 
         # TODO proper error message
         # if not isinstance(v, objects.AbsInstance):
@@ -115,7 +84,13 @@ def _expand_ellipsis(state, table, fields):
             if f.name:
                 raise Signal.make(T.SyntaxError, state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
-                elems = elem_dict(table.type)
+                t = table.type
+                if t <= T.vectorized:
+                    # FIXME why is this needed here? probably shouldn't be
+                    elems = t.elem.elems
+                else:
+                    elems = t.elems
+
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
                         raise AutocompleteSuggestions({k:(0, v) for k, v in elems.items()
@@ -132,7 +107,7 @@ def _expand_ellipsis(state, table, fields):
                 for name in elems:
                     assert isinstance(name, str)
                     if name not in exclude:
-                        yield ast.NamedField(f.text_ref, name, ast.Name(None, name))
+                        yield ast.NamedField(name, ast.Name(name)).set_text_ref(f.text_ref)
         else:
             yield f
 
@@ -182,8 +157,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     attrs = table.all_attrs()
 
     with state.use_scope({n:vectorized(c) for n, c in attrs.items()}):
-        query_state = state.limit_access(state.AccessLevels.QUERY)
-        fields = _process_fields(query_state, fields)
+        fields = _process_fields(state, fields)
 
     for name, f in fields:
         t = T.union[T.primitive, T.struct, T.nulltype, T.unknown]
@@ -197,8 +171,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     agg_fields = []
     if proj.agg_fields:
         with state.use_scope({n:objects.aggregate(c) for n, c in attrs.items()}):
-            query_state = state.limit_access(state.AccessLevels.QUERY)
-            agg_fields = _process_fields(query_state, proj.agg_fields)
+            agg_fields = _process_fields(state, proj.agg_fields)
 
     all_fields = fields + agg_fields
 
@@ -208,20 +181,20 @@ def compile_to_inst(state: State, proj: ast.Projection):
     for name_, inst in all_fields:
         assert isinstance(inst, AbsInstance)
 
-        # TODO what happens if automatic name preceeds and collides with user-given name?
+        # TODO what happens if automatic name precedes and collides with user-given name?
         name = name_
         i = 1
         while name in elems:
             name = name_ + str(i)
             i += 1
         t = inst.type
-        # Devectorize
+        # Unvectorize (XXX is this correct?)
         if t <= T.vectorized:
             t = t.elem
         elems[name] = t
 
     # TODO inherit primary key? indexes?
-    new_table_type = T.table(elems, temporary=True)
+    new_table_type = T.table(elems, temporary=False)    # XXX abstract=True
 
     # Make code
     flat_codes = [code
@@ -263,8 +236,7 @@ def compile_to_inst(state: State, order: ast.Order):
     assert_type(table.type, T.table, state, order, "'order'")
 
     with state.use_scope(table.all_attrs()):
-        query_state = state.limit_access(state.AccessLevels.QUERY)
-        fields = cast_to_instance(query_state, order.fields)
+        fields = cast_to_instance(state, order.fields)
 
     for f in fields:
         if not f.type <= T.primitive:
@@ -288,19 +260,30 @@ def compile_to_inst(state: State, lst: list):
     return [evaluate(state, e) for e in lst]
 
 
+def base_type(t):
+    if t <= T.vectorized:
+        return t.elem
+    return t
+
 @dy
 def compile_to_inst(state: State, o: ast.Or):
     args = cast_to_instance(state, o.args)
-    args_bool = [cast(state, a, T.bool) for a in args]
-    code = sql.LogicalBinOp("OR", [a.code for a in args_bool])
-    return objects.make_instance(code, T.bool, args)
+    a, b = args
+    if base_type(a.type) != base_type(b.type):
+        raise Signal.make(T.TypeError, state, o, f"'or' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
+    cond = cast(state, a, T.bool)
+    code = sql.Case(cond.code, a.code, b.code)
+    return objects.make_instance(code, a.type, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
-    args_bool = [cast(state, a, T.bool) for a in args]
-    code = sql.LogicalBinOp("AND", [a.code for a in args_bool])
-    return objects.make_instance(code, T.bool, args)
+    a, b = args
+    if base_type(a.type) != base_type(b.type):
+        raise Signal.make(T.TypeError, state, o, f"'and' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
+    cond = cast(state, a, T.bool)
+    code = sql.Case(cond.code, b.code, a.code)
+    return objects.make_instance(code, a.type, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.Not):
@@ -347,11 +330,28 @@ def _contains(state, op, a: T.primitive, b: T.collection):
 def _contains(state, op, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, state, op, f"Contains not implemented for {a.type} and {b.type}")
 
+@dp_inst
+def _contains(state, op, a: T.vectorized, b: T.any):
+    return vectorized(_contains(state, op, unvectorized(a), b))
 
 ## Compare
 @dp_inst
 def _compare(state, op, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, state, op, f"Compare not implemented for {a.type} and {b.type}")
+
+@dp_inst
+def _compare(state, op, a: T.vectorized, b: T.vectorized):
+    return vectorized(_compare(state, op, unvectorized(a), unvectorized(b)))
+
+@dp_inst
+def _compare(state, op, a: T.vectorized, b: T.any):
+    return vectorized(_compare(state, op, unvectorized(a), b))
+
+@dp_inst
+def _compare(state, op, a: T.any, b: T.vectorized):
+    return vectorized(_compare(state, op, a, unvectorized(b)))
+
+
 
 @dp_inst
 def _compare(state, op, a: T.nulltype, b: T.nulltype):
@@ -365,8 +365,11 @@ def _compare(state, op, a: T.type, b: T.nulltype):
 def _compare(state, op, a: T.nulltype, b: T.type):
     return _compare(state, op, b, a)
 
+
+primitive_or_struct = T.union[T.primitive, T.struct]
+
 @dp_inst
-def _compare(state, op, a: T.nulltype, b: T.object):
+def _compare(state, op, a: T.nulltype, b: primitive_or_struct):
     # TODO Enable this type-based optimization:
     # if not b.type.nullable:
     #     return objects.new_value_instance(False)
@@ -375,7 +378,7 @@ def _compare(state, op, a: T.nulltype, b: T.object):
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 @dp_inst
-def _compare(state, op, a: T.object, b: T.nulltype):
+def _compare(state, op, a: primitive_or_struct, b: T.nulltype):
     return _compare(state, op, b, a)
 
 
@@ -475,6 +478,20 @@ def compile_to_inst(state: State, arith: ast.Arith):
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, state, arith.op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
+
+@dp_inst
+def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
+    return vectorized(_compile_arith(state, arith, unvectorized(a), unvectorized(b)))
+
+@dp_inst
+def _compile_arith(state, arith, a: T.any, b: T.vectorized):
+    return vectorized(_compile_arith(state, arith, a, unvectorized(b)))
+
+@dp_inst
+def _compile_arith(state, arith, a: T.vectorized, b: T.any):
+    return vectorized(_compile_arith(state, arith, unvectorized(a), b))
+
+
 
 @dp_inst
 def _compile_arith(state, arith, a: T.collection, b: T.collection):
@@ -584,6 +601,17 @@ def compile_to_inst(state: State, d: ast.Dict_):
 
 
 @dy
+def compile_to_inst(state: State, lst: objects.PythonList):
+    t = lst.type.elem
+    x = [sql.Primitive(t, sql._repr(t,i)) for i in (lst.items)]
+    name = state.unique_name("list_")
+    table_code, subq = sql.create_list(lst.type, name, x)
+    inst = objects.ListInstance.make(table_code, lst.type, [])
+    inst.subqueries[name] = subq
+    return inst
+
+
+@dy
 def compile_to_inst(state: State, lst: ast.List_):
     # TODO generate (a,b,c) syntax for IN operations, with its own type
     # sql = "(" * join([e.code.text for e in objs], ",") * ")"
@@ -591,7 +619,7 @@ def compile_to_inst(state: State, lst: ast.List_):
     # return Instance(Sql(sql), ArrayType(type, false))
     # Or just evaluate?
 
-    if not lst.elems and tuple(lst.type.elems) == (T.any,):
+    if not lst.elems and tuple(lst.type.elems.values()) == (T.any,):
         # XXX a little awkward
         return objects.EmptyList
 
@@ -602,7 +630,7 @@ def compile_to_inst(state: State, lst: ast.List_):
     if not (elem_type <= T.union[T.primitive, T.nulltype]):
         raise Signal.make(T.TypeError, state, lst, "Cannot create lists of type %s" % elem_type)
 
-    assert elem_type <= lst.type.elems[0]
+    assert elem_type <= lst.type.elems[ITEM_NAME]
 
     list_type = T.list[elem_type]
     name = state.unique_name("list_")
@@ -728,7 +756,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
 def compile_to_inst(state: State, s: ast.Slice):
     obj = cast_to_instance(state, s.obj)
 
-    assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
+    assert_type(obj.type, T.union[T.string, T.collection, T.vectorized[T.string]], state, s, "Slice")
 
     instances = [obj]
     if s.range.start:
@@ -743,7 +771,7 @@ def compile_to_inst(state: State, s: ast.Slice):
     else:
         stop = None
 
-    if obj.type <= T.string:
+    if obj.type <= T.string or obj.type <= T.vectorized[T.string]:
         code = sql.StringSlice(obj.code, sql.add_one(start.code), stop and sql.add_one(stop.code))
     else:
         start_n = cast_to_python(state, start)
@@ -760,15 +788,18 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     table = cast_to_instance(state, obj)
 
-    if table.type <= T.string:
-        raise exc.Signal.make(T.NotImplementedError, state, sel, "String indexing not implemented yet. Use slicing instead (s[start..stop])")
+    if table.type <= T.string or table.type <= T.vectorized[T.string]:
+        # raise exc.Signal.make(T.NotImplementedError, state, sel, "String indexing not implemented yet. Use slicing instead (s[start..stop])")
+        index ,= sel.conds
+        assert index.type <= T.int
+        table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
+        slice = ast.Slice(table, ast.Range(index, ast.Arith('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
+        return compile_to_inst(state, slice)
 
     assert_type(table.type, T.collection, state, sel, "Selection")
 
-    # with state.use_scope(table.all_attrs()):
     with state.use_scope({n:vectorized(c) for n, c in table.all_attrs().items()}):
-        query_state = state.limit_access(state.AccessLevels.QUERY)
-        conds = cast_to_instance(query_state, sel.conds)
+        conds = cast_to_instance(state, sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):
         code = sql.unknown
@@ -801,11 +832,14 @@ def compile_to_inst(state: State, attr: ast.Attr):
             attrs = {}
         raise AutocompleteSuggestions(attrs)
 
+    if not attr.expr:
+        raise Signal.make(T.NotImplementedError, state, attr, "Implicit attribute syntax not supported")
+
     inst = evaluate(state, attr.expr)
     try:
         return evaluate(state, inst.get_attr(attr.name))
     except exc.pql_AttributeError as e:
-        raise Signal.make(T.AttributeError, state, attr, e.message) from e
+        raise Signal.make(T.AttributeError, state, attr, e.message)
 
 
 
@@ -857,8 +891,12 @@ def compile_to_inst(state: State, marker: ast.Marker):
 @dy
 def compile_to_inst(state: State, range: ast.Range):
     start = cast_to_python(state, range.start) if range.start else 0
+    if not isinstance(start, int):
+        raise Signal.make(T.TypeError, state, range, "Range must be between integers")
     if range.stop:
         stop = cast_to_python(state, range.stop)
+        if not isinstance(stop, int):
+            raise Signal.make(T.TypeError, state, range, "Range must be between integers")
         stop_str = f" WHERE item+1<{stop}"
     else:
         if state.db.target is sql.mysql:

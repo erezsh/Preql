@@ -1,8 +1,7 @@
+from time import time
+
 import rich.console
 import rich.markup
-
-from time import time
-import sys
 
 ### XXX Fix for Python 3.8 bug (https://github.com/prompt-toolkit/python-prompt-toolkit/issues/1023)
 import asyncio
@@ -20,10 +19,10 @@ from prompt_toolkit.validation import Validator, ValidationError
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text.html import HTML, html_escape
-from prompt_toolkit.key_binding import KeyBindings
 
-from . import Preql, __version__
+from . import __version__
 from . import pql_objects as objects
+from .utils import memoize
 from .api import table_more
 from .exceptions import Signal, ExitInterp, pql_SyntaxError
 from .pql_types import Object
@@ -31,7 +30,6 @@ from .parser import parse_stmts
 from .loggers import repl_log
 from . import settings
 from .autocomplete import autocomplete
-from .utils import memoize
 
 
 
@@ -116,6 +114,7 @@ class MyValidator(Validator):
             # raise ValidationError(message=e.args[0], cursor_position=0)
             # pass
 
+# from prompt_toolkit.key_binding import KeyBindings
 # kb = KeyBindings()
 # @kb.add('c-space')
 # def _(event):

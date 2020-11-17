@@ -115,14 +115,6 @@ class Type(Object):
             return self.elems.values()
         return self.elems
 
-    @property
-    def elem_dict(self):
-        elems = self.elems
-        if isinstance(elems, tuple):
-            assert len(elems) == 1, self
-            elems = {ITEM_NAME: elems[0]}
-        return elems
-
     def issubtype(self, t):
         assert isinstance(t, Type), t
         if self.typename == 'union':
@@ -143,9 +135,12 @@ class Type(Object):
         return self.issubtype(other)
 
     def __getitem__(self, elems):
-        if not isinstance(elems, tuple):
-            elems = elems,
-        return self.replace(elems=tuple(elems))
+        if self is T.union or self is T.function:
+            elems = tuple(elems)
+        else:
+            assert not isinstance(elems, tuple), (self, elems)
+            elems = {ITEM_NAME: elems}
+        return self.replace(elems=elems)
 
     def __call__(self, elems=None, **options):
         return self.replace(elems=elems or self.elems, methods=dict(self.methods), options={**self.options, **options})
@@ -159,18 +154,24 @@ class Type(Object):
             return self
 
         # XXX hacky
-        if attr == 'elem' and self.elems:
+        if attr == 'elem' and self.elems and len(self.elems) == 1:
             try:
                 return self.elem
             except ValueError:
                 pass
+        # elif attr == 'elems' and self.elems:
+        #     return self.elems
 
         assert attr not in self.methods
 
         return super().get_attr(attr)
 
     def all_attrs(self):
-        return {'elem': self.elem}
+        if len(self.elems) == 1:
+            return {'elem': self.elem}
+        # else:
+        #     return {'elems': self.elems}
+        return {}
 
     def repr(self, state):
         return repr(self)
@@ -281,7 +282,32 @@ _t = {
     Decimal: T.decimal,
 }
 def from_python(t):
+    # TODO throw proper exception if this fails
     return _t[t]
+
+
+from collections import deque
+def common_type(t1, t2):
+    "Returns a type which is the closest ancestor of both t1 and t2"
+    v1 = {t1}
+    v2 = {t2}
+
+    o1 = deque([t1])
+    o2 = deque([t2])
+    while o1 or o2:
+        x1 = o1.popleft()
+        v1.add(x1)
+        if x1 in v2:
+            return x1
+        o1 += [t for t in x1.supertypes if t not in v1]
+
+        x2 = o2.popleft()
+        v2.add(x2)
+        if x2 in v1:
+            return x2
+        o2 += [t for t in x2.supertypes if t not in v2]
+
+    assert False
 
 
 def union_types(types):

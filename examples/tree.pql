@@ -25,7 +25,6 @@ new Tree("Golden Retriever", dog)
 new Tree("Lion", mammal)
 new Tree("Fish", animal)
 
-
 // Define a generic graph search function 'bfs' (copied from core.pql)
 func bfs(edges: table, initial: table) {
     """Performs a breadth-first search on a graph
@@ -37,6 +36,18 @@ func bfs(edges: table, initial: table) {
     // Use SQL's native recursion syntax, using the special $self variable
     bfs = SQL(list[int], "SELECT * FROM $initial UNION SELECT e.dst FROM $edges e JOIN $self bfs ON e.src = bfs.item")
     return SQL(list[int], "SELECT bfs.item FROM $bfs bfs")
+}
+
+// Define useful tables derived from Tree
+// (these are reevaluated for each call, and so will reflect any changes to Tree)
+roots = Tree[parent==null]
+edges_downwards = Tree{
+    src: parent
+    dst: id
+}
+edges_upwards = Tree{
+    src: id
+    dst: parent
 }
 
 // Define Tree-specific search functions
@@ -51,21 +62,13 @@ func get_trees(ids: list[int]) {
 
 func find_path_to_root(initial: table) {
     "Find all nodes connecting the given nodes to the root (all ancestors)"
-    edges = Tree{
-        src: id
-        dst: parent
-    }
-    path_to_root = bfs(edges, initial{id})
+    path_to_root = bfs(edges_upwards, initial{id})
     return get_trees(path_to_root)
 }
 
 func find_descendants(initial: table) {
     "Find all descendants of given nodes"
-    edges = Tree{
-        src: parent
-        dst: id
-    }
-    descendants_ids = bfs(edges, initial{id})[item !in initial{id}]
+    descendants_ids = bfs(edges_downwards, initial{id})[item !in initial{id}]
     return get_trees(descendants_ids)
 }
 
@@ -107,9 +110,7 @@ func print_most_common_ancestor(a, b) {
 func print_hierarchy() {
     // Uses the builtin `walk_tree()` function, which is defined similarly to `bfs()`
     // This is all done with a single SQL statement.
-    roots = Tree[parent==null]
-    edges = Tree{src: parent, dst: id}
-    nodes_by_rank = walk_tree(edges, roots{id}, 1000)
+    nodes_by_rank = walk_tree(edges_downwards, roots{id}, 1000)
     print join(r: nodes_by_rank.id, t: Tree.id) {
         hierarchy: repeat(" ", r.rank*2) + t.value
     }

@@ -468,8 +468,8 @@ class ColumnAlias(SqlTree):
         alias = qb.safe_name(self.alias)
         value = self.value.compile_wrap(qb).code
         assert alias and value, (alias, value)
-        if value == alias:  # TODO disable when unoptimized?
-            return alias  # This is just for beauty, it's not necessary for function
+        if value == [alias]:  # TODO disable when unoptimized?
+            return value  # This is just for beauty, it's not necessary for function
 
         return value + [f' AS {alias}']
 
@@ -930,6 +930,10 @@ def compile_type_def(state, table_name, table) -> Sql:
     # Consistent among SQL databases
     command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
     return RawSql(T.nulltype, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
+
+def compile_drop_table(state, table_name) -> Sql:
+    target = state.db.target
+    return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
 
 @dp_type
 def compile_type(type_: T.t_relation):

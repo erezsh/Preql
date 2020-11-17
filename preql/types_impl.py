@@ -3,8 +3,8 @@ import json
 from .exceptions import Signal, pql_AttributeError
 
 from .base import Object
-from .utils import dataclass, listgen, concat_for, classify_bool
-from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst
+from .utils import listgen, concat_for, classify_bool
+from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst, from_python
 
 
 def Object_repr(self, state):
@@ -29,7 +29,7 @@ def flatten_path(path, t):
 
 @dp_type
 def flatten_path(path, t: T.union[T.table, T.struct]):
-    elems = t.elem_dict
+    elems = t.elems
     if t.maybe_null():
         elems = {k:v.as_nullable() for k, v in elems.items()}
     return concat_for(flatten_path(path + [name], col) for name, col in elems.items())
@@ -67,6 +67,17 @@ def pql_repr(state, t: T.object, value):
     return repr(value)
 
 @dp_type
+def pql_repr(state, t: T.function, value):
+    params = []
+    for p in value.params:
+        s = p.name
+        if p.type:
+            s += ": %s" % p.type
+        params.append(s)
+
+    return f'{{func {value.name}({", ".join(params)})}}'
+
+@dp_type
 def pql_repr(state, t: T.decimal, value):
     raise Signal.make(T.NotImplementedError, state, None, "Decimal not implemented")
 
@@ -90,25 +101,6 @@ def pql_repr(state, t: T.nulltype, value):
     return 'null'
 
 
-###
-
-@dp_type
-def elem_dict(t: T.union[T.table, T.struct]):
-    return t.elems
-
-@dp_type
-def elem_dict(t: T.list):
-    assert len(t.elems) == 1
-    return {ITEM_NAME: t.elems[0]}
-
-@dp_type
-def elem_dict(t: T.vectorized):
-    return elem_dict(t.elem)
-
-
-###
-
-
 @dp_inst
 def from_sql(state, res: T.primitive):
     try:
@@ -116,6 +108,9 @@ def from_sql(state, res: T.primitive):
         item ,= row
     except ValueError:
         raise Signal.make(T.TypeError, state, None, "Expected primitive. Got: '%s'" % res.value)
+    # t = from_python(type(item))
+    # if not (t <= res.type):
+    #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
     return item
 
 def _from_datetime(state, s):
@@ -165,7 +160,7 @@ def restructure_result(state, t: T.table, i):
 
 @dp_type
 def restructure_result(state, t: T.struct, i):
-    return ({name: restructure_result(state, col, i) for name, col in t.elem_dict.items()})
+    return ({name: restructure_result(state, col, i) for name, col in t.elems.items()})
 
 @dp_type
 def restructure_result(state, t: T.union[T.primitive, T.nulltype], i):
@@ -177,7 +172,7 @@ def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.nulltype]],
 
 
 @dp_type
-def restructure_result(state, t: T.list[T.primitive, T.nulltype], i):
+def restructure_result(state, t: T.list[T.union[T.primitive, T.nulltype]], i):
     # XXX specific to choice of db. So belongs in sql.py?
     res = next(i)
     if state.db.target == 'mysql':   # TODO use constant

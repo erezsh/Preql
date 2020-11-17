@@ -118,10 +118,9 @@ class State:
 
     def set_var(self, name, value):
         return self.ns.set_var(name, value)
+
     def use_scope(self, scope: dict):
         return self.ns.use_scope(scope)
-
-
 
     def unique_name(self, obj):
         self.tick[0] += 1
@@ -133,13 +132,13 @@ class NameNotFound(Exception):
 
 class Namespace:
     def __init__(self, ns=None):
-        self.ns = ns or [{}]
+        self._ns = ns or [{}]
 
     def __copy__(self):
-        return Namespace([dict(n) for n in self.ns])
+        return Namespace([dict(n) for n in self._ns])
 
     def get_var(self, name):
-        for scope in reversed(self.ns):
+        for scope in reversed(self._ns):
             if name in scope:
                 return scope[name]
 
@@ -147,34 +146,38 @@ class Namespace:
 
     def set_var(self, name, value):
         assert not isinstance(value, ast.Name)
-        self.ns[-1][name] = value
+        self._ns[-1][name] = value
 
 
     @contextmanager
     def use_scope(self, scope: dict):
-        x = len(self.ns)
-        self.ns.append(scope)
+        x = len(self._ns)
+        self._ns.append(scope)
         try:
             yield
         finally:
-            self.ns.pop()
-            assert x == len(self.ns)
+            _discarded_scope = self._ns.pop()
+            assert x == len(self._ns)
 
-    def push_scope(self):
-        self.ns.append({})
 
-    def pop_scope(self):
-        return self.ns.pop()
+    # def push_scope(self):
+    #     self.ns.append({})
+
+    # def pop_scope(self):
+    #     return self.ns.pop()
+
+    def __len__(self):
+        return len(self._ns)
 
     def get_all_vars(self):
         d = {}
-        for scope in reversed(self.ns):
+        for scope in reversed(self._ns):
             d.update(scope) # Overwrite upper scopes
         return d
 
     def get_all_vars_with_rank(self):
         d = {}
-        for i, scope in enumerate(reversed(self.ns)):
+        for i, scope in enumerate(reversed(self._ns)):
             for k, v in scope.items():
                 if k not in d:
                     d[k] = i, v
@@ -217,7 +220,7 @@ def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s,
         raise Signal.make(T.TypeError, state, ast, msg % (op, type_str, t))
 
 def exclude_fields(state, table, fields):
-    proj = ast.Projection(None, table, [ast.NamedField(None, None, ast.Ellipsis(None, exclude=list(fields) ))])
+    proj = ast.Projection(table, [ast.NamedField(None, ast.Ellipsis(exclude=list(fields) ))])
     return evaluate(state, proj)
 
 def call_pql_func(state, name, args):
@@ -225,9 +228,13 @@ def call_pql_func(state, name, args):
     builtins = state.ns.get_var('__builtins__')
     assert isinstance(builtins, objects.Module)
 
-    expr = ast.FuncCall(None, builtins.namespace[name], args)
+    expr = ast.FuncCall(builtins.namespace[name], args)
     return evaluate(state, expr)
 
 
 new_value_instance = objects.new_value_instance
 
+
+def is_global_scope(state):
+    assert len(state.ns)
+    return len(state.ns) == 1

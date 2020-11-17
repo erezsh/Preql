@@ -1,25 +1,9 @@
-# Steps for evaluation
-#         expand
-#         expand names
-#         expand function calls
-#     resolve types
-#         propagate types
-#         verify correctness
-#         adjust tree to accomodate type semantics
-#     simplify (opt)
-#         compute local operations (fold constants)
-#     compile
-#         generate sql for remote operations
-#     execute
-#         execute remote queries
-#         simplify (compute) into the final result
-
 from typing import List, Optional
 import logging
 from pathlib import Path
 
 from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type, exclude_fields, call_pql_func
+from .interp_common import assert_type, exclude_fields, call_pql_func, is_global_scope
 from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
@@ -29,7 +13,7 @@ from . import settings
 from .parser import Str
 
 from .interp_common import State, dy, new_value_instance
-from .compiler import compile_to_instance, cast_to_instance
+from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
 from .pql_objects import vectorized
@@ -44,7 +28,14 @@ def resolve(state: State, struct_def: ast.StructDef):
 
 @dy
 def resolve(state: State, table_def: ast.TableDef):
-    t = T.table({}, name=Id(table_def.name))
+    name = table_def.name
+    if is_global_scope(state):
+        temporary = False
+    else:
+        name = '__local_' + state.unique_name(name)
+        temporary = True
+
+    t = T.table({}, name=Id(name), temporary=temporary)
 
     with state.use_scope({table_def.name: t}):  # For self-reference
         elems = {c.name: resolve(state, c) for c in table_def.columns}
@@ -94,12 +85,22 @@ def db_query(state: State, sql_code, subqueries=None):
     except exc.DatabaseQueryError as e:
         raise Signal.make(T.DbQueryError, state, None, e.args[0]) from e
 
+def drop_table(state, table_type):
+    name ,= table_type.options['name'].parts
+    code = sql.compile_drop_table(state, name)
+    return state.db.query(code, {}, state=state)
 
-from .types_impl import elem_dict
+
 @dy
 def _execute(state: State, table_def: ast.TableDefFromExpr):
     expr = cast_to_instance(state, table_def.expr)
-    t = new_table_from_expr(state, table_def.name, expr, table_def.const, False)
+    name = table_def.name
+    if is_global_scope(state):
+        temporary = False
+    else:
+        name = '__local_' + state.unique_name(name)
+        temporary = True
+    t = new_table_from_expr(state, name, expr, table_def.const, temporary)
     state.set_var(table_def.name, t)
 
 @dy
@@ -219,6 +220,7 @@ def _execute(state: State, func_def: ast.FuncDef):
 
     state.set_var(func.name, func.replace(params=new_params))
 
+# TODO doesn't belong here!
 import rich.console
 @dy
 def _execute(state: State, p: ast.Print):
@@ -285,7 +287,7 @@ def _execute(state: State, t: ast.Try):
             raise
 
 def import_module(state, r):
-    paths = [Path(__file__).parent, Path.cwd()]
+    paths = [Path(__file__).parent / 'modules', Path.cwd()]
     for path in paths:
         module_path =  (path / r.module_path).with_suffix(".pql")
         if module_path.exists():
@@ -312,9 +314,9 @@ def import_module(state, r):
     # Inherit module db (in case it called connect())
     state.db = i.state.db
 
-    ns = i.state.ns.ns
+    ns = i.state.ns
     assert len(ns) == 1
-    return objects.Module(r.module_path, i.state.ns.ns[0])
+    return objects.Module(r.module_path, ns._ns[0])
 
 
 @dy
@@ -365,7 +367,7 @@ def simplify(state: State, cb: ast.CodeBlock):
         # Failed to run it, so try to cast as instance
         # XXX order should be other way around!
         if e.type <= T.CastError:
-            return compile_to_instance(state, cb)
+            return compile_to_inst(state, cb)
         raise
     except InsufficientAccessLevel:
         return cb
@@ -412,29 +414,31 @@ def simplify(state: State, x):
 # TODO Optimize these, right now failure to evaluate will lose all work
 @dy
 def simplify(state: State, obj: ast.Or):
-    for expr in obj.args:
-        inst = evaluate(state, expr)
-        try:
-            nz = test_nonzero(state, inst)
-        except InsufficientAccessLevel:
-            return obj
-        if nz:
-            return objects.new_value_instance(True)
+    a, b = evaluate(state, obj.args)
+    _, (ta, tb) = objects.unvectorize_args([a,b])
+    if ta.type != tb.type:
+        raise Signal.make(T.TypeError, state, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
+    try:
+        if test_nonzero(state, a):
+            return a
+    except InsufficientAccessLevel:
+        return obj
+    return b
 
-    return objects.new_value_instance(False)
 
 @dy
 def simplify(state: State, obj: ast.And):
-    for expr in obj.args:
-        inst = evaluate(state, expr)
-        try:
-            nz = test_nonzero(state, inst)
-        except InsufficientAccessLevel:
-            return obj
-        if not nz:
-            return objects.new_value_instance(False)
+    a, b = evaluate(state, obj.args)
+    _, (ta, tb) = objects.unvectorize_args([a,b])
+    if ta.type != tb.type:
+        raise Signal.make(T.TypeError, state, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
+    try:
+        if not test_nonzero(state, a):
+            return a
+    except InsufficientAccessLevel:
+        return obj
+    return b
 
-    return objects.new_value_instance(True)
 
 @dy
 def simplify(state: State, obj: ast.Not):
@@ -513,7 +517,7 @@ def eval_func_call(state, func, args):
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:
-            params = {name: ast.Parameter(None, name, value.type) for name, value in args.items()}
+            params = {name: ast.Parameter(name, value.type) for name, value in args.items()}
             sig = (func.name,) + tuple(a.type for a in args.values())
 
             try:
@@ -532,7 +536,7 @@ def eval_func_call(state, func, args):
                             expr = expr.replace(code=x)
                         state._cache[sig] = expr
 
-                expr = ast.ResolveParameters(None, expr, args)
+                expr = ast.ResolveParameters(expr, args)
 
             except exc.InsufficientAccessLevel:
                 # Don't cache
@@ -586,7 +590,8 @@ def apply_database_rw(state: State, o: ast.One):
         x ,= obj.attrs.values()
         return x
 
-    table = evaluate(state, ast.Slice(o.text_ref, obj, ast.Range(None, None, ast.Const(None, T.int, 2))))
+    slice_ast = ast.Slice(obj, ast.Range(None, ast.Const(T.int, 2))).set_text_ref(o.text_ref)
+    table = evaluate(state, slice_ast)
 
     assert (table.type <= T.collection), table
     rows = localize(state, table) # Must be 1 row
@@ -614,7 +619,7 @@ def apply_database_rw(state: State, d: ast.Delete):
     state.catch_access(state.AccessLevels.WRITE_DB)
     # TODO Optimize: Delete on condition, not id, when possible
 
-    cond_table = ast.Selection(d.text_ref, d.table, d.conds)
+    cond_table = ast.Selection(d.table, d.conds).set_text_ref(d.text_ref)
     table = evaluate(state, cond_table)
     assert table.type <= T.table
 
@@ -679,7 +684,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
         arg ,= new.args
         table = evaluate(state, arg.value)
         fakerows = [objects.RowInstance(T.row[table], {'id': T.t_id})]
-        return ast.List_(new.text_ref, T.list[T.int], fakerows)
+        return ast.List_(T.list[T.int], fakerows).set_text_ref(new.text_ref)
 
     if isinstance(obj, objects.TableInstance):
         # XXX Is it always TableInstance? Just sometimes? What's the transition here?
@@ -705,7 +710,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
         ids += [_new_row(state, new, obj, matched).primary_key()]   # XXX return everything, not just pk?
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
-    return ast.List_(new.text_ref, T.list[T.int], ids)
+    return ast.List_(T.list[T.int], ids).set_text_ref(new.text_ref)
 
 
 @listgen
@@ -756,8 +761,8 @@ def apply_database_rw(state: State, new: ast.New):
             msg = cast_to_python(state, msg)
             assert new.text_ref is state.stacktrace[-1]
             return Signal(obj, list(state.stacktrace), msg)    # TODO move this to `throw`?
-        f = objects.InternalFunction(obj.typename, [objects.Param(None, 'message')], create_exception)
-        res = evaluate(state, ast.FuncCall(new.text_ref, f, new.args))
+        f = objects.InternalFunction(obj.typename, [objects.Param('message')], create_exception)
+        res = evaluate(state, ast.FuncCall(f, new.args).set_text_ref(new.text_ref))
         return res
 
     assert isinstance(obj, objects.TableInstance), obj  # XXX always the case?
@@ -781,7 +786,8 @@ class TableConstructor(objects.Function):
 
     @classmethod
     def make(cls, table):
-        return cls([objects.Param(getattr(name, 'text_ref', None), name, p, p.options.get('default'), orig=p) for name, p in table_params(table)])
+        return cls([objects.Param(name, p, p.options.get('default'), orig=p).set_text_ref(getattr(name, 'text_ref', None))
+                    for name, p in table_params(table)])
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
@@ -814,14 +820,14 @@ def evaluate(state, obj_):
 
     # - Compile to instances with db-specific code (sql)
     # . Compilation may fail (e.g. due to lack of DB access)
-    # . Objects are generic within the same database, and can be cached
+    # . Resulting code generic within the same database, and can be cached
     # obj = compile_to_inst(state.reduce_access(state.AccessLevels.COMPILE), obj)
-    obj = compile_to_instance(state, obj)
+    obj = compile_to_inst(state, obj)
 
     if state.access_level < state.AccessLevels.EVALUATE:
         return obj
 
-    # - Resolve parameters to "instanciate" the cached code
+    # - Resolve parameters to "instantiate" the cached code
     # TODO necessary?
     obj = resolve_parameters(state, obj)
 
@@ -934,11 +940,10 @@ def new_table_from_rows(state, name, columns, rows):
 
 
 def new_table_from_expr(state, name, expr, const, temporary):
-    elems = expr.type.elem_dict
+    elems = expr.type.elems
 
     if any(t <= T.unknown for t in elems.values()):
         return objects.TableInstance.make(sql.null, expr.type, [])
-
 
     if 'id' in elems and not const:
         raise Signal.make(T.NameError, state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
@@ -959,6 +964,10 @@ def new_table_from_expr(state, name, expr, const, temporary):
 
 
 
+
+@dy
+def cast_to_python(state, obj):
+    raise Signal.make(T.TypeError, state, None, f"Unexpected value: {pql_repr(state, obj.type, obj)}")
 
 
 @dy
