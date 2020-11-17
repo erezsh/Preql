@@ -365,8 +365,11 @@ def _compare(state, op, a: T.type, b: T.nulltype):
 def _compare(state, op, a: T.nulltype, b: T.type):
     return _compare(state, op, b, a)
 
+
+primitive_or_struct = T.union[T.primitive, T.struct]
+
 @dp_inst
-def _compare(state, op, a: T.nulltype, b: T.primitive):
+def _compare(state, op, a: T.nulltype, b: primitive_or_struct):
     # TODO Enable this type-based optimization:
     # if not b.type.nullable:
     #     return objects.new_value_instance(False)
@@ -375,7 +378,7 @@ def _compare(state, op, a: T.nulltype, b: T.primitive):
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 @dp_inst
-def _compare(state, op, a: T.primitive, b: T.nulltype):
+def _compare(state, op, a: primitive_or_struct, b: T.nulltype):
     return _compare(state, op, b, a)
 
 
