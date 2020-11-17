@@ -217,6 +217,17 @@ class BasicTests(PreqlTests):
         res = preql('list(["hello"]{item[1]})')
         assert res == ["e"], res
 
+
+    def test_from_python(self):
+        preql = self.Preql()
+
+        preql('func f(x) = count(x)')
+        assert preql.f([1,2,3]) == 3
+
+        # TODO
+        # assert preql.f([(1,2), (2,3), (3,4)]) == 3
+
+
     def test_vectorized_logic2(self):
         preql = self.Preql()
         assert preql(' ["hello"]{item[..1]} ') == [{'_': 'h'}]

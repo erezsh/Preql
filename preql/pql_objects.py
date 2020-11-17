@@ -9,6 +9,7 @@ from .exceptions import pql_AttributeError, Signal
 from . import settings
 from . import pql_ast as ast
 from . import sql
+from . import pql_types
 
 from .pql_types import ITEM_NAME, T, Type, Object
 from .types_impl import repr_value, flatten_type, join_names
@@ -596,6 +597,16 @@ def new_const_table(state, table_type, tuples):
 
 
 
+class PythonList(ast.Ast):
+    # TODO just a regular const?
+    def __init__(self, items):
+        types = set(type(i) for i in items)
+        # TODO if not one type, raise typeerror
+        type_ ,= types
+        self.type = T.list[pql_types.from_python(type_)]
+
+        # allow to compile it straight to SQL, no AST in the middle
+        self.items = items
 
 def from_python(value):
     if value is None:
@@ -607,7 +618,8 @@ def from_python(value):
     elif isinstance(value, int):
         return ast.Const(T.int, value)
     elif isinstance(value, list):
-        return ast.List_(T.list[T.any], list(map(from_python, value)))
+        # return ast.List_(T.list[T.any], list(map(from_python, value)))
+        return PythonList(value)
     elif isinstance(value, dict):
         #return ast.Dict_(value)
         elems = {k:from_python(v) for k,v in value.items()}

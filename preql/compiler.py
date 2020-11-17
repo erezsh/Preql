@@ -601,6 +601,17 @@ def compile_to_inst(state: State, d: ast.Dict_):
 
 
 @dy
+def compile_to_inst(state: State, lst: objects.PythonList):
+    t = lst.type.elem
+    x = [sql.Primitive(t, sql._repr(t,i)) for i in (lst.items)]
+    name = state.unique_name("list_")
+    table_code, subq = sql.create_list(lst.type, name, x)
+    inst = objects.ListInstance.make(table_code, lst.type, [])
+    inst.subqueries[name] = subq
+    return inst
+
+
+@dy
 def compile_to_inst(state: State, lst: ast.List_):
     # TODO generate (a,b,c) syntax for IN operations, with its own type
     # sql = "(" * join([e.code.text for e in objs], ",") * ")"

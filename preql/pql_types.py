@@ -282,6 +282,7 @@ _t = {
     Decimal: T.decimal,
 }
 def from_python(t):
+    # TODO throw proper exception if this fails
     return _t[t]
 
 

@@ -55,7 +55,8 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
     except Exception as e:
         raise Signal.make(T.EvalError, state, code_expr, f"Python code provided returned an error: {e}")
 
-    return new_value_instance(res)
+    return objects.from_python(res)
+    # return new_value_instance(res)
 
 
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
