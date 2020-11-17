@@ -63,7 +63,7 @@ def repr_value(state, v):
     return pql_repr(state, v.type, v.value)
 
 @dp_type
-def pql_repr(state, t: T.object, value):
+def pql_repr(state, t, value):
     return repr(value)
 
 @dp_type
