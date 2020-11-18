@@ -153,29 +153,14 @@ class Type(Object):
         if self is T.unknown:
             return self
 
-        # XXX hacky
-        if attr == 'elem' and self.elems and len(self.elems) == 1:
-            try:
-                return self.elem
-            except ValueError:
-                pass
-        # elif attr == 'elems' and self.elems:
-        #     return self.elems
-
-        assert attr not in self.methods
-
-        return super().get_attr(attr)
+        return self.elems[attr]
 
     def all_attrs(self):
-        if len(self.elems) == 1:
-            return {'elem': self.elem}
-        # else:
-        #     return {'elems': self.elems}
-        return {}
+        # return {'elems': self.elems}
+        return self.elems
 
     def repr(self, state):
         return repr(self)
-
 
 
 class TypeDict(dict):
@@ -191,7 +176,6 @@ class TypeDict(dict):
             self._register(name, *args)
         else:
             self._register(name, args)
-
 
 
 T = TypeDict()
@@ -213,10 +197,10 @@ T.string = [T.text]
 T.number = [T.primitive]
 T.int = [T.number]
 T.float = [T.number]
-T.bool = [T.primitive]    # number
+T.bool = [T.primitive]    # number?
 T.decimal = [T.number]
 
-T.datetime = [T.primitive]    # primitive? struct?
+T.datetime = [T.primitive]    # struct?
 
 T.container = [T.object]
 
@@ -320,7 +304,6 @@ def union_types(types):
     return elem_type
 
 
-
 class ProtoTS(TypeSystem):
     def issubclass(self, t1, t2):
         if t2 is object:
@@ -336,13 +319,13 @@ class ProtoTS(TypeSystem):
 
     default_type = object
 
+
 class TS_Preql(ProtoTS):
     def get_type(self, obj):
         try:
             return obj.type
         except AttributeError:
             return type(obj)
-
 
 
 class TS_Preql_subclass(ProtoTS):
@@ -353,6 +336,7 @@ class TS_Preql_subclass(ProtoTS):
 
         # Regular Python
         return type(obj)
+
 
 dp_type = runtype.Dispatch(TS_Preql_subclass())
 dp_inst = runtype.Dispatch(TS_Preql())

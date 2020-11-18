@@ -7,8 +7,9 @@ from .utils import TextPos, TextRange, TextReference
 from .exceptions import pql_SyntaxError
 from . import pql_ast as ast
 from . import pql_objects as objects
-
+from .compiler import guess_field_name
 from .pql_types import T
+
 
 class Str(str):
     def __new__(cls, value, text_ref=None):
@@ -72,8 +73,6 @@ def _fix_escaping(s):
         raise ValueError(s, e)
 
     return s
-
-from .compiler import guess_field_name  # XXX a little out of place
 
 
 def _wrap_result(res, f, meta, children):

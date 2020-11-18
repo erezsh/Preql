@@ -5,7 +5,6 @@ from . import pql_types
 from .pql_types import ITEM_NAME, T, Type, dp_type, Id
 from .types_impl import join_names, flatten_type
 
-
 duck = 'duck'
 sqlite = 'sqlite'
 postgres = 'postgres'
@@ -52,6 +51,8 @@ class Sql:
 class SqlTree(Sql):
     _is_select = False
     _needs_select = False
+
+    _compile = NotImplemented
 
     def compile_wrap(self, qb):  # Move to Expr? Doesn't apply to statements
         return self.compile(qb).wrap(qb)

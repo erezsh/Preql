@@ -1,9 +1,8 @@
-import re
 import operator
 
 from runtype import DispatchError
 
-from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict, re_split
+from .utils import safezip, listgen, find_duplicate, SafeDict, re_split
 from .exceptions import Signal
 from . import exceptions as exc
 
@@ -12,7 +11,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Object, Type, union_types, Id, ITEM_NAME
+from .pql_types import T, Type, union_types, Id, ITEM_NAME
 from .types_impl import dp_inst, flatten_type, pql_repr
 from .casts import cast
 from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
@@ -383,15 +382,18 @@ def _compare(state, op, a: primitive_or_struct, b: T.nulltype):
 
 
 @dp_inst
-def _compare(state, op, a: T.unknown, b: T.object):
+def _compare(state, op, _a: T.unknown, _b: T.object):
     return objects.UnknownInstance()
 @dp_inst
-def _compare(state, op, a: T.object, b: T.unknown):
+def _compare(state, op, _a: T.object, _b: T.unknown):
+    return objects.UnknownInstance()
+@dp_inst
+def _compare(state, op, _a: T.unknown, _b: T.unknown):
     return objects.UnknownInstance()
 
 
 @dp_inst
-def _compare(state, op, a: T.primitive, b: T.primitive):
+def _compare(_state, op, a: T.primitive, b: T.primitive):
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
                 f = {
                     '=': operator.eq,
@@ -450,12 +452,12 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 
     if cmp.op == 'in' or cmp.op == '!in':
         return _contains(state, cmp.op, insts[0], insts[1])
-    else:
-        op = {
-            '==': '=',
-            '<>': '!=',
-        }.get(cmp.op, cmp.op)
-        return _compare(state, op, insts[0], insts[1])
+
+    op = {
+        '==': '=',
+        '<>': '!=',
+    }.get(cmp.op, cmp.op)
+    return _compare(state, op, insts[0], insts[1])
 
 @dy
 def compile_to_inst(state: State, neg: ast.Neg):
@@ -613,12 +615,6 @@ def compile_to_inst(state: State, lst: objects.PythonList):
 
 @dy
 def compile_to_inst(state: State, lst: ast.List_):
-    # TODO generate (a,b,c) syntax for IN operations, with its own type
-    # sql = "(" * join([e.code.text for e in objs], ",") * ")"
-    # type = length(objs)>0 ? objs[1].type : nothing
-    # return Instance(Sql(sql), ArrayType(type, false))
-    # Or just evaluate?
-
     if not lst.elems and tuple(lst.type.elems.values()) == (T.any,):
         # XXX a little awkward
         return objects.EmptyList
@@ -819,8 +815,8 @@ def compile_to_inst(state: State, param: ast.Parameter):
             # TODO why can't I just make an instance?
             raise exc.InsufficientAccessLevel("Structs not supported yet")
         return make_instance(sql.Parameter(param.type, param.name), param.type, [])
-    else:
-        return state.get_var(param.name)
+
+    return state.get_var(param.name)
 
 @dy
 def compile_to_inst(state: State, attr: ast.Attr):
@@ -856,9 +852,8 @@ def _apply_type_generics(state, gen_type, type_names):
             return gen_type(tuple(type_objs))
 
         raise Signal.make(T.TypeError, state, None, "Union types not yet supported!")
-    else:
-        t ,= type_objs
 
+    t ,= type_objs
     try:
         return gen_type[t]
     except TypeError:
@@ -867,7 +862,7 @@ def _apply_type_generics(state, gen_type, type_names):
 
 
 @dy
-def guess_field_name(f):
+def guess_field_name(_f):
     return '_'
 @dy
 def guess_field_name(f: ast.Attr):

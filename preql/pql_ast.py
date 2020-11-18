@@ -46,7 +46,6 @@ class ResolveParameters(Expr):
     obj: Object
     values: Dict[str, Object]
 
-    type = Ast  # XXX Not the place!
 
 @dataclass
 class ParameterizedSqlCode(Expr):
@@ -78,6 +77,7 @@ class Ellipsis(Expr):
 
 class BinOpExpr(Expr):
     _args = 'args',
+
 class UnaryOpExpr(Expr):
     _args = 'expr',
 

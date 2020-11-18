@@ -493,8 +493,6 @@ def eval_func_call(state, func, args):
     # XXX simplify destroys text_ref, so it harms error messages.
     # TODO Can I get rid of it, or make it preserve the text_ref somehow?
     # Don't I need an instance to ensure I have type?
-    # args.update( {p.name:evaluate(state, a) for p,a in matched_args} )
-    # args.update( {p.name:a for p,a in matched_args} )
 
     for i, (p, a) in enumerate(matched_args):
         a = evaluate(state, a)

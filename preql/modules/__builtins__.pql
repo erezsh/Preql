@@ -5,7 +5,7 @@ func _sql_agg_func(name, obj, t=null) {
             throw new TypeError(name + "() only accepts lists or tables with one column. Got '" + repr(type(obj)) + "'")
         }
 
-        t = type(obj).elem
+        t = type(obj).item
     }
 
     if (not (issubclass(t, number))) {
@@ -47,7 +47,7 @@ func first(obj: collection) {
     "Return the first member of a column or a list"
 
     if (isa(obj, aggregate)) {
-        return SQL(type(obj).elem, "($obj)")
+        return SQL(type(obj).item, "($obj)")
     } else {
         obj = list(obj)
         if (isa(obj, list)) {
@@ -60,7 +60,7 @@ func first_or_null(obj: collection) {
     "Return the first member of a column or a list, or null if it's empty"
 
     if (isa(obj, aggregate)) {
-        return SQL(type(obj).elem, "($obj)")
+        return SQL(type(obj).item, "($obj)")
     } else {
         obj = list(obj)
         if (isa(obj, list)) {
