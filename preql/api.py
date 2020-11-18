@@ -267,7 +267,10 @@ class Preql:
 
     def _run_code(self, pq: str, source_file: str, **args):
         pql_args = {name: objects.from_python(value) for name, value in args.items()}
-        return self.interp.execute_code(pq + "\n", source_file, pql_args)
+        try:
+            return self.interp.execute_code(pq + "\n", source_file, pql_args)
+        except exc.ReturnSignal:
+            raise Signal.make(T.CodeError, self.interp.state, None, "'return' outside of function")
 
     def __call__(self, pq, **args):
         res = self._run_code(pq, '<inline>', **args)
@@ -300,7 +303,7 @@ class Preql:
         return self.interp.state.db.commit()
 
     def _drop_tables(self, *tables):
-        # XXX temporary method
+        # XXX temporary. Used for testing
         for t in tables:
             self.interp.state.db._execute_sql(T.nulltype, f"DROP TABLE {t};", self.interp.state)
 

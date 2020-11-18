@@ -218,6 +218,8 @@ class BasicTests(PreqlTests):
         res = preql('list(["hello"]{item[1]})')
         assert res == ["e"], res
 
+        self.assertRaises(Signal, preql, 'return 1')
+
 
     def test_from_python(self):
         preql = self.Preql()

@@ -437,17 +437,10 @@ def pql_names(state: State, obj: T.any = objects.null):
 
     If no object is given, lists the names in the current namespace.
     """
-    # TODO support all objects
-    if obj is not objects.null:
-        inst = obj
-        if inst.type <= T.module:
-            all_vars = inst.all_attrs()
-        elif inst.type <= T.collection:
-            all_vars = inst.all_attrs()
-        else:
-            raise Signal.make(T.TypeError, state, obj, "Argument to names() must be a table or module")
-    else:
+    if obj is objects.null:
         all_vars = (state.ns.get_all_vars())
+    else:
+        all_vars = obj.all_attrs()
 
     assert all(isinstance(s, str) for s in all_vars)
     tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(v.type).code]) for n,v in all_vars.items()]

@@ -87,8 +87,11 @@ def _args_wrapper(f, data, children, meta):
     return _wrap_result(res, f, meta, children)
 
 def _args_wrapper_meta(f, data, children, meta):
-    res = f(meta, *children)
-    return _wrap_result(res, f, meta, children)
+    ref = make_text_reference(*f.__self__.code_ref, meta, children)
+    res = f(ref, *children)
+    if isinstance(res, (Str, ast.Ast)):
+        res.set_text_ref(ref)
+    return res
 
 def _args_wrapper_list(f, data, children, meta):
     res = f(children)

@@ -452,7 +452,7 @@ def simplify(state: State, funccall: ast.FuncCall):
     func = evaluate(state, funccall.func)
 
     if isinstance(func, objects.UnknownInstance):
-        evaluate(state, [a.value for a in funccall.args])
+        # evaluate(state, [a.value for a in funccall.args])
         raise Signal.make(T.TypeError, state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
 
     args = funccall.args

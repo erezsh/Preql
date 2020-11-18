@@ -69,11 +69,11 @@ def _process_fields(state: State, fields):
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
 
-        yield [name, v]
+        yield [(bool(f.name), name), v]
 
 
 @listgen
-def _expand_ellipsis(state, table, fields):
+def _expand_ellipsis(state, obj, fields):
     direct_names = {f.value.name for f in fields if isinstance(f.value, ast.Name)}
 
     for f in fields:
@@ -83,12 +83,11 @@ def _expand_ellipsis(state, table, fields):
             if f.name:
                 raise Signal.make(T.SyntaxError, state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
-                t = table.type
+                t = obj.type
                 if t <= T.vectorized:
-                    # FIXME why is this needed here? probably shouldn't be
-                    elems = t.elem.elems
-                else:
-                    elems = t.elems
+                    t = t.elem
+                assert t <= T.table or t <= T.struct # some_table{ ... } or some_table{ some_struct_item {...} }
+                elems = t.elems
 
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
@@ -155,7 +154,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     attrs = table.all_attrs()
 
-    with state.use_scope({n:vectorized(c) for n, c in attrs.items()}):
+    with state.use_scope({n: vectorized(c) for n, c in attrs.items()}):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
@@ -164,8 +163,9 @@ def compile_to_inst(state: State, proj: ast.Projection):
             raise exc.Signal.make(T.TypeError, state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
-        t = T.struct({n:c.type for n, c in fields})
-        return objects.StructInstance(t, dict(fields))
+        d = {n[1]:c for n, c in fields}     # Remove used_defined bool
+        t = T.struct({n:f.type for n, f in d.items()})
+        return objects.StructInstance(t, d)
 
     agg_fields = []
     if proj.agg_fields:
@@ -173,26 +173,32 @@ def compile_to_inst(state: State, proj: ast.Projection):
             agg_fields = _process_fields(state, proj.agg_fields)
 
     all_fields = fields + agg_fields
+    assert all(isinstance(inst, AbsInstance) for name_, inst in all_fields)
 
-    # Make new type
+    #
+    # Make new type (and resolve names)
+    #
+    field_types = [(name, inst.type) for name, inst in all_fields]
+    reserved_names = {name[1] for name, _ in all_fields if name[0]}
     elems = {}
-    # codename = state.unique_name('proj')
-    for name_, inst in all_fields:
-        assert isinstance(inst, AbsInstance)
+    for (user_defined, name), type_ in field_types:
+        # Unvectorize for placing in the table type
+        if type_ <= T.vectorized:
+            type_ = type_.elem
 
-        # TODO what happens if automatic name precedes and collides with user-given name?
-        name = name_
-        i = 1
-        while name in elems:
-            name = name_ + str(i)
-            i += 1
-        t = inst.type
-        # Unvectorize (XXX is this correct?)
-        if t <= T.vectorized:
-            t = t.elem
-        elems[name] = t
+        # Find name without collision
+        if not user_defined:
+            name_ = name
+            i = 1
+            while name in elems or name in reserved_names:
+                name = name_ + str(i)
+                i += 1
+
+        assert name not in elems
+        elems[name] = type_
 
     # TODO inherit primary key? indexes?
+    # codename = state.unique_name('proj')
     new_table_type = T.table(elems, temporary=False)    # XXX abstract=True
 
     # Make code

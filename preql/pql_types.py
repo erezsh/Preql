@@ -1,10 +1,12 @@
-import runtype
-from runtype.typesystem import TypeSystem
-
+from contextlib import suppress
 from typing import Union
 from datetime import datetime
 from dataclasses import field
 from decimal import Decimal
+
+import runtype
+from runtype.typesystem import TypeSystem
+
 
 from .base import Object
 from .utils import dataclass
@@ -153,11 +155,17 @@ class Type(Object):
         if self is T.unknown:
             return self
 
-        return self.elems[attr]
+        if isinstance(self.elems, dict):
+            with suppress(KeyError):
+                return self.elems[attr]
+
+        return super().get_attr(attr)
 
     def all_attrs(self):
         # return {'elems': self.elems}
-        return self.elems
+        if isinstance(self.elems, dict):
+            return self.elems
+        return {}
 
     def repr(self, state):
         return repr(self)
