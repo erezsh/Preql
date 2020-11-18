@@ -1,9 +1,12 @@
+import json
+from datetime import datetime
 from typing import List, Optional, Dict
 
 from .utils import dataclass, X, listgen, field_list
 from . import pql_types
-from .pql_types import ITEM_NAME, T, Type, dp_type, Id
+from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst, Id
 from .types_impl import join_names, flatten_type
+from .exceptions import Signal
 
 duck = 'duck'
 sqlite = 'sqlite'
@@ -969,3 +972,96 @@ def compile_type(idtype: T.t_id):
     return s
 
 
+
+
+def _from_datetime(state, s):
+    if s is None:
+        return None
+
+    # Postgres
+    if isinstance(s, datetime):
+        return s
+
+    # Sqlite
+    if not isinstance(s, str):
+        raise Signal.make(T.TypeError, [], None, f"datetime expected a string. Instead got: {s}")
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError as e:
+        raise Signal.make(T.ValueError, state, None, str(e))
+
+
+@dp_inst
+def from_sql(state, res: T.primitive):
+    try:
+        row ,= res.value
+        item ,= row
+    except ValueError:
+        raise Signal.make(T.TypeError, state, None, "Expected primitive. Got: '%s'" % res.value)
+    # t = from_python(type(item))
+    # if not (t <= res.type):
+    #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
+    return item
+
+
+@dp_inst
+def from_sql(state, res: T.datetime):
+    # XXX doesn't belong here?
+    row ,= res.value
+    item ,= row
+    s = item
+    return _from_datetime(state, s)
+
+@dp_inst
+def from_sql(state, arr: T.list):
+    if not all(len(e)==1 for e in arr.value):
+        raise Signal.make(T.TypeError, state, None, f"Expected 1 column. Got {len(arr.value[0])}")
+    return [e[0] for e in arr.value]
+
+@dp_inst
+@listgen
+def from_sql(state, arr: T.table):
+    expected_length = len(flatten_type(arr.type))   # TODO optimize?
+    for row in arr.value:
+        if len(row) != expected_length:
+            raise Signal.make(T.TypeError, state, None, f"Expected {expected_length} columns, but got {len(row)}")
+        i = iter(row)
+        yield {name: restructure_result(state, col, i) for name, col in arr.type.elems.items()}
+
+@dp_type
+def restructure_result(state, t: T.table, i):
+    # return ({name: restructure_result(state, col, i) for name, col in t.elem_dict.items()})
+    return next(i)
+
+@dp_type
+def restructure_result(state, t: T.struct, i):
+    return ({name: restructure_result(state, col, i) for name, col in t.elems.items()})
+
+@dp_type
+def restructure_result(state, t: T.union[T.primitive, T.nulltype], i):
+    return next(i)
+
+@dp_type
+def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.nulltype]], i):
+    return next(i)
+
+
+@dp_type
+def restructure_result(state, t: T.list[T.union[T.primitive, T.nulltype]], i):
+    res = next(i)
+    if state.db.target == mysql:
+        res = json.loads(res)
+    elif state.db.target == sqlite:
+        res = res.split('|')
+
+    # XXX hack! TODO Use a generic form to cast types
+    if t.elem <= T.int:
+        res = [int(x) for x in res]
+    elif t.elem <= T.float:
+        res = [float(x) for x in res]
+    return res
+
+@dp_type
+def restructure_result(state, t: T.datetime, i):
+    s = next(i)
+    return _from_datetime(None, s)

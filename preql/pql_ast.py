@@ -3,7 +3,8 @@ from dataclasses import field
 
 from .utils import dataclass, TextReference, field_list
 from .pql_types import Type, Object
-from .types_impl import repr_value
+from .types_impl import pql_repr
+
 
 # TODO We want Ast to typecheck, but sometimes types are still unknown (i.e. at parse time).
 # * Use incremental type checks?
@@ -69,7 +70,7 @@ class Const(Expr):
     value: Any
 
     def repr(self, state):
-        return repr_value(state, self)
+        return pql_repr(state, self.type, self.value)
 
 @dataclass
 class Ellipsis(Expr):

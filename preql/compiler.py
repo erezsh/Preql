@@ -11,8 +11,8 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Type, union_types, Id, ITEM_NAME
-from .types_impl import dp_inst, flatten_type, pql_repr
+from .pql_types import T, Type, union_types, Id, ITEM_NAME, dp_inst
+from .types_impl import flatten_type, pql_repr
 from .casts import cast
 from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
 
@@ -200,7 +200,6 @@ def compile_to_inst(state: State, proj: ast.Projection):
                   for _, inst in all_fields
                   for code in inst.flatten_code()]
 
-    # TODO if nn != on
     sql_fields = [
         sql.ColumnAlias.make(code, nn)
         for code, (nn, _nt) in safezip(flat_codes, flatten_type(new_table_type))

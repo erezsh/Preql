@@ -339,13 +339,9 @@ def _execute(state: State, t: ast.Throw):
     raise e
 
 def execute(state, stmt):
-    try:
-        if isinstance(stmt, ast.Statement):
-            return _execute(state, stmt) or objects.null
-        return evaluate(state, stmt)
-    except Signal as e:
-        # assert e.text_refs    # TODO ensure?
-        raise
+    if isinstance(stmt, ast.Statement):
+        return _execute(state, stmt) or objects.null
+    return evaluate(state, stmt)
 
 
 
@@ -693,7 +689,6 @@ def apply_database_rw(state: State, new: ast.NewRows):
     arg ,= new.args
 
     # TODO postgres can do it better!
-    # field = arg.name
     table = evaluate(state, arg.value)
     rows = localize(state, table)
 
@@ -763,7 +758,9 @@ def apply_database_rw(state: State, new: ast.New):
         res = evaluate(state, ast.FuncCall(f, new.args).set_text_ref(new.text_ref))
         return res
 
-    assert isinstance(obj, objects.TableInstance), obj  # XXX always the case?
+    if not isinstance(obj, objects.TableInstance):
+        raise Signal.make(T.TypeError, state, new, f"'new' expects a table or exception, instead got {obj.repr(state)}")
+
     table = obj
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
     assert_type(table.type, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")

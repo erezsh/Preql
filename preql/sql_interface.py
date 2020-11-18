@@ -2,11 +2,10 @@ from decimal import Decimal
 from .utils import classify, dataclass
 from .loggers import sql_log
 
-from .sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck
+from .sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, from_sql
 from . import exceptions
 
 from .pql_types import T, Type, Object, Id
-from .types_impl import from_sql
 
 
 @dataclass

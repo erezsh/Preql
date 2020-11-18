@@ -93,7 +93,6 @@ class State:
             raise Signal.make(T.ValueError, self, None, *e.args) from e
 
         self._db_uri = uri
-        # self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
 
 
     def get_all_vars(self):

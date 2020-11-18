@@ -12,7 +12,8 @@ from . import sql
 from . import pql_types
 
 from .pql_types import ITEM_NAME, T, Type, Object
-from .types_impl import repr_value, flatten_type, join_names
+from .types_impl import flatten_type, join_names, pql_repr
+
 
 # Functions
 @dataclass
@@ -264,7 +265,7 @@ class ValueInstance(Instance):
     local_value: object
 
     def repr(self, state):
-        return repr_value(state, self)
+        return pql_repr(state, self.type, self.local_value)
 
     @property
     def value(self):
