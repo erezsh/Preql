@@ -163,11 +163,14 @@ class TreeToAst(Transformer):
         return ast.Compare(op, [a,b])
 
     def _arith_expr(self, a, op, b):
-        return ast.Arith(op, [a,b])
+        return ast.BinOp(op, [a,b])
 
     add_expr = _arith_expr
     term = _arith_expr
     power = _arith_expr
+
+    def like(self, string, pattern):
+        return ast.BinOp('like', [string, pattern])
 
     and_test = no_inline(ast.And)
     or_test = no_inline(ast.Or)
@@ -175,7 +178,6 @@ class TreeToAst(Transformer):
     not_test = ast.Not
 
     neg = ast.Neg
-    like = ast.Like
     var = ast.Name
     getattr = ast.Attr
     named_expr = ast.NamedField

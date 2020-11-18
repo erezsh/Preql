@@ -95,7 +95,7 @@ NOT_IN: "!in"
 ?not_test: "not" not_test -> not_test
          | compare
 ?compare: (compare comp_op)? like
-?like: (like "~")? add_expr
+?like: (like ("~"|"like"))? add_expr
 ?add_expr: (add_expr add_op)? term
 ?term: (term mul_op)? power
 ?factor: ("+" | "-")* molecule

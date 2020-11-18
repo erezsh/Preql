@@ -91,7 +91,7 @@ def pql_fmt(state: State, s: T.string):
 
     a = string_parts[0]
     for b in string_parts[1:]:
-        a = ast.Arith("+", [a,b])
+        a = ast.BinOp("+", [a,b])
 
     return cast_to_instance(state, a)
 

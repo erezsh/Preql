@@ -90,7 +90,7 @@ class Compare(BinOpExpr):
 
 
 @dataclass
-class Arith(BinOpExpr):
+class BinOp(BinOpExpr):
     op: str
     args: List[Object]
 
@@ -120,15 +120,6 @@ class DescOrder(Expr):
     value: Object
 
     _args = 'value',
-
-@dataclass
-class Like(Expr):
-    str: Object
-    pattern: Object
-
-    op = "~"
-
-    _args = 'str', 'pattern'
 
 @dataclass
 class Range(Expr):

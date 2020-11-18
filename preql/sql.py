@@ -349,16 +349,6 @@ class Compare(Scalar):
 
         return parens( join_sep(elems, f' {op} ') )
 
-@dataclass
-class Like(Scalar):
-    string: Sql
-    pattern: Sql
-    type = T.bool
-
-    def _compile(self, qb):
-        s = self.string.compile_wrap(qb)
-        p = self.pattern.compile_wrap(qb)
-        return s.code + [' like '] + p.code
 
 @dataclass
 class LogicalBinOp(Scalar):
@@ -381,8 +371,9 @@ class LogicalNot(Scalar):
 
     type = T.bool
 
+
 @dataclass
-class Arith(Scalar):
+class BinOp(Scalar):
     op: str
     exprs: List[Sql]
 
@@ -821,7 +812,7 @@ def arith(target, res_type, op, args):
         else:
             op = '/'
 
-    return Arith(op, arg_codes)
+    return BinOp(op, arg_codes)
 
 
 @dataclass
@@ -886,7 +877,7 @@ def make_value(x):
     return Primitive(t, _repr(t, x))
 
 def add_one(x):
-    return Arith('+', [x, make_value(1)])
+    return BinOp('+', [x, make_value(1)])
 
 def _quote(target, name):
     assert isinstance(name, str)

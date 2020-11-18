@@ -297,17 +297,6 @@ def compile_to_inst(state: State, o: ast.Not):
     return objects.make_instance(code, T.bool, [expr])
 
 
-@dy
-def compile_to_inst(state: State, like: ast.Like):
-    # XXX move to ast.Arith ?
-    s = cast_to_instance(state, like.str)
-    p = cast_to_instance(state, like.pattern)
-
-    try:
-        return _compile_arith(state, like, s, p)
-    except DispatchError as e:
-        raise Signal.make(T.TypeError, state, like, f"Like not implemented for {s.type} and {p.type}")
-
 
 ## Contains
 @dp_inst
@@ -473,14 +462,10 @@ def compile_to_inst(state: State, neg: ast.Neg):
 
 
 @dy
-def compile_to_inst(state: State, arith: ast.Arith):
-    args = evaluate(state, arith.args)
+def compile_to_inst(state: State, arith: ast.BinOp):
+    args = cast_to_instance(state, arith.args)
+    return _compile_arith(state, arith, *args)
 
-    try:
-        return _compile_arith(state, arith, *args)
-    except DispatchError as e:
-        a, b = args
-        raise Signal.make(T.TypeError, state, arith, f"Arith not implemented for {a.type} and {b.type}")
 
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
@@ -571,8 +556,8 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
 
 @dp_inst
 def _compile_arith(state, arith, a: T.string, b: T.string):
-    if arith.op == '~':
-        code = sql.Like(a.code, b.code)
+    if arith.op == 'like':
+        code = sql.BinOp('like', [a.code, b.code])
         return objects.Instance.make(code, T.bool, [a, b])
 
     if arith.op != '+':
@@ -794,7 +779,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
         index ,= sel.conds
         assert index.type <= T.int
         table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
-        slice = ast.Slice(table, ast.Range(index, ast.Arith('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
+        slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
 
     assert_type(table.type, T.collection, state, sel, "Selection")
