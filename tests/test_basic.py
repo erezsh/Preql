@@ -233,6 +233,9 @@ class BasicTests(PreqlTests):
 
     def test_vectorized_logic2(self):
         preql = self.Preql()
+        res = preql('list(["a", "b"]{length(item)>1 or true})')
+        assert res == [1, 1]
+
         assert preql(' ["hello"]{item[..1]} ') == [{'_': 'h'}]
 
         self.assertRaises(Signal, preql, '["hello"]{item or 1}')    # XXX TypeError
@@ -256,6 +259,9 @@ class BasicTests(PreqlTests):
         assert res == [{'_': "hello"}], res
         res = preql('["hello"]{item and "a" or "b"}')
         assert res == [{'_': "a"}], res
+
+        res = preql('list(["a", "b"]{length(item)>1 or true})')
+        assert res == [1, 1]
 
 
 
@@ -508,6 +514,9 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql('"hello"[1..]'), "ello" )
         self.assertEqual( preql('"hello"[..1]'), "h" )
         self.assertEqual( preql('"hello"[2..4]'), "ll" )
+
+        self.assertEqual( preql('length("hello")'), 5 )
+        self.assertEqual( preql('list(["hello"]{length(item)})'), [5] )
 
     def test_casts(self):
         preql = self.Preql()
@@ -1319,6 +1328,21 @@ class BasicTests(PreqlTests):
         res = p('list([-2..3]{sign(item)})')
         assert res == [-1, -1, 0, 1, 1], res
 
+    def test_builtins(self):
+        p = self.Preql()
+
+        assert p("list([1.1, 2.3]{round(item)})") == [1.0, 2.0]
+        assert p('round(1.3)') == 1.0
+
+        assert p('list(["A", "Ab"]{length(item)})') == [1, 2]
+        assert p('list(["A", "Ab"]{lower(item)})') == ["a", "ab"]
+        assert p('list(["A", "Ab"]{upper(item)})') == ["A", "AB"]
+        assert p('length("Ab")') == 2
+        assert p('lower("Ab")') == "ab"
+        assert p('upper("Ab")') == "AB"
+
+        assert p('list(["Ab", "Aab"]{str_index("b", item)})') == [2, 3]
+        assert p('str_index("b", "Ab")') == 2
 
 
 

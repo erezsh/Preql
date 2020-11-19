@@ -1,3 +1,4 @@
+func maybe_vectorized(t) = union[t, vectorized[t]]
 
 func _sql_agg_func(name, obj, t=null) {
     if (t==null) {
@@ -96,22 +97,22 @@ func enum(tbl: collection) {
     return tbl{index: SQL(int, "row_number() over ()"), ...}
 }
 
-func upper(s: string) {
+func upper(s: maybe_vectorized(string)) {
     "Return a copy of the string converted to uppercase."
     return SQL(string, "upper($s)")
 }
 
-func lower(s: string) {
+func lower(s: maybe_vectorized(string)) {
     "Return a copy of the string converted to uppercase."
     return SQL(string, "lower($s)")
 }
 
-func length(s: string) {
+func length(s: maybe_vectorized(string)) {
     "Return the length of the string"
     return SQL(int, "length($s)")
 }
 
-func round(n: number) {
+func round(n: maybe_vectorized(number)) {
     "Return a rounded float"
     return SQL(float, "round($n)")
 }
@@ -164,15 +165,15 @@ func distinct(t: collection) {
 
 func pi() = SQL(float, "PI()")
 func now() = SQL(datetime, "NOW()")
-func repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")
+func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "REPEAT($s, $num)")
 
 if (get_db_type() == "postgres") {
     func random() = SQL(float, "RANDOM()")
 
-    func str_index(a, b) = SQL(int, "POSITION($a in $b)")
+    func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "POSITION($a in $b)")
 } else {
     if (get_db_type() == "sqlite" or get_db_type() == "duck") {
-        func repeat(s: string, num: int) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
+        func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')")   // Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
         func pi() = SQL(float, "3.141592653589793")
@@ -186,13 +187,13 @@ if (get_db_type() == "postgres") {
         func week_of_year(date) = SQL(int, "strftime('%W', $date)")
         func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
 
-        func str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)")
+        func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)")
 
     } else {
         if (get_db_type() == "mysql") {
             func random() = SQL(float, "RAND()")
 
-            func str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)")    // same as sqlite
+            func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)")    // same as sqlite
 
             // TODO use AST interface instead?
             func count_false(field) {

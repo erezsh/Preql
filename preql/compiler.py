@@ -696,6 +696,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
     else:
         self_table = None
 
+    params_vectorized = False
     instances = []
     subqueries = SafeDict()
     tokens = re_split(r"\$\w+", sql_code)
@@ -715,6 +716,8 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
                     inst = objects.new_table(obj)
                 else:
                     inst = cast_to_instance(state, obj)
+                    if inst.type <= T.vectorized:
+                        params_vectorized = True
 
             instances.append(inst)
             new_code += _resolve_sql_parameters(state, inst.code, wrap=bool(new_code), subqueries=subqueries).code
@@ -735,6 +738,8 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
         inst.subqueries[name] = subq
         return inst
 
+    if params_vectorized:
+        type_ = T.vectorized[type_]
     code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
     return make_instance(code, type_, instances)
 

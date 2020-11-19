@@ -489,7 +489,8 @@ def eval_func_call(state, func, args):
     for i, (p, a) in enumerate(matched_args):
         a = evaluate(state, a)
         # TODO cast?
-        if p.type and not a.type <= T.union[p.type, T.vectorized[p.type]]:
+        # if p.type and not a.type <= T.union[p.type, T.vectorized[p.type]]:
+        if p.type and not a.type <= p.type:
             raise Signal.make(T.TypeError, state, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
         args[p.name] = a
 
@@ -499,10 +500,10 @@ def eval_func_call(state, func, args):
         # TODO Ensure correct types
         args = list(args.values())
         # args = evaluate(state, args)
-        was_vec, args = objects.unvectorize_args(args)
+        # was_vec, args = objects.unvectorize_args(args)
         res = func.func(state, *args)
-        if was_vec:
-            res = vectorized(res)
+        # if was_vec:
+        #     res = vectorized(res)
         return res
     else:
         # TODO make tests to ensure caching was successful
