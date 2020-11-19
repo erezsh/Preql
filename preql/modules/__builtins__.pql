@@ -272,6 +272,10 @@ func bfs(edges: table, initial: table) {
         edges - a table of type {src: int, dst: int}, defining the edges of the graph
         initial - list[int], specifies from which nodes to start
     """
+    if (count(names(edges){name} & ["src", "dst"]) != 2) {
+        throw new TypeError("bfs: 'edges' expected to contain 'src' and 'dst'")
+    }
+    initial = list(initial)
     bfs = SQL(list[int], "SELECT * FROM $initial UNION SELECT e.dst FROM $edges e JOIN $self bfs ON e.src = bfs.item")
     return SQL(list[int], "SELECT bfs.item FROM $bfs bfs")
 }
