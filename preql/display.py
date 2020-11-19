@@ -95,7 +95,7 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
     if not rows:
         return header
 
-    table = rich.table.Table(title=rich.text.Text(header), show_footer=show_footer)
+    table = rich.table.Table(title=rich.text.Text(header), show_footer=show_footer, min_width=len(header))
 
     # TODO enable/disable styling
     for k, v in rows[0].items():
@@ -192,9 +192,11 @@ class RichDisplay(Display):
         self.console = rich.console.Console()
 
     def print(self, repr_):
-        if not hasattr(repr_, '__rich_console__'):
-            repr_ = rich.text.Text(repr_)
-        self.console.print(repr_, overflow="ellipsis")
+        if hasattr(repr_, '__rich_console__'):
+            self.console.print(repr_, overflow="ellipsis")
+        else:
+            # repr_ = rich.text.Text(repr_)
+            self.console.print(repr_, overflow="ellipsis", markup=False)
 
     def print_exception(self, e):
         "Yields colorful styled lines to print by the ``rich`` library"

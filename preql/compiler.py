@@ -775,8 +775,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     table = cast_to_instance(state, obj)
 
     if table.type <= T.string or table.type <= T.vectorized[T.string]:
-        # raise exc.Signal.make(T.NotImplementedError, state, sel, "String indexing not implemented yet. Use slicing instead (s[start..stop])")
-        index ,= sel.conds
+        index ,= cast_to_instance(state, sel.conds)
         assert index.type <= T.int
         table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
         slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
