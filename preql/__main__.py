@@ -1,9 +1,9 @@
 import argparse
 from pathlib import Path
 from itertools import chain
-import rich
 
 from . import Preql, __version__, Signal
+from .display import display
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', default=False, help="Enter interactive mode after running the script")
@@ -55,11 +55,7 @@ def main():
 
             interactive = True
     except Signal as e:
-        for is_rich, line in e.get_rich_lines():
-            if is_rich:
-                rich.print(line)
-            else:
-                print(line)
+        display.print_exception(e)
         res = -1
     except KeyboardInterrupt:
         print("Interrupted (Ctrl+C)")

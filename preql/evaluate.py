@@ -12,11 +12,12 @@ from . import sql
 from . import settings
 from .parser import Str
 
-from .interp_common import State, dy, new_value_instance
+from .interp_common import State, dy, new_value_instance, cast_to_python
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
 from .pql_objects import vectorized
+from .display import display
 
 
 @dy
@@ -220,8 +221,6 @@ def _execute(state: State, func_def: ast.FuncDef):
 
     state.set_var(func.name, func.replace(params=new_params))
 
-# TODO doesn't belong here!
-import rich.console
 @dy
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
@@ -230,11 +229,8 @@ def _execute(state: State, p: ast.Print):
         repr_ = cast_to_python(state, inst)
     else:
         repr_ = inst.repr(state)
-    if isinstance(repr_, rich.table.Table):
-        console = rich.console.Console()
-        console.print(repr_)
-    else:
-        print(repr_)
+
+    display.print(repr_)
 
 @dy
 def _execute(state: State, p: ast.Assert):
@@ -957,13 +953,9 @@ def new_table_from_expr(state, name, expr, const, temporary):
     return objects.new_table(table)
 
 
-
-
-
 @dy
 def cast_to_python(state, obj):
     raise Signal.make(T.TypeError, state, None, f"Unexpected value: {pql_repr(state, obj.type, obj)}")
-
 
 @dy
 def cast_to_python(state, obj: ast.Ast):

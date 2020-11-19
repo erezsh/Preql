@@ -10,7 +10,7 @@ from operator import getitem
 import dataclasses
 
 import runtype
-
+from rich.text import Text
 
 from . import settings
 
@@ -194,16 +194,16 @@ class TextReference:
 
         source = Path(self.source_file)
 
+        start = self.ref.start
         if rich:
-            start = self.ref.start
             return [
-                (True, f"  [red]~~~[/red] At '{source.name}' line {start.line}, column {start.column}"),
-                (False, text_before + text_after),
-                (False, ' ' * (len(text_before)-mark_before) + MARK_CHAR*mark_before + '^' + MARK_CHAR*mark_after),
+                f"  [red]~~~[/red] At '{source.name}' line {start.line}, column {start.column}",
+                Text(text_before + text_after),
+                Text(' ' * (len(text_before)-mark_before) + MARK_CHAR*mark_before + '^' + MARK_CHAR*mark_after),
             ]
 
         res = [
-            "  ~~~ At '%s' line %d, column %d:\n" % (source.name, self.ref.start.line, self.ref.start.column),
+            "  ~~~ At '%s' line %d, column %d:\n" % (source.name, start.line, start.column),
             text_before, text_after, '\n',
             ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
         ]

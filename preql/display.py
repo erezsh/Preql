@@ -1,14 +1,15 @@
 import html
 
 import rich.table
-import rich.markup
+import rich.text
+import rich.console
 
 from .exceptions import Signal
-from .evaluate import cast_to_python, call_pql_func
 from .pql_types import T, ITEM_NAME
 from . import pql_objects as objects
 from . import pql_ast as ast
 from .types_impl import dp_type, pql_repr
+from .interp_common import call_pql_func, cast_to_python
 
 TABLE_PREVIEW_SIZE = 16
 LIST_PREVIEW_SIZE = 128
@@ -94,7 +95,7 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
     if not rows:
         return header
 
-    table = rich.table.Table(title=rich.markup.escape(header), show_footer=show_footer)
+    table = rich.table.Table(title=rich.text.Text(header), show_footer=show_footer)
 
     # TODO enable/disable styling
     for k, v in rows[0].items():
@@ -119,7 +120,6 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
         table.add_row(*['...' for x in rows[0]])
 
     return table
-
 
 _g_last_table = None
 _g_last_offset = 0
@@ -183,8 +183,33 @@ def function_repr(func, state):
     return res
 
 
+class Display:
+    def print(self, repr_):
+        print(repr_)
+
+class RichDisplay(Display):
+    def __init__(self):
+        self.console = rich.console.Console()
+
+    def print(self, repr_):
+        if not hasattr(repr_, '__rich_console__'):
+            repr_ = rich.text.Text(repr_)
+        self.console.print(repr_, overflow="ellipsis")
+
+    def print_exception(self, e):
+        "Yields colorful styled lines to print by the ``rich`` library"
+        self.console.print('[bold]Exception traceback:[/bold]')
+        for ref in e.text_refs:
+            for line in (ref.get_pinpoint_text(rich=True) if ref else ['???']):
+                self.console.print(line)
+            self.console.print()
+        self.console.print(rich.text.Text('%s: %s' % (e.type, e.message)))
+
+
 
 def install_reprs():
     objects.CollectionInstance.repr = table_repr
     objects.Module.repr = module_repr
     objects.Function.repr = function_repr
+
+display = RichDisplay()

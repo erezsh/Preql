@@ -28,6 +28,7 @@ def cast_to_python(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError(obj)
 
 
+
 class AccessLevels:
     COMPILE = 1
     # COMPILE_TEXT
@@ -35,6 +36,7 @@ class AccessLevels:
     EVALUATE = 3
     READ_DB = 4
     WRITE_DB = 5
+
 
 class State:
     AccessLevels = AccessLevels
@@ -237,3 +239,4 @@ new_value_instance = objects.new_value_instance
 def is_global_scope(state):
     assert len(state.ns)
     return len(state.ns) == 1
+
