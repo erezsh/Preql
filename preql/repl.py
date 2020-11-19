@@ -23,7 +23,7 @@ from prompt_toolkit.formatted_text.html import HTML, html_escape
 from . import __version__
 from . import pql_objects as objects
 from .utils import memoize
-from .api import table_more
+from .display import table_more
 from .exceptions import Signal, ExitInterp, pql_SyntaxError
 from .pql_types import Object
 from .parser import parse_stmts

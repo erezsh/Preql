@@ -2,7 +2,8 @@ from typing import List, Any, Optional, Dict, Union
 from dataclasses import field
 
 from .utils import dataclass, TextReference, field_list
-from .pql_types import Type, Object
+from . import pql_types as types
+from .pql_types import Object
 from .types_impl import pql_repr
 
 
@@ -40,7 +41,7 @@ class Name(Expr):
 class Parameter(Expr):
     "A typed object without a value"
     name: str
-    type: Type
+    type: types.Type
 
 @dataclass
 class ResolveParameters(Expr):
@@ -66,7 +67,7 @@ class Attr(Expr):
 
 @dataclass
 class Const(Expr):
-    type: Type
+    type: types.Type
     value: Any
 
     def repr(self, state):
@@ -322,3 +323,7 @@ class Dict_(Expr):
     elems: dict
 
 
+
+def make_const(value):
+    t = types.from_python(type(value))
+    return Const(t, value)

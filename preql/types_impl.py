@@ -57,46 +57,11 @@ def table_flat_for_insert(table):
     return classify_bool(names, lambda name: name in pks)
 
 
-@dp_type
-def pql_repr(state, t, value):
-    return repr(value)
-
-@dp_type
-def pql_repr(state, t: T.function, value):
-    params = []
-    for p in value.params:
-        s = p.name
-        if p.type:
-            s += ": %s" % p.type
-        params.append(s)
-
-    return f'{{func {value.name}({", ".join(params)})}}'
-
-@dp_type
-def pql_repr(state, t: T.decimal, value):
-    raise Signal.make(T.NotImplementedError, state, None, "Decimal not implemented")
-
-@dp_type
-def pql_repr(state, t: T.string, value):
-    assert isinstance(value, str), value
-    value = value.replace('"', r'\"')
-    return f'"{value}"'
-
-@dp_type
-def pql_repr(state, t: T.text, value):
-    assert isinstance(value, str), value
-    return str(value)
-
-@dp_type
-def pql_repr(state, t: T.bool, value):
-    return 'true' if value else 'false'
-
-@dp_type
-def pql_repr(state, t: T.nulltype, value):
-    return 'null'
-
-
-
 def join_names(names):
     return "_".join(names)
 
+
+# The rest is implemented in display.py
+@dp_type
+def pql_repr(state, t, value):
+    return repr(value)

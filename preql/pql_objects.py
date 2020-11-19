@@ -59,8 +59,6 @@ class Module(Object):
     def type(self):
         return T.module
 
-    def repr(self, state):
-        return f'<Module {self.name} | {len(self.namespace)} members>'
 
 class Function(Object):
 
@@ -70,10 +68,6 @@ class Function(Object):
 
     def help_str(self, state):
         raise NotImplementedError()
-
-    def repr(self, state):
-        return '<%s>' % self.help_str(state)
-
 
     @listgen
     def match_params_fast(self, state, args):
