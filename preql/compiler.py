@@ -860,7 +860,10 @@ def guess_field_name(_f):
     return '_'
 @dy
 def guess_field_name(f: ast.Attr):
-    return guess_field_name(f.expr) + "." + f.name
+    name = f.name
+    if isinstance(name, ast.Marker):
+        name = '<marker>'
+    return guess_field_name(f.expr) + "." + name
 @dy
 def guess_field_name(f: ast.Name):
     return str(f.name)
