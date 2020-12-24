@@ -178,13 +178,13 @@ SIGNED_FLOAT: ["+"|"-"] FLOAT
 SIGNED_INT: ["+"|"-"] INT
 
 
-LONG_STRING: /""".*?(?<!\\)(\\\\)*?"""/s
+STRING : /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
+LONG_STRING: /(""".*?(?<!\\)(\\\\)*?"""|'''.*?(?<!\\)(\\\\)*?''')/is
 
 %import common.CNAME -> NAME
 
 %import common.WS_INLINE
 %import common.INT
-%import common.ESCAPED_STRING -> STRING
 %ignore WS_INLINE
 %ignore /\\[\t \f]*\r?\n/   // LINE_CONT
 %ignore COMMENT
