@@ -58,6 +58,13 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
     return objects.from_python(res)
     # return new_value_instance(res)
 
+def pql_sql_of(state: State, obj: T.object):
+    "Returns the SQL code that would be executed to evaluate the given object"
+    if not isinstance(obj, objects.Instance):
+        raise Signal.make(T.TypeError, state, None, f"sql_of() expects a concrete object. Instead got: {obj.type}")
+    s = state.db.compile_sql(obj.code, obj.subqueries)
+    return objects.ValueInstance.make(sql.make_value(s), T.text, [], s)
+
 
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
@@ -230,6 +237,10 @@ def pql_table_union(state: State, t1: T.collection, t2: T.collection):
 
 def pql_table_concat(state: State, t1: T.collection, t2: T.collection):
     "Concatenate two tables (union all). Used for `t1 + t2`"
+    if isinstance(t1, objects.EmptyListInstance):
+        return t2
+    if isinstance(t2, objects.EmptyListInstance):
+        return t1
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate", True)
 
 
@@ -611,6 +622,7 @@ internal_funcs = create_internal_funcs({
     'table_union': pql_table_union,
     'table_subtract': pql_table_substract,
     'SQL': pql_SQL,
+    'sql_of': pql_sql_of,
     'PY': pql_PY,
     'isa': pql_isa,
     'issubclass': pql_issubclass,

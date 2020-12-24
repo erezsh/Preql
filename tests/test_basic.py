@@ -163,6 +163,14 @@ class BasicTests(PreqlTests):
         self._assertSignal(T.TypeError, preql, '"a" % "b"')
         self._assertSignal(T.TypeError, preql, '3 ~ 3')
 
+    def test_table_arith(self):
+        preql = self.Preql()
+
+        assert preql("[1] + [2]") == [1, 2]
+        assert preql("[1] + []") == [1]
+        assert preql("[] + [1]") == [1]
+        assert preql("[]") == []
+
     def test_logical(self):
         # TODO null values
         preql = self.Preql()

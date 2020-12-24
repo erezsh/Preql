@@ -69,6 +69,13 @@ def _cast(state, inst_type: T.string, target_type: T.bool, inst):
     return objects.Instance.make(code, T.bool, [inst])
 
 @dp_type
+def _cast(state, inst_type: T.string, target_type: T.text, inst):
+    return inst.replace(type=T.text)
+@dp_type
+def _cast(state, inst_type: T.text, target_type: T.string, inst):
+    return inst.replace(type=T.string)
+
+@dp_type
 def _cast(state, inst_type: T.union[T.int, T.bool], target_type: T.float, inst):
     code = sql.Cast(T.float, "float", inst.code)
     return objects.Instance.make(code, T.float, [inst])

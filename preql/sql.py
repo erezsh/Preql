@@ -11,6 +11,7 @@ from .exceptions import Signal
 duck = 'duck'
 sqlite = 'sqlite'
 postgres = 'postgres'
+bigquery = 'bigquery'
 mysql = 'mysql'
 
 class QueryBuilder:
@@ -883,7 +884,7 @@ def _quote(target, name):
     assert isinstance(name, str)
     if target is sqlite:
         return f'[{name}]'
-    elif target is mysql:
+    elif target is mysql or target is bigquery:
         return f'`{name}`'
     else:
         return f'"{name}"'

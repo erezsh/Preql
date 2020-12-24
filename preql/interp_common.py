@@ -10,7 +10,7 @@ from .utils import dy
 from .exceptions import Signal
 from .exceptions import InsufficientAccessLevel
 from .pql_types import Type, T
-from .sql_interface import (ConnectError, DuckInterface, GitInterface, MysqlInterface, PostgresInterface, SqliteInterface)
+from .sql_interface import (ConnectError, DuckInterface, GitInterface, MysqlInterface, PostgresInterface, SqliteInterface, BigQueryInterface)
 
 logger = getLogger('interp')
 
@@ -205,6 +205,8 @@ def create_engine(db_uri, print_sql):
         return GitInterface(path, print_sql=print_sql)
     elif scheme == 'duck':
         return DuckInterface(path, print_sql=print_sql)
+    elif scheme == 'bigquery':
+        return BigQueryInterface(path, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
 

@@ -2,7 +2,7 @@ from decimal import Decimal
 from .utils import classify, dataclass
 from .loggers import sql_log
 
-from .sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, from_sql
+from .sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, from_sql, bigquery
 from . import exceptions
 
 from .pql_types import T, Type, Object, Id
@@ -23,7 +23,7 @@ class SqlInterface:
     def query(self, sql, subqueries=None, qargs=(), quiet=False, state=None):
         assert state
         assert isinstance(sql, Sql), sql
-        sql_code = self._compile_sql(sql, subqueries, qargs, state)
+        sql_code = self.compile_sql(sql, subqueries, qargs, state)
 
         if self._print_sql and not quiet:
             log_sql(sql_code)
@@ -51,7 +51,7 @@ class SqlInterface:
         return self._import_result(sql_type, c, state)
 
 
-    def _compile_sql(self, sql, subqueries=None, qargs=(), state=None):
+    def compile_sql(self, sql, subqueries=None, qargs=(), state=None):
         qb = QueryBuilder(self.target)
 
         return sql.finalize_with_subqueries(qb, subqueries)
@@ -206,6 +206,71 @@ class PostgresInterface(SqlInterface):
             # name = '%s.%s' % (schema, table_name)
             yield schema, table_name, T.table(cols, name=Id(schema, table_name))
 
+
+
+class BigQueryInterface(SqlInterface):
+    target = bigquery
+
+    def __init__(self, project, print_sql=False):
+        from google.cloud import bigquery
+
+        self._client = bigquery.Client(project)
+
+        self._print_sql = print_sql
+
+
+    def table_exists(self, name):
+        # sql_code = "SELECT count(*) FROM information_schema.tables where table_name='%s'" % name
+        # cnt = self._execute_sql(T.int, sql_code, None)
+        # return cnt > 0
+        return False
+
+    def list_tables(self):
+        # sql_code = "SELECT table_name FROM information_schema.tables where table_schema='public'"
+        # return self._execute_sql(T.list[T.string], sql_code, None)
+        return []
+
+
+    def _execute_sql(self, sql_type, sql_code, state):
+        try:
+            res = list(self._client.query(sql_code))
+        except Exception as e:
+            msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
+            raise exceptions.DatabaseQueryError(msg%(sql_code, e))
+
+        if sql_type is not T.nulltype:
+            res = [list(i.values()) for i in res]
+            return from_sql(state, Const(sql_type, res))
+
+
+
+    # Row(('bigquery-public-data', 'usa_names', 'usa_1910_2013', 'BASE TABLE', 'YES', 'NO', datetime.datetime(2016, 3, 12, 1, 2, 22, 425000, tzinfo=<UTC>)), {'table_catalog': 0, 'table_schema': 1, 'table_name': 2, 'table_type': 3, 'is_insertable_into': 4, 'is_typed': 5, 'creation_time': 6})
+    # Row(('bigquery-public-data', 'usa_names', 'usa_1910_current', 'BASE TABLE', 'YES', 'NO', datetime.datetime(2017, 2, 27, 21, 35, 45, 458000, tzinfo=<UTC>)), {'table_catalog': 0, 'table_schema': 1, 'table_name': 2, 'table_type': 3, 'is_insertable_into': 4, 'is_typed': 5, 'creation_time': 6})
+    _schema_columns_t = T.table(dict(
+        schema=T.string,
+        table=T.string,
+        name=T.string,
+        pos=T.int,
+        nullable=T.bool,
+        type=T.string,
+    ))
+
+    def import_table_types(self, state):
+        return []
+        # columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
+        #     FROM information_schema.columns
+        #     """
+        # sql_columns = self._execute_sql(self._schema_columns_t, columns_q, state)
+
+        # columns_by_table = classify(sql_columns, lambda c: (c['schema'], c['table']))
+
+        # for (schema, table_name), columns in columns_by_table.items():
+        #     cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in columns]
+        #     cols.sort()
+        #     cols = dict(c[1:] for c in cols)
+
+        #     # name = '%s.%s' % (schema, table_name)
+        #     yield schema, table_name, T.table(cols, name=Id(schema, table_name))
 
 
 class SqliteInterface(SqlInterface):
