@@ -480,11 +480,13 @@ class Insert(SqlTree):
     type = T.nulltype
 
     def _compile(self, qb):
-        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
+        columns = [qb.quote(Id(c)) for c in self.columns]
+        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
         if qb.target is mysql:
-            sql_code = f'INSERT INTO {qb.quote(self.table_name)}({", ".join(self.columns)}) '
+            columns = [qb.quote(Id(c)) for c in self.columns]
+            sql_code = f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) '
             sql_code += self.query.finalize_with_subqueries(qb, subqueries)
             return ''.join(sql_code)
 
@@ -505,8 +507,9 @@ class InsertConsts(SqlTree):
             for tpl in self.tuples
         )
 
+        cols = [qb.quote(Id(c)) for c in self.cols]
         q = ['INSERT INTO', qb.safe_name(self.table),
-             "(", ', '.join(self.cols), ")",
+             "(", ', '.join(cols), ")",
              "VALUES ",
         ]
         return [' '.join(q)] + values #+ [';']

@@ -377,7 +377,10 @@ class AggregateInstance(AbsInstance):
 class AbsStructInstance(AbsInstance):
     def get_attr(self, name):
         if name in self.attrs:
-            return self.attrs[name]
+            attr = self.attrs[name]
+            if self.type <= T.vectorized:
+                attr = vectorized(attr)
+            return attr
         else:
             raise pql_AttributeError(name)
 
