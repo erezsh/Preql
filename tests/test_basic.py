@@ -752,7 +752,7 @@ class BasicTests(PreqlTests):
         res = preql("""[1,2,3]{v:item*2}[v !in [2,6]]""")
         assert res == [{'v': 4}], res
 
-        res = preql("""enum([1,8,4,4])[index==item]{item}""")
+        res = preql("""enum([1,8,4,4])[index+1==item]{item}""")
         assert res == [{'item': 1}, {'item': 4}]
 
         res = preql("""[1,2,3][..2]""")
@@ -1349,8 +1349,8 @@ class BasicTests(PreqlTests):
         assert p('lower("Ab")') == "ab"
         assert p('upper("Ab")') == "AB"
 
-        assert p('list(["Ab", "Aab"]{str_index("b", item)})') == [2, 3]
-        assert p('str_index("b", "Ab")') == 2
+        assert p('list(["Ab", "Aab"]{str_index("b", item)})') == [1, 2]
+        assert p('str_index("b", "Ab")') == 1
 
 
 

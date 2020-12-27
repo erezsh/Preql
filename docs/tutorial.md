@@ -20,7 +20,7 @@ $ pip install -U prql
 
 Usually, you would connect Preql to a database, or load an existing module.
 
-But, you can also access the preql interpreter like this:
+But, you can also just run the preql interpreter as is:
 
 ```sh
 $ preql
@@ -34,9 +34,9 @@ From now on, we'll use `>>` to signify the Preql REPL.
 
 Press Ctrl+C to interrupt an existing operation or prompt. Press Ctrl+D or run `exit()` to exit the interpreter.
 
-You can run the `names()` function to see what functions are available.
+You can run the `names()` function to see what functions are available, and `help()` to get interactive help.
 
-You can also run a preql file. Let's edit a file called `helloworld.pql`:
+You can also run a preql file. Let's create a file called `helloworld.pql`:
 
 ```javascript
 // helloworld.pql
@@ -50,7 +50,7 @@ $ preql -m helloworld
 Hello World!
 ```
 
-Alternatively, we could do `preql -f helloworld.pql`.
+Alternatively, we could do `preql -f helloworld.pql`, if we want to specify a full path.
 
 We can also use Preql as a Python library:
 
@@ -163,15 +163,6 @@ table  =99
 └────────┘
 ```
 
-But behind the scenes, it uses a SQL generator expression, rather than an actual list:
-
-```sql
-WITH RECURSIVE range1 AS (SELECT 1 AS item UNION ALL SELECT item+1 FROM range1 WHERE item+1<100)
-SELECT * FROM [range1] LIMIT 5 OFFSET 0
-```
-
-
-
 Preql only shows us a preview of the table. If we want to see more items, we can just enter a dot (`.`) in the prompt:
 
 ```javascript
@@ -189,6 +180,20 @@ table [5..] =99
 ```
 
 Entering `.` again will keep scrolling more items.
+
+### inspect_sql
+
+You might be curious what SQL statements are being executed behind the scenes. You can find out using the `inspect_sql()`  function.
+
+```javascript
+ >> print inspect_sql([1..10] + [20..30])
+```
+
+```sql
+WITH RECURSIVE range3 AS (SELECT 1 AS item UNION ALL SELECT item+1 FROM range3 WHERE item+1<10)
+    , range4 AS (SELECT 20 AS item UNION ALL SELECT item+1 FROM range4 WHERE item+1<30)
+    SELECT * FROM [range3] UNION ALL SELECT * FROM [range4] LIMIT -1
+```
 
 ## Functions
 
@@ -225,15 +230,18 @@ You can also use them in table operations!
 └──────┘
 ```
 
-Here is the SQL that was executed:
+We can also inspect the SQL code that is executed:
 
-```SQL
-WITH list_12([item]) AS (VALUES (-20), (0), (30))
-   , subq_14([sign]) AS (SELECT CASE WHEN ([item] = 0) THEN 0 ELSE CASE WHEN ([item] > 0) THEN 1 ELSE -1 END  END  AS [sign] FROM [list_12])
-SELECT * FROM [subq_14]
+```javascript
+ >> print inspect_sql([-20, 0, 30]{ sign(item) })
 ```
 
-Note: Functions with side-effects or I/O operations aren't allowed as table operations, due to SQL's limitations.
+```SQL
+WITH RECURSIVE list_1([item]) AS (VALUES (-20), (0), (30))
+    SELECT CASE WHEN ([item] = 0) THEN 0 ELSE CASE WHEN ([item] > 0) THEN 1 ELSE -1 END  END  AS [sign] FROM [list_1]
+```
+
+Note: Functions with side-effects or I/O operations aren't allowed in table operations, due to SQL's limitations.
 
 There's also a shorthand for "one-liners":
 
@@ -270,7 +278,7 @@ print my_list{
 
 ## Tables
 
-Tables are basically a list of rows that all have the same structure.
+Tables are essentially a list of rows, where all rows have the same structure.
 
 That structure is defined by a set of columns, where each column has a name and a type.
 

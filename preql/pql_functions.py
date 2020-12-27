@@ -58,10 +58,10 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
     return objects.from_python(res)
     # return new_value_instance(res)
 
-def pql_sql_of(state: State, obj: T.object):
+def pql_inspect_sql(state: State, obj: T.object):
     "Returns the SQL code that would be executed to evaluate the given object"
     if not isinstance(obj, objects.Instance):
-        raise Signal.make(T.TypeError, state, None, f"sql_of() expects a concrete object. Instead got: {obj.type}")
+        raise Signal.make(T.TypeError, state, None, f"inspect_sql() expects a concrete object. Instead got: {obj.type}")
     s = state.db.compile_sql(obj.code, obj.subqueries)
     return objects.ValueInstance.make(sql.make_value(s), T.text, [], s)
 
@@ -622,7 +622,7 @@ internal_funcs = create_internal_funcs({
     'table_union': pql_table_union,
     'table_subtract': pql_table_substract,
     'SQL': pql_SQL,
-    'sql_of': pql_sql_of,
+    'inspect_sql': pql_inspect_sql,
     'PY': pql_PY,
     'isa': pql_isa,
     'issubclass': pql_issubclass,

@@ -94,7 +94,7 @@ func limit_offset(tbl: collection, lim: int, offset: int) = SQL(type(tbl), "SELE
 
 func enum(tbl: collection) {
     "Return the table with a new index column"
-    return tbl{index: SQL(int, "row_number() over ()"), ...}
+    return tbl{index: SQL(int, "(row_number() over ())-1"), ...}
 }
 
 func upper(s: maybe_vectorized(string)) {
@@ -144,7 +144,7 @@ func is_empty(tbl) {
     return count(tbl[..1]) == 0
 }
 
-func list_median(x) {
+func list_median(x: list) {
     "Find the median of a list"
     cnt = count(x)
     middle_item_offset = (cnt-1)/~2
@@ -170,7 +170,7 @@ func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(strin
 if (get_db_type() == "postgres") {
     func random() = SQL(float, "RANDOM()")
 
-    func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "POSITION($a in $b)")
+    func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "POSITION($a in $b)-1")
 } else {
     if (get_db_type() == "sqlite" or get_db_type() == "duck") {
         func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
@@ -187,13 +187,13 @@ if (get_db_type() == "postgres") {
         func week_of_year(date) = SQL(int, "strftime('%W', $date)")
         func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
 
-        func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)")
+        func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")
 
     } else {
         if (get_db_type() == "mysql") {
             func random() = SQL(float, "RAND()")
 
-            func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)")    // same as sqlite
+            func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
 
             // TODO use AST interface instead?
             func count_false(field) {
@@ -212,8 +212,8 @@ if (get_db_type() == "postgres") {
     }
 }
 
-func str_contains(a: string, b: string) = str_index(a, b) > 0
-func str_notcontains(a: string, b: string) = str_index(a, b) == 0
+func str_contains(a: string, b: string) = str_index(a, b) >= 0
+func str_notcontains(a: string, b: string) = str_index(a, b) < 0
 
 func sample_ratio_fast(tbl, ratio) {
     "Return a random sample of rows from the table, at the approximate amount of (ratio*count(tbl))."
