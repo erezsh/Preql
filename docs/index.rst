@@ -9,6 +9,7 @@
 
    introduction
    features
+   roadmap
 
 .. toctree::
    :maxdepth: 2
@@ -46,6 +47,8 @@ Resources
 -  :doc:`introduction`
 -  :doc:`getting-started`
 -  :doc:`features`
+-  :doc:`roadmap`
+
 -  Tutorials
 
    -  :doc:`tutorial`
