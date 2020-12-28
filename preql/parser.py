@@ -239,7 +239,7 @@ class TreeToAst(Transformer):
     struct_def = ast.StructDef
     table_def = ast.TableDef
     col_def = ast.ColumnDef
-    print = ast.Print
+    print = no_inline(ast.Print)
     assert_ = ast.Assert
     return_stmt = ast.Return
     import_stmt = ast.Import

@@ -224,13 +224,18 @@ def _execute(state: State, func_def: ast.FuncDef):
 @dy
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
-    inst = evaluate(state, p.value)
-    if inst.type <= T.string:
-        repr_ = cast_to_python(state, inst)
-    else:
-        repr_ = inst.repr(state)
+    insts = evaluate(state, p.value)
+    assert isinstance(insts, list)
 
-    display.print(repr_)
+    for inst in insts:
+        # inst = evaluate(state, p.value)
+        if inst.type <= T.string:
+            repr_ = cast_to_python(state, inst)
+        else:
+            repr_ = inst.repr(state)
+
+        display.print(repr_, end=" ")
+    display.print("")
 
 @dy
 def _execute(state: State, p: ast.Assert):

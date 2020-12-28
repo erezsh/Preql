@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 from itertools import chain
+import time
 
 from . import Preql, __version__, Signal
 from .display import display
@@ -12,6 +13,7 @@ parser.add_argument('--install-jupyter', action='store_true', help="Installs the
 parser.add_argument('--print-sql', action='store_true', help="Print the SQL code that's being executed")
 parser.add_argument('-f', '--file', type=str, help='Path to a Preql script to run')
 parser.add_argument('-m', '--module', type=str, help='Name of a Preql module to run')
+parser.add_argument('--time', action='store_true', help='Displays how long the script ran')
 parser.add_argument('database', type=str, nargs='?', default=None, help="database url (postgres://user:password@host:port/db_name")
 
 
@@ -40,6 +42,7 @@ def main():
     interactive = args.interactive
 
     res = 0
+    start = time.time()
     try:
         if args.file:
             p.load(args.file)
@@ -60,6 +63,9 @@ def main():
     except KeyboardInterrupt:
         print("Interrupted (Ctrl+C)")
 
+    end = time.time()
+    if args.time:
+        print('Running took %.2f seconds to run' % (end -start))
 
     if interactive:
         p.load_all_tables()

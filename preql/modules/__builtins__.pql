@@ -313,10 +313,9 @@ func range(lst: list, start: union[int, function], end: union[int, function]) {
 		e = end
 	} else if (isa(end, function)) {
 		e = max(list(lst{end(item)})) + 1
-	}
-	r = [s..e]
+    }
 
-	mul = joinall(l: lst, i: r) {i: i.item, l.item }
+	mul = joinall(l: lst, i: [s..e]) {i: i.item, l.item }
 
 	if (isa(start, function)) {
 		mul = mul[i >= start(item)]

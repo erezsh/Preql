@@ -191,12 +191,12 @@ class RichDisplay(Display):
     def __init__(self):
         self.console = rich.console.Console()
 
-    def print(self, repr_):
+    def print(self, repr_, end="\n"):
         if hasattr(repr_, '__rich_console__'):
-            self.console.print(repr_, overflow="ellipsis")
+            self.console.print(repr_, overflow="ellipsis", end=end)
         else:
             # repr_ = rich.text.Text(repr_)
-            self.console.print(repr_, overflow="ellipsis", markup=False)
+            self.console.print(repr_, overflow="ellipsis", markup=False, end=end)
 
     def print_exception(self, e):
         "Yields colorful styled lines to print by the ``rich`` library"

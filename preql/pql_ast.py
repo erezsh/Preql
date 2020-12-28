@@ -257,7 +257,7 @@ class InsertRows(Statement):
 
 @dataclass
 class Print(Statement):
-    value: Object
+    value: List[Object]
 
 @dataclass
 class Assert(Statement):
