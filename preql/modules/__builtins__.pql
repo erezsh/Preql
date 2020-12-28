@@ -6,6 +6,7 @@ func _sql_agg_func(name, obj, t=null) {
             throw new TypeError(name + "() only accepts lists or tables with one column. Got '" + repr(type(obj)) + "'")
         }
 
+        obj = list(obj)
         t = type(obj).item
     }
 
@@ -303,27 +304,28 @@ func walk_tree(edges: table, initial: table, max_rank: int) {
 
 func range(lst: list, start: union[int, function], end: union[int, function]) {
     "Produce a range of numbers as rows for each item in the list, based on `start` and `end`"
-	if (isa(start, int)) {
-		s = start
-	} else if (isa(start, function)) {
-		s = min(lst{start(item)})
-	}
-
-	if (isa(end, int)) {
-		e = end
-	} else if (isa(end, function)) {
-		e = max(list(lst{end(item)})) + 1
+    lst = list(lst)
+    if (isa(start, int)) {
+        s = start
+    } else if (isa(start, function)) {
+        s = min(lst{start(item)})
     }
 
-	mul = joinall(l: lst, i: [s..e]) {i: i.item, l.item }
+    if (isa(end, int)) {
+        e = end
+    } else if (isa(end, function)) {
+        e = max(list(lst{end(item)})) + 1
+    }
 
-	if (isa(start, function)) {
-		mul = mul[i >= start(item)]
-	}
+    mul = joinall(l: lst, i: [s..e]) {i: i.item, l.item }
 
-	if (isa(end, function)) {
-		mul = mul[i <= end(item)]
-	}
+    if (isa(start, function)) {
+        mul = mul[i >= start(item)]
+    }
 
-	return mul
+    if (isa(end, function)) {
+        mul = mul[i <= end(item)]
+    }
+
+    return mul
 }

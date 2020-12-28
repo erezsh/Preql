@@ -481,7 +481,7 @@ class Insert(SqlTree):
 
     def _compile(self, qb):
         columns = [qb.quote(Id(c)) for c in self.columns]
-        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
+        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
         if qb.target is mysql:

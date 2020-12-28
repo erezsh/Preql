@@ -5,7 +5,7 @@ from .exceptions import Signal
 
 @dp_type
 def _cast(state, inst_type, target_type, inst):
-    if inst_type == target_type:
+    if inst_type == target_type or target_type is T.any:
         return inst
     raise Signal.make(T.TypeError, state, None, f"Cast not implemented for {inst_type}->{target_type}")
 
@@ -74,6 +74,9 @@ def _cast(state, inst_type: T.string, target_type: T.text, inst):
 @dp_type
 def _cast(state, inst_type: T.text, target_type: T.string, inst):
     return inst.replace(type=T.string)
+@dp_type
+def _cast(state, inst_type: T.string, target_type: T.string, inst):     # Disambiguate text<->string due to inheritance
+    return inst
 
 @dp_type
 def _cast(state, inst_type: T.union[T.int, T.bool], target_type: T.float, inst):
