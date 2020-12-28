@@ -159,11 +159,13 @@ class Preql:
 
     @contextmanager
     def transaction(self):
-        # TODO rollback
         try:
             yield self  # TODO new instance?
-        finally:
-            self.commit()
+        except:
+            self.rollback()
+            raise
+
+        self.commit()
 
     def start_repl(self, *args):
         "Run the interactive prompt"
@@ -172,6 +174,9 @@ class Preql:
 
     def commit(self):
         return self.interp.state.db.commit()
+
+    def rollback(self):
+        return self.interp.state.db.rollback()
 
     def _drop_tables(self, *tables):
         # XXX temporary. Used for testing

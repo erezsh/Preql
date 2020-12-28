@@ -839,6 +839,9 @@ def _apply_type_generics(state, gen_type, type_names):
         raise Signal.make(T.TypeError, state, None, f"Generics expression expected a type, got nothing.")
     for o in type_objs:
         if not isinstance(o, Type):
+            if isinstance(o.code, sql.Parameter):
+                # XXX hacky test, hacky solution
+                raise exc.InsufficientAccessLevel()
             raise Signal.make(T.TypeError, state, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:
