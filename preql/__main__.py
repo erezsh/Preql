@@ -35,9 +35,10 @@ def main():
         install_jupyter([])
         print("Install successful. To start working, run 'jupyter notebook' and create a new Preql notebook.")
 
-    p = Preql(print_sql=args.print_sql)
+    kw = {'print_sql': args.print_sql}
     if args.database:
-        p.interp.state.connect(args.database)
+        kw['db_uri'] = args.database
+    p = Preql(**kw)
 
     interactive = args.interactive
 

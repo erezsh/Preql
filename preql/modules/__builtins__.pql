@@ -137,6 +137,10 @@ func commit() {
     "Commit the current transaction"
     force_eval(SQL(nulltype, "COMMIT"))
 }
+func rollback() {
+    "Commit the current transaction"
+    force_eval(SQL(nulltype, "ROLLBACK"))
+}
 
 func is_empty(tbl) {
     "Returns whether a table expression is empty or not"
@@ -168,12 +172,16 @@ func pi() = SQL(float, "PI()")
 func now() = SQL(datetime, "NOW()")
 func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "REPEAT($s, $num)")
 
-if (get_db_type() == "postgres") {
+db_type = get_db_type()
+if (db_type == "postgres") {
     func random() = SQL(float, "RANDOM()")
 
     func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "POSITION($a in $b)-1")
+
+    func char(n: maybe_vectorized(int)) = SQL(string, "chr($n)")
+    func char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
 } else {
-    if (get_db_type() == "sqlite" or get_db_type() == "duck") {
+    if (db_type == "sqlite" or db_type == "duck") {
         func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')")   // Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
@@ -189,12 +197,16 @@ if (get_db_type() == "postgres") {
         func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
 
         func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")
+        func char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
+        func char_ord(n: maybe_vectorized(string)) = SQL(int, "unicode($n)")
 
     } else {
-        if (get_db_type() == "mysql") {
+        if (db_type == "mysql") {
             func random() = SQL(float, "RAND()")
 
             func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
+            func char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
+            func char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
 
             // TODO use AST interface instead?
             func count_false(field) {
@@ -301,8 +313,18 @@ func walk_tree(edges: table, initial: table, max_rank: int) {
     return SQL(node, "SELECT bfs.id, bfs.rank FROM $bfs bfs")
 }
 
+func char_range(start: string, end: string) {
+    """Produce a table of all characters from 'start' to 'stop'
 
-func range(lst: list, start: union[int, function], end: union[int, function]) {
+    Example:
+        >> char_range('a', 'z')
+    """
+
+    return list([char_ord(start)..(char_ord(end)+1)]{char(item)})
+}
+
+
+func map_range(lst: list, start: union[int, function], end: union[int, function]) {
     "Produce a range of numbers as rows for each item in the list, based on `start` and `end`"
     lst = list(lst)
     if (isa(start, int)) {

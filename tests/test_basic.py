@@ -1352,6 +1352,10 @@ class BasicTests(PreqlTests):
         assert p('list(["Ab", "Aab"]{str_index("b", item)})') == [1, 2]
         assert p('str_index("b", "Ab")') == 1
 
+        assert p('char(65)') == 'A'
+        assert p('char_ord("A")') == 65
+        assert p('char_range("a", "c")') == ['a', 'b', 'c']
+
 
 
 class TestTypes(PreqlTests):
