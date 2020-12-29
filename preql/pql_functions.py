@@ -58,6 +58,13 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
     return objects.from_python(res)
     # return new_value_instance(res)
 
+def pql_inspect_sql(state: State, obj: T.object):
+    "Returns the SQL code that would be executed to evaluate the given object"
+    if not isinstance(obj, objects.Instance):
+        raise Signal.make(T.TypeError, state, None, f"inspect_sql() expects a concrete object. Instead got: {obj.type}")
+    s = state.db.compile_sql(obj.code, obj.subqueries)
+    return objects.ValueInstance.make(sql.make_value(s), T.text, [], s)
+
 
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
@@ -91,7 +98,7 @@ def pql_fmt(state: State, s: T.string):
 
     a = string_parts[0]
     for b in string_parts[1:]:
-        a = ast.Arith("+", [a,b])
+        a = ast.BinOp("+", [a,b])
 
     return cast_to_instance(state, a)
 
@@ -179,27 +186,6 @@ def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() 
 
     return new_table_from_expr(state, name, expr, const, True)
 
-# def pql_bfs(state: State, edges: T.collection, initial: T.collection):
-#     edges = cast_to_instance(state, edges)
-#     initial = cast_to_instance(state, initial)
-#     breakpoint()
-
-    # from = edges.columns["src"]
-    # to = edges.columns["dst"]
-
-    # t = TableType(get_alias(state, "bfs"))
-    # add_column(t, ColumnType("edge", PrimitiveType(Int)))
-    # results = instanciate_table(state, t, sql"<<dummy>>", [edges, initial])  # XXX need a better method for this
-    # idx_inst = results.columns["edge"]
-
-    # with_sql = Sql("SELECT * FROM ($(initial.code.text)) UNION SELECT e.$(to.code.text) FROM ($(edges.code.text)) e JOIN bfs ON e.$(from.code.text) = bfs.node")
-    # select_sql = Sql("SELECT bfs.node AS $(idx_inst.code.text) FROM bfs")
-
-    # results = alias_instance(select_sql, results)
-
-    # push!(results.with_queries, ("bfs(node)", Instance(with_sql, PrimitiveType(Int), [initial, edges]))) # XXX slightly hacky
-    # add_with!(state, results)
-
 
 def pql_get_db_type(state: State):
     """
@@ -251,6 +237,10 @@ def pql_table_union(state: State, t1: T.collection, t2: T.collection):
 
 def pql_table_concat(state: State, t1: T.collection, t2: T.collection):
     "Concatenate two tables (union all). Used for `t1 + t2`"
+    if isinstance(t1, objects.EmptyListInstance):
+        return t2
+    if isinstance(t2, objects.EmptyListInstance):
+        return t1
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate", True)
 
 
@@ -458,17 +448,10 @@ def pql_names(state: State, obj: T.any = objects.null):
 
     If no object is given, lists the names in the current namespace.
     """
-    # TODO support all objects
-    if obj is not objects.null:
-        inst = obj
-        if inst.type <= T.module:
-            all_vars = inst.all_attrs()
-        elif inst.type <= T.collection:
-            all_vars = inst.all_attrs()
-        else:
-            raise Signal.make(T.TypeError, state, obj, "Argument to names() must be a table or module")
-    else:
+    if obj is objects.null:
         all_vars = (state.ns.get_all_vars())
+    else:
+        all_vars = obj.all_attrs()
 
     assert all(isinstance(s, str) for s in all_vars)
     tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(v.type).code]) for n,v in all_vars.items()]
@@ -639,6 +622,7 @@ internal_funcs = create_internal_funcs({
     'table_union': pql_table_union,
     'table_subtract': pql_table_substract,
     'SQL': pql_SQL,
+    'inspect_sql': pql_inspect_sql,
     'PY': pql_PY,
     'isa': pql_isa,
     'issubclass': pql_issubclass,

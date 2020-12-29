@@ -20,7 +20,7 @@ $ pip install -U prql
 
 Usually, you would connect Preql to a database, or load an existing module.
 
-But, you can also access the preql interpreter like this:
+But, you can also just run the preql interpreter as is:
 
 ```sh
 $ preql
@@ -34,9 +34,9 @@ From now on, we'll use `>>` to signify the Preql REPL.
 
 Press Ctrl+C to interrupt an existing operation or prompt. Press Ctrl+D or run `exit()` to exit the interpreter.
 
-You can run the `names()` function to see what functions are available.
+You can run the `names()` function to see what functions are available, and `help()` to get interactive help.
 
-You can also run a preql file. Let's edit a file called `helloworld.pql`:
+You can also run a preql file. Let's create a file called `helloworld.pql`:
 
 ```javascript
 // helloworld.pql
@@ -50,7 +50,7 @@ $ preql -m helloworld
 Hello World!
 ```
 
-Alternatively, we could do `preql -f helloworld.pql`.
+Alternatively, we could do `preql -f helloworld.pql`, if we want to specify a full path.
 
 We can also use Preql as a Python library:
 
@@ -58,6 +58,9 @@ We can also use Preql as a Python library:
 # In the Python interpreter
 from preql import Preql
 p = Preql()
+
+assert p1('sum([1..10])') == 45
+
 p('''
   func my_range(x) = [1..x]
 ''')
@@ -143,6 +146,55 @@ list[int]
 list[string]
 ```
 
+The range syntax creates a list of integers:
+
+```javascript
+>> [1..100]
+table  =99
+┏━━━━━━━━┓
+┃   item ┃
+┡━━━━━━━━┩
+│      1 │
+│      2 │
+│      3 │
+│      4 │
+│      5 │
+│    ... │
+└────────┘
+```
+
+Preql only shows us a preview of the table. If we want to see more items, we can just enter a dot (`.`) in the prompt:
+
+```javascript
+>> .
+table [5..] =99
+┏━━━━━━━━┓
+┃   item ┃
+┡━━━━━━━━┩
+│      6 │
+│      7 │
+│      8 │
+│      9 │
+│     10 │
+└────────┘
+```
+
+Entering `.` again will keep scrolling more items.
+
+### inspect_sql
+
+You might be curious what SQL statements are being executed behind the scenes. You can find out using the `inspect_sql()`  function.
+
+```javascript
+ >> print inspect_sql([1..10] + [20..30])
+```
+
+```sql
+WITH RECURSIVE range3 AS (SELECT 1 AS item UNION ALL SELECT item+1 FROM range3 WHERE item+1<10)
+    , range4 AS (SELECT 20 AS item UNION ALL SELECT item+1 FROM range4 WHERE item+1<30)
+    SELECT * FROM [range3] UNION ALL SELECT * FROM [range4] LIMIT -1
+```
+
 ## Functions
 
 Declare functions using func:
@@ -178,15 +230,18 @@ You can also use them in table operations!
 └──────┘
 ```
 
-Here is the SQL that was executed:
+We can also inspect the SQL code that is executed:
 
-```SQL
-WITH list_12([item]) AS (VALUES (-20), (0), (30))
-   , subq_14([sign]) AS (SELECT CASE WHEN ([item] = 0) THEN 0 ELSE CASE WHEN ([item] > 0) THEN 1 ELSE -1 END  END  AS [sign] FROM [list_12])
-SELECT * FROM [subq_14]
+```javascript
+ >> print inspect_sql([-20, 0, 30]{ sign(item) })
 ```
 
-Note: Functions with side-effects or I/O operations aren't allowed as table operations, due to SQL's limitations.
+```SQL
+WITH RECURSIVE list_1([item]) AS (VALUES (-20), (0), (30))
+    SELECT CASE WHEN ([item] = 0) THEN 0 ELSE CASE WHEN ([item] > 0) THEN 1 ELSE -1 END  END  AS [sign] FROM [list_1]
+```
+
+Note: Functions with side-effects or I/O operations aren't allowed in table operations, due to SQL's limitations.
 
 There's also a shorthand for "one-liners":
 
@@ -194,13 +249,36 @@ There's also a shorthand for "one-liners":
 >> func str_concat(s1, s2) = s1 + s2
 >> str_concat("foo", "bar")
 "foobar"
->> str_concat     // Functions are objects just like everything else
-<func str_concat(s1, s2) = ...>
+```
+
+Functions are objects just like everything else, and can be passed around to other functions.
+
+Here is a toy example that demonstrates this:
+
+```javascript
+func apply_function(f, x) = f(x)
+
+my_list = ["this", "is", "a", "list"]
+
+// Run `apply_function` for each item, and use the built-in `length` function for strings.
+print my_list{
+  len: apply_function(length, item)
+}
+// Output:
+// table  =4
+// ┏━━━━━━━┓
+// ┃   len ┃
+// ┡━━━━━━━┩
+// │     4 │
+// │     2 │
+// │     1 │
+// │     4 │
+// └───────┘
 ```
 
 ## Tables
 
-Tables are basically a list of rows that all have the same structure.
+Tables are essentially a list of rows, where all rows have the same structure.
 
 That structure is defined by a set of columns, where each column has a name and a type.
 
@@ -278,11 +356,25 @@ There are many operations that you can perform on a table. Here we'll javascript
 
 ```javascript
 // All countries that contain the letter 'l' and a population below 15000
->> Country[name ~ "%l%", population < 15000] {name, population}
-table Country, count=1
-name      population
-------  ------------
-Tuvalu         10200
+>> Country[name like "%l%", population < 15000]
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│  3 │ Tuvalu │      10200 │
+└────┴────────┴────────────┘
+```
+
+We can chain table operations:
+
+```javascript
+ >> Country[name like "%l%" or population < 11000] {name, population}
+       table  =2
+┏━━━━━━━━┳━━━━━━━━━━━━┓
+┃ name   ┃ population ┃
+┡━━━━━━━━╇━━━━━━━━━━━━┩
+│ Palau  │      17900 │
+│ Tuvalu │      10200 │
+└────────┴────────────┘
 ```
 
 We can also filter the rows by index (zero-based), by providing it with a `range` instead.
@@ -297,18 +389,6 @@ table Country, count=2
 ```
 
 Notice that the row index and the value of the `id` column are not related in any meaningful way.
-
-We can also use functions inside table expressions, as long as they don't change the global state.
-
-```javascript
->> func startswith(s, p) = s ~ (p + "%")    // Pattern match the string (LIKE)
->> my_list = ["cat", "dog", "car"]          // Define a list
->> new_list = my_list[startswith(item, "c")]  // Apply selection. `item` refers to the list's items
->> print new_list                           // Execute SQL query
-["cat", "car"]
-```
-
-Lists are basically tables with a single column named `item`.
 
 **Projection** lets us create new tables, with columns of our own choice:
 
@@ -575,7 +655,7 @@ func enum(tbl) {
     return tbl{index: SQL(int, "row_number() over ()"), ...}
 }
 
-// Add index for each row
+// Add an index for each row in the table
 >> enum(Country order {population})
 table Country_proj80, count=3
   index    id  name      population

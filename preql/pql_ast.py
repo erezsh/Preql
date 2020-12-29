@@ -2,8 +2,10 @@ from typing import List, Any, Optional, Dict, Union
 from dataclasses import field
 
 from .utils import dataclass, TextReference, field_list
-from .pql_types import Type, Object
-from .types_impl import repr_value
+from . import pql_types as types
+from .pql_types import Object
+from .types_impl import pql_repr
+
 
 # TODO We want Ast to typecheck, but sometimes types are still unknown (i.e. at parse time).
 # * Use incremental type checks?
@@ -39,14 +41,13 @@ class Name(Expr):
 class Parameter(Expr):
     "A typed object without a value"
     name: str
-    type: Type
+    type: types.Type
 
 @dataclass
 class ResolveParameters(Expr):
     obj: Object
     values: Dict[str, Object]
 
-    type = Ast  # XXX Not the place!
 
 @dataclass
 class ParameterizedSqlCode(Expr):
@@ -66,11 +67,11 @@ class Attr(Expr):
 
 @dataclass
 class Const(Expr):
-    type: Type
+    type: types.Type
     value: Any
 
     def repr(self, state):
-        return repr_value(state, self)
+        return pql_repr(state, self.type, self.value)
 
 @dataclass
 class Ellipsis(Expr):
@@ -78,6 +79,7 @@ class Ellipsis(Expr):
 
 class BinOpExpr(Expr):
     _args = 'args',
+
 class UnaryOpExpr(Expr):
     _args = 'expr',
 
@@ -89,7 +91,7 @@ class Compare(BinOpExpr):
 
 
 @dataclass
-class Arith(BinOpExpr):
+class BinOp(BinOpExpr):
     op: str
     args: List[Object]
 
@@ -119,15 +121,6 @@ class DescOrder(Expr):
     value: Object
 
     _args = 'value',
-
-@dataclass
-class Like(Expr):
-    str: Object
-    pattern: Object
-
-    op = "~"
-
-    _args = 'str', 'pattern'
 
 @dataclass
 class Range(Expr):
@@ -264,7 +257,7 @@ class InsertRows(Statement):
 
 @dataclass
 class Print(Statement):
-    value: Object
+    value: List[Object]
 
 @dataclass
 class Assert(Statement):
@@ -330,3 +323,7 @@ class Dict_(Expr):
     elems: dict
 
 
+
+def make_const(value):
+    t = types.from_python(type(value))
+    return Const(t, value)

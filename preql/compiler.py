@@ -1,9 +1,8 @@
-import re
 import operator
 
 from runtype import DispatchError
 
-from .utils import safezip, listgen, find_duplicate, dataclass, SafeDict, re_split
+from .utils import safezip, listgen, find_duplicate, SafeDict, re_split
 from .exceptions import Signal
 from . import exceptions as exc
 
@@ -12,8 +11,8 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Object, Type, union_types, Id, ITEM_NAME
-from .types_impl import dp_inst, flatten_type, pql_repr
+from .pql_types import T, Type, union_types, Id, ITEM_NAME, dp_inst
+from .types_impl import flatten_type, pql_repr
 from .casts import cast
 from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
 
@@ -70,11 +69,11 @@ def _process_fields(state: State, fields):
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
 
-        yield [name, v]
+        yield [(bool(f.name), name), v]
 
 
 @listgen
-def _expand_ellipsis(state, table, fields):
+def _expand_ellipsis(state, obj, fields):
     direct_names = {f.value.name for f in fields if isinstance(f.value, ast.Name)}
 
     for f in fields:
@@ -84,12 +83,11 @@ def _expand_ellipsis(state, table, fields):
             if f.name:
                 raise Signal.make(T.SyntaxError, state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
-                t = table.type
+                t = obj.type
                 if t <= T.vectorized:
-                    # FIXME why is this needed here? probably shouldn't be
-                    elems = t.elem.elems
-                else:
-                    elems = t.elems
+                    t = t.elem
+                assert t <= T.table or t <= T.struct # some_table{ ... } or some_table{ some_struct_item {...} }
+                elems = t.elems
 
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
@@ -156,7 +154,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     attrs = table.all_attrs()
 
-    with state.use_scope({n:vectorized(c) for n, c in attrs.items()}):
+    with state.use_scope({n: vectorized(c) for n, c in attrs.items()}):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
@@ -165,8 +163,9 @@ def compile_to_inst(state: State, proj: ast.Projection):
             raise exc.Signal.make(T.TypeError, state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
-        t = T.struct({n:c.type for n, c in fields})
-        return objects.StructInstance(t, dict(fields))
+        d = {n[1]:c for n, c in fields}     # Remove used_defined bool
+        t = T.struct({n:f.type for n, f in d.items()})
+        return objects.StructInstance(t, d)
 
     agg_fields = []
     if proj.agg_fields:
@@ -174,26 +173,32 @@ def compile_to_inst(state: State, proj: ast.Projection):
             agg_fields = _process_fields(state, proj.agg_fields)
 
     all_fields = fields + agg_fields
+    assert all(isinstance(inst, AbsInstance) for name_, inst in all_fields)
 
-    # Make new type
+    #
+    # Make new type (and resolve names)
+    #
+    field_types = [(name, inst.type) for name, inst in all_fields]
+    reserved_names = {name[1] for name, _ in all_fields if name[0]}
     elems = {}
-    # codename = state.unique_name('proj')
-    for name_, inst in all_fields:
-        assert isinstance(inst, AbsInstance)
+    for (user_defined, name), type_ in field_types:
+        # Unvectorize for placing in the table type
+        if type_ <= T.vectorized:
+            type_ = type_.elem
 
-        # TODO what happens if automatic name precedes and collides with user-given name?
-        name = name_
-        i = 1
-        while name in elems:
-            name = name_ + str(i)
-            i += 1
-        t = inst.type
-        # Unvectorize (XXX is this correct?)
-        if t <= T.vectorized:
-            t = t.elem
-        elems[name] = t
+        # Find name without collision
+        if not user_defined:
+            name_ = name
+            i = 1
+            while name in elems or name in reserved_names:
+                name = name_ + str(i)
+                i += 1
+
+        assert name not in elems
+        elems[name] = type_
 
     # TODO inherit primary key? indexes?
+    # codename = state.unique_name('proj')
     new_table_type = T.table(elems, temporary=False)    # XXX abstract=True
 
     # Make code
@@ -201,7 +206,6 @@ def compile_to_inst(state: State, proj: ast.Projection):
                   for _, inst in all_fields
                   for code in inst.flatten_code()]
 
-    # TODO if nn != on
     sql_fields = [
         sql.ColumnAlias.make(code, nn)
         for code, (nn, _nt) in safezip(flat_codes, flatten_type(new_table_type))
@@ -293,17 +297,6 @@ def compile_to_inst(state: State, o: ast.Not):
     return objects.make_instance(code, T.bool, [expr])
 
 
-@dy
-def compile_to_inst(state: State, like: ast.Like):
-    # XXX move to ast.Arith ?
-    s = cast_to_instance(state, like.str)
-    p = cast_to_instance(state, like.pattern)
-
-    try:
-        return _compile_arith(state, like, s, p)
-    except DispatchError as e:
-        raise Signal.make(T.TypeError, state, like, f"Like not implemented for {s.type} and {p.type}")
-
 
 ## Contains
 @dp_inst
@@ -383,15 +376,18 @@ def _compare(state, op, a: primitive_or_struct, b: T.nulltype):
 
 
 @dp_inst
-def _compare(state, op, a: T.unknown, b: T.object):
+def _compare(state, op, _a: T.unknown, _b: T.object):
     return objects.UnknownInstance()
 @dp_inst
-def _compare(state, op, a: T.object, b: T.unknown):
+def _compare(state, op, _a: T.object, _b: T.unknown):
+    return objects.UnknownInstance()
+@dp_inst
+def _compare(state, op, _a: T.unknown, _b: T.unknown):
     return objects.UnknownInstance()
 
 
 @dp_inst
-def _compare(state, op, a: T.primitive, b: T.primitive):
+def _compare(_state, op, a: T.primitive, b: T.primitive):
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
                 f = {
                     '=': operator.eq,
@@ -450,12 +446,12 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 
     if cmp.op == 'in' or cmp.op == '!in':
         return _contains(state, cmp.op, insts[0], insts[1])
-    else:
-        op = {
-            '==': '=',
-            '<>': '!=',
-        }.get(cmp.op, cmp.op)
-        return _compare(state, op, insts[0], insts[1])
+
+    op = {
+        '==': '=',
+        '<>': '!=',
+    }.get(cmp.op, cmp.op)
+    return _compare(state, op, insts[0], insts[1])
 
 @dy
 def compile_to_inst(state: State, neg: ast.Neg):
@@ -466,14 +462,10 @@ def compile_to_inst(state: State, neg: ast.Neg):
 
 
 @dy
-def compile_to_inst(state: State, arith: ast.Arith):
-    args = evaluate(state, arith.args)
+def compile_to_inst(state: State, arith: ast.BinOp):
+    args = cast_to_instance(state, arith.args)
+    return _compile_arith(state, arith, *args)
 
-    try:
-        return _compile_arith(state, arith, *args)
-    except DispatchError as e:
-        a, b = args
-        raise Signal.make(T.TypeError, state, arith, f"Arith not implemented for {a.type} and {b.type}")
 
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
@@ -564,8 +556,8 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
 
 @dp_inst
 def _compile_arith(state, arith, a: T.string, b: T.string):
-    if arith.op == '~':
-        code = sql.Like(a.code, b.code)
+    if arith.op == 'like':
+        code = sql.BinOp('like', [a.code, b.code])
         return objects.Instance.make(code, T.bool, [a, b])
 
     if arith.op != '+':
@@ -613,12 +605,6 @@ def compile_to_inst(state: State, lst: objects.PythonList):
 
 @dy
 def compile_to_inst(state: State, lst: ast.List_):
-    # TODO generate (a,b,c) syntax for IN operations, with its own type
-    # sql = "(" * join([e.code.text for e in objs], ",") * ")"
-    # type = length(objs)>0 ? objs[1].type : nothing
-    # return Instance(Sql(sql), ArrayType(type, false))
-    # Or just evaluate?
-
     if not lst.elems and tuple(lst.type.elems.values()) == (T.any,):
         # XXX a little awkward
         return objects.EmptyList
@@ -710,6 +696,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
     else:
         self_table = None
 
+    params_vectorized = False
     instances = []
     subqueries = SafeDict()
     tokens = re_split(r"\$\w+", sql_code)
@@ -729,6 +716,8 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
                     inst = objects.new_table(obj)
                 else:
                     inst = cast_to_instance(state, obj)
+                    if inst.type <= T.vectorized:
+                        params_vectorized = True
 
             instances.append(inst)
             new_code += _resolve_sql_parameters(state, inst.code, wrap=bool(new_code), subqueries=subqueries).code
@@ -749,6 +738,8 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
         inst.subqueries[name] = subq
         return inst
 
+    if params_vectorized:
+        type_ = T.vectorized[type_]
     code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
     return make_instance(code, type_, instances)
 
@@ -789,11 +780,10 @@ def compile_to_inst(state: State, sel: ast.Selection):
     table = cast_to_instance(state, obj)
 
     if table.type <= T.string or table.type <= T.vectorized[T.string]:
-        # raise exc.Signal.make(T.NotImplementedError, state, sel, "String indexing not implemented yet. Use slicing instead (s[start..stop])")
-        index ,= sel.conds
+        index ,= cast_to_instance(state, sel.conds)
         assert index.type <= T.int
         table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
-        slice = ast.Slice(table, ast.Range(index, ast.Arith('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
+        slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
 
     assert_type(table.type, T.collection, state, sel, "Selection")
@@ -819,8 +809,8 @@ def compile_to_inst(state: State, param: ast.Parameter):
             # TODO why can't I just make an instance?
             raise exc.InsufficientAccessLevel("Structs not supported yet")
         return make_instance(sql.Parameter(param.type, param.name), param.type, [])
-    else:
-        return state.get_var(param.name)
+
+    return state.get_var(param.name)
 
 @dy
 def compile_to_inst(state: State, attr: ast.Attr):
@@ -849,6 +839,9 @@ def _apply_type_generics(state, gen_type, type_names):
         raise Signal.make(T.TypeError, state, None, f"Generics expression expected a type, got nothing.")
     for o in type_objs:
         if not isinstance(o, Type):
+            if isinstance(o.code, sql.Parameter):
+                # XXX hacky test, hacky solution
+                raise exc.InsufficientAccessLevel()
             raise Signal.make(T.TypeError, state, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:
@@ -856,9 +849,8 @@ def _apply_type_generics(state, gen_type, type_names):
             return gen_type(tuple(type_objs))
 
         raise Signal.make(T.TypeError, state, None, "Union types not yet supported!")
-    else:
-        t ,= type_objs
 
+    t ,= type_objs
     try:
         return gen_type[t]
     except TypeError:
@@ -867,11 +859,14 @@ def _apply_type_generics(state, gen_type, type_names):
 
 
 @dy
-def guess_field_name(f):
+def guess_field_name(_f):
     return '_'
 @dy
 def guess_field_name(f: ast.Attr):
-    return guess_field_name(f.expr) + "." + f.name
+    name = f.name
+    if isinstance(name, ast.Marker):
+        name = '<marker>'
+    return guess_field_name(f.expr) + "." + name
 @dy
 def guess_field_name(f: ast.Name):
     return str(f.name)

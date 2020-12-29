@@ -12,11 +12,12 @@ from . import sql
 from . import settings
 from .parser import Str
 
-from .interp_common import State, dy, new_value_instance
+from .interp_common import State, dy, new_value_instance, cast_to_python
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
 from .pql_objects import vectorized
+from .display import display
 
 
 @dy
@@ -220,21 +221,21 @@ def _execute(state: State, func_def: ast.FuncDef):
 
     state.set_var(func.name, func.replace(params=new_params))
 
-# TODO doesn't belong here!
-import rich.console
 @dy
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
-    inst = evaluate(state, p.value)
-    if inst.type <= T.string:
-        repr_ = cast_to_python(state, inst)
-    else:
-        repr_ = inst.repr(state)
-    if isinstance(repr_, rich.table.Table):
-        console = rich.console.Console()
-        console.print(repr_)
-    else:
-        print(repr_)
+    insts = evaluate(state, p.value)
+    assert isinstance(insts, list)
+
+    for inst in insts:
+        # inst = evaluate(state, p.value)
+        if inst.type <= T.string:
+            repr_ = cast_to_python(state, inst)
+        else:
+            repr_ = inst.repr(state)
+
+        display.print(repr_, end=" ")
+    display.print("")
 
 @dy
 def _execute(state: State, p: ast.Assert):
@@ -339,13 +340,9 @@ def _execute(state: State, t: ast.Throw):
     raise e
 
 def execute(state, stmt):
-    try:
-        if isinstance(stmt, ast.Statement):
-            return _execute(state, stmt) or objects.null
-        return evaluate(state, stmt)
-    except Signal as e:
-        # assert e.text_refs    # TODO ensure?
-        raise
+    if isinstance(stmt, ast.Statement):
+        return _execute(state, stmt) or objects.null
+    return evaluate(state, stmt)
 
 
 
@@ -456,7 +453,7 @@ def simplify(state: State, funccall: ast.FuncCall):
     func = evaluate(state, funccall.func)
 
     if isinstance(func, objects.UnknownInstance):
-        evaluate(state, [a.value for a in funccall.args])
+        # evaluate(state, [a.value for a in funccall.args])
         raise Signal.make(T.TypeError, state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
 
     args = funccall.args
@@ -493,13 +490,12 @@ def eval_func_call(state, func, args):
     # XXX simplify destroys text_ref, so it harms error messages.
     # TODO Can I get rid of it, or make it preserve the text_ref somehow?
     # Don't I need an instance to ensure I have type?
-    # args.update( {p.name:evaluate(state, a) for p,a in matched_args} )
-    # args.update( {p.name:a for p,a in matched_args} )
 
     for i, (p, a) in enumerate(matched_args):
         a = evaluate(state, a)
         # TODO cast?
-        if p.type and not a.type <= T.union[p.type, T.vectorized[p.type]]:
+        # if p.type and not a.type <= T.union[p.type, T.vectorized[p.type]]:
+        if p.type and not a.type <= p.type:
             raise Signal.make(T.TypeError, state, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
         args[p.name] = a
 
@@ -509,10 +505,10 @@ def eval_func_call(state, func, args):
         # TODO Ensure correct types
         args = list(args.values())
         # args = evaluate(state, args)
-        was_vec, args = objects.unvectorize_args(args)
+        # was_vec, args = objects.unvectorize_args(args)
         res = func.func(state, *args)
-        if was_vec:
-            res = vectorized(res)
+        # if was_vec:
+        #     res = vectorized(res)
         return res
     else:
         # TODO make tests to ensure caching was successful
@@ -695,7 +691,6 @@ def apply_database_rw(state: State, new: ast.NewRows):
     arg ,= new.args
 
     # TODO postgres can do it better!
-    # field = arg.name
     table = evaluate(state, arg.value)
     rows = localize(state, table)
 
@@ -765,7 +760,9 @@ def apply_database_rw(state: State, new: ast.New):
         res = evaluate(state, ast.FuncCall(f, new.args).set_text_ref(new.text_ref))
         return res
 
-    assert isinstance(obj, objects.TableInstance), obj  # XXX always the case?
+    if not isinstance(obj, objects.TableInstance):
+        raise Signal.make(T.TypeError, state, new, f"'new' expects a table or exception, instead got {obj.repr(state)}")
+
     table = obj
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
     assert_type(table.type, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
@@ -962,13 +959,9 @@ def new_table_from_expr(state, name, expr, const, temporary):
     return objects.new_table(table)
 
 
-
-
-
 @dy
 def cast_to_python(state, obj):
     raise Signal.make(T.TypeError, state, None, f"Unexpected value: {pql_repr(state, obj.type, obj)}")
-
 
 @dy
 def cast_to_python(state, obj: ast.Ast):

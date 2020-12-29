@@ -12,7 +12,8 @@ from . import sql
 from . import pql_types
 
 from .pql_types import ITEM_NAME, T, Type, Object
-from .types_impl import repr_value, flatten_type, join_names
+from .types_impl import flatten_type, join_names, pql_repr
+
 
 # Functions
 @dataclass
@@ -58,8 +59,6 @@ class Module(Object):
     def type(self):
         return T.module
 
-    def repr(self, state):
-        return f'<Module {self.name} | {len(self.namespace)} members>'
 
 class Function(Object):
 
@@ -69,10 +68,6 @@ class Function(Object):
 
     def help_str(self, state):
         raise NotImplementedError()
-
-    def repr(self, state):
-        return '<%s>' % self.help_str(state)
-
 
     @listgen
     def match_params_fast(self, state, args):
@@ -264,7 +259,7 @@ class ValueInstance(Instance):
     local_value: object
 
     def repr(self, state):
-        return repr_value(state, self)
+        return pql_repr(state, self.type, self.local_value)
 
     @property
     def value(self):
@@ -382,7 +377,10 @@ class AggregateInstance(AbsInstance):
 class AbsStructInstance(AbsInstance):
     def get_attr(self, name):
         if name in self.attrs:
-            return self.attrs[name]
+            attr = self.attrs[name]
+            if self.type <= T.vectorized:
+                attr = vectorized(attr)
+            return attr
         else:
             raise pql_AttributeError(name)
 

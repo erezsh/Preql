@@ -1,14 +1,17 @@
+import json
+from datetime import datetime
 from typing import List, Optional, Dict
 
 from .utils import dataclass, X, listgen, field_list
 from . import pql_types
-from .pql_types import ITEM_NAME, T, Type, dp_type, Id
+from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst, Id
 from .types_impl import join_names, flatten_type
-
+from .exceptions import Signal
 
 duck = 'duck'
 sqlite = 'sqlite'
 postgres = 'postgres'
+bigquery = 'bigquery'
 mysql = 'mysql'
 
 class QueryBuilder:
@@ -52,6 +55,8 @@ class Sql:
 class SqlTree(Sql):
     _is_select = False
     _needs_select = False
+
+    _compile = NotImplemented
 
     def compile_wrap(self, qb):  # Move to Expr? Doesn't apply to statements
         return self.compile(qb).wrap(qb)
@@ -345,16 +350,6 @@ class Compare(Scalar):
 
         return parens( join_sep(elems, f' {op} ') )
 
-@dataclass
-class Like(Scalar):
-    string: Sql
-    pattern: Sql
-    type = T.bool
-
-    def _compile(self, qb):
-        s = self.string.compile_wrap(qb)
-        p = self.pattern.compile_wrap(qb)
-        return s.code + [' like '] + p.code
 
 @dataclass
 class LogicalBinOp(Scalar):
@@ -377,8 +372,9 @@ class LogicalNot(Scalar):
 
     type = T.bool
 
+
 @dataclass
-class Arith(Scalar):
+class BinOp(Scalar):
     op: str
     exprs: List[Sql]
 
@@ -484,11 +480,13 @@ class Insert(SqlTree):
     type = T.nulltype
 
     def _compile(self, qb):
-        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(self.columns)}) SELECT * FROM '] + self.query.compile_wrap(qb).code
+        columns = [qb.quote(Id(c)) for c in self.columns]
+        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
         if qb.target is mysql:
-            sql_code = f'INSERT INTO {qb.quote(self.table_name)}({", ".join(self.columns)}) '
+            columns = [qb.quote(Id(c)) for c in self.columns]
+            sql_code = f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) '
             sql_code += self.query.finalize_with_subqueries(qb, subqueries)
             return ''.join(sql_code)
 
@@ -509,8 +507,9 @@ class InsertConsts(SqlTree):
             for tpl in self.tuples
         )
 
+        cols = [qb.quote(Id(c)) for c in self.cols]
         q = ['INSERT INTO', qb.safe_name(self.table),
-             "(", ', '.join(self.cols), ")",
+             "(", ', '.join(cols), ")",
              "VALUES ",
         ]
         return [' '.join(q)] + values #+ [';']
@@ -817,7 +816,7 @@ def arith(target, res_type, op, args):
         else:
             op = '/'
 
-    return Arith(op, arg_codes)
+    return BinOp(op, arg_codes)
 
 
 @dataclass
@@ -882,13 +881,13 @@ def make_value(x):
     return Primitive(t, _repr(t, x))
 
 def add_one(x):
-    return Arith('+', [x, make_value(1)])
+    return BinOp('+', [x, make_value(1)])
 
 def _quote(target, name):
     assert isinstance(name, str)
     if target is sqlite:
         return f'[{name}]'
-    elif target is mysql:
+    elif target is mysql or target is bigquery:
         return f'`{name}`'
     else:
         return f'"{name}"'
@@ -968,3 +967,96 @@ def compile_type(idtype: T.t_id):
     return s
 
 
+
+
+def _from_datetime(state, s):
+    if s is None:
+        return None
+
+    # Postgres
+    if isinstance(s, datetime):
+        return s
+
+    # Sqlite
+    if not isinstance(s, str):
+        raise Signal.make(T.TypeError, [], None, f"datetime expected a string. Instead got: {s}")
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError as e:
+        raise Signal.make(T.ValueError, state, None, str(e))
+
+
+@dp_inst
+def from_sql(state, res: T.primitive):
+    try:
+        row ,= res.value
+        item ,= row
+    except ValueError:
+        raise Signal.make(T.TypeError, state, None, "Expected primitive. Got: '%s'" % res.value)
+    # t = from_python(type(item))
+    # if not (t <= res.type):
+    #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
+    return item
+
+
+@dp_inst
+def from_sql(state, res: T.datetime):
+    # XXX doesn't belong here?
+    row ,= res.value
+    item ,= row
+    s = item
+    return _from_datetime(state, s)
+
+@dp_inst
+def from_sql(state, arr: T.list):
+    if not all(len(e)==1 for e in arr.value):
+        raise Signal.make(T.TypeError, state, None, f"Expected 1 column. Got {len(arr.value[0])}")
+    return [e[0] for e in arr.value]
+
+@dp_inst
+@listgen
+def from_sql(state, arr: T.table):
+    expected_length = len(flatten_type(arr.type))   # TODO optimize?
+    for row in arr.value:
+        if len(row) != expected_length:
+            raise Signal.make(T.TypeError, state, None, f"Expected {expected_length} columns, but got {len(row)}")
+        i = iter(row)
+        yield {name: restructure_result(state, col, i) for name, col in arr.type.elems.items()}
+
+@dp_type
+def restructure_result(state, t: T.table, i):
+    # return ({name: restructure_result(state, col, i) for name, col in t.elem_dict.items()})
+    return next(i)
+
+@dp_type
+def restructure_result(state, t: T.struct, i):
+    return ({name: restructure_result(state, col, i) for name, col in t.elems.items()})
+
+@dp_type
+def restructure_result(state, t: T.union[T.primitive, T.nulltype], i):
+    return next(i)
+
+@dp_type
+def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.nulltype]], i):
+    return next(i)
+
+
+@dp_type
+def restructure_result(state, t: T.list[T.union[T.primitive, T.nulltype]], i):
+    res = next(i)
+    if state.db.target == mysql:
+        res = json.loads(res)
+    elif state.db.target == sqlite:
+        res = res.split('|')
+
+    # XXX hack! TODO Use a generic form to cast types
+    if t.elem <= T.int:
+        res = [int(x) for x in res]
+    elif t.elem <= T.float:
+        res = [float(x) for x in res]
+    return res
+
+@dp_type
+def restructure_result(state, t: T.datetime, i):
+    s = next(i)
+    return _from_datetime(None, s)

@@ -17,22 +17,14 @@ class Signal(Object, Exception):
         refs = state.stacktrace+([ast_ref] if ast_ref else [])
         return cls(type, refs, message)
 
-    def __str__(self):
-        "Returns the exception with a traceback"
-        texts = ['Exception traceback:\n']
-        texts += [ref.get_pinpoint_text() if ref else '  ~~~ ???\n' for ref in self.text_refs]
-        texts += [
-            '[%s] %s\n' % (self.type, self.message)
-        ]
-        return ''.join(texts)
-
-    def get_rich_lines(self):
-        "Yields colorful styled lines to print by the ``rich`` library"
-        yield True, '[bold]Exception traceback:[/bold]'
-        for ref in self.text_refs:
-            yield from ref.get_pinpoint_text(rich=True) if ref else ['???']
-        # yield True, '[red]%s[/red]: %s' % (self.exc_name, self.message)
-        yield False, '%s: %s' % (self.type, self.message)
+    # def __str__(self):
+    #     "Returns the exception with a traceback"
+    #     texts = ['Exception traceback:\n']
+    #     texts += [ref.get_pinpoint_text() if ref else '  ~~~ ???\n' for ref in self.text_refs]
+    #     texts += [
+    #         '[%s] %s\n' % (self.type, self.message)
+    #     ]
+    #     return ''.join(texts)
 
     def repr(self, state):
         return f'{self.type}("{self.message}")'

@@ -148,6 +148,7 @@ disable=print-statement,
         no-self-use,
         multiple-statements,
         bad-whitespace,
+        E1126,
 
 
 

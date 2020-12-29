@@ -10,7 +10,7 @@ from .utils import dy
 from .exceptions import Signal
 from .exceptions import InsufficientAccessLevel
 from .pql_types import Type, T
-from .sql_interface import (ConnectError, DuckInterface, GitInterface, MysqlInterface, PostgresInterface, SqliteInterface)
+from .sql_interface import (ConnectError, DuckInterface, GitInterface, MysqlInterface, PostgresInterface, SqliteInterface, BigQueryInterface)
 
 logger = getLogger('interp')
 
@@ -28,6 +28,7 @@ def cast_to_python(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError(obj)
 
 
+
 class AccessLevels:
     COMPILE = 1
     # COMPILE_TEXT
@@ -35,6 +36,7 @@ class AccessLevels:
     EVALUATE = 3
     READ_DB = 4
     WRITE_DB = 5
+
 
 class State:
     AccessLevels = AccessLevels
@@ -93,7 +95,6 @@ class State:
             raise Signal.make(T.ValueError, self, None, *e.args) from e
 
         self._db_uri = uri
-        # self.interp.include('core.pql', __file__) # TODO use an import mechanism instead
 
 
     def get_all_vars(self):
@@ -204,6 +205,8 @@ def create_engine(db_uri, print_sql):
         return GitInterface(path, print_sql=print_sql)
     elif scheme == 'duck':
         return DuckInterface(path, print_sql=print_sql)
+    elif scheme == 'bigquery':
+        return BigQueryInterface(path, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
 
@@ -238,3 +241,4 @@ new_value_instance = objects.new_value_instance
 def is_global_scope(state):
     assert len(state.ns)
     return len(state.ns) == 1
+

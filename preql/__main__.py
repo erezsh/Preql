@@ -1,9 +1,10 @@
 import argparse
 from pathlib import Path
 from itertools import chain
-import rich
+import time
 
 from . import Preql, __version__, Signal
+from .display import display
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', default=False, help="Enter interactive mode after running the script")
@@ -12,6 +13,7 @@ parser.add_argument('--install-jupyter', action='store_true', help="Installs the
 parser.add_argument('--print-sql', action='store_true', help="Print the SQL code that's being executed")
 parser.add_argument('-f', '--file', type=str, help='Path to a Preql script to run')
 parser.add_argument('-m', '--module', type=str, help='Name of a Preql module to run')
+parser.add_argument('--time', action='store_true', help='Displays how long the script ran')
 parser.add_argument('database', type=str, nargs='?', default=None, help="database url (postgres://user:password@host:port/db_name")
 
 
@@ -33,13 +35,15 @@ def main():
         install_jupyter([])
         print("Install successful. To start working, run 'jupyter notebook' and create a new Preql notebook.")
 
-    p = Preql(print_sql=args.print_sql)
+    kw = {'print_sql': args.print_sql}
     if args.database:
-        p.interp.state.connect(args.database)
+        kw['db_uri'] = args.database
+    p = Preql(**kw)
 
     interactive = args.interactive
 
     res = 0
+    start = time.time()
     try:
         if args.file:
             p.load(args.file)
@@ -55,15 +59,14 @@ def main():
 
             interactive = True
     except Signal as e:
-        for is_rich, line in e.get_rich_lines():
-            if is_rich:
-                rich.print(line)
-            else:
-                print(line)
+        display.print_exception(e)
         res = -1
     except KeyboardInterrupt:
         print("Interrupted (Ctrl+C)")
 
+    end = time.time()
+    if args.time:
+        print('Running took %.2f seconds to run' % (end -start))
 
     if interactive:
         p.load_all_tables()

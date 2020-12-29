@@ -27,14 +27,6 @@ Preql is a programming language, a library, an interactive shell, and a set of t
 - REST+JSON server, automatically generated
 
 
-## Planned features (for the near future)
-- Full IDE support via language server (WIP, coming soon)
-- Support for more databases
-- Automatic GraphQL integration
-- Multiple Dispatch (multimethods)
-- Cached JIT compilation (PoC working!)
-- JSON operations in SQL
-- Compile control flow to SQL
-- API for Graph computation over SQL
-- Migrations
-- Automatic joins via attribute access
+## Planned features
+
+- See the [roadmap](roadmap.md)

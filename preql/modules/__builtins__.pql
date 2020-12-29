@@ -1,3 +1,4 @@
+func maybe_vectorized(t) = union[t, vectorized[t]]
 
 func _sql_agg_func(name, obj, t=null) {
     if (t==null) {
@@ -5,7 +6,8 @@ func _sql_agg_func(name, obj, t=null) {
             throw new TypeError(name + "() only accepts lists or tables with one column. Got '" + repr(type(obj)) + "'")
         }
 
-        t = type(obj).elem
+        obj = list(obj)
+        t = type(obj).item
     }
 
     if (not (issubclass(t, number))) {
@@ -47,7 +49,7 @@ func first(obj: collection) {
     "Return the first member of a column or a list"
 
     if (isa(obj, aggregate)) {
-        return SQL(type(obj).elem, "($obj)")
+        return SQL(type(obj).item, "($obj)")
     } else {
         obj = list(obj)
         if (isa(obj, list)) {
@@ -60,7 +62,7 @@ func first_or_null(obj: collection) {
     "Return the first member of a column or a list, or null if it's empty"
 
     if (isa(obj, aggregate)) {
-        return SQL(type(obj).elem, "($obj)")
+        return SQL(type(obj).item, "($obj)")
     } else {
         obj = list(obj)
         if (isa(obj, list)) {
@@ -93,25 +95,25 @@ func limit_offset(tbl: collection, lim: int, offset: int) = SQL(type(tbl), "SELE
 
 func enum(tbl: collection) {
     "Return the table with a new index column"
-    return tbl{index: SQL(int, "row_number() over ()"), ...}
+    return tbl{index: SQL(int, "(row_number() over ())-1"), ...}
 }
 
-func upper(s: string) {
+func upper(s: maybe_vectorized(string)) {
     "Return a copy of the string converted to uppercase."
     return SQL(string, "upper($s)")
 }
 
-func lower(s: string) {
+func lower(s: maybe_vectorized(string)) {
     "Return a copy of the string converted to uppercase."
     return SQL(string, "lower($s)")
 }
 
-func length(s: string) {
+func length(s: maybe_vectorized(string)) {
     "Return the length of the string"
     return SQL(int, "length($s)")
 }
 
-func round(n: number) {
+func round(n: maybe_vectorized(number)) {
     "Return a rounded float"
     return SQL(float, "round($n)")
 }
@@ -135,6 +137,10 @@ func commit() {
     "Commit the current transaction"
     force_eval(SQL(nulltype, "COMMIT"))
 }
+func rollback() {
+    "Commit the current transaction"
+    force_eval(SQL(nulltype, "ROLLBACK"))
+}
 
 func is_empty(tbl) {
     "Returns whether a table expression is empty or not"
@@ -143,7 +149,7 @@ func is_empty(tbl) {
     return count(tbl[..1]) == 0
 }
 
-func list_median(x) {
+func list_median(x: list) {
     "Find the median of a list"
     cnt = count(x)
     middle_item_offset = (cnt-1)/~2
@@ -164,15 +170,19 @@ func distinct(t: collection) {
 
 func pi() = SQL(float, "PI()")
 func now() = SQL(datetime, "NOW()")
-func repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")
+func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "REPEAT($s, $num)")
 
-if (get_db_type() == "postgres") {
+db_type = get_db_type()
+if (db_type == "postgres") {
     func random() = SQL(float, "RANDOM()")
 
-    func str_index(a, b) = SQL(int, "POSITION($a in $b)")
+    func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "POSITION($a in $b)-1")
+
+    func char(n: maybe_vectorized(int)) = SQL(string, "chr($n)")
+    func char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
 } else {
-    if (get_db_type() == "sqlite" or get_db_type() == "duck") {
-        func repeat(s: string, num: int) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
+    if (db_type == "sqlite" or db_type == "duck") {
+        func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')")   // Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
         func pi() = SQL(float, "3.141592653589793")
@@ -186,13 +196,17 @@ if (get_db_type() == "postgres") {
         func week_of_year(date) = SQL(int, "strftime('%W', $date)")
         func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
 
-        func str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)")
+        func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")
+        func char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
+        func char_ord(n: maybe_vectorized(string)) = SQL(int, "unicode($n)")
 
     } else {
-        if (get_db_type() == "mysql") {
+        if (db_type == "mysql") {
             func random() = SQL(float, "RAND()")
 
-            func str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)")    // same as sqlite
+            func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
+            func char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
+            func char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
 
             // TODO use AST interface instead?
             func count_false(field) {
@@ -211,8 +225,8 @@ if (get_db_type() == "postgres") {
     }
 }
 
-func str_contains(a: string, b: string) = str_index(a, b) > 0
-func str_notcontains(a: string, b: string) = str_index(a, b) == 0
+func str_contains(a: string, b: string) = str_index(a, b) >= 0
+func str_notcontains(a: string, b: string) = str_index(a, b) < 0
 
 func sample_ratio_fast(tbl, ratio) {
     "Return a random sample of rows from the table, at the approximate amount of (ratio*count(tbl))."
@@ -272,6 +286,10 @@ func bfs(edges: table, initial: table) {
         edges - a table of type {src: int, dst: int}, defining the edges of the graph
         initial - list[int], specifies from which nodes to start
     """
+    if (count(names(edges){name} & ["src", "dst"]) != 2) {
+        throw new TypeError("bfs: 'edges' expected to contain 'src' and 'dst'")
+    }
+    initial = list(initial)
     bfs = SQL(list[int], "SELECT * FROM $initial UNION SELECT e.dst FROM $edges e JOIN $self bfs ON e.src = bfs.item")
     return SQL(list[int], "SELECT bfs.item FROM $bfs bfs")
 }
@@ -295,31 +313,41 @@ func walk_tree(edges: table, initial: table, max_rank: int) {
     return SQL(node, "SELECT bfs.id, bfs.rank FROM $bfs bfs")
 }
 
+func char_range(start: string, end: string) {
+    """Produce a table of all characters from 'start' to 'stop'
 
-func range(lst: list, start: union[int, function], end: union[int, function]) {
+    Example:
+        >> char_range('a', 'z')
+    """
+
+    return list([char_ord(start)..(char_ord(end)+1)]{char(item)})
+}
+
+
+func map_range(lst: list, start: union[int, function], end: union[int, function]) {
     "Produce a range of numbers as rows for each item in the list, based on `start` and `end`"
-	if (isa(start, int)) {
-		s = start
-	} else if (isa(start, function)) {
-		s = min(lst{start(item)})
-	}
+    lst = list(lst)
+    if (isa(start, int)) {
+        s = start
+    } else if (isa(start, function)) {
+        s = min(lst{start(item)})
+    }
 
-	if (isa(end, int)) {
-		e = end
-	} else if (isa(end, function)) {
-		e = max(lst{end(item)}) + 1
-	}
-	r = [s..e]
+    if (isa(end, int)) {
+        e = end
+    } else if (isa(end, function)) {
+        e = max(list(lst{end(item)})) + 1
+    }
 
-	mul = joinall(l: lst, i: r) {i: i.item, l.item }
+    mul = joinall(l: lst, i: [s..e]) {i: i.item, l.item }
 
-	if (isa(start, function)) {
-		mul = mul[i >= start(item)]
-	}
+    if (isa(start, function)) {
+        mul = mul[i >= start(item)]
+    }
 
-	if (isa(end, function)) {
-		mul = mul[i <= end(item)]
-	}
+    if (isa(end, function)) {
+        mul = mul[i <= end(item)]
+    }
 
-	return mul
+    return mul
 }

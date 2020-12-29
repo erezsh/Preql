@@ -1,8 +1,5 @@
 from time import time
 
-import rich.console
-import rich.markup
-
 ### XXX Fix for Python 3.8 bug (https://github.com/prompt-toolkit/python-prompt-toolkit/issues/1023)
 import asyncio
 import selectors
@@ -23,7 +20,7 @@ from prompt_toolkit.formatted_text.html import HTML, html_escape
 from . import __version__
 from . import pql_objects as objects
 from .utils import memoize
-from .api import table_more
+from .display import display, table_more
 from .exceptions import Signal, ExitInterp, pql_SyntaxError
 from .pql_types import Object
 from .parser import parse_stmts
@@ -165,7 +162,7 @@ def start_repl(p, prompt=' >> '):
 
     p.set_output_format('rich')
 
-    console = rich.console.Console()
+    console = display.console
     console.print(f"[purple]Preql {__version__} interactive prompt. Type help() for help[/purple]")
 
     try:
@@ -211,15 +208,10 @@ def start_repl(p, prompt=' >> '):
                         if isinstance(res, str):
                             if len(res) > 200:
                                 res = res[:100] + "..." + res[-100:]    # smarter limit?
-                            res = rich.markup.escape(res)
-                        console.print(res, overflow='ellipsis')
+                        display.print(res)
 
                 except Signal as s:
-                    for is_rich, line in s.get_rich_lines():
-                        if is_rich:
-                            rich.print(line)
-                        else:
-                            print(line)
+                    display.print_exception(s)
                     # repl_log.error(s)
                     # p.interp.set_var('_e', objects.ExceptionInstance(e))
                     continue

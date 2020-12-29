@@ -18,6 +18,7 @@ stmts: _NL? stmt+   -> as_list
 _ml_seperated{item}: (item _ml_sep)* item _ml_sep?
 _ml_sep: "," | "," _NL | _NL
 _separated{item, sep}: (item sep)* item
+_cs_list{item}: (item ",")* item ","?
 
 pql_dict: "{" _ml_sep? ml_list{named_expr} _ml_sep? "}"
 key_value: name ":" expr
@@ -59,7 +60,7 @@ codeblock: _NL? "{" _NL? stmt* "}"
 return_stmt: "return" expr _NL
 import_stmt: "import" NAME _NL
 throw: "throw" expr _NL
-print: "print" expr _NL
+print: "print" _cs_list{expr} _NL
 assert_: "assert" expr _NL
 func_params: "(" _separated{param, ","}? ("," param_variadic)? ")" -> as_list
            | "(" param_variadic ")" -> as_list
@@ -95,7 +96,7 @@ NOT_IN: "!in"
 ?not_test: "not" not_test -> not_test
          | compare
 ?compare: (compare comp_op)? like
-?like: (like "~")? add_expr
+?like: (like ("~"|"like"))? add_expr
 ?add_expr: (add_expr add_op)? term
 ?term: (term mul_op)? power
 ?factor: ("+" | "-")* molecule
@@ -178,13 +179,13 @@ SIGNED_FLOAT: ["+"|"-"] FLOAT
 SIGNED_INT: ["+"|"-"] INT
 
 
-LONG_STRING: /""".*?(?<!\\)(\\\\)*?"""/s
+STRING : /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
+LONG_STRING: /(""".*?(?<!\\)(\\\\)*?"""|'''.*?(?<!\\)(\\\\)*?''')/is
 
 %import common.CNAME -> NAME
 
 %import common.WS_INLINE
 %import common.INT
-%import common.ESCAPED_STRING -> STRING
 %ignore WS_INLINE
 %ignore /\\[\t \f]*\r?\n/   // LINE_CONT
 %ignore COMMENT

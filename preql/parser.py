@@ -7,8 +7,9 @@ from .utils import TextPos, TextRange, TextReference
 from .exceptions import pql_SyntaxError
 from . import pql_ast as ast
 from . import pql_objects as objects
-
+from .compiler import guess_field_name
 from .pql_types import T
+
 
 class Str(str):
     def __new__(cls, value, text_ref=None):
@@ -73,8 +74,6 @@ def _fix_escaping(s):
 
     return s
 
-from .compiler import guess_field_name  # XXX a little out of place
-
 
 def _wrap_result(res, f, meta, children):
     if isinstance(res, (Str, ast.Ast)):
@@ -88,8 +87,11 @@ def _args_wrapper(f, data, children, meta):
     return _wrap_result(res, f, meta, children)
 
 def _args_wrapper_meta(f, data, children, meta):
-    res = f(meta, *children)
-    return _wrap_result(res, f, meta, children)
+    ref = make_text_reference(*f.__self__.code_ref, meta, children)
+    res = f(ref, *children)
+    if isinstance(res, (Str, ast.Ast)):
+        res.set_text_ref(ref)
+    return res
 
 def _args_wrapper_list(f, data, children, meta):
     res = f(children)
@@ -161,11 +163,14 @@ class TreeToAst(Transformer):
         return ast.Compare(op, [a,b])
 
     def _arith_expr(self, a, op, b):
-        return ast.Arith(op, [a,b])
+        return ast.BinOp(op, [a,b])
 
     add_expr = _arith_expr
     term = _arith_expr
     power = _arith_expr
+
+    def like(self, string, pattern):
+        return ast.BinOp('like', [string, pattern])
 
     and_test = no_inline(ast.And)
     or_test = no_inline(ast.Or)
@@ -173,7 +178,6 @@ class TreeToAst(Transformer):
     not_test = ast.Not
 
     neg = ast.Neg
-    like = ast.Like
     var = ast.Name
     getattr = ast.Attr
     named_expr = ast.NamedField
@@ -235,7 +239,7 @@ class TreeToAst(Transformer):
     struct_def = ast.StructDef
     table_def = ast.TableDef
     col_def = ast.ColumnDef
-    print = ast.Print
+    print = no_inline(ast.Print)
     assert_ = ast.Assert
     return_stmt = ast.Return
     import_stmt = ast.Import
