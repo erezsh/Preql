@@ -39,6 +39,7 @@ def _pql_PY_callback(state: State, var: str):
 
 
 def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable() = objects.null):
+    "Run the given Python code and convert the result to a Preql object"
     py_code = cast_to_python(state, code_expr)
     py_setup = cast_to_python(state, code_setup)
 
@@ -67,6 +68,8 @@ def pql_inspect_sql(state: State, obj: T.object):
 
 
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
+    """Create an object with the given SQL evaluation code, and given result type
+    """
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     # .. why not just compile with parameters? the types are already known
     return ast.ParameterizedSqlCode(result_type, sql_code)
@@ -121,6 +124,7 @@ def pql_brk_continue(state):
 
 
 def pql_breakpoint(state: State):
+    "Create a Python breakpoint. For a Preql breakpoint, use debug() instead"
     breakpoint()
     return objects.null
 
@@ -188,8 +192,7 @@ def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() 
 
 
 def pql_get_db_type(state: State):
-    """
-    Returns a string representing the type of the active database.
+    """Returns a string representing the type of the active database.
 
     Possible values are:
         - "sqlite"
@@ -342,14 +345,12 @@ def _find_table_reference(t1, t2):
                 yield (objects.SelectedColumnInstance(t2, T.t_id, 'id'), objects.SelectedColumnInstance(t1, c, name))
 
 def pql_type(state: State, obj: T.any):
-    """
-    Returns the type of the given object
+    """Returns the type of the given object
     """
     return obj.type
 
 def pql_repr(state: State, obj: T.any):
-    """
-    Returns the type of the given object
+    """Returns the type of the given object
     """
     try:
         return new_value_instance(obj.repr(state))
@@ -358,8 +359,7 @@ def pql_repr(state: State, obj: T.any):
         return new_value_instance(value)
 
 def pql_columns(state: State, table: T.collection):
-    """
-    Returns a dictionary of {column_name: column_type}
+    """Accepts a table, and returns a dictionary of {column_name: column_type}
     """
     elems = table.type.elems
     if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
@@ -407,16 +407,14 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = o
 
 
 def pql_connect(state: State, uri: T.string):
-    """
-    Connect to a new database, specified by the uri
+    """Connect to a new database, specified by the uri
     """
     uri = cast_to_python(state, uri)
     state.connect(uri)
     return objects.null
 
 def pql_help(state: State, inst: T.any = objects.null):
-    """
-    Provides a brief summary for a given object
+    """Provides a brief summary for a given object
     """
     if inst is objects.null:
         text = (
@@ -443,6 +441,12 @@ def pql_help(state: State, inst: T.any = objects.null):
     text = '\n'.join(lines) + '\n'
     return new_value_instance(text).replace(type=T.text)
 
+def _get_doc(v):
+    s = ''
+    if v.type <= T.function and v.docstring:
+        s = v.docstring.splitlines()[0]
+    return new_str(s).code
+
 def pql_names(state: State, obj: T.any = objects.null):
     """List all names in the namespace of the given object.
 
@@ -454,13 +458,16 @@ def pql_names(state: State, obj: T.any = objects.null):
         all_vars = obj.all_attrs()
 
     assert all(isinstance(s, str) for s in all_vars)
-    tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(v.type).code]) for n,v in all_vars.items()]
+    all_vars = list(all_vars.items())
+    all_vars.sort()
+    tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(v.type).code, _get_doc(v)]) for n,v in all_vars]
 
-    table_type = T.table(dict(name=T.string, type=T.string))
+    table_type = T.table(dict(name=T.string, type=T.string, doc=T.string))
     return objects.new_const_table(state, table_type, tuples)
 
 
 def pql_tables(state: State):
+    "Return a table of all tables in the database"
     names = state.db.list_tables()
     values = [(name, state.db.import_table_type(state, name, None)) for name in names]
     tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in values]
@@ -567,6 +574,7 @@ def _rest_table_endpoint(state, table):
 
 
 def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080)):
+    "Start a starlette server that exposes the current namespace as REST API"
 
     try:
         from starlette.applications import Starlette

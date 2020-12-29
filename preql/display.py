@@ -62,7 +62,7 @@ def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)
     return cast_to_python(state, count)
 
-def _html_table(name, count_str, rows, offset):
+def _html_table(name, count_str, rows, offset, has_more):
     header = 'table '
     if name:
         header += name
@@ -81,7 +81,16 @@ def _html_table(name, count_str, rows, offset):
         for row in rows
     ]
 
-    return '%s<table>%s%s</table>' % (header, ths, '\n'.join(trs))
+    if has_more:
+        trs.append('<tr><td>...</td></tr>')
+
+    style = """<style>
+    .preql_table td, .preql_table th {
+        text-align: left
+    }
+    </style>
+    """
+    return '%s<table class="preql_table">%s%s</table>' % (header, ths, '\n'.join(trs)) + style
 
 
 def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_footer=False):
@@ -124,8 +133,23 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
 _g_last_table = None
 _g_last_offset = 0
 
-def table_repr(self, state, offset=0):
+def _view_table(state, table, size, offset):
     global _g_last_table, _g_last_offset
+    rows = cast_to_python(state, table_limit(table, state, size, offset))
+    _g_last_table = table
+    _g_last_offset = offset + len(rows)
+    if table.type <= T.list:
+        rows = [{ITEM_NAME: x} for x in rows]
+
+    try:
+        table_name = table.type.options['name'].repr_name
+    except KeyError:
+        table_name = ''
+
+    return table_name, rows
+
+
+def table_repr(self, state, offset=0):
 
     count = _call_pql_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)])
     if count == MAX_AUTO_COUNT:
@@ -140,22 +164,13 @@ def table_repr(self, state, offset=0):
     #     return f'[{elems}{post}]'
 
     # TODO load into preql and repr, instead of casting to python
-    rows = cast_to_python(state, table_limit(self, state, TABLE_PREVIEW_SIZE, offset))
-    _g_last_table = self
-    _g_last_offset = offset + len(rows)
-    if self.type <= T.list:
-        rows = [{ITEM_NAME: x} for x in rows]
-
-    has_more = offset + len(rows) < count
-
-    try:
-        table_name = self.type.options['name'].repr_name
-    except KeyError:
-        table_name = ''
-
     if state.fmt == 'html':
-        return _html_table(table_name, count_str, rows, offset)
+        table_name, rows, = _view_table(state, self, TABLE_PREVIEW_SIZE * 100, offset)
+        has_more = offset + len(rows) < count
+        return _html_table(table_name, count_str, rows, offset, has_more)
     elif state.fmt == 'rich':
+        table_name, rows, = _view_table(state, self, TABLE_PREVIEW_SIZE, offset)
+        has_more = offset + len(rows) < count
         return _rich_table(table_name, count_str, rows, offset, has_more)
 
     assert state.fmt == 'text'

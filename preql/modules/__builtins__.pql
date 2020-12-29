@@ -1,6 +1,7 @@
 func maybe_vectorized(t) = union[t, vectorized[t]]
 
 func _sql_agg_func(name, obj, t=null) {
+    "Helper function. Do not call"
     if (t==null) {
         if (not (isa(obj, collection) and count(columns(obj))==1)) {
             throw new TypeError(name + "() only accepts lists or tables with one column. Got '" + repr(type(obj)) + "'")
@@ -91,7 +92,10 @@ func limit(tbl: collection, n: int) {
     return tbl[..n]
 }
 
-func limit_offset(tbl: collection, lim: int, offset: int) = SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
+func limit_offset(tbl: collection, lim: int, offset: int) {
+    "Return the first 'n' rows in table at given offset"
+    return SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
+}
 
 func enum(tbl: collection) {
     "Return the table with a new index column"
@@ -125,7 +129,7 @@ func dict(...x) {
 }
 
 func _zipjoin(join_func, table1, table2) {
-	"Add index to each table, and then join"
+	"Helper function. Add index to each table, and then join them"
 	return join_func(a: enum(table1).index, b: enum(table2).index) {
 			// Remove index from nested structs
 			a {... !index}
@@ -263,21 +267,23 @@ func sample_fast(tbl: collection, n: int, bias: number=0.05) {
 }
 
 func page(table, index, page_size=20) {
+    "Pagination utility function for tables"
     offset = index*page_size
     return table[offset..(offset+page_size)]
 }
 
-func remove_table(table) {
-    SQL(nulltype, "DROP TABLE $table")
+func remove_table(table_name) {
+    "Remove table from database (drop table)"
+    SQL(nulltype, "DROP TABLE $table_name")
 }
 
-func remove_tables(tables) {
-    "TODO"
+// func remove_tables(tables) {
+//     "TODO"
 
-    for (table in tables) {
-        SQL(nulltype, "DROP TABLE $table")
-    }
-}
+//     for (table in tables) {
+//         SQL(nulltype, "DROP TABLE $table")
+//     }
+// }
 
 func bfs(edges: table, initial: table) {
     """Performs a breadth-first search on a graph
