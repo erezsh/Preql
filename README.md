@@ -26,7 +26,7 @@ It is designed for use by data engineers, analysts and data scientists.
 Simply install via pip:
 
 ```sh
-    pip install -U prql
+    pip install -U preql-lang
 ```
 
 Then just run the interpreter:

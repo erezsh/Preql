@@ -7,7 +7,7 @@ Ensure you have, or install, Python 3.8 or up.
 Install using pip:
 
 ```sh
-    pip install -U prql
+    pip install -U preql-lang
 ```
 
 ## Run the interpreter in the console (REPL)
