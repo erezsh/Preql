@@ -42,7 +42,7 @@ _table_contents: table_cols func_defs
 col_def: name ":" coltype ["->" expr] ["=" expr]
 ?coltype: type
         | m2m
-type: name [typemod]
+type.-10: molecule [typemod]
 m2m: "[" type "]"
 
 struct_def: "struct" name "{" _ml_sep? ml_list{member_def} "}" _NL

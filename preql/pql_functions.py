@@ -337,12 +337,11 @@ def _auto_join(state, join, ta, tb):
 
 @listgen
 def _find_table_reference(t1, t2):
-    # XXX TODO need to check TableType too (owner)?
     for name, c in t1.type.elems.items():
         if (c <= T.t_relation):
-            if c.elem == t2.type:
-                # TODO depends on the query XXX
-                yield (objects.SelectedColumnInstance(t2, T.t_id, 'id'), objects.SelectedColumnInstance(t1, c, name))
+            rel = c.options['rel']
+            if rel['table'] == t2.type:     # if same table
+                yield t2.get_attr(rel['column']), objects.SelectedColumnInstance(t1, c, name)
 
 def pql_type(state: State, obj: T.any):
     """Returns the type of the given object
@@ -406,11 +405,14 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = o
 
 
 
-def pql_connect(state: State, uri: T.string):
+def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.Const(T.bool, False)):
     """Connect to a new database, specified by the uri
     """
     uri = cast_to_python(state, uri)
+    load_all_tables = cast_to_python(state, load_all_tables)
     state.connect(uri)
+    if load_all_tables:
+        state._py_api.load_all_tables()     # XXX
     return objects.null
 
 def pql_help(state: State, inst: T.any = objects.null):

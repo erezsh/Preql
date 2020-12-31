@@ -208,7 +208,7 @@ class One(Expr):
 
 @dataclass
 class Type(Ast):
-    name: str
+    name: Object
     nullable: bool = False
 
 class Definition:

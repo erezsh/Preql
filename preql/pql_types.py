@@ -221,7 +221,7 @@ T.list = [T.table], (T.any,)
 T.set = [T.table], (T.any,)
 T.aggregate = [T.collection], (T.any,)
 T.t_id = [T.number], (T.table,)
-T.t_relation = [T.number], (T.table,)   # t_id?
+T.t_relation = [T.number], (T.any,)   # t_id?
 
 T.vectorized = [T.container], (T.any,)  # sequence or collection?
 

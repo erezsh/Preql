@@ -171,6 +171,27 @@ class BasicTests(PreqlTests):
         assert preql("[] + [1]") == [1]
         assert preql("[]") == []
 
+    def test_foreign_key(self):
+        p = self.Preql()
+
+        p(r'''
+            table Point {
+                x: int
+                y: int
+            }
+
+            table HRuler {
+                x_axis: Point.x
+            }
+
+            new Point(1, 1)
+            new Point(3, 3)
+            new Point(3, 4)
+        ''')
+
+        p('join(h: HRuler[x_axis==3], p: Point) {p.y}') == [3, 4]
+        p('join(h: HRuler[x_axis==4], p: Point) {p.y}') == []
+
     def test_logical(self):
         # TODO null values
         preql = self.Preql()
@@ -351,7 +372,7 @@ class BasicTests(PreqlTests):
 
         # Auto join
         res = preql(""" join(c: Country[language=="en"], p: Person) { p.name, country: c.name } """)
-        assert is_eq(res, english_speakers)
+        assert is_eq(res, english_speakers), res
 
         res = preql(""" join(p: Person, c: Country[language=="en"]) { p.name, country: c.name } """)
         assert is_eq(res, english_speakers)

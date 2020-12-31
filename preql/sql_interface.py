@@ -278,7 +278,10 @@ class SqliteInterface(SqlInterface):
 
     def __init__(self, filename=None, print_sql=False):
         import sqlite3
-        self._conn = sqlite3.connect(filename or ':memory:')
+        try:
+            self._conn = sqlite3.connect(filename or ':memory:')
+        except sqlite3.OperationalError as e:
+            raise ConnectError(*e.args) from e
         self._print_sql = print_sql
 
     def table_exists(self, name):

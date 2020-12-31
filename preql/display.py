@@ -165,7 +165,7 @@ def table_repr(self, state, offset=0):
 
     # TODO load into preql and repr, instead of casting to python
     if state.fmt == 'html':
-        table_name, rows, = _view_table(state, self, TABLE_PREVIEW_SIZE * 100, offset)
+        table_name, rows, = _view_table(state, self, TABLE_PREVIEW_SIZE * 10, offset)
         has_more = offset + len(rows) < count
         return _html_table(table_name, count_str, rows, offset, has_more)
     elif state.fmt == 'rich':

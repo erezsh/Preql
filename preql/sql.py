@@ -884,7 +884,7 @@ def add_one(x):
     return BinOp('+', [x, make_value(1)])
 
 def _quote(target, name):
-    assert isinstance(name, str)
+    assert isinstance(name, str), name
     if target is sqlite:
         return f'[{name}]'
     elif target is mysql or target is bigquery:
@@ -919,8 +919,11 @@ def compile_type_def(state, table_name, table) -> Sql:
             # TODO any column, using projection / get_attr
             if not table.options.get('temporary', False):
                 # In postgres, constraints on temporary tables may reference only temporary tables
-                s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, c.options['name'])}(id)"
-                posts.append(s)
+                rel = c.options['rel']
+                if rel['key']:          # Requires a unique constraint
+                    _tbl_name ,= rel['table'].options['name'].parts   # TODO fix for multiple parts
+                    s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, _tbl_name)}({rel['column']})"
+                    posts.append(s)
 
     if pks:
         names = ", ".join(pks)
@@ -937,7 +940,8 @@ def compile_drop_table(state, table_name) -> Sql:
 @dp_type
 def compile_type(type_: T.t_relation):
     # TODO might have a different type
-    return 'INTEGER'    # Foreign-key is integer
+    #return 'INTEGER'    # Foreign-key is integer
+    return compile_type(type_.elems['item'])
 
 @dp_type
 def compile_type(type_: T.primitive):
@@ -948,7 +952,7 @@ def compile_type(type_: T.primitive):
         'float': "FLOAT",
         'bool': "BOOLEAN",
         'text': "TEXT",
-        't_relation': "INTEGER",
+        # 't_relation': "INTEGER",
         'datetime': "TIMESTAMP",
     }[type_.typename]
     if not type_.maybe_null():

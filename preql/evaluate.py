@@ -50,21 +50,23 @@ def resolve(state: State, table_def: ast.TableDef):
 
 @dy
 def resolve(state: State, col_def: ast.ColumnDef):
-    col = resolve(state, col_def.type)
+    coltype = resolve(state, col_def.type)
 
     query = col_def.query
     assert not query
 
-    assert not isinstance(col, objects.CollectionInstance)
+    if isinstance(coltype, objects.SelectedColumnInstance):
+        return T.t_relation[coltype.type](rel={'table': coltype.parent.type, 'column': coltype.name, 'key': False}).replace(_nullable=coltype.type._nullable)
 
-    if col <= T.table:
-        return T.t_relation[col](name=col_def.type.name).replace(_nullable=col._nullable)
+    elif coltype <= T.table:
+        # TODO what if 'id' isn't an int?
+        return T.t_relation[T.int.as_nullable()](rel={'table': coltype, 'column': 'id', 'key': True}).replace(_nullable=coltype._nullable)
 
-    return col(default=col_def.default)
+    return coltype(default=col_def.default)
 
 @dy
 def resolve(state: State, type_: ast.Type):
-    t = state.get_var(type_.name)
+    t = evaluate(state, type_.name)
     if isinstance(t, objects.TableInstance):
         t = t.type
         assert t <= T.table
