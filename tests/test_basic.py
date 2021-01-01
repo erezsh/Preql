@@ -988,6 +988,10 @@ class BasicTests(PreqlTests):
         assert res1 == res2, (res1, res2)
         assert res2 == res3, (list(res2), list(res3))
 
+    def test_struct_inline(self):
+        preql = self.Preql()
+        res = preql('list(join(a:[1..10].item, b:[8..20].item) {...a})')
+        assert res == [8,9], res
 
 
     @uses_tables('a')

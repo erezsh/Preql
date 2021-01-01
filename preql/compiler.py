@@ -102,10 +102,20 @@ def _expand_ellipsis(state, obj, fields):
 
                 exclude = direct_names | set(f.value.exclude)
 
-                for name in elems:
-                    assert isinstance(name, str)
-                    if name not in exclude:
-                        yield ast.NamedField(name, ast.Name(name)).set_text_ref(f.text_ref)
+
+                if f.value.from_struct:
+                    # Inline struct
+                    with state.use_scope(obj.all_attrs()):
+                        s = evaluate(state, f.value.from_struct)
+                        for name, v in s.attrs.items():
+                            if name not in exclude:
+                                yield ast.NamedField(name, v).set_text_ref(f.text_ref)
+                else:
+                    # Ellipsis for current projection
+                    for name in elems:
+                        assert isinstance(name, str)
+                        if name not in exclude:
+                            yield ast.NamedField(name, ast.Name(name)).set_text_ref(f.text_ref)
         else:
             yield f
 

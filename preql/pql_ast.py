@@ -75,6 +75,7 @@ class Const(Expr):
 
 @dataclass
 class Ellipsis(Expr):
+    from_struct: Optional[Union[Expr, Marker]]
     exclude: List[Union[str, Marker]]
 
 class BinOpExpr(Expr):
@@ -136,9 +137,6 @@ class NamedField(Expr):
 
     _args = 'value',
 
-@dataclass
-class InlineStruct(Expr):
-    struct: Expr
 
 
 class TableOperation(Expr): pass

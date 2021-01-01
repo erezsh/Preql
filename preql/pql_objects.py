@@ -89,7 +89,7 @@ class Function(Object):
     def match_params(self, state, args):
 
         # If no keyword arguments, matching is much simpler and faster
-        if all(not isinstance(a, (ast.NamedField, ast.InlineStruct)) for a in args):
+        if all(not isinstance(a, (ast.NamedField, ast.Ellipsis)) for a in args):
             return self.match_params_fast(state, args)
 
         # Canonize args for the rest of the function
@@ -97,10 +97,13 @@ class Function(Object):
         for i, a in enumerate(args):
             if isinstance(a, ast.NamedField):
                 inline_args.append(a)
-            elif isinstance(a, ast.InlineStruct):
+            elif isinstance(a, ast.Ellipsis):
                 assert i == len(args)-1
+                if a.exclude:
+                    raise NotImplementedError("Cannot exclude keys when inlining struct")
+
                 # XXX we only want to localize the keys, not the values
-                d = self._localize_keys(state, a.struct)
+                d = self._localize_keys(state, a.from_struct)
                 if not isinstance(d, dict):
                     raise Signal.make(T.TypeError, state, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():

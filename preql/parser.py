@@ -181,7 +181,6 @@ class TreeToAst(Transformer):
     var = ast.Name
     getattr = ast.Attr
     named_expr = ast.NamedField
-    inline_struct = ast.InlineStruct
     order = ast.Order
     update = ast.Update
     delete = ast.Delete
@@ -223,7 +222,7 @@ class TreeToAst(Transformer):
     @with_meta
     def func_call(self, meta, func, args):
         for i, a in enumerate(args):
-            if isinstance(a, ast.InlineStruct):
+            if isinstance(a, ast.Ellipsis):
                 if i != len(args)-1:
                     raise pql_SyntaxError(meta, f"An inlined struct must appear at the end of the function call ({a})")
 
@@ -257,7 +256,9 @@ class TreeToAst(Transformer):
         return ast.TableDefFromExpr(name, table_expr, const == 'const')
 
     codeblock = no_inline(ast.CodeBlock)
-    ellipsis = no_inline(ast.Ellipsis)
+
+    def ellipsis(self, from_struct, *exclude):
+        return ast.Ellipsis(from_struct, list(exclude))
 
 
     def __default__(self, data, children, meta):

@@ -121,8 +121,10 @@ NOT_IN: "!in"
      | "^" molecule -> desc
      | new
      | one
+     | ellipsis
 
 ?atom: var
+     | marker
      | getattr
      | const
 
@@ -136,10 +138,8 @@ _GET_OR_NEW.10: "new?"
 _NEW_ARRAY.10: "new[]"
 
 func_call: molecule func_args
-func_args: "(" _separated{named_expr, ","}? ("," inline_struct)? ")" -> as_list
-         | "(" inline_struct ")" -> as_list
-
-inline_struct: "..." expr
+func_args: "(" _separated{named_expr, ","}? ("," ellipsis)? ")" -> as_list
+         | "(" ellipsis ")" -> as_list
 
 named_expr: [name ":"] expr
 
@@ -150,13 +150,11 @@ named_expr: [name ":"] expr
       | "null" -> null
       | "false" -> false
       | "true" -> true
-      | marker
-      | ellipsis
      //  | range
 
 
 marker: MARKER
-ellipsis: "..." exclude*
+ellipsis: "..." [expr] exclude*
 ?exclude: "!" (name | marker)
 
 getattr: [molecule] "." (name | marker)
