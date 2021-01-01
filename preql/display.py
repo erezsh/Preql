@@ -164,17 +164,21 @@ def table_repr(self, state, offset=0):
     #     return f'[{elems}{post}]'
 
     # TODO load into preql and repr, instead of casting to python
-    if state.fmt == 'html':
-        table_name, rows, = _view_table(state, self, TABLE_PREVIEW_SIZE * 10, offset)
-        has_more = offset + len(rows) < count
-        return _html_table(table_name, count_str, rows, offset, has_more)
-    elif state.fmt == 'rich':
-        table_name, rows, = _view_table(state, self, TABLE_PREVIEW_SIZE, offset)
-        has_more = offset + len(rows) < count
-        return _rich_table(table_name, count_str, rows, offset, has_more)
+    table_f = _rich_table
+    preview = TABLE_PREVIEW_SIZE
+    colors = True
 
-    assert state.fmt == 'text'
-    return _rich_table(table_name, count_str, rows, offset, has_more, colors=False)
+    if state.fmt == 'html':
+        preview = TABLE_PREVIEW_SIZE * 10
+        table_f = _html_table
+    elif state.fmt == 'text':
+        colors = False
+    else:
+        assert state.fmt == 'rich'
+
+    table_name, rows, = _view_table(state, self, preview, offset)
+    has_more = offset + len(rows) < count
+    return table_f(table_name, count_str, rows, offset, has_more, colors=colors)
 
     # raise NotImplementedError(f"Unknown format: {state.fmt}")
 
