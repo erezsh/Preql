@@ -3,6 +3,7 @@ from preql.compiler import cast_to_instance
 import re
 import csv
 import inspect
+import itertools
 from typing import Optional
 
 from tqdm import tqdm
@@ -247,61 +248,86 @@ def pql_table_concat(state: State, t1: T.collection, t2: T.collection):
     return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate", True)
 
 
+def _get_table(t):
+    if isinstance(t, objects.SelectedColumnInstance):
+        return t.parent
 
+    assert isinstance(t, objects.CollectionInstance)
+    return t
 
-def _join(state: State, join: str, exprs: dict, joinall=False, nullable=None):
+def _join2(state, join, a, b):
+    if isinstance(a, objects.SelectedColumnInstance) and isinstance(b, objects.SelectedColumnInstance):
+        return [a, b]
 
-    exprs = {name: evaluate(state, value) for name, value in exprs.items()}
-    for x in exprs.values():
+    if not ((a.type <= T.collection) and (b.type <= T.collection)):
+        raise Signal.make(T.TypeError, state, None, f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}")
+
+    return _auto_join(state, join, a, b)
+
+def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=None):
+
+    names = list(exprs_dict)
+    exprs = [evaluate(state, value) for value in exprs_dict.values()]
+
+    # Validation and edge cases
+    for x in exprs:
         if not isinstance(x, objects.AbsInstance):
             raise Signal.make(T.TypeError, state, None, f"Unexpected object type: {x}")
 
-    if len(exprs) != 2:
-        raise Signal.make(T.TypeError, state, None, "join expected only 2 arguments")
+    for e in exprs:
+        if e is objects.EmptyList:
+            raise Signal.make(T.TypeError, state, None, "Cannot join on an untyped empty list")
 
-    (a,b) = exprs.values()
+        if isinstance(e, objects.UnknownInstance):
+            table_type = T.table({n: T.unknown for n in names})
+            return objects.TableInstance.make(sql.unknown, table_type, [])
 
-    if a is objects.EmptyList or b is objects.EmptyList:
-        raise Signal.make(T.TypeError, state, None, "Cannot join on an untyped empty list")
-
-    if isinstance(a, objects.UnknownInstance) or isinstance(b, objects.UnknownInstance):
-        table_type = T.table({e: T.unknown for e in exprs})
-        return objects.TableInstance.make(sql.unknown, table_type, [])
-
-    if isinstance(a, objects.SelectedColumnInstance) and isinstance(b, objects.SelectedColumnInstance):
-        cols = a, b
-        tables = [a.parent, b.parent]
-    else:
-        if not ((a.type <= T.collection) and (b.type <= T.collection)):
-            raise Signal.make(T.TypeError, state, None, f"join() got unexpected values:\n * {a}\n * {b}")
-        if joinall:
-            tables = (a, b)
-        else:
-            cols = _auto_join(state, join, a, b)
-            tables = [c.parent for c in cols]
-
+    # Initialization
+    tables = [_get_table(x) for x in exprs]
     assert all((t.type <= T.collection) for t in tables)
 
-    structs = {name: T.struct(table.type.elems) for name, table in safezip(exprs, tables)}
+    structs = {name: T.struct(table.type.elems) for name, table in safezip(names, tables)}
 
-    # Update nullable for left/right/outer joins
     if nullable:
+        # Update nullable for left/right/outer joins
         structs = {name: t.as_nullable() if n else t
                    for (name, t), n in safezip(structs.items(), nullable)}
 
-    tables = [objects.alias_table_columns(t, n) for n, t in safezip(exprs, tables)]
+    tables = [objects.alias_table_columns(t, n) for n, t in safezip(names, tables)]
 
     primary_keys = [ [name] + pk
-                    for name, t in safezip(exprs, tables)
+                    for name, t in safezip(names, tables)
                     for pk in t.type.options.get('pk', [])
                 ]
     table_type = T.table(structs, name=Id(state.unique_name("joinall" if joinall else "join")), pk=primary_keys)
 
-    conds = [] if joinall else [sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip(structs, cols)])]
+    conds = []
+    if joinall:
+        for e in exprs:
+            if not isinstance(e, objects.CollectionInstance):
+                raise Signal.make(T.TypeError, state, None, f"joinall() expected tables. Got {e}")
+    else:
+        if len(exprs) < 2:
+            raise Signal.make(T.TypeError, state, None, "join expected at least 2 arguments")
+
+        joined_exprs = set()
+        for (na, ta), (nb, tb) in itertools.combinations(safezip(names, exprs), 2):
+            try:
+                cols = _join2(state, join, ta, tb)
+                conds.append( sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip([na, nb], cols)]) )
+                joined_exprs |= {id(ta), id(tb)}
+            except NoAutoJoinFound as e:
+                pass
+
+        if {id(e) for e in exprs} != set(joined_exprs):
+            # TODO better error!!! table name?? specific failed auto-join?
+            s = ', '.join(repr(t.type) for t in exprs)
+            raise Signal.make(T.JoinError, state, None, f"Cannot auto-join: No plausible relations found between {s}")
+
 
     code = sql.Join(table_type, join, [t.code for t in tables], conds)
+    return objects.TableInstance.make(code, table_type, exprs)
 
-    return objects.TableInstance.make(code, table_type, [a,b])
 
 def pql_join(state, tables):
     "Inner join two tables into a new projection {t1, t2}"
@@ -316,12 +342,17 @@ def pql_joinall(state: State, tables):
     "Cartesian product of two tables into a new projection {t1, t2}"
     return _join(state, "JOIN", tables, True)
 
+class NoAutoJoinFound(Exception):
+    pass
+
 def _auto_join(state, join, ta, tb):
+    # if len(ta.type.elems) == len(tb.type.elems) == 1:
+
     refs1 = _find_table_reference(ta, tb)
     refs2 = _find_table_reference(tb, ta)
     auto_join_count = len(refs1) + len(refs2)
     if auto_join_count < 1:
-        raise Signal.make(T.JoinError, state, None, "Cannot auto-join: No plausible relations found")
+        raise NoAutoJoinFound(ta, tb)
     elif auto_join_count > 1:   # Ambiguity in auto join resolution
         raise Signal.make(T.JoinError, state, None, "Cannot auto-join: Several plausible relations found")
 
@@ -349,7 +380,7 @@ def pql_type(state: State, obj: T.any):
     return obj.type
 
 def pql_repr(state: State, obj: T.any):
-    """Returns the type of the given object
+    """Returns the repr of the given object
     """
     try:
         return new_value_instance(obj.repr(state))

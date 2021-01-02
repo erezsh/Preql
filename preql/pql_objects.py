@@ -420,7 +420,7 @@ class StructInstance(AbsStructInstance):
         return '{%s}' % ', '.join(attrs)
 
 
-
+# TODO simplify with mixin
 @dataclass
 class MapInstance(AbsStructInstance):
     attrs: Dict[str, Object]
@@ -432,6 +432,15 @@ class MapInstance(AbsStructInstance):
 
     def items(self):
         return self.attrs.items()
+
+    def __iter__(self):
+        return iter(self.attrs)
+
+    def keys(self):
+        return self.attrs.keys()
+
+    def values(self):
+        return self.attrs.values()
 
     def all_attrs(self):
         return dict(self.attrs)

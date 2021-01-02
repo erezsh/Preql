@@ -440,6 +440,11 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql.p().to_json()[0]['y'], 27)
 
 
+    def test_triple_join(self):
+        preql = self.Preql()
+        preql(""" join(a: [1..10].item, b: [2..20].item, c:[3,5,15].item) {c.item} """) == [3, 5]
+
+
 
     @uses_tables('Point')
     def test_SQL(self):

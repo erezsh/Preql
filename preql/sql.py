@@ -742,6 +742,11 @@ class Subquery(SqlTree):
         fields_str = ["("] + join_comma(fields) + [")"] if fields else []
         return [f"{self.table_name}"] + fields_str + [" AS ("] + query + [")"]
 
+def _enum_is_last(seq):
+    last = len(seq) - 1
+    for i, item in enumerate(seq):
+        yield i == last, item
+
 
 @dataclass
 class Join(TableOperation):
@@ -753,14 +758,18 @@ class Join(TableOperation):
     def _compile(self, qb):
         tables_sql = [t.compile_wrap(qb).code for t in self.tables]
         join_op = ' %s ' % self.join_op.upper()
-        join_sql = join_sep([e for e in tables_sql], join_op)
 
-        if self.conds:
-            conds = join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
-        else:
-            conds = ['1=1']   # Postgres requires ON clause
+        code = [f'SELECT * FROM '] + tables_sql[0]
 
-        return [f'SELECT * FROM '] + join_sql + [' ON '] + conds
+        for is_last, t_sql in _enum_is_last(tables_sql[1:]):
+            code += [join_op] + t_sql + [' ON ']
+
+            if self.conds and is_last:
+                code += join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
+            else:
+                code += ['1=1']   # Postgres requires ON clause
+
+        return code
 
 
 
