@@ -72,6 +72,15 @@ def _process_fields(state: State, fields):
         yield [(bool(f.name), name), v]
 
 
+def _exclude_items(d, req_exclude, opt_exclude):
+    if not (req_exclude <= set(d)):
+        raise ValueError(req_exclude - set(d))
+
+    for k, v in d.items():
+        if k not in req_exclude and k not in opt_exclude:
+            yield k, v
+
+
 @listgen
 def _expand_ellipsis(state, obj, fields):
     direct_names = {f.value.name for f in fields if isinstance(f.value, ast.Name)}
@@ -87,35 +96,36 @@ def _expand_ellipsis(state, obj, fields):
                 if t <= T.vectorized:
                     t = t.elem
                 assert t <= T.table or t <= T.struct # some_table{ ... } or some_table{ some_struct_item {...} }
-                elems = t.elems
 
                 for n in f.value.exclude:
                     if isinstance(n, ast.Marker):
-                        raise AutocompleteSuggestions({k:(0, v) for k, v in elems.items()
+                        raise AutocompleteSuggestions({k:(0, v) for k, v in t.elems.items()
                                                       if k not in direct_names
                                                       and k not in f.value.exclude})
 
-                    if n not in elems:
-                        raise Signal.make(T.NameError, state, n, f"Field to exclude '{n}' not found")
                     if n in direct_names:
                         raise Signal.make(T.NameError, state, n, f"Field to exclude '{n}' is explicitely included in projection")
-
-                exclude = direct_names | set(f.value.exclude)
-
 
                 if f.value.from_struct:
                     # Inline struct
                     with state.use_scope(obj.all_attrs()):
                         s = evaluate(state, f.value.from_struct)
-                        for name, v in s.attrs.items():
-                            if name not in exclude:
-                                yield ast.NamedField(name, v).set_text_ref(f.text_ref)
+                        items = s.attrs
                 else:
                     # Ellipsis for current projection
-                    for name in elems:
-                        assert isinstance(name, str)
-                        if name not in exclude:
-                            yield ast.NamedField(name, ast.Name(name)).set_text_ref(f.text_ref)
+                    items = obj.all_attrs()
+
+                try:
+                    remaining_items = list(_exclude_items(items, set(f.value.exclude), direct_names))
+                except ValueError as e:
+                    fte = set(e.args[0])
+                    raise Signal.make(T.NameError, state, obj, f"Fields to exclude '{fte}' not found")
+
+                exclude = direct_names | set(f.value.exclude)
+                for name, value in remaining_items:
+                    assert isinstance(name, str)
+                    assert name not in exclude
+                    yield ast.NamedField(name, value).set_text_ref(f.text_ref)
         else:
             yield f
 
