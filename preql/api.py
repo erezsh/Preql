@@ -93,7 +93,7 @@ class Preql:
 
     __name__ = "Preql"
 
-    def __init__(self, db_uri: str='sqlite://:memory:', print_sql: bool=settings.print_sql):
+    def __init__(self, db_uri: str='sqlite://:memory:', print_sql: bool=settings.print_sql, auto_create: bool = False):
         """Initialize a new Preql instance
 
         Parameters:
@@ -104,7 +104,7 @@ class Preql:
         self._print_sql = print_sql
         # self.engine.ping()
 
-        engine = create_engine(self._db_uri, print_sql=self._print_sql)
+        engine = create_engine(self._db_uri, print_sql=self._print_sql, auto_create=auto_create)
         self._reset_interpreter(engine)
 
     def set_output_format(self, fmt):

@@ -38,6 +38,7 @@ def main():
     kw = {'print_sql': args.print_sql}
     if args.database:
         kw['db_uri'] = args.database
+        kw['auto_create'] = True
     p = Preql(**kw)
 
     interactive = args.interactive

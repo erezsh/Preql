@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from copy import copy
 from logging import getLogger
+from pathlib import Path
 
 import dsnparse
 
@@ -83,10 +84,10 @@ class State:
         if self.access_level < level:
             raise Exception("Bad access. Security risk.")
 
-    def connect(self, uri):
+    def connect(self, uri, auto_create=False):
         logger.info(f"[Preql] Connecting to {uri}")
         try:
-            self.db = create_engine(uri, self.db._print_sql)
+            self.db = create_engine(uri, self.db._print_sql, auto_create)
         except NotImplementedError as e:
             raise Signal.make(T.NotImplementedError, self, None, *e.args) from e
         except ConnectError as e:
@@ -187,7 +188,7 @@ class Namespace:
 
 
 
-def create_engine(db_uri, print_sql):
+def create_engine(db_uri, print_sql, auto_create):
     dsn = dsnparse.parse(db_uri)
     if len(dsn.paths) != 1:
         raise ValueError("Bad value for uri: %s" % db_uri)
@@ -196,6 +197,9 @@ def create_engine(db_uri, print_sql):
         raise NotImplementedError("Preql doesn't support multiple schemes")
     scheme ,= dsn.schemes
     if scheme == 'sqlite':
+        if not auto_create and path != ':memory:':
+            if not Path(path).exists():
+                raise ConnectError("File %r doesn't exist. To create it, set auto_create to True" % path)
         return SqliteInterface(path, print_sql=print_sql)
     elif scheme == 'postgres':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)

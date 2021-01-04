@@ -3,7 +3,7 @@ from dataclasses import field
 
 from .utils import dataclass, TextReference, field_list
 from . import pql_types as types
-from .pql_types import Object
+from .pql_types import T, Object
 from .types_impl import pql_repr
 
 
@@ -326,3 +326,7 @@ class Dict_(Expr):
 def make_const(value):
     t = types.from_python(type(value))
     return Const(t, value)
+
+
+false = Const(T.bool, False)
+true = Const(T.bool, True)

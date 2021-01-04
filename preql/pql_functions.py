@@ -436,14 +436,16 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = o
 
 
 
-def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.Const(T.bool, False)):
+def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.false, auto_create: T.bool = ast.false):
     """Connect to a new database, specified by the uri
 
     If load_all_tables is true, loads all the tables in the database to the global namespace.
+    If auto_create is true, create the database if it doesn't exist (Sqlite only)
     """
     uri = cast_to_python(state, uri)
     load_all_tables = cast_to_python(state, load_all_tables)
-    state.connect(uri)
+    auto_create = cast_to_python(state, auto_create)
+    state.connect(uri, auto_create=auto_create)
     if load_all_tables:
         state._py_api.load_all_tables()     # XXX
     return objects.null
