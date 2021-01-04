@@ -276,18 +276,17 @@ class Case(SqlTree):
             code += [ " ELSE " ] + self.else_.compile_wrap(qb).code
         return code + [" END "]
 
+_ARRAY_SEP = '||'
 
 @dataclass
 class MakeArray(SqlTree):
     type: Type
     field: Sql
 
-    _sp = "|"
-
     def _compile(self, qb):
         field = self.field.compile_wrap(qb).code
         if qb.target == sqlite:
-            return ['group_concat('] + field + [f', "{self._sp}")']
+            return ['group_concat('] + field + [f', "{_ARRAY_SEP}")']
         elif qb.target == postgres:
             return ['array_agg('] + field + [')']
         elif qb.target == mysql:
@@ -1060,7 +1059,7 @@ def restructure_result(state, t: T.list[T.union[T.primitive, T.nulltype]], i):
     if state.db.target == mysql:
         res = json.loads(res)
     elif state.db.target == sqlite:
-        res = res.split('|')
+        res = res.split(_ARRAY_SEP)
 
     # XXX hack! TODO Use a generic form to cast types
     if t.elem <= T.int:

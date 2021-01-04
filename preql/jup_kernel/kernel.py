@@ -5,6 +5,7 @@ from . import __version__
 import preql
 from preql.autocomplete import autocomplete
 from preql import Preql, Signal
+from preql.pql_objects import null
 pql = Preql()
 pql.set_output_format('html')
 
@@ -33,7 +34,9 @@ class PreqlKernel(Kernel):
                 res = pql._run_code(code, '<jupyter>')
 
                 # Print
-                if res is not None:
+                if res is null:
+                    res = ''
+                elif res is not None:
                     res = res.repr(pql.interp.state)
 
                 json = {

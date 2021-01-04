@@ -438,6 +438,8 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = o
 
 def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.Const(T.bool, False)):
     """Connect to a new database, specified by the uri
+
+    If load_all_tables is true, loads all the tables in the database to the global namespace.
     """
     uri = cast_to_python(state, uri)
     load_all_tables = cast_to_python(state, load_all_tables)

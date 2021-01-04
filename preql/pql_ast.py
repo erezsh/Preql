@@ -134,6 +134,7 @@ class Range(Expr):
 class NamedField(Expr):
     name: Optional[str]
     value: Object #(Expr, types.PqlType)
+    user_defined: bool = True
 
     _args = 'value',
 

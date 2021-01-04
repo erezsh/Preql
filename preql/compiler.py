@@ -69,7 +69,7 @@ def _process_fields(state: State, fields):
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
         name = suggested_name.rsplit('.', 1)[-1]    # Use the last attribute as name
 
-        yield [(bool(f.name), name), v]
+        yield [(f.user_defined and bool(f.name), name), v]
 
 
 def _exclude_items(d, req_exclude, opt_exclude):
@@ -125,7 +125,7 @@ def _expand_ellipsis(state, obj, fields):
                 for name, value in remaining_items:
                     assert isinstance(name, str)
                     assert name not in exclude
-                    yield ast.NamedField(name, value).set_text_ref(f.text_ref)
+                    yield ast.NamedField(name, value, user_defined=False).set_text_ref(f.text_ref)
         else:
             yield f
 

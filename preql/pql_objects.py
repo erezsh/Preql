@@ -109,7 +109,7 @@ class Function(Object):
                 for k, v in d.items():
                     inline_args.append(ast.NamedField(k, new_value_instance(v)))
             else:
-                inline_args.append(ast.NamedField(None, a))
+                inline_args.append(ast.NamedField(None, a, user_defined=False))
 
         args = inline_args
         named = [arg.name is not None for arg in args]

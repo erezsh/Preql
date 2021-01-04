@@ -223,7 +223,7 @@ def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s,
         raise Signal.make(T.TypeError, state, ast, msg % (op, type_str, t))
 
 def exclude_fields(state, table, fields):
-    proj = ast.Projection(table, [ast.NamedField(None, ast.Ellipsis(None, exclude=list(fields) ))])
+    proj = ast.Projection(table, [ast.NamedField(None, ast.Ellipsis(None, exclude=list(fields) ), user_defined=False)])
     return evaluate(state, proj)
 
 def call_pql_func(state, name, args):

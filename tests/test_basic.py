@@ -749,6 +749,7 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql(""" "a" != null """), True )
 
 
+
     def test_list_ops(self):
         # TODO should be consistent - always table, or always array
         preql = self.Preql()
@@ -997,6 +998,9 @@ class BasicTests(PreqlTests):
         preql = self.Preql()
         res = preql('list(join(a:[1..10].item, b:[8..20].item) {...a})')
         assert res == [8,9], res
+
+        res = preql('joinall(a:[1], b:[2]) {...a, ...b}')
+        assert res == [{'item': 1, 'item1': 2}]
 
 
     @uses_tables('a')

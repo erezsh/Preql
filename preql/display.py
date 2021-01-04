@@ -62,7 +62,8 @@ def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)
     return cast_to_python(state, count)
 
-def _html_table(name, count_str, rows, offset, has_more):
+def _html_table(name, count_str, rows, offset, has_more, colors):
+    assert colors
     header = 'table '
     if name:
         header += name
