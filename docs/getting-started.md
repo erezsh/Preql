@@ -81,7 +81,7 @@ Then just run Jupyter Notebook as usual:
 
 Use the `connect()` function to connect to a database.
 
-For an example, view the following Jupyter notebook: [Tutorial: Exploring a database with Preql](chinook_tutorial.ipynb)
+For an example, view the following Jupyter notebook: [Tutorial: Exploring a database with Preql](https://github.com/erezsh/Preql/blob/master/docs/chinook_tutorial.ipynb)
 
 ## Use as a Python library
 
