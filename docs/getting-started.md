@@ -77,9 +77,11 @@ Then just run Jupyter Notebook as usual:
     jupyter notebook
 ```
 
-And create a new notebook with the `Preql` kernel.
+    And create a new notebook with the `Preql` kernel.
 
 Use the `connect()` function to connect to a database.
+
+For an example, view the following Jupyter notebook: [Tutorial: Exploring a database with Preql](chinook_tutorial.ipynb)
 
 ## Use as a Python library
 
