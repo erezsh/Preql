@@ -472,6 +472,13 @@ class BasicTests(PreqlTests):
         self.assertEqual( len(preql.f4()), 1)
         self.assertEqual( preql.f4().to_json(), [{'y': 7}])
 
+    def test_SQL2(self):
+        preql = self.Preql()
+        preql("""
+        a = [1..10]
+        func f() = SQL(int, "SELECT COUNT(*) FROM $a")
+        """)
+        assert preql.f() == 9
 
     def test_nested_projections(self):
         preql = self.Preql()

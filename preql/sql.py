@@ -90,7 +90,7 @@ class CompiledSQL(Sql):
     def finalize(self, qb):
         wrapped = self.wrap(qb)
         assert qb.is_root
-        if wrapped.type <= T.primitive:
+        if wrapped.type <= T.primitive and not wrapped.code[0].lower().startswith('select '):
             code = ['SELECT '] + wrapped.code
         else:
             code = wrapped.code
@@ -120,8 +120,7 @@ class CompiledSQL(Sql):
     def compile(self, qb):
         return self
     def finalize_with_subqueries(self, qb, subqueries):
-        assert not subqueries   # TODO
-        return self.compile(qb).finalize(qb)
+        return SqlTree.finalize_with_subqueries(self, qb, subqueries)
 
     def optimize(self):
         if not self.code:
