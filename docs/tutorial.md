@@ -24,7 +24,7 @@ But, you can also just run the preql interpreter as is:
 
 ```sh
 $ preql
-Preql 0.1.5a interactive prompt. Type help() for help
+Preql 0.1.16 interactive prompt. Type help() for help
 >>
 ```
 
@@ -32,7 +32,7 @@ By default, the interpreter uses SQLite's memory database. We'll later see how t
 
 From now on, we'll use `>>` to signify the Preql REPL.
 
-Press Ctrl+C to interrupt an existing operation or prompt. Press Ctrl+D or run `exit()` to exit the interpreter.
+Press Ctrl+C at any time to interrupt an existing operation or prompt. Press Ctrl+D or run `exit()` to exit the interpreter.
 
 You can run the `names()` function to see what functions are available, and `help()` to get interactive help.
 
@@ -59,7 +59,7 @@ We can also use Preql as a Python library:
 from preql import Preql
 p = Preql()
 
-assert p1('sum([1..10])') == 45
+assert p('sum([1..10])') == 45
 
 p('''
   func my_range(x) = [1..x]
@@ -72,7 +72,7 @@ print(p.my_range(8))
 
 ## Basic Expressions
 
-Preql has integers, floats and strings. They behave similarly to Python
+Preql has integers, floats and strings, which behave similarly to Python
 
 `null` behaves just like Python's None.
 
@@ -97,12 +97,11 @@ Exception traceback:
   ~~~ At '<repl>' line 1, column 6
 null + 1
 -----^---
-TypeError: Operator '+' not implemented for null and int
+
+TypeError: Operator '+' not implemented for nulltype and int
 ```
 
-Notice that dividing two integers results in a float. To get an integer, use the `/~` operator:
-
-(Equivalent to Python's `//` operator)
+Notice that dividing two integers results in a float. To get an integer, use the `/~` operator, which is equivalent to Python's `//` operator:
 
 ```javascript
 >> 10 /~ 3
@@ -134,12 +133,12 @@ Preql also has lists, which are essentially a table with a single column called 
  >> count(my_list + [4,5,6])
 6
  >> names(my_list)
-   table  =1
-┏━━━━━━┳━━━━━━┓
-┃ name ┃ type ┃
-┡━━━━━━╇━━━━━━┩
-│ item │ int  │
-└──────┴──────┘
+       table  =1
+┏━━━━━━┳━━━━━━┳━━━━━┓
+┃ name ┃ type ┃ doc ┃
+┡━━━━━━╇━━━━━━╇━━━━━┩
+│ item │ int  │     │
+└──────┴──────┴─────┘
  >> type(my_list)
 list[int]
  >> type(["a", "b", "c"])
@@ -176,6 +175,7 @@ table [5..] =99
 │      8 │
 │      9 │
 │     10 │
+│    ... │
 └────────┘
 ```
 
@@ -190,9 +190,9 @@ You might be curious what SQL statements are being executed behind the scenes. Y
 ```
 
 ```sql
-WITH RECURSIVE range3 AS (SELECT 1 AS item UNION ALL SELECT item+1 FROM range3 WHERE item+1<10)
-    , range4 AS (SELECT 20 AS item UNION ALL SELECT item+1 FROM range4 WHERE item+1<30)
-    SELECT * FROM [range3] UNION ALL SELECT * FROM [range4] LIMIT -1
+WITH RECURSIVE range1 AS (SELECT 1 AS item UNION ALL SELECT item+1 FROM range1 WHERE item+1<10)
+    , range2 AS (SELECT 20 AS item UNION ALL SELECT item+1 FROM range2 WHERE item+1<30)
+    SELECT * FROM [range1] UNION ALL SELECT * FROM [range2] LIMIT -1
 ```
 
 ## Functions
@@ -230,7 +230,7 @@ You can also use them in table operations!
 └──────┘
 ```
 
-We can also inspect the SQL code that is executed:
+Let's inspect the SQL code that is executed:
 
 ```javascript
  >> print inspect_sql([-20, 0, 30]{ sign(item) })
@@ -261,6 +261,7 @@ func apply_function(f, x) = f(x)
 my_list = ["this", "is", "a", "list"]
 
 // Run `apply_function` for each item, and use the built-in `length` function for strings.
+// `len` is just the name of the new column.
 print my_list{
   len: apply_function(length, item)
 }
@@ -278,7 +279,7 @@ print my_list{
 
 ## Tables
 
-Tables are essentially a list of rows, where all rows have the same structure.
+Tables are essentially a list of rows, where all the rows have the same structure.
 
 That structure is defined by a set of columns, where each column has a name and a type.
 
@@ -338,12 +339,14 @@ Row{id: 1, name: "Palau", population: 17900}
 >> palau.population + 1
 17901
 >> Country
-table Country, count=3
-  id  name      population
-----  ------  ------------
-   1  Palau          17900
-   2  Nauru          11000
-   3  Tuvalu         10200
+      table Country =3
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│  1 │ Palau  │      17900 │
+│  2 │ Nauru  │      11000 │
+│  3 │ Tuvalu │      10200 │
+└────┴────────┴────────────┘
 ```
 
 Notice that every table automatically gets an `id` column. It's a useful practice, that provides us with an easy and performant "pointer" to refer to rows.
@@ -380,12 +383,13 @@ We can chain table operations:
 We can also filter the rows by index (zero-based), by providing it with a `range` instead.
 
 ```javascript
->> Country[1..]
-table Country, count=2
-  id  name      population
-----  ------  ------------
-   2  Nauru          11000
-   3  Tuvalu         10200
+      table Country =2
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│  2 │ Nauru  │      11000 │
+│  3 │ Tuvalu │      10200 │
+└────┴────────┴────────────┘
 ```
 
 Notice that the row index and the value of the `id` column are not related in any meaningful way.
@@ -394,27 +398,31 @@ Notice that the row index and the value of the `id` column are not related in an
 
 ```javascript
 >> Country{name, is_big: population>15000}
-table Country_proj3, count=3
-name      is_big
-------  --------
-Palau          1
-Nauru          0
-Tuvalu         0
-
->> Country[name ~ "P%"]{name, is_big: population>15000}
-table table, =1
-name      is_big
-------  --------
-Palau          1
-
+     table  =3
+┏━━━━━━━━┳━━━━━━━━┓
+┃ name   ┃ is_big ┃
+┡━━━━━━━━╇━━━━━━━━┩
+│ Palau  │      1 │
+│ Nauru  │      0 │
+│ Tuvalu │      0 │
+└────────┴────────┘
+>> Country[name like "P%"]{name, is_big: population>15000}
+    table  =1
+┏━━━━━━━┳━━━━━━━━┓
+┃ name  ┃ is_big ┃
+┡━━━━━━━╇━━━━━━━━┩
+│ Palau │      1 │
+└───────┴────────┘
 >> func half(n) = n / 2
->> Country{..., half(population)}   // Ellipsis fills in all columns
-table Country_proj58, count=3
-  id  name      population    half
-----  ------  ------------  ------
-   1  Palau          17900    8950
-   2  Nauru          11001  5500.5
-   3  Tuvalu         10201  5100.5
+>> Country{..., half(population)}   // Ellipsis fills in the rest of the columns
+              table  =3
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃   half ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━┩
+│  1 │ Palau  │      17900 │ 8950.0 │
+│  2 │ Nauru  │      11000 │ 5500.0 │
+│  3 │ Tuvalu │      10200 │ 5100.0 │
+└────┴────────┴────────────┴────────┘
 ```
 
 Notice that Preql creates a new table type for each projection. Therefore, the fields that aren't included in the projection, won't be available afterwards.
@@ -425,6 +433,7 @@ However these are only types, and not actual tables. To create a persistent tabl
 table half_population = Country{..., half(population)}
 ```
 
+Now, if connected to a database, `half_population` will be stored persistently.
 
 **Aggregation** looks a lot like projection, and lets us aggregate information:
 
@@ -433,53 +442,72 @@ The syntax is basically `{ keys => values }`
 ```javascript
 // Count how many countries there are, for each length of name.
 >> Country { length(name) => count(id) }
-table Country_proj19, count=2
-  length    count
---------  -------
-       5        2
-       6        1
+    table  =2
+┏━━━━━━━━┳━━━━━━━┓
+┃ length ┃ count ┃
+┡━━━━━━━━╇━━━━━━━┩
+│      5 │     2 │
+│      6 │     1 │
+└────────┴───────┘
 
 // If no keys are given, aggregate all the rows into one.
 >> world_population = Country { => sum(population) }
-table Country_proj11, count=1
-  sum
------
-39100
+table  =1
+┏━━━━━━━┓
+┃   sum ┃
+┡━━━━━━━┩
+│ 39100 │
+└───────┘
+
+// We can extract the row from the table using the `one` operator
+>> one world_population
+Row{sum: 39100}
 
 // Create an even-odd histogram
 >> [1,2,3,4,5,6,7] {
       odd: item % 2 => count(item)
    }
-table list_int_proj37, count=2
-  odd    count
------  -------
-    0        3
-    1        4
+   table  =2
+┏━━━━━┳━━━━━━━┓
+┃ odd ┃ count ┃
+┡━━━━━╇━━━━━━━┩
+│   0 │     3 │
+│   1 │     4 │
+└─────┴───────┘
 
 // Sum up all the squares
 >> func sqrsum(x) = sum(x*x)
 >> [1,2,3,4]{ => sqrsum(item)}
-30
+table  =1
+┏━━━━━━━━┓
+┃ sqrsum ┃
+┡━━━━━━━━┩
+│     30 │
+└────────┘
 ```
 
 **Ordering** lets us sort the rows into a new table.
 
 ```javascript
 >> Country order {population} // Sort ascending
-table Country, count=3
-  id  name      population
-----  ------  ------------
-   3  Tuvalu         10200
-   2  Nauru          11000
-   1  Palau          17900
+      table Country =3
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│  3 │ Tuvalu │      10200 │
+│  2 │ Nauru  │      11000 │
+│  1 │ Palau  │      17900 │
+└────┴────────┴────────────┘
 
 >> Country order {^name}      // Sort descending (^)
-table Country, count=3
-  id  name      population
-----  ------  ------------
-   3  Tuvalu         10200
-   1  Palau          17900
-   2  Nauru          11000
+      table Country =3
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│  3 │ Tuvalu │      10200 │
+│  1 │ Palau  │      17900 │
+│  2 │ Nauru  │      11000 │
+└────┴────────┴────────────┘
 ```
 
 ### Lazy-evaluation vs Temporary tables
@@ -537,25 +565,31 @@ Updates are evaluated immediately. This is true for all expressions that change 
 Example:
 ```javascript
 >> Country update {population: population + 1}
-table Country, count=3
-  id  name      population
-----  ------  ------------
-   1  Palau          17901
-   2  Nauru          11001
-   3  Tuvalu         10201
+      table Country =3
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│  1 │ Palau  │      17901 │
+│  2 │ Nauru  │      11001 │
+│  3 │ Tuvalu │      10201 │
+└────┴────────┴────────────┘
 
  >> Country[name=="Palau"] update {population: population - 1}
-table Country, count=1
-  id  name      population
-----  ------  ------------
-   1  Palau          17900
+      table Country =1
+┏━━━━┳━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name  ┃ population ┃
+┡━━━━╇━━━━━━━╇━━━━━━━━━━━━┩
+│  1 │ Palau │      17900 │
+└────┴───────┴────────────┘
  >> Country
-table Country, count=3
-  id  name      population
-----  ------  ------------
-   1  Palau          17900
-   2  Nauru          11001
-   3  Tuvalu         10201
+       table Country =3
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│  1 │ Palau  │      17900 │
+│  2 │ Nauru  │      11001 │
+│  3 │ Tuvalu │      10201 │
+└────┴────────┴────────────┘
 ```
 
 ### Join
@@ -565,51 +599,61 @@ Joining two tables means returning a new table that contains the rows of both ta
 It is possible to omit the attributes when there is a predefined relationship between the tables.
 
 ```javascript
+// Create tables from lists. That automatically adds an `id` column.
 >> table odds = [1, 3, 5, 7, 9, 11]
 >> table primes = [2, 3, 5, 7, 11]
 
-// Creates columns `o` and `p`, which are structures containing the original rows.
+// Join into columns `o` and `p`, which are structures containing the original rows.
 >> join(o: odds.item, p: primes.item)
-table join9, count=4
-o                       p
-----------------------  ----------------------
-{'item': 3, 'id': 2}   {'item': 3, 'id': 2}
-{'item': 5, 'id': 3}   {'item': 5, 'id': 3}
-{'item': 7, 'id': 4}   {'item': 7, 'id': 4}
-{'item': 11, 'id': 6}  {'item': 11, 'id': 5}
+┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ o                     ┃ p                     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━┩
+│ {'item': 3, 'id': 2}  │ {'item': 3, 'id': 2}  │
+│ {'item': 5, 'id': 3}  │ {'item': 5, 'id': 3}  │
+│ {'item': 7, 'id': 4}  │ {'item': 7, 'id': 4}  │
+│ {'item': 11, 'id': 6} │ {'item': 11, 'id': 5} │
+└───────────────────────┴───────────────────────┘
 
 // We can then destructure it into a regular table
 >> join(o: odds.item, p: primes.item) {o.item, o_id: o.id, p_id: p.id}
-table join33_proj34, count=4
-  item    o_id    p_id
--------  ------  ------
-      3       2       2
-      5       3       3
-      7       4       4
-     11       6       5
+      table  =4
+┏━━━━━━┳━━━━━━┳━━━━━━┓
+┃ item ┃ o_id ┃ p_id ┃
+┡━━━━━━╇━━━━━━╇━━━━━━┩
+│    3 │    2 │    2 │
+│    5 │    3 │    3 │
+│    7 │    4 │    4 │
+│   11 │    6 │    5 │
+└──────┴──────┴──────┘
 
 // We can filter countries by name, by joining on their name:
->> join(c: Country.name, n:["Palau", "Nauru"].item) {c.id, c.name}
-table join30_proj31, count=2
-  id  name
-----  ------
-   1  Palau
-   2  Nauru
+>> join(c: Country.name, n:["Palau", "Nauru"].item) {...c}
+         table  =2
+┏━━━━┳━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name  ┃ population ┃
+┡━━━━╇━━━━━━━╇━━━━━━━━━━━━┩
+│  1 │ Palau │      17900 │
+│  2 │ Nauru │      11001 │
+└────┴───────┴────────────┘
 
 // But idiomatically, the best way to accomplish this is to use the `in` operator
 >> Country[name in ["Palau", "Nauru"]]
-table Country, count=2
-  id  name      population
-----  ------  ------------
-   1  Palau          17900
-   2  Nauru          11001
+     table Country =2
+┏━━━━┳━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name  ┃ population ┃
+┡━━━━╇━━━━━━━╇━━━━━━━━━━━━┩
+│  1 │ Palau │      17900 │
+│  2 │ Nauru │      11001 │
+└────┴───────┴────────────┘
 
 // Or not in
 >> Country[name !in ["Palau", "Nauru"]]
-table Country, count=1
-  id  name      population
-----  ------  ------------
-   3  Tuvalu         10201
+      table Country =1
+┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name   ┃ population ┃
+┡━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│  3 │ Tuvalu │      10201 │
+└────┴────────┴────────────┘
 ```
 
 ## The SQL Escape-hatch
@@ -625,25 +669,29 @@ The first argument is the type of the result, and the second argument is a strin
 ```javascript
 >> func do_sql_stuff(x) = SQL(string, "lower($x) || '!'")   // Runs in Sqlite
 >> ["UP", "Up", "up"]{ do_sql_stuff(item) }
-table list_string_proj70, count=3
-do_sql_stuff
---------------
-up!
-up!
-up!
+   table  =3
+┏━━━━━━━━━━━━━━┓
+┃ do_sql_stuff ┃
+┡━━━━━━━━━━━━━━┩
+│ up!          │
+│ up!          │
+│ up!          │
+└──────────────┘
 ```
 
 We can also query entire tables:
 
 ```javascript
  >> SQL(Country, "SELECT * FROM $Country WHERE name == \"Palau\"")
-table Country, count=1
-  id  name      population
-----  ------  ------------
-   1  Palau          17900
+      table Country =1
+┏━━━━┳━━━━━━━┳━━━━━━━━━━━━┓
+┃ id ┃ name  ┃ population ┃
+┡━━━━╇━━━━━━━╇━━━━━━━━━━━━┩
+│  1 │ Palau │      17900 │
+└────┴───────┴────────────┘
 ```
 
-Notice that "Country" is used twice in different contexts: once as the return type, and once for its rows.
+Notice that "Country" is used twice in different contexts: once as the return type, and once for querying its rows.
 
 In fact, many of Preql's core functions are written using the `SQL()` function, for example `enum`:
 
@@ -651,18 +699,23 @@ In fact, many of Preql's core functions are written using the `SQL()` function, 
 func enum(tbl) {
     "Return the table with a new index column"
     // Uses SQL's window functions to calculate the index per each row
-    // Remember, ellipsis (...) means include all columns.
-    return tbl{index: SQL(int, "row_number() over ()"), ...}
+    // Remember, ellipsis (...) includes all available columns.
+    return tbl{
+      index: SQL(int, "row_number() over ()")
+      ...
+    }
 }
 
 // Add an index for each row in the table
 >> enum(Country order {population})
-table Country_proj80, count=3
-  index    id  name      population
--------  ----  ------  ------------
-      1     3  Tuvalu         10201
-      2     2  Nauru          11001
-      3     1  Palau          17900
+             table  =3
+┏━━━━━━━┳━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
+┃ index ┃ id ┃ name   ┃ population ┃
+┡━━━━━━━╇━━━━╇━━━━━━━━╇━━━━━━━━━━━━┩
+│     0 │  3 │ Tuvalu │      10201 │
+│     1 │  2 │ Nauru  │      11001 │
+│     2 │  1 │ Palau  │      17900 │
+└───────┴────┴────────┴────────────┘
 ```
 
 ## Notable Built-in functions
@@ -674,7 +727,10 @@ Here is a partial list of functions provided by Preql:
 - `random()` - return a random number
 - `now()` - return a `datetime` object for now
 - `sample_fast(tbl, n)` - return a sample of `n` rows from table `tbl` (O(n), maximum of two queries). May introduce a minor bias (See `help(sample_fast)`).
+- `bfs(edges, initial)` - performs a breadth-first search on a graph using SQL
 - `count_distinct(field)` - count how many unique values are in the given field/column.
+
+To see the full list, run the following in Preql: `names(__builtins__)[type=="function"]`
 
 ## Calling Preql from Python
 
@@ -710,8 +766,8 @@ You can also reach variables inside the Preql namespace using:
 >>> p('a = [1,2,3]')
 >>> sum(p.a)
 6
->>> p.names()[:10]  # `names()` is a global function, like Python's `dir()`
-['int', 'float', 'string', 'text', 'bool', 'datetime', 'exit', 'help', 'names', 'dir']
+>>> p.char_range('w', 'z')    # char_range() is a built-in function in Preql
+['w', 'x', 'y', 'z']
 ```
 
 ### Using Pandas
@@ -725,13 +781,8 @@ You can easily import/export tables between Preql and Pandas, by using Python as
 >>> f = DataFrame([[1,2,"a"], [4,5,"b"], [7,8,"c"]], columns=['x', 'y', 'z'])
 
 >>> x = p.import_pandas(x=f)
->>> p.x                         # Returns a Preql table
-table x, =3
-  id    x    y  z
-----  ---  ---  ---
-   1    1    2  a
-   2    4    5  b
-   3    7    8  c
+>>> p.x                          # Returns a Preql table
+[{'x': 1, 'y': 2, 'z': 'a', 'id': 1}, {'x': 4, 'y': 5, 'z': 'b', 'id': 2}, {'x': 7, 'y': 8, 'z': 'c', 'id': 3}]
 
 >>> p('x {y, z}').to_pandas()    # Returns a pandas table
    y  z

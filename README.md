@@ -60,12 +60,15 @@ Requires Python 3.8+
 // The following code sums up all the squares of an aggregated list of
 // numbers, grouped by whether they are odd or even.
 
-func sqrsum(x) = sum(x * x)
+func sum_of_squares(x) = sum(x * x)
 func is_even(x) = (x % 2 == 0)
 
-print [1..100]{
-        is_even(item) => sqrsum(item)
-      }
+// Create a list of [1, 2, 3, ..., 99]
+num_list = [1..100]
+
+// Group by is_even(), and run sum_of_squares() on the grouped values.
+print num_list{ is_even(item) => sum_of_squares(item) }
+
 // Result is:
 ┏━━━━━━━━━┳━━━━━━━━┓
 ┃ is_even ┃ sqrsum ┃

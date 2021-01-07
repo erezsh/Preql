@@ -82,7 +82,7 @@ However, they are themselves limited by their host languages, which were never d
 
 ### vs Pandas
 
-Given the failings of SQL and ORMs, it's no wonder that many programmers and data analysts choose to disregard relational database altogether, and use completely new approaches.
+Given the failings of SQL and ORMs, it's no wonder that many programmers and data analysts choose to disregard relational databases altogether, and use completely new approaches.
 
 Pandas is one of those new approaches. Implemented entirely on top of Python and Numpy, it has gained a lot of popularity in recent years due to its accessibility and relative simplicity. It also has a wide range of features that were designed specifically for data scientists.
 

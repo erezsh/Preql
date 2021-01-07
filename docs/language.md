@@ -1,11 +1,12 @@
 # Language Reference
 
+(This document is incomplete, and needs more work)
+
 ## Syntax
 
 Inspired by Javascript
 
 - Comments start with `//`
-- Functions are defined with `func`
 
 ### Literals
 
@@ -57,6 +58,21 @@ Ranges can be specified using the `[start..end]` syntax. They are equivalent to 
 ```javascript
  >> type([1..10])
 list[int]
+```
+
+### Functions
+
+- Functions are defined with `func`, like in Go
+
+```javascript
+func add1(x) = x + 1        // short-hand syntax
+
+func abs(x) {
+    if (x < 0) {
+        return -x
+    }
+    return x
+}
 ```
 
 ### Keywords
