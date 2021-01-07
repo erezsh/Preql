@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "preql-lang"
-version = "0.1.15"
+version = "0.1.16"
 description = "An interpreted relational query language that compiles to SQL"
 authors = ["Erez Shin <erezshin@gmail.com>"]
 license = "Interface-Protection Clause + MIT"

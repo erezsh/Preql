@@ -16,6 +16,7 @@ Preql is a programming language, a library, an interactive shell, and a set of t
         - **Postgres**
         - **MySQL**
         - Askgit :)
+        - BigQuery (soon)
         - More to come!
 
 - **Python integration**
@@ -23,7 +24,10 @@ Preql is a programming language, a library, an interactive shell, and a set of t
     - Call Python from Preql
     - Pandas integration
 
-- **Interactive shell** (REPL) with autocompletion
+- **Interactive Environment**
+    - Shell (REPL), with auto-completion
+    - Runs on Jupyter Notebook, with auto-completion
+
 - REST+JSON server, automatically generated
 
 

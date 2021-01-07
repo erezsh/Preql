@@ -1,21 +1,36 @@
 ![alt text](logo_small.png "Logo")
 
-Preql (*pronounced: Prequel*) is an interpreted relational query language.
+Preql (*pronounced: Prequel*) is an interpreted, relational programming language, that specializes in database queries.
 
 It is designed for use by data engineers, analysts and data scientists.
 
-* Compiles to SQL at runtime. It has the performance and abilities of SQL, and much more.
+Preql's main objective is to provide an alternative to SQL, in the form of a high-level programming language, with first-class functions, modules, strict typing, and Python integration.
 
-    * Support for Postgres, MySQL and Sqlite. (more planned!)
+**How does it work?**
 
-    * Escape hatch to SQL, for all those database-specific features we didn't think to include
+Preql code is interpreted and gets compiled to SQL at runtime. This way, Preql gains the performance and abilities of SQL, but can also operate as a normal scripting language.
 
-* Programmer-friendly syntax and semantics, with gradual type-checking, inspired by Typescript and Python
+Currently supported dialects are:
+* Postgres
+* MySQL
+* Sqlite
+* BigQuery (soon)
+* More... (planned)
 
-* Interface through Python, HTTP or a terminal environment with autocompletion
+For features that are database-specific, or aren't implemented in Preql, there is a `SQL()` function that provides a convenient escape hatch to write raw SQL code.
+
+**Main Features**
+
+* Modern syntax and semantics
+    - Interpreted, everything is an object
+    - Strong type system with gradual type validation and duck-typing
+* Compiles to SQL
+* Python and Pandas integration
+* Interactive shell (REPL) with auto-completion
+* Runs on Jupyter Notebook
 
 
-**Note: Preql is still work in progress, and isn't ready for production use, or any serious use yet**
+**Note: Preql is still work in progress, and isn't ready for production use, or any serious use quite yet.**
 
 # Documentation
 
@@ -42,10 +57,11 @@ Requires Python 3.8+
 # Quick Example
 
 ```javascript
-// Sum up all the squares of an aggregated list of numbers
-// Grouped by whether they are odd or even
+// The following code sums up all the squares of an aggregated list of
+// numbers, grouped by whether they are odd or even.
+
 func sqrsum(x) = sum(x * x)
-func is_even(x) = x % 2 == 0
+func is_even(x) = (x % 2 == 0)
 
 print [1..100]{
         is_even(item) => sqrsum(item)
@@ -59,12 +75,11 @@ print [1..100]{
 └─────────┴────────┘
 ```
 
-In the background, this was run by executing the following SQL code (reformatted):
+In the background, this was run by executing the following compiled SQL code (reformatted):
 
 ```sql
   WITH range1 AS (SELECT 1 AS item UNION ALL SELECT item+1 FROM range1 WHERE item+1<100)
-     , subq_3(is_even, sqrsum) AS (SELECT ((item % 2) = 0) AS is_even, SUM(item * item) AS sqrsum FROM range1 GROUP BY 1)
-  SELECT * FROM subq_3
+  SELECT ((item % 2) = 0) AS is_even, SUM(item * item) AS sqrsum FROM range1 GROUP BY 1;
 ```
 
 # License
