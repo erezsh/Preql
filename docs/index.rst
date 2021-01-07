@@ -52,6 +52,7 @@ Resources
 -  Tutorials
 
    -  :doc:`tutorial`
+   -  `Jupyter tutorial <https://github.com/erezsh/Preql/blob/master/docs/chinook_tutorial.ipynb>`_
 
 -  Guides
 
