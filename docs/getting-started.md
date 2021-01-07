@@ -2,7 +2,7 @@
 
 ## Install
 
-Ensure you have, or install, Python 3.8 or up.
+Ensure you have Python 3.8 or up installed on your system.
 
 Install using pip:
 

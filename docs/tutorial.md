@@ -730,7 +730,7 @@ Here is a partial list of functions provided by Preql:
 - `bfs(edges, initial)` - performs a breadth-first search on a graph using SQL
 - `count_distinct(field)` - count how many unique values are in the given field/column.
 
-To see the full list, run the following in Preql: `names(__builtins__)[type=="function"]`
+To see the full list, run the following in Preql: `names(__builtins__)[type like "function%"]`
 
 ## Calling Preql from Python
 

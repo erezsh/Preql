@@ -19,6 +19,7 @@ from prompt_toolkit.formatted_text.html import HTML, html_escape
 
 from . import __version__
 from . import pql_objects as objects
+from .pql_types import T
 from .utils import memoize
 from .display import display, table_more
 from .exceptions import Signal, ExitInterp, pql_SyntaxError
@@ -147,7 +148,7 @@ class PreqlStyle(Style):
     styles = {
         Generic:                'ansigray',
         Comment:                'italic #888',
-        Keyword:                'bold #005',
+        Keyword:                'bold #00f',
         Name:                   '#fff',
         Name.Function:          'bold #8f8',
         Name.Class:             'bold #0f0',
@@ -203,12 +204,12 @@ def start_repl(p, prompt=' >> '):
                         if save_last:
                             p.interp.set_var(save_last, res)
 
-                        res = res.repr(p.interp.state)
+                        res_repr = res.repr(p.interp.state)
                         # repl_log.info(res)
-                        if isinstance(res, str):
-                            if len(res) > 200:
-                                res = res[:100] + "..." + res[-100:]    # smarter limit?
-                        display.print(res)
+                        if isinstance(res_repr, str) and res.type == T.string:  # Not text
+                            if len(res_repr) > 200:
+                                res_repr = res_repr[:100] + "..." + res_repr[-100:]    # smarter limit?
+                        display.print(res_repr)
 
                 except Signal as s:
                     display.print_exception(s)
