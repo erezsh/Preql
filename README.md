@@ -32,9 +32,14 @@ For features that are database-specific, or aren't implemented in Preql, there i
 
 **Note: Preql is still work in progress, and isn't ready for production use, or any serious use quite yet.**
 
-# Documentation
+# Learn More
 
-[Read here](https://preql.readthedocs.io/en/latest/)
+- [**Read the documentation**](https://preql.readthedocs.io/en/latest/)
+
+- [Follow the tutorial](https://preql.readthedocs.io/en/latest/tutorial.html)
+
+- [Browse the examples](https://github.com/erezsh/Preql/tree/master/examples)
+
 
 # Get started
 
