@@ -1399,6 +1399,16 @@ class BasicTests(PreqlTests):
 
 
 
+class TestFlow(PreqlTests):
+    def test_new_freezes_values(self):
+        # Test for issue #7
+        p = self.Preql()
+        p('''
+        table a{x: float}
+        row = new a(random())
+        assert row.x in a{x}
+        ''')
+
 class TestTypes(PreqlTests):
     def test_types(self):
         assert T.int == T.int

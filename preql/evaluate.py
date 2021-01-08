@@ -245,7 +245,7 @@ def _execute(state: State, p: ast.Assert):
     if not res:
         # TODO pretty print values
         if isinstance(p.cond, ast.Compare):
-            s = (' %s '%p.cond.op).join(evaluate(state, a).repr(state) for a in p.cond.args)
+            s = (' %s '%p.cond.op).join(str(evaluate(state, a).repr(state)) for a in p.cond.args)
         else:
             s = p.cond.repr(state)
         raise Signal.make(T.AssertError, state, p.cond, f"Assertion failed: {s}")
@@ -721,15 +721,29 @@ def _destructure_param_match(state, ast_node, param_match):
         if (k.type <= T.struct):
             names = [name for name, t in flatten_type(k.orig, [k.name])]
             if not isinstance(v, list):
-                raise Signal.make(T.TypeError, state, ast_node, f"Parameter {k.name} received a bad value (expecting a struct or a list)")
+                raise Signal.make(T.TypeError, state, ast_node, f"Parameter {k.name} received a bad value: {v} (expecting a struct or a list)")
             if len(v) != len(names):
                 raise Signal.make(T.TypeError, state, ast_node, f"Parameter {k.name} received a bad value (size of {len(names)})")
             yield from safezip(names, v)
         else:
             yield k.name, v
 
+
+def _new_value(state, v, type_):
+    if isinstance(v, list):
+        return evaluate(state, objects.PythonList(v))
+    return objects.new_value_instance(v, type_=type_)
+
+@dy
+def freeze(state, i: objects.Instance):
+    return _new_value(state, cast_to_python(state, i), type_=i.type )
+
+@dy
+def freeze(state, i: objects.RowInstance):
+    return i.replace(attrs={k: freeze(state, v) for k, v in i.attrs.items()})
+
 def _new_row(state, new_ast, table, matched):
-    matched = [(k, evaluate(state, v)) for k, v in matched]
+    matched = [(k, freeze(state, evaluate(state, v))) for k, v in matched]
     destructured_pairs = _destructure_param_match(state, new_ast, matched)
 
     keys = [name for (name, _) in destructured_pairs]
@@ -866,6 +880,8 @@ def localize(state, inst: objects.Instance):
     # Cancel unoptimized mode? Or leave this unprotected?
     # state.require_access(state.AccessLevels.WRITE_DB)
 
+    if inst.type <= T.nulltype:
+        return None
     return db_query(state, inst.code, inst.subqueries)
 
 @dy
@@ -977,6 +993,13 @@ def cast_to_python(state, obj: objects.AbsInstance):
         raise exc.InsufficientAccessLevel(state.access_level)
         # raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
     res = localize(state, obj)
-    assert isinstance(res, (int, str, float, dict, list, type(None))), res
+    if obj.type == T.float:
+        res = float(res)
+    elif obj.type == T.int:
+        res = int(res)
+    elif obj.type == T.bool:
+        assert res in (0, 1), res
+        res = bool(res)
+    assert isinstance(res, (int, str, float, dict, list, type(None))), (res, type(res))
     return res
 
