@@ -619,7 +619,12 @@ def apply_database_rw(state: State, d: ast.Delete):
 
     cond_table = ast.Selection(d.table, d.conds).set_text_ref(d.text_ref)
     table = evaluate(state, cond_table)
-    assert table.type <= T.table
+
+    if not (table.type <= T.table):
+        raise Signal.make(T.TypeError, state, d.table, f"Expected a table. Got: {table.type}")
+
+    if not 'name' in table.type.options:
+        raise Signal.make(T.ValueError, state, d.table, "Cannot delete. Table is not persistent")
 
     rows = list(localize(state, table))
     if rows:
@@ -642,6 +647,9 @@ def apply_database_rw(state: State, u: ast.Update):
 
     if not (table.type <= T.table):
         raise Signal.make(T.TypeError, state, u.table, f"Expected a table. Got: {table.type}")
+
+    if not 'name' in table.type.options:
+        raise Signal.make(T.ValueError, state, u.table, "Cannot update: Table is not persistent")
 
     for f in u.fields:
         if not f.name:

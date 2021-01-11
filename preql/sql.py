@@ -990,7 +990,7 @@ def _from_datetime(state, s):
 
     # Sqlite
     if not isinstance(s, str):
-        raise Signal.make(T.TypeError, [], None, f"datetime expected a string. Instead got: {s}")
+        raise Signal.make(T.TypeError, state, None, f"datetime expected a string. Instead got: {s}")
     try:
         return datetime.fromisoformat(s)
     except ValueError as e:
