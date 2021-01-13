@@ -544,7 +544,7 @@ def _compile_arith(state, arith, a: T.string, b: T.int):
 
 @dp_inst
 def _compile_arith(state, arith, a: T.number, b: T.number):
-    if arith.op == '/' or a.type <= T.float or b.type <= T.float:
+    if arith.op in ('/', '**') or a.type <= T.float or b.type <= T.float:
         res_type = T.float
     else:
         res_type = T.int
@@ -557,6 +557,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
             '/': operator.truediv,
             '/~': operator.floordiv,
             '%': operator.mod,
+            '**': operator.pow,
         }[arith.op]
     except KeyError:
         raise Signal.make(T.TypeError, state, arith, f"Operator {arith.op} not supported between types '{a.type}' and '{b.type}'")
@@ -569,6 +570,8 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
             value = f(a.local_value, b.local_value)
         except ZeroDivisionError as e:
             raise Signal.make(T.ValueError, state, arith.args[-1], str(e))
+        if arith.op == '**':
+            value = float(value)
         return new_value_instance(value, res_type)
 
     code = sql.arith(state.db.target, res_type, arith.op, [a.code, b.code])

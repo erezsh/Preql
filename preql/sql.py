@@ -1,3 +1,4 @@
+import decimal
 import json
 from datetime import datetime
 from typing import List, Optional, Dict
@@ -581,6 +582,7 @@ class Values(Table):
                 return ['ROW('] + x + [')']
         else:
             row_func = parens
+
         return ['VALUES '] + join_comma(row_func(v.code) for v in values)
 
 @dataclass
@@ -784,7 +786,18 @@ def updates_by_ids(table, proj, ids):
         compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
         yield Update(TableName(table.type, table.type.options['name']), sql_proj, [compare])
 
+def _sql_primitive_to_float(e):
+    if e.type == T.int:
+        return e.replace(
+            type=T.float,
+            text=str(float(e.text))
+        )
+    assert t.type == T.float
+    return
+
 def create_list(list_type, name, elems):
+    # if T.float <= list_type.elem:
+    #     elems = [_sql_primitive_to_float(e) for e in elems]
     fields = [Name(list_type.elem, ITEM_NAME)]
     subq = Subquery(name, fields, Values(list_type, elems))
     table = TableName(list_type, Id(name))
@@ -822,6 +835,8 @@ def arith(target, res_type, op, args):
             op = 'DIV'
         else:
             op = '/'
+    elif op == '**':
+        return FuncCall(T.float, 'power', arg_codes)
 
     return BinOp(op, arg_codes)
 
@@ -1018,11 +1033,17 @@ def from_sql(state, res: T.datetime):
     s = item
     return _from_datetime(state, s)
 
+def _from_sql_primitive(p):
+    if isinstance(p, decimal.Decimal):
+        # TODO Needs different handling when we expect a decimal
+        return float(p)
+    return p
+
 @dp_inst
 def from_sql(state, arr: T.list):
     if not all(len(e)==1 for e in arr.value):
         raise Signal.make(T.TypeError, state, None, f"Expected 1 column. Got {len(arr.value[0])}")
-    return [e[0] for e in arr.value]
+    return [_from_sql_primitive(e[0]) for e in arr.value]
 
 @dp_inst
 @listgen
@@ -1055,6 +1076,9 @@ def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.nulltype]],
 @dp_type
 def restructure_result(state, t: T.list[T.union[T.primitive, T.nulltype]], i):
     res = next(i)
+    if not res:
+        return res
+
     if state.db.target == mysql:
         res = json.loads(res)
     elif state.db.target == sqlite:

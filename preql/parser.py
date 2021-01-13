@@ -167,7 +167,7 @@ class TreeToAst(Transformer):
 
     add_expr = _arith_expr
     term = _arith_expr
-    power = _arith_expr
+    power = lambda self, a,b: self._arith_expr(a, '**', b)
 
     def like(self, string, pattern):
         return ast.BinOp('like', [string, pattern])

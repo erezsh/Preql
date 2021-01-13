@@ -282,6 +282,11 @@ class SqliteInterface(SqlInterface):
             self._conn = sqlite3.connect(filename or ':memory:')
         except sqlite3.OperationalError as e:
             raise ConnectError(*e.args) from e
+
+        def sqlite_power(x,n):
+            return x**n
+        self._conn.create_function("power", 2, sqlite_power)
+
         self._print_sql = print_sql
 
     def table_exists(self, name):
