@@ -161,7 +161,7 @@ class BasicTests(PreqlTests):
         assert preql("10**-2") == 0.01
 
         # res = preql("list([0, 10, 1.2]{item ** 2})")
-        res = preql("list([0, 10.0, 1.2]{item ** 2})")
+        res = preql("list([0.0, 10.0, 1.2]{item ** 2})")
         assert res == [0.0, 100.0, 1.44], res
 
 

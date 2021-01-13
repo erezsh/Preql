@@ -795,13 +795,13 @@ def _sql_primitive_to_float(e):
     assert t.type == T.float
     return
 
-def create_list(list_type, name, elems):
-    # if T.float <= list_type.elem:
-    #     elems = [_sql_primitive_to_float(e) for e in elems]
+def create_list(name, elems):
+    # Assumes all elems have the same type!
+    list_type = T.list[elems[0].type]
     fields = [Name(list_type.elem, ITEM_NAME)]
     subq = Subquery(name, fields, Values(list_type, elems))
     table = TableName(list_type, Id(name))
-    return table, subq
+    return table, subq, list_type
 
 def create_table(table_type, name, rows):
     fields = [Name(col_type, col_name) for col_name, col_type in table_type.elems.items()]

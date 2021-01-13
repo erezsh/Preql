@@ -620,8 +620,8 @@ def compile_to_inst(state: State, lst: objects.PythonList):
     t = lst.type.elem
     x = [sql.Primitive(t, sql._repr(t,i)) for i in (lst.items)]
     name = state.unique_name("list_")
-    table_code, subq = sql.create_list(lst.type, name, x)
-    inst = objects.ListInstance.make(table_code, lst.type, [])
+    table_code, subq, list_type = sql.create_list(name, x)
+    inst = objects.ListInstance.make(table_code, list_type, [])
     inst.subqueries[name] = subq
     return inst
 
@@ -634,16 +634,21 @@ def compile_to_inst(state: State, lst: ast.List_):
 
     elems = evaluate(state, lst.elems)
 
-    elem_type = union_types(e.type for e in elems)
+    types = {e.type for e in elems}
+
+    if len(types) > 1:
+        raise Signal.make(T.TypeError, state, lst, f"List members must be of the same type. Got {types}")
+    # elem_type = union_types(e.type for e in elems)
+
+    elem_type ,= types
 
     if not (elem_type <= T.union[T.primitive, T.nulltype]):
         raise Signal.make(T.TypeError, state, lst, "Cannot create lists of type %s" % elem_type)
 
-    assert elem_type <= lst.type.elems[ITEM_NAME]
+    assert elem_type <= lst.type.elems[ITEM_NAME], (elem_type, lst.type)
 
-    list_type = T.list[elem_type]
     name = state.unique_name("list_")
-    table_code, subq = sql.create_list(list_type, name, [e.code for e in elems])
+    table_code, subq, list_type = sql.create_list(name, [e.code for e in elems])
 
     inst = objects.ListInstance.make(table_code, list_type, elems)
     inst.subqueries[name] = subq
