@@ -638,7 +638,6 @@ def compile_to_inst(state: State, lst: ast.List_):
 
     if len(types) > 1:
         raise Signal.make(T.TypeError, state, lst, f"List members must be of the same type. Got {types}")
-    # elem_type = union_types(e.type for e in elems)
 
     elem_type ,= types
 
