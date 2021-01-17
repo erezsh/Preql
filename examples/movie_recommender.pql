@@ -1,0 +1,89 @@
+//
+//    Movie Recommender
+//  =====================
+//
+// This is a toy example of a naive recommender-system using Preql
+//
+// Setup:
+//  - Download dataset: http://files.grouplens.org/datasets/movielens/ml-latest-small.zip
+//  - Unzip 'ml-latest-small' to the working directory
+//
+// Then run the file using:
+//
+//    preql -f examples/movie_recommender.pql
+//
+
+table movies {
+    movieId: int
+    title: string
+    genres: string
+}
+
+table ratings {
+    userId: int
+    movieId: movies.movieId
+    rating: float
+    timestamp: int
+}
+
+import_csv(ratings, "ml-latest-small/ratings.csv", true)
+import_csv(movies, "ml-latest-small/movies.csv", true)
+
+
+func recommend(likes_ids) {
+    // Create a table of others users, based on how they rated
+    // the movies you liked
+    user_similarity = leftjoin(
+        lm: movies[movieId in likes_ids],
+        r:ratings
+    ) {
+        r.userId => similarity_score: sum(r.rating)
+    }
+
+    // Give a score to each movie, based on how others users rated it.
+    // Similar users have more effect on the score.
+    movie_score = leftjoin(
+        ur: user_similarity.userId,
+        other: ratings[movieId !in likes_ids].userId
+    ) {
+        other.movieId => score: sum(ur.similarity_score * other.rating)
+    }
+
+    return movie_score order {^score}
+}
+
+
+func test() {
+    r = recommend([
+        1   // Toy Story
+        2   // Jumanji
+        32  // Twelve Monkeys
+        215 // Before Sunrise
+        223 // Clerks
+        296 // Pulp Fiction
+        344 // Ace Ventura: Pet Detective
+        442 // Demolition Man
+    ])
+
+    print "Top 5 recommended movies:"
+    print "-------------------------"
+    print join(_: r, m:movies) { Movie: "* " + m.title } [..5]
+
+    // Outputs:
+    //
+    //         Top 5 recommended movies:
+    //     -------------------------
+    //                     table  =5
+    //     ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    //     ┃ Movie                                       ┃
+    //     ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+    //     │ * Shawshank Redemption, The (1994)          │
+    //     │ * Forrest Gump (1994)                       │
+    //     │ * Silence of the Lambs, The (1991)          │
+    //     │ * Matrix, The (1999)                        │
+    //     │ * Star Wars: Episode IV - A New Hope (1977) │
+    //     └─────────────────────────────────────────────┘
+    //
+}
+
+test()

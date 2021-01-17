@@ -515,7 +515,7 @@ class InsertConsts(SqlTree):
 
 @dataclass
 class InsertConsts2(SqlTree):
-    table: str
+    table: Id
     cols: List[str]
     tuples: list #List[List[Sql]]
     type = T.nulltype
@@ -528,7 +528,7 @@ class InsertConsts2(SqlTree):
             for tpl in self.tuples
         )
 
-        q = ['INSERT INTO', qb.safe_name(self.table),
+        q = ['INSERT INTO', qb.quote(self.table),
              "(", ', '.join(self.cols), ")",
              "VALUES ",
         ]
@@ -1094,4 +1094,4 @@ def restructure_result(state, t: T.list[T.union[T.primitive, T.nulltype]], i):
 @dp_type
 def restructure_result(state, t: T.datetime, i):
     s = next(i)
-    return _from_datetime(None, s)
+    return _from_datetime(state, s)

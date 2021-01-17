@@ -99,6 +99,11 @@ def _cast(state, inst_type: T.t_relation, target_type: T.t_id, inst):
     # TODO verify same table? same type?
     return inst.replace(type=target_type)
 
+@dp_type
+def _cast(state, inst_type: T.t_relation, target_type: T.int, inst):
+    if inst.type.elem <= T.int:
+        return inst.replace(type=target_type)
+    raise Signal.make(T.TypeError, state, None, f"Cast not implemented for {inst_type}->{target_type}")
 
 def cast(state, obj, t):
     was_vec, [obj, t] = objects.unvectorize_args([obj, t])

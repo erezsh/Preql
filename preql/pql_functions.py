@@ -252,7 +252,8 @@ def _get_table(t):
     if isinstance(t, objects.SelectedColumnInstance):
         return t.parent
 
-    assert isinstance(t, objects.CollectionInstance)
+    if not isinstance(t, objects.CollectionInstance):
+        raise Signal.make(T.TypeError, state, None, f"join() arguments must be tables")
     return t
 
 def _join2(state, join, a, b):
@@ -558,10 +559,10 @@ def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.b
         db_query(state, q)
 
 
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding='utf8') as f:
         line_count = len(list(f))
 
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding='utf8') as f:
         reader = csv.reader(f)
         for i, row in enumerate(tqdm(reader, total=line_count)):
             if i == 0:
