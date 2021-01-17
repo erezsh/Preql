@@ -1,6 +1,6 @@
 from . import _base_imports
 
-from .api import Preql
+from .api import Preql, T
 from .exceptions import Signal
 
 # import importlib.metadata as importlib_metadata

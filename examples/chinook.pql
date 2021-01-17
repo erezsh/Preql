@@ -1,0 +1,61 @@
+//
+//    Chinook Database - Joining tables
+//  =====================================
+//
+// This example demonstrates how to declare relations between tables,
+// to allow for an easy join syntax.
+//
+//
+// Sample database taken from: https://www.sqlitetutorial.net/sqlite-sample-database/
+//
+
+connect("sqlite:///chinook.db", true)
+
+table genres {...}
+
+table albums {
+	ArtistId: artists.ArtistId
+	...
+}
+
+table tracks {
+	AlbumId: albums.AlbumId,
+	GenreId: genres.GenreId
+	...
+}
+
+tracks_joined = join(art: artists, alb: albums, t: tracks, g: genres) {
+	...t !GenreId !AlbumId !TrackId
+	Artist: art.Name
+	Album: alb.Title
+	Genre: g.Name
+}
+
+tracks_pretty = tracks_joined {
+	... !Milliseconds !Bytes
+	Seconds: Milliseconds / 1000
+	MB: Bytes / 1024 / 1024
+}
+
+
+// Playlists
+table playlists {...}
+
+table playlist_track {
+	PlaylistId: playlists.PlaylistId
+	TrackId: tracks.TrackId
+}
+
+tracks_with_categories = join(t: tracks, pt: playlist_track, p: playlists) {
+    ...t => Categories: p.Name
+}
+
+
+tracks_joined = join(art: artists, alb: albums, t: tracks, g: genres, pt: playlist_track, p: playlists) {
+    ...t !GenreId !AlbumId
+    Album: alb.Title
+    Artist: art.Name
+    Genre: g.Name
+    =>
+    Categories: p.Name
+}

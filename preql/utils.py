@@ -197,13 +197,13 @@ class TextReference:
         start = self.ref.start
         if rich:
             return [
-                f"  [red]~~~[/red] At '{source.name}' line {start.line}, column {start.column}",
+                f"  [red]~~~[/red] file '{source.name}' line {start.line}, column {start.column}",
                 Text(text_before + text_after),
                 Text(' ' * (len(text_before)-mark_before) + MARK_CHAR*mark_before + '^' + MARK_CHAR*mark_after),
             ]
 
         res = [
-            "  ~~~ At '%s' line %d, column %d:\n" % (source.name, start.line, start.column),
+            "  ~~~ file '%s' line %d, column %d:\n" % (source.name, start.line, start.column),
             text_before, text_after, '\n',
             ' ' * (len(text_before)-mark_before), MARK_CHAR*mark_before, '^', MARK_CHAR*mark_after, '\n'
         ]

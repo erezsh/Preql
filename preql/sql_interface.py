@@ -34,16 +34,17 @@ class SqlInterface:
     def _import_result(self, sql_type, c, state):
         if sql_type is not T.nulltype:
             res = c.fetchall()
-            # imp = sql_type.import_result
-            # return imp(res)
             return from_sql(state, Const(sql_type, res))
+
+    def _backend_execute_sql(self, sql_code):
+        c = self._conn.cursor()
+        c.execute(sql_code)
+        return c
 
     def _execute_sql(self, sql_type, sql_code, state):
 
         try:
-            c = self._conn.cursor()
-            c.execute(sql_code)
-            # c.execute(sql_code, qargs)    # XXX messes up when sql_code contains '%', like for LIKE
+            c = self._backend_execute_sql(sql_code)
         except Exception as e:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
             raise exceptions.DatabaseQueryError(msg%(sql_code, e))
