@@ -888,8 +888,9 @@ def localize(state, inst: objects.Instance):
     # Cancel unoptimized mode? Or leave this unprotected?
     # state.require_access(state.AccessLevels.WRITE_DB)
 
-    if inst.type <= T.nulltype:
+    if inst.code is sql.null:
         return None
+
     return db_query(state, inst.code, inst.subqueries)
 
 @dy
