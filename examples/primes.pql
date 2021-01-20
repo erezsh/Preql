@@ -16,17 +16,19 @@ table primes {
     num: int
 }
 
-// Return highest prime number, or null if empty
-func get_last_prime() = first_or_null(primes{num} order {^num})
 
 func find_primes() {
+    // Get the last prime, i.e. where the program last stopped
+    last_prime = first_or_null(primes{num} order {^num})
+
     // Init primes if empty
-    if (get_last_prime() == null) {
+    if (last_prime == null) {
         new primes(2)
+        last_prime = 2
     }
 
     // Search for primes, starting with the last one found
-    n = get_last_prime()
+    n = last_prime
     while (true) {
         n = n + 1
         // Can 'n' be divided by any other prime?
