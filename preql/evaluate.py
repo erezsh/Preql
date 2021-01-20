@@ -917,7 +917,7 @@ def function_help_str(self, state):
         if p.type:
             s += f": {p.type}"
         if p.default:
-            s += f"={cast_to_python(state, p.default)}"
+            s += f"={p.default.repr(state)}"
         params.append(s)
 
     if self.param_collector is not None:

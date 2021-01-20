@@ -59,6 +59,9 @@ class Module(Object):
     def type(self):
         return T.module
 
+    def __repr__(self):
+        return f'<preql:Module | {len(self.namespace)} members>'
+
 
 class Function(Object):
 
@@ -68,6 +71,9 @@ class Function(Object):
 
     def help_str(self, state):
         raise NotImplementedError()
+
+    def __repr__(self):
+        return f'<preql:Function | {self.name}: {self.type}>'
 
     @listgen
     def match_params_fast(self, state, args):
@@ -173,6 +179,10 @@ class UserFunction(Function):
             if stmts and isinstance(stmts[0], ast.Const) and stmts[0].type is T.string:
                 return stmts[0].value
 
+    def __repr__(self):
+        return super().__repr__()
+
+
 @dataclass
 class InternalFunction(Function):
     name: str
@@ -186,6 +196,8 @@ class InternalFunction(Function):
     def docstring(self):
         return self.func.__doc__
 
+    def __repr__(self):
+        return super().__repr__()
 
 # Instances
 
