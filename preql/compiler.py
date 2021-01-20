@@ -808,7 +808,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     if table.type <= T.string or table.type <= T.vectorized[T.string]:
         index ,= cast_to_instance(state, sel.conds)
-        assert index.type <= T.int
+        assert index.type <= T.int or index.type <= T.vectorized[T.int], index.type
         table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
         slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
