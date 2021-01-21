@@ -19,10 +19,10 @@ Future versions of Preql will cut the constant-time cost significantly, by cachi
 
 ### Comparison to hand-written SQL
 
-The following benchmark compared the performance of hand-written SQL to Preql-generated SQL
+The following benchmark compared the performance of hand-written SQL queries to Preql-generated SQL (without compilation costs).
 
-The code is available on [benchmark/test_chinook.py]([benchmark/test_chinook.py])
+The code is available on [benchmark/test_chinook.py]([https://github.com/erezsh/Preql/blob/master/benchmark/test_chinook.py])
 
-Results on SQLite (1000 iterations):
+Results for Sqlite3 (1000 iterations):
 
-![Benchmark Graph](benchmark1.png "Benchmark Graph")
+![-](benchmark1.png "Benchmark Graph")
