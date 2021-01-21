@@ -67,7 +67,7 @@ def main():
 
     end = time.time()
     if args.time:
-        print('Running took %.2f seconds to run' % (end -start))
+        print('Script took %.2f seconds to run' % (end -start))
 
     if interactive:
         p.load_all_tables()

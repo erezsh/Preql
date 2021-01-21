@@ -9,6 +9,7 @@
 
    introduction
    features
+   performance
    roadmap
 
 .. toctree::
@@ -47,6 +48,7 @@ Resources
 -  :doc:`introduction`
 -  :doc:`getting-started`
 -  :doc:`features`
+-  :doc:`performance`
 -  :doc:`roadmap`
 
 -  Tutorials
