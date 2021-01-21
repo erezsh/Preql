@@ -621,7 +621,7 @@ def compile_to_inst(state: State, lst: objects.PythonList):
     x = [sql.Primitive(t, sql._repr(t,i)) for i in (lst.items)]
     name = state.unique_name("list_")
     table_code, subq, list_type = sql.create_list(name, x)
-    inst = objects.ListInstance.make(table_code, list_type, [])
+    inst = objects.TableInstance.make(table_code, list_type, [])
     inst.subqueries[name] = subq
     return inst
 
@@ -649,7 +649,7 @@ def compile_to_inst(state: State, lst: ast.List_):
     name = state.unique_name("list_")
     table_code, subq, list_type = sql.create_list(name, [e.code for e in elems])
 
-    inst = objects.ListInstance.make(table_code, list_type, elems)
+    inst = objects.TableInstance.make(table_code, list_type, elems)
     inst.subqueries[name] = subq
     return inst
 
@@ -931,4 +931,4 @@ def compile_to_inst(state: State, range: ast.Range):
     code = f"SELECT {start} AS item UNION ALL SELECT item+{skip} FROM {name}{stop_str}"
     subq = sql.Subquery(name, [], sql.RawSql(type_, code))
     code = sql.TableName(type_, Id(name))
-    return objects.ListInstance(code, type_, SafeDict({name: subq}))
+    return objects.TableInstance(code, type_, SafeDict({name: subq}))

@@ -170,6 +170,9 @@ class Type(Object):
     def repr(self, state):
         return repr(self)
 
+    def __or__(self, other):
+        return T.union[self, other]
+
 
 class TypeDict(dict):
 

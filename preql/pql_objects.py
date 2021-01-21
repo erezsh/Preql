@@ -300,42 +300,14 @@ class TableInstance(CollectionInstance):
         return make_instance_from_name(t[name], name) #t.column_codename(name))
 
     def all_attrs(self):
-        # XXX hacky way to write it
-        attrs = dict(self.type.methods)
-        return SafeDict(attrs).update(self.__columns)
+        attrs = SafeDict(self.type.methods)
+        return attrs.update(self.__columns)
 
     def get_attr(self, name):
         try:
             v = self.type.elems[name]
             return SelectedColumnInstance(self, v, name)
         except KeyError:
-            try:
-                return MethodInstance(self, self.type.methods[name])
-            except KeyError:
-                raise pql_AttributeError(name)
-
-@dataclass
-class ListInstance(CollectionInstance):
-    def __post_init__(self):
-        assert self.type <= T.list, self.type
-
-    def get_column(self, name):
-        # TODO memoize? columns shouldn't change
-        assert name == ITEM_NAME
-        t = self.type
-        return make_instance_from_name(t.elem, name)
-
-    def all_attrs(self):
-        # XXX hacky way to write it
-        attrs = dict(self.type.methods)
-        attrs[ITEM_NAME] = self.get_column(ITEM_NAME)
-        return attrs
-
-    def get_attr(self, name):
-        if name == ITEM_NAME:
-            v = self.type.elem
-            return SelectedColumnInstance(self, v, name)
-        else:
             try:
                 return MethodInstance(self, self.type.methods[name])
             except KeyError:
@@ -350,9 +322,7 @@ def make_instance_from_name(t, cn):
 
 def make_instance(code, t, insts):
     assert not t.issubtype(T.struct), t
-    if t <= T.list:
-        return ListInstance.make(code, t, insts)
-    elif t <= T.table:
+    if t <= T.table:
         return TableInstance.make(code, t, insts)
     elif t <= T.aggregate:
         return AggregateInstance(t, make_instance(code, t.elem, insts))
@@ -573,7 +543,7 @@ def unvectorize_args(x):
 null = ValueInstance.make(sql.null, T.nulltype, [], None)
 
 @dataclass
-class EmptyListInstance(ListInstance):
+class EmptyListInstance(TableInstance):
     """Special case, because it is untyped
     """
 
@@ -597,12 +567,8 @@ def alias_table_columns(t, prefix):
 
 def new_table(type_, name=None, instances=None, select_fields=False):
     "Create new table instance"
-    if type_ <= T.list:
-        cls = ListInstance
-    else:
-        cls = TableInstance
     name = name if name else type_.options.get('name', sql.Id('anon'))
-    inst = cls.make(sql.TableName(type_, name), type_, instances or [])
+    inst = TableInstance.make(sql.TableName(type_, name), type_, instances or [])
 
     if select_fields:
         code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in type_.elems.items()])

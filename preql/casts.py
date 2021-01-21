@@ -39,7 +39,7 @@ def _cast(state, inst_type: T.table, target_type: T.list, inst):
     (elem_name, elem_type) ,= inst_type.elems.items()
     code = sql.Select(T.list[elem_type], inst.code, [sql.ColumnAlias(sql.Name(elem_type, elem_name), ITEM_NAME)])
 
-    return objects.ListInstance.make(code, T.list[elem_type], [inst])
+    return objects.TableInstance.make(code, T.list[elem_type], [inst])
 
 @dp_type
 def _cast(state, inst_type: T.t_id, target_type: T.int, inst):
