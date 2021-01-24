@@ -6,8 +6,6 @@ import inspect
 import itertools
 from typing import Optional
 
-from tqdm import tqdm
-
 from .utils import safezip, listgen, re_split
 from .exceptions import Signal, ExitInterp
 
@@ -181,6 +179,14 @@ def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() 
     """Generate a temporary table with the contents of the given table
 
     It will remain available until the db-session ends, unless manually removed.
+
+    Parameters:
+        expr: the table expression to create the table from
+        const: whether the resulting table may be changed or not.
+
+    Note:
+        A non-const table creates its own `id` field.
+        Trying to copy an existing id field into it will cause a collision
     """
     # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
     # 'const table' doesn't
@@ -194,10 +200,6 @@ def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() 
 
 def pql_get_db_type(state: State):
     """Returns a string representing the type of the active database.
-
-    Possible values are:
-        - "sqlite"
-        - "postgres"
     """
     assert state.access_level >= state.AccessLevels.EVALUATE
     return new_value_instance(state.db.target, T.string)
@@ -399,22 +401,32 @@ def pql_columns(state: State, table: T.collection):
     return ast.Dict_(elems)
 
 
-def pql_cast(state: State, inst: T.any, type: T.type):
-    "Attempt to cast an object to a specified type"
-    type_ = type
+def pql_cast(state: State, obj: T.any, target_type: T.type):
+    """Attempt to cast an object to a specified type
+
+    The resulting object will be of type `target_type`, or an exception will be thrown.
+
+    Parameters:
+        obj: The object to cast
+        target_type: The type to cast to
+
+    """
+    type_ = target_type
     if not isinstance(type_, Type):
         raise Signal.make(T.TypeError, state, type_, f"Cast expected a type, got {type_} instead.")
 
-    if inst.type is type_:
-        return inst
+    if obj.type is type_:
+        return obj
 
-    return cast(state, inst, type_)
+    return cast(state, obj, type_)
 
 
 def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = objects.null):
-    """Import an existing table from SQL
+    """Import an existing table from the database, and fill in the types automatically.
 
-    If the columns argument is provided, only these columns will be imported.
+    Parameters:
+        name: The name of the table to import
+        columns: If this argument is provided, only these columns will be imported.
 
     Example:
         >> import_table("my_sql_table", ["some_column", "another_column])
@@ -440,8 +452,10 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = o
 def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.false, auto_create: T.bool = ast.false):
     """Connect to a new database, specified by the uri
 
-    If load_all_tables is true, loads all the tables in the database to the global namespace.
-    If auto_create is true, create the database if it doesn't exist (Sqlite only)
+    Parameters:
+        uri: A string specifying which database to connect to (e.g. "sqlite:///test.db")
+        load_all_tables: If true, loads all the tables in the database into the global namespace.
+        auto_create: If true, creates the database if it doesn't already exist (Sqlite only)
     """
     uri = cast_to_python(state, uri)
     load_all_tables = cast_to_python(state, load_all_tables)
@@ -529,21 +543,31 @@ breakpoint_funcs = create_internal_funcs({
 })
 
 
-def pql_exit(state, value: T.int.as_nullable() = None):
+def pql_exit(state, value: T.any.as_nullable() = None):
     """Exit the current interpreter instance.
 
     Can be used from running code, or the REPL.
 
     If the current interpreter is nested within another Preql interpreter (e.g. by using debug()),
     exit() will return to the parent interpreter.
+
     """
     raise ExitInterp(value)
 
 
 
 def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.bool = ast.Const(T.bool, False)):
-    "Import a csv into an existing table"
+    """Import a csv file into an existing table
+
+    Parameters:
+        table: A table into which to add the rows.
+        filename: A path to the csv file
+        header: If true, skips the first line
+    """
     # TODO better error handling, validation
+    from tqdm import tqdm   # TODO use rich instead?
+
+
     filename = cast_to_python(state, filename)
     header = cast_to_python(state, header)
     print(f"Importing CSV file: '{filename}'")
@@ -612,7 +636,12 @@ def _rest_table_endpoint(state, table):
 
 
 def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080)):
-    "Start a starlette server that exposes the current namespace as REST API"
+    """Start a starlette server (HTTP) that exposes the current namespace as REST API
+
+    Parameters:
+        endpoints: A struct of type (string => function), mapping names to the functions.
+        port: A port from which to serve the API
+    """
 
     try:
         from starlette.applications import Starlette

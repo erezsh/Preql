@@ -1,3 +1,5 @@
+"Built-in functions for Preql. Automatically imported by the interpreter."
+
 func maybe_vectorized(t) = union[t, vectorized[t]]
 
 func _sql_agg_func(name, obj, t=null) {
@@ -142,12 +144,12 @@ func commit() {
     force_eval(SQL(nulltype, "COMMIT"))
 }
 func rollback() {
-    "Commit the current transaction"
+    "Rollback the current transaction"
     force_eval(SQL(nulltype, "ROLLBACK"))
 }
 
 func is_empty(tbl) {
-    "Returns whether a table expression is empty or not"
+    "Returns whether the table expression `tbl` is empty or not"
     // count(t) would also work, but it will evaluate all the elements of `tbl`
     // We only care if there is at least one.
     return count(tbl[..1]) == 0
@@ -168,7 +170,7 @@ func zipjoin_left(a: collection, b: collection) = _zipjoin(leftjoin, a, b)
 func zipjoin_longest(a: collection, b: collection) = _zipjoin(outerjoin, a, b)
 
 func distinct(t: collection) {
-    "Remove identical rows"
+    "Remove identical rows from the table"
     return SQL(t, "SELECT distinct * FROM $t")
 }
 
@@ -286,11 +288,12 @@ func remove_table(table_name) {
 // }
 
 func bfs(edges: table, initial: table) {
-    """Performs a breadth-first search on a graph
+    """Performs a breadth-first search on a graph.
 
     Parameters:
-        edges - a table of type {src: int, dst: int}, defining the edges of the graph
-        initial - list[int], specifies from which nodes to start
+        edges: a table of type {src: int, dst: int},
+               defining the edges of the graph
+        initial: list[int], specifies from which nodes to start
     """
     if (count(names(edges){name} & ["src", "dst"]) != 2) {
         throw new TypeError("bfs: 'edges' expected to contain 'src' and 'dst'")
@@ -307,9 +310,9 @@ func walk_tree(edges: table, initial: table, max_rank: int) {
     Not unique! Nodes may be visited more than once. Cycles will repeat until max_rank!
 
     Parameters:
-            edges - a table of type {src: int, dst: int}, defining the edges of the graph
-            initial - list[int], specifies from which nodes to start
-            max_rank - integer limiting how far to search
+        edges: a table of type {src: int, dst: int}, defining the edges of the graph
+        initial: list[int], specifies from which nodes to start
+        max_rank: integer limiting how far to search
     """
     table node {
         id: int

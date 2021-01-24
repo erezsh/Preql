@@ -217,7 +217,7 @@ def start_repl(p, prompt=' >> '):
                     # p.interp.set_var('_e', objects.ExceptionInstance(e))
                     continue
                 except ExitInterp as e:
-                    return
+                    return e.value
                 except Exception as e:
                     repl_log.exception(e)
                     raise
