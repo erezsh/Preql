@@ -100,7 +100,21 @@ func limit_offset(tbl: collection, lim: int, offset: int) {
 }
 
 func enum(tbl: collection) {
-    "Return the table with a new index column"
+    """Return the table with a new index column
+
+    Count starts from 0.
+
+    Example:
+        >> enum(["a", "b", "c"])
+        table  =3
+        ┏━━━━━━━┳━━━━━━┓
+        ┃ index ┃ item ┃
+        ┡━━━━━━━╇━━━━━━┩
+        │     0 │ a    │
+        │     1 │ b    │
+        │     2 │ c    │
+        └───────┴──────┘
+    """
     return tbl{index: SQL(int, "(row_number() over ())-1"), ...}
 }
 
@@ -110,17 +124,25 @@ func upper(s: maybe_vectorized(string)) {
 }
 
 func lower(s: maybe_vectorized(string)) {
-    "Return a copy of the string converted to uppercase."
+    "Return a copy of the string converted to lowercase."
     return SQL(string, "lower($s)")
 }
 
 func length(s: maybe_vectorized(string)) {
-    "Return the length of the string"
+    """Returns the length of the string
+
+    For tables or lists, use `count()`
+    """
     return SQL(int, "length($s)")
 }
 
 func round(n: maybe_vectorized(number)) {
-    "Return a rounded float"
+    """Returns a rounded float
+
+    Example:
+        >> round(3.14)
+        3.0
+    """
     return SQL(float, "round($n)")
 }
 
@@ -140,23 +162,33 @@ func _zipjoin(join_func, table1, table2) {
 }
 
 func commit() {
-    "Commit the current transaction"
+    """Commit the current transaction
+
+    This is necessary for changes to the tables to become persistent.
+    """
     force_eval(SQL(nulltype, "COMMIT"))
 }
 func rollback() {
-    "Rollback the current transaction"
+    """Rollback the current transaction
+
+    This reverts the data in all the tables to the last commit.
+    Local variables will remain unaffected.
+    """
     force_eval(SQL(nulltype, "ROLLBACK"))
 }
 
 func is_empty(tbl) {
-    "Returns whether the table expression `tbl` is empty or not"
+    """Efficiently tests whether the table expression `tbl` is empty or not"""
     // count(t) would also work, but it will evaluate all the elements of `tbl`
     // We only care if there is at least one.
     return count(tbl[..1]) == 0
 }
 
 func list_median(x: list) {
-    "Find the median of a list"
+    """Find the median of a list
+
+    Cannot be used inside a projection.
+    """
     cnt = count(x)
     middle_item_offset = (cnt-1)/~2
     middle_item_count = (2-cnt%2)   // 1 for odd count, 2 for even
@@ -164,17 +196,72 @@ func list_median(x: list) {
     return mean(mid_items)
 }
 
-"Join two tables into one by matching rows with the same index"
-func zipjoin(a: collection, b: collection) = _zipjoin(join, a, b)
-func zipjoin_left(a: collection, b: collection) = _zipjoin(leftjoin, a, b)
-func zipjoin_longest(a: collection, b: collection) = _zipjoin(outerjoin, a, b)
+func zipjoin(a: collection, b: collection) {
+    """Joins two tables on their row index.
+
+    Column names are always `a` and `b`.
+
+    Result is as long as the shortest table.
+
+    Similar to Python's `zip()` function.
+
+    Example:
+        >> zipjoin(["a", "b"], [1, 2])
+                table  =2
+        ┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+        ┃ a             ┃ b           ┃
+        ┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+        │ {'item': 'a'} │ {'item': 1} │
+        │ {'item': 'b'} │ {'item': 2} │
+        └───────────────┴─────────────┘
+    """
+
+    return _zipjoin(join, a, b)
+}
+
+func zipjoin_left(a: collection, b: collection) {
+    """Similar to `zipjoin`, but the result is as long as the first parameter.
+
+    Missing rows will be assigned `null`.
+
+    Example:
+        >> zipjoin_left(["a", "b"], [1])
+                    table  =2
+        ┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
+        ┃ a             ┃ b              ┃
+        ┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
+        │ {'item': 'a'} │ {'item': 1}    │
+        │ {'item': 'b'} │ {'item': null} │
+        └───────────────┴────────────────┘
+    """
+    return _zipjoin(leftjoin, a, b)
+}
+func zipjoin_longest(a: collection, b: collection) {
+    """Similar to `zipjoin`, but the result is as long as the longest table.
+
+    Missing rows will be assigned `null`.
+    """
+    return _zipjoin(outerjoin, a, b)
+}
 
 func distinct(t: collection) {
-    "Remove identical rows from the table"
+    """Removes identical rows from the given table
+
+    Example:
+        >> distinct(["a","b","b","c"])
+        table  =3
+        ┏━━━━━━━┓
+        ┃ item  ┃
+        ┡━━━━━━━┩
+        │ a     │
+        │ b     │
+        │ c     │
+        └───────┘
+    """
     return SQL(t, "SELECT distinct * FROM $t")
 }
 
-func pi() = SQL(float, "PI()")
+func _pi() = SQL(float, "PI()")
 func now() = SQL(datetime, "NOW()")
 func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "REPEAT($s, $num)")
 
@@ -191,7 +278,7 @@ if (db_type == "postgres") {
         func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
         func now() = SQL(datetime, "datetime('now')")   // Sqlite
         func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
-        func pi() = SQL(float, "3.141592653589793")
+        func _pi() = SQL(float, "3.141592653589793")
 
         func year(date) = SQL(int, "strftime('%Y', $date)")
         func month(date) = SQL(int, "strftime('%m', $date)")
@@ -231,19 +318,40 @@ if (db_type == "postgres") {
     }
 }
 
-func str_contains(a: string, b: string) = str_index(a, b) >= 0
-func str_notcontains(a: string, b: string) = str_index(a, b) < 0
+func str_contains(substr: string, s: string) {
+    """Tests whether string `substr` is contained in `s`
+
+    Example:
+        >> str_contains("i", "tim")
+        true
+        >> str_contains("i", "team")
+        false
+    """
+    return str_index(substr, s) >= 0
+}
+
+func str_notcontains(substr: string, s: string) {
+    """Tests whether string `substr` is not contained in `s`
+
+    Equivalent to `not str_contains(substr, s)`.
+    """
+    return str_index(substr, s) < 0
+}
 
 func sample_ratio_fast(tbl, ratio) {
-    "Return a random sample of rows from the table, at the approximate amount of (ratio*count(tbl))."
+    "Returns a random sample of rows from the table, at the approximate amount of (ratio*count(tbl))."
     return tbl[random() < ratio]    // random() will be re-evaluated for every row
 }
 
 func sample_fast(tbl: collection, n: int, bias: number=0.05) {
-    """Return a random sample of n rows from the table in one query (or at worst two queries)
+    """Returns a random sample of n rows from the table in one query (or at worst two queries)
 
-    Higher values of 'bias' increase the chance of success in a single query,
-    but may introduce a higher bias in the randomness of the chosen rows, especially in sorted tables.
+    Parameters:
+        tbl: The table to sample from
+        n: The number of items to sample
+        bias: Add bias (reduce randomness) to gain performance. Higher values of 'bias'
+              increase the chance of success in a single query, but may introduce a
+              higher bias in the randomness of the chosen rows, especially in sorted tables.
     """
     c = count(tbl)
     if (n > c) {
@@ -291,8 +399,7 @@ func bfs(edges: table, initial: table) {
     """Performs a breadth-first search on a graph.
 
     Parameters:
-        edges: a table of type {src: int, dst: int},
-               defining the edges of the graph
+        edges: a table of type `{src: int, dst: int}`, defining the edges of the graph
         initial: list[int], specifies from which nodes to start
     """
     if (count(names(edges){name} & ["src", "dst"]) != 2) {
@@ -304,10 +411,11 @@ func bfs(edges: table, initial: table) {
 }
 
 
-func walk_tree(edges: table, initial: table, max_rank: int) {
-    """Walk a tree and keep track of rank.
+func _walk_tree(edges: table, initial: table, max_rank: int) {
+    """Walks a tree and keeps track of the rank.
 
-    Not unique! Nodes may be visited more than once. Cycles will repeat until max_rank!
+    Doesn't test for uniqueness. Nodes may be visited more than once.
+    Cycles will repeat until max_rank.
 
     Parameters:
         edges: a table of type {src: int, dst: int}, defining the edges of the graph
@@ -323,7 +431,7 @@ func walk_tree(edges: table, initial: table, max_rank: int) {
 }
 
 func char_range(start: string, end: string) {
-    """Produce a table of all characters from 'start' to 'stop'
+    """Produce a list of all characters from 'start' to 'stop'
 
     Example:
         >> char_range('a', 'z')
@@ -333,22 +441,54 @@ func char_range(start: string, end: string) {
 }
 
 
-func map_range(lst: list, start: union[int, function], end: union[int, function]) {
-    "Produce a range of numbers as rows for each item in the list, based on `start` and `end`"
-    lst = list(lst)
+func map_range(tbl: table, start: union[int, function], end: union[int, function]) {
+    """For each row in the table, assigns numbers out of a range, and
+    produces `(end-start)` new rows instead, each attached to a number.
+
+    If `start` or `end` are functions, the index is the result of the function, per row.
+
+    Parameters:
+        tbl: Table to map the range onto
+        start: The starting index, or a function producing the starting index
+        end: The ending index, or a function producing the ending index
+
+    Examples:
+        >> map_range(["a", "b"], 0, 3)
+        table  =6
+        ┏━━━┳━━━━━━┓
+        ┃ i ┃ item ┃
+        ┡━━━╇━━━━━━┩
+        │ 0 │ a    │
+        │ 1 │ a    │
+        │ 2 │ a    │
+        │ 0 │ b    │
+        │ 1 │ b    │
+        │ 2 │ b    │
+        └───┴──────┘
+
+        >> map_range(["a", "ab"], 1, length)
+        table  =3
+        ┏━━━┳━━━━━━┓
+        ┃ i ┃ item ┃
+        ┡━━━╇━━━━━━┩
+        │ 1 │ a    │
+        │ 1 │ ab   │
+        │ 2 │ ab   │
+        └───┴──────┘
+    """
     if (isa(start, int)) {
         s = start
     } else if (isa(start, function)) {
-        s = min(lst{start(item)})
+        s = min(tbl{start(item)})
     }
 
     if (isa(end, int)) {
         e = end
     } else if (isa(end, function)) {
-        e = max(list(lst{end(item)})) + 1
+        e = max(list(tbl{end(item)})) + 1
     }
 
-    mul = joinall(l: lst, i: [s..e]) {i: i.item, l.item }
+    mul = joinall(t: tbl, i: [s..e]) {i: i.item, ...t }
 
     if (isa(start, function)) {
         mul = mul[i >= start(item)]
@@ -360,3 +500,5 @@ func map_range(lst: list, start: union[int, function], end: union[int, function]
 
     return mul
 }
+
+pi = _pi()

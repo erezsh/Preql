@@ -38,7 +38,22 @@ def _pql_PY_callback(state: State, var: str):
 
 
 def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable() = objects.null):
-    "Run the given Python code and convert the result to a Preql object"
+    """Evaluate the given Python expression and convert the result to a Preql object
+
+    Parameters:
+        code_expr: The Python expression to evaluate
+        code_setup: Setup code to prepare for the evaluation
+
+    Note:
+        This function is still experemental, and should be used with caution.
+
+    Example:
+        >> PY("random.randrange(1, 10)", "import random")
+
+        >> x = "Hello World"
+        >> PY("'$x'[::-1]")
+        "dlroW olleH"
+    """
     py_code = cast_to_python(state, code_expr)
     py_setup = cast_to_python(state, code_setup)
 
@@ -59,7 +74,9 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
     # return new_value_instance(res)
 
 def pql_inspect_sql(state: State, obj: T.object):
-    "Returns the SQL code that would be executed to evaluate the given object"
+    """Returns the SQL code that would be executed to evaluate the given object
+
+    """
     if not isinstance(obj, objects.Instance):
         raise Signal.make(T.TypeError, state, None, f"inspect_sql() expects a concrete object. Instead got: {obj.type}")
     s = state.db.compile_sql(obj.code, obj.subqueries)
@@ -67,18 +84,60 @@ def pql_inspect_sql(state: State, obj: T.object):
 
 
 def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
-    """Create an object with the given SQL evaluation code, and given result type
+    """Create an object with the given SQL evaluation code, and given result type.
+
+    The object will only be evaluated when required by the program flow.
+
+    Parameters:
+        result_type: The expected type of the result of the SQL query
+        sql_code: The SQL code to be evaluated
+
+    Example:
+        >> ["a", "b"]{item: SQL(string, "$item || '!'")}
+        table  =2
+        ┏━━━━━━━┓
+        ┃ item  ┃
+        ┡━━━━━━━┩
+        │ a!    │
+        │ b!    │
+        └───────┘
+
+        >> x = ["a", "b", "c"]
+        >> SQL(type(x), "SELECT item || '!' FROM $x")
+        table  =3
+        ┏━━━━━━━┓
+        ┃ item  ┃
+        ┡━━━━━━━┩
+        │ a!    │
+        │ b!    │
+        │ c!    │
+        └───────┘
     """
     # TODO optimize for when the string is known (prefetch the variables and return Sql)
     # .. why not just compile with parameters? the types are already known
     return ast.ParameterizedSqlCode(result_type, sql_code)
 
 def pql_force_eval(state: State, expr: T.object):
-    "Force evaluation of expression. Execute any db queries necessary."
+    """Forces the evaluation of the given expression.
+
+    Executes any db queries necessary.
+    """
     return objects.new_value_instance( cast_to_python(state, expr) )
 
 def pql_fmt(state: State, s: T.string):
-    "Format given string using interpolation on variables marked as `$var`"
+    """Format the given string using interpolation on variables marked as `$var`
+
+    Example:
+        >> ["a", "b", "c"]{item: fmt("$item!")}
+        table  =3
+        ┏━━━━━━━┓
+        ┃ item  ┃
+        ┡━━━━━━━┩
+        │ a!    │
+        │ b!    │
+        │ c!    │
+        └───────┘
+    """
     _s = cast_to_python(state, s)
 
     tokens = re_split(r"\$\w+", _s)
@@ -123,12 +182,18 @@ def pql_brk_continue(state):
 
 
 def pql_breakpoint(state: State):
-    "Create a Python breakpoint. For a Preql breakpoint, use debug() instead"
+    """Creates a Python breakpoint.
+
+    For a Preql breakpoint, use debug() instead
+    """
     breakpoint()
     return objects.null
 
 def pql_debug(state: State):
-    "Hop into a debug session with REPL"
+    """Breaks the execution of the interpreter, and enters into a debug
+    session using the REPL environment.
+
+    """
     py_api = state._py_api
 
     with state.use_scope(breakpoint_funcs):
@@ -137,21 +202,38 @@ def pql_debug(state: State):
 
 
 
-def pql_issubclass(state: State, inst: T.any, type: T.type):
-    "Returns whether the give object is an instance of the given type"
-    type_ = type
-    assert_type(inst.type, T.type, state, inst, 'issubclass')
-    assert_type(type_.type, T.type, state, inst, 'issubclass')
-    assert isinstance(inst, Type)
-    assert isinstance(type_, Type)
-    res = inst <= type_
-    return new_value_instance(res, T.bool)
+def pql_issubclass(state: State, a: T.type, b: T.type):
+    """Checks if type 'a' is a subclass of type 'b'
 
-def pql_isa(state: State, inst: T.any, type: T.type):
-    "Returns whether the give object is an instance of the given type"
-    type_ = type
-    assert_type(type_.type, T.type, state, inst, 'isa')
-    res = inst.isa(type_)
+    Examples:
+        >> issubclass(int, number)
+        true
+        >> issubclass(int, table)
+        false
+        >> issubclass(list, table)
+        true
+    """
+    assert_type(a.type, T.type, state, a, 'issubclass')
+    assert_type(b.type, T.type, state, b, 'issubclass')
+    assert isinstance(a, Type)
+    assert isinstance(b, Type)
+    return new_value_instance(a <= b, T.bool)
+
+def pql_isa(state: State, obj: T.any, type: T.type):
+    """Checks if the give object is an instance of the given type
+
+    Examples:
+        >> isa(1, int)
+        true
+        >> isa(1, string)
+        false
+        >> isa(1.2, number)
+        true
+        >> isa([1], table)
+        true
+    """
+    assert_type(type.type, T.type, state, obj, 'isa')
+    res = obj.isa(type)
     return new_value_instance(res, T.bool)
 
 def _count(state, obj, table_func, name):
@@ -171,14 +253,35 @@ def _count(state, obj, table_func, name):
     return objects.Instance.make(code, T.int, [obj])
 
 def pql_count(state: State, obj: T.container.as_nullable() = objects.null):
-    "Count how many rows are in the given table, or in the projected column."
+    """Count how many rows are in the given table, or in the projected column.
+
+    If no argument is given, count all the rows in the current projection.
+
+    Examples:
+        >> count([0..10])
+        10
+        >> [0..10]{ => count() }
+        table  =1
+        ┏━━━━━━━┓
+        ┃ count ┃
+        ┡━━━━━━━┩
+        │    10 │
+        └───────┘
+        >> [0..10]{ => count(item) }
+        table  =1
+        ┏━━━━━━━┓
+        ┃ count ┃
+        ┡━━━━━━━┩
+        │    10 │
+        └───────┘
+    """
     return _count(state, obj, sql.CountTable, 'count')
 
 
 def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() = objects.null):
     """Generate a temporary table with the contents of the given table
 
-    It will remain available until the db-session ends, unless manually removed.
+    It will remain available until the database session ends, unless manually removed.
 
     Parameters:
         expr: the table expression to create the table from
@@ -200,6 +303,10 @@ def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() 
 
 def pql_get_db_type(state: State):
     """Returns a string representing the type of the active database.
+
+    Example:
+        >> get_db_type()
+        "sqlite"
     """
     assert state.access_level >= state.AccessLevels.EVALUATE
     return new_value_instance(state.db.target, T.string)
@@ -333,16 +440,70 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
 
 
 def pql_join(state, tables):
-    "Inner join two tables into a new projection {t1, t2}"
+    """Inner-join any number of tables.
+
+    Each argument is expected to be one of -
+    (1) A column to join on. Columns are attached to specific tables. or
+    (2) A table to join on. The column will be chosen automatically, if there is no ambiguity.
+    Connections are made according to the relationships in the declaration of the table.
+
+    Parameters:
+        tables: Each argument must be either a column, or a table.
+
+    Returns:
+        A new table, where each column is a struct representing one of
+        the joined tables.
+
+    Examples:
+        >> join(a: [0].item, b: [0].item)
+        table join46 =1
+        ┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+        ┃ a           ┃ b           ┃
+        ┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+        │ {'item': 0} │ {'item': 0} │
+        └─────────────┴─────────────┘
+
+        >> join(a: [1..5].item, b: [3..8].item) {...a}
+        table  =2
+        ┏━━━━━━━┓
+        ┃  item ┃
+        ┡━━━━━━━┩
+        │     3 │
+        │     4 │
+        └───────┘
+
+        >> join(c: Country, l: Language) {...c, language: l.name}
+    """
     return _join(state, "JOIN", tables)
 def pql_leftjoin(state, tables):
-    "Left join two tables into a new projection {t1, t2}"
+    """Left-join any number of tables
+
+    See `join`
+    """
     return _join(state, "LEFT JOIN", tables, nullable=[False, True])
 def pql_outerjoin(state, tables):
-    "Outer join two tables into a new projection {t1, t2}"
+    """Outer-join any number of tables
+
+    See `join`
+    """
     return _join(state, "FULL OUTER JOIN", tables, nullable=[False, True])
 def pql_joinall(state: State, tables):
-    "Cartesian product of two tables into a new projection {t1, t2}"
+    """Cartesian product of any number of tables
+
+    See `join`
+
+    Example:
+        >> joinall(a: [0,1], b: ["a", "b"])
+            table joinall14 =4
+        ┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+        ┃ a           ┃ b             ┃
+        ┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+        │ {'item': 0} │ {'item': 'a'} │
+        │ {'item': 0} │ {'item': 'b'} │
+        │ {'item': 1} │ {'item': 'a'} │
+        │ {'item': 1} │ {'item': 'b'} │
+        └─────────────┴───────────────┘
+    """
     return _join(state, "JOIN", tables, True)
 
 class NoAutoJoinFound(Exception):
@@ -379,11 +540,19 @@ def _find_table_reference(t1, t2):
 
 def pql_type(state: State, obj: T.any):
     """Returns the type of the given object
+
+    Example:
+        >> type(1)
+        int
+        >> type([1])
+        list[item: int]
+        >> type(int)
+        type
     """
     return obj.type
 
 def pql_repr(state: State, obj: T.any):
-    """Returns the repr of the given object
+    """Returns the representation text of the given object
     """
     try:
         return new_value_instance(obj.repr(state))
@@ -392,7 +561,11 @@ def pql_repr(state: State, obj: T.any):
         return new_value_instance(value)
 
 def pql_columns(state: State, table: T.collection):
-    """Accepts a table, and returns a dictionary of {column_name: column_type}
+    """Returns a dictionary `{column_name: column_type}` for the given table
+
+    Example:
+        >> columns([0])
+        {item: int}
     """
     elems = table.type.elems
     if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
@@ -404,7 +577,8 @@ def pql_columns(state: State, table: T.collection):
 def pql_cast(state: State, obj: T.any, target_type: T.type):
     """Attempt to cast an object to a specified type
 
-    The resulting object will be of type `target_type`, or an exception will be thrown.
+    The resulting object will be of type `target_type`, or a `TypeError`
+    exception will be thrown.
 
     Parameters:
         obj: The object to cast
@@ -456,6 +630,9 @@ def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.false
         uri: A string specifying which database to connect to (e.g. "sqlite:///test.db")
         load_all_tables: If true, loads all the tables in the database into the global namespace.
         auto_create: If true, creates the database if it doesn't already exist (Sqlite only)
+
+    Example:
+        >> connect("sqlite://:memory:")     // Connect to a database in memory
     """
     uri = cast_to_python(state, uri)
     load_all_tables = cast_to_python(state, load_all_tables)
@@ -466,7 +643,7 @@ def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.false
     return objects.null
 
 def pql_help(state: State, inst: T.any = objects.null):
-    """Provides a brief summary for a given object
+    """Provides a brief summary for the given object
     """
     if inst is objects.null:
         text = (
@@ -519,7 +696,10 @@ def pql_names(state: State, obj: T.any = objects.null):
 
 
 def pql_tables(state: State):
-    "Return a table of all tables in the database"
+    """Returns a table of all the persistent tables in the database.
+
+    The resulting table has two columns: name, and type.
+    """
     names = state.db.list_tables()
     values = [(name, state.db.import_table_type(state, name, None)) for name in names]
     tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in values]
@@ -641,6 +821,17 @@ def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080
     Parameters:
         endpoints: A struct of type (string => function), mapping names to the functions.
         port: A port from which to serve the API
+
+    Note:
+        Requires the `starlette` package for Python. Run `pip install starlette`.
+
+    Example:
+        >> func index() = "Hello World!"
+        >> serve_rest({index: index})
+        INFO     Started server process [85728]
+        INFO     Waiting for application startup.
+        INFO     Application startup complete.
+        INFO     Uvicorn running on http://127.0.0.1:8080 (Press CTRL+C to quit)
     """
 
     try:

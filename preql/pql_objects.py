@@ -608,6 +608,8 @@ def from_python(value):
         return ast.Const(T.bool, value)
     elif isinstance(value, int):
         return ast.Const(T.int, value)
+    elif isinstance(value, float):
+        return ast.Const(T.float, value)
     elif isinstance(value, list):
         # return ast.List_(T.list[T.any], list(map(from_python, value)))
         return PythonList(value)

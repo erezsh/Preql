@@ -36,6 +36,7 @@
 
    language
    api
+   preql-api
 
 
 Preql (*pronounced: Prequel*) is an interpreted relational query language, that compiles to SQL.
@@ -65,4 +66,5 @@ Resources
 
    -  :doc:`language`
    -  :doc:`api`
+   -  :doc:`preql-api`
 
