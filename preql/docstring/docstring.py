@@ -205,7 +205,7 @@ class _Lexer:
         return []
 
 
-parser = Lark.open('docstring2.lark', rel_to=__file__,
+parser = Lark.open('docstring.lark', rel_to=__file__,
                     parser='lalr', #lexer=_Lexer,
                     postlex=DocIndenter(),
                     maybe_placeholders=True,

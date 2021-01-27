@@ -1,0 +1,27 @@
+start: header sections _DEDENT*
+
+header: _line _INDENT? _line*
+
+sections: section*
+section: SECTION_TYPE _NL _INDENT section_items _DEDENT
+
+section_items: (text | defin)+
+
+text: _text
+_text: _line+ (_INDENT _text _DEDENT)?
+_line: LINE _NL
+
+defin: DEFIN _WS? text
+
+_NL: ( /\r?\n[\t ]*/ | COMMENT )+
+
+SECTION_TYPE: LINE /:\s*(?=\n)/  // Line, if followed immediately by :\n
+LINE.-10: /.+/
+DEFIN: NAME ":" /(?!\n)/
+
+%import python (NAME, COMMENT)
+%import common.WS_INLINE -> _WS
+
+%ignore COMMENT
+
+%declare _INDENT _DEDENT
