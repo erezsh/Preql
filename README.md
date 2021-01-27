@@ -1,6 +1,6 @@
 ![alt text](logo_small.png "Logo")
 
-Preql (*pronounced: Prequel*) is an interpreted, relational programming language, that specializes in database queries.
+Preql is an interpreted, relational programming language, that specializes in database queries.
 
 It is designed for use by data engineers, analysts and data scientists.
 

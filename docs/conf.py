@@ -20,6 +20,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('..'))
+sys.path.append(os.path.abspath("./_ext"))
 autodoc_member_order = 'bysource'
 
 
@@ -38,6 +39,7 @@ extensions = [
     'sphinx.ext.coverage',
     'recommonmark',
     'sphinx_markdown_tables',
+    'preql_autodoc',
     # 'sphinx_gallery.gen_gallery'
 ]
 

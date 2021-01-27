@@ -35,8 +35,8 @@
    :hidden:
 
    language
-   api
-   preql-api
+   preql-modules
+   python-api
 
 
 Preql (*pronounced: Prequel*) is an interpreted relational query language, that compiles to SQL.
@@ -65,6 +65,6 @@ Resources
 -  Reference
 
    -  :doc:`language`
-   -  :doc:`api`
-   -  :doc:`preql-api`
+   -  :doc:`preql-modules`
+   -  :doc:`python-api`
 
