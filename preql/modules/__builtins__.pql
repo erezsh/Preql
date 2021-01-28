@@ -28,28 +28,61 @@ func _sql_agg_func(name, obj, t=null) {
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
 }
 
-func sum(field: collection) {
-    "Sum up a column or a list"
-    return _sql_agg_func("SUM", field)
+func sum(col: collection[number]) {
+    """Sums up a column or a list.
+
+    Examples:
+        >> sum([1,2,3])
+        6
+        >> [1,2,3]{ => sum(item) }
+        table  =1
+        ┏━━━━━━━┓
+        ┃   sum ┃
+        ┡━━━━━━━┩
+        │     6 │
+        └───────┘
+    """
+    return _sql_agg_func("SUM", col)
 }
 
-func mean(field: collection) {
-    "Mean of a column or a list"
-    return _sql_agg_func("AVG", field, float)
+func mean(col: collection[number]) {
+    """Returns the mean average of a column or a list
+
+    See Also `sum`.
+    """
+    return _sql_agg_func("AVG", col, float)
 }
 
-func min(field: collection) {
-    "Find the minimum of a column or a list"
-    return _sql_agg_func("MIN", field)
+func min(col: collection[number]) {
+    """Finds the minimum of a column or a list
+
+    See Also `sum`.
+    """
+    return _sql_agg_func("MIN", col)
 }
 
-func max(field: collection) {
-    "Find the maximum of a column or a list"
-    return _sql_agg_func("MAX", field)
+func max(col: collection[number]) {
+    """Finds the maximum of a column or a list
+
+    See Also `sum`.
+    """
+    return _sql_agg_func("MAX", col)
 }
 
 func first(obj: collection) {
-    "Return the first member of a column or a list"
+    """Returns the first member of a column or a list
+
+    Examples:
+        >> first([1,2,3])
+        1
+        >> [1,2,3]{ => first(item) }
+        table  =1
+        ┏━━━━━━━┓
+        ┃ first ┃
+        ┡━━━━━━━┩
+        │     1 │
+        └───────┘
+    """
 
     if (isa(obj, aggregate)) {
         return SQL(type(obj).item, "($obj)")
@@ -61,8 +94,11 @@ func first(obj: collection) {
     }
 }
 
-func first_or_null(obj: collection) {
-    "Return the first member of a column or a list, or null if it's empty"
+func first_or_null(obj: union[collection, vectorized]) {
+    """Returns the first member of a column or a list, or null if it's empty
+
+    See Also `first()`.
+    """
 
     if (isa(obj, aggregate)) {
         return SQL(type(obj).item, "($obj)")
@@ -80,22 +116,13 @@ func first_or_null(obj: collection) {
 
 
 
-func count_false(field: collection) {
-    "Count how many values in the field are false or zero"
-    return SQL(int, "sum(cast($field=0 as int))")
-}
-func count_true(field: collection) {
-    "Count how many values in the field are true (non-zero)"
-    return SQL(int, "sum(cast($field!=0 as int))")
-}
-
 func limit(tbl: collection, n: int) {
-    "Return the first 'n' rows in table"
+    """Returns the first 'n' rows in the table """
     return tbl[..n]
 }
 
 func limit_offset(tbl: collection, lim: int, offset: int) {
-    "Return the first 'n' rows in table at given offset"
+    "Returns the first 'n' rows in the table at the given offset"
     return SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
 }
 
@@ -148,12 +175,12 @@ func round(n: maybe_vectorized(number)) {
 
 
 func dict(...x) {
-    "Construct a dictionary"
+    "Constructs a dictionary"
     return x
 }
 
 func _zipjoin(join_func, table1, table2) {
-	"Helper function. Add index to each table, and then join them"
+	"Helper function. Adds index to each table, and then join them"
 	return join_func(a: enum(table1).index, b: enum(table2).index) {
 			// Remove index from nested structs
 			a {... !index}
@@ -262,61 +289,144 @@ func distinct(t: collection) {
 }
 
 func _pi() = SQL(float, "PI()")
-func now() = SQL(datetime, "NOW()")
-func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "REPEAT($s, $num)")
+
+//
+// Start of database-specific code
+//
+func _repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "REPEAT($s, $num)")
+func _now() = SQL(datetime, "NOW()")
+func _count_false(field: aggregate) = SQL(int, "sum(cast($field=0 as int))")
+func _count_true(field: aggregate) = SQL(int, "sum(cast($field!=0 as int))")
+
 
 db_type = get_db_type()
 if (db_type == "postgres") {
-    func random() = SQL(float, "RANDOM()")
+    func _random() = SQL(float, "RANDOM()")
 
-    func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "POSITION($a in $b)-1")
+    func _str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "POSITION($a in $b)-1")
 
-    func char(n: maybe_vectorized(int)) = SQL(string, "chr($n)")
-    func char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
+    func _char(n: maybe_vectorized(int)) = SQL(string, "chr($n)")
+    func _char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
+} else if (db_type == "sqlite" or db_type == "duck") {
+    func _repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
+    func _now() = SQL(datetime, "datetime('now')")
+    func _random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
+    func _pi() = SQL(float, "3.141592653589793")
+
+    func year(date) = SQL(int, "strftime('%Y', $date)")
+    func month(date) = SQL(int, "strftime('%m', $date)")
+    func day(date) = SQL(int, "strftime('%d', $date)")
+    func hour(date) = SQL(int, "strftime('%H', $date)")
+    func minute(date) = SQL(int, "strftime('%M', $date)")
+    func day_of_week(date) = SQL(int, "strftime('%w', $date)")
+    func week_of_year(date) = SQL(int, "strftime('%W', $date)")
+    func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
+
+    func _str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")
+    func _char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
+    func _char_ord(n: maybe_vectorized(string)) = SQL(int, "unicode($n)")
+} else if (db_type == "mysql") {
+    func _random() = SQL(float, "RAND()")
+
+    func _str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
+    func _char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
+    func _char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
+
+    // TODO use AST interface instead?
+    func _count_false(field) = SQL(int, "sum(cast($field=0 as unsigned))")
+    func _count_true(field) = SQL(int, "sum(cast($field!=0 as unsigned))")
+
 } else {
-    if (db_type == "sqlite" or db_type == "duck") {
-        func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
-        func now() = SQL(datetime, "datetime('now')")   // Sqlite
-        func random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
-        func _pi() = SQL(float, "3.141592653589793")
-
-        func year(date) = SQL(int, "strftime('%Y', $date)")
-        func month(date) = SQL(int, "strftime('%m', $date)")
-        func day(date) = SQL(int, "strftime('%d', $date)")
-        func hour(date) = SQL(int, "strftime('%H', $date)")
-        func minute(date) = SQL(int, "strftime('%M', $date)")
-        func day_of_week(date) = SQL(int, "strftime('%w', $date)")
-        func week_of_year(date) = SQL(int, "strftime('%W', $date)")
-        func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
-
-        func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")
-        func char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
-        func char_ord(n: maybe_vectorized(string)) = SQL(int, "unicode($n)")
-
-    } else {
-        if (db_type == "mysql") {
-            func random() = SQL(float, "RAND()")
-
-            func str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
-            func char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
-            func char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
-
-            // TODO use AST interface instead?
-            func count_false(field) {
-                "Count how many values in the field are false or zero"
-                return SQL(int, "sum(cast($field=0 as unsigned))")
-            }
-            func count_true(field) {
-                "Count how many values in the field are true (non-zero)"
-                return SQL(int, "sum(cast($field!=0 as unsigned))")
-            }
-
-        }
-        else {
-            throw new TypeError("Unexpected")
-        }
-    }
+    throw new TypeError("Unexpected")
 }
+// End of database specific code
+// Wrapping database specific code
+
+
+func count_false(field: aggregate) {
+    """Count how many values in the field are false or zero
+
+    Example:
+        >> [0,1,2,0,3]{ => count_false(item) }
+        table  =1
+        ┏━━━━━━━━━━━━━┓
+        ┃ count_false ┃
+        ┡━━━━━━━━━━━━━┩
+        │           2 │
+        └─────────────┘
+
+    See Also:
+        - `count_true`
+    """
+    return _count_false(field)
+}
+func count_true(field: aggregate) {
+    """Count how many values in the field are true (non-zero)
+
+    Example:
+        >> [0,1,2,0,3]{ => count_true(item) }
+        table  =1
+        ┏━━━━━━━━━━━━┓
+        ┃ count_true ┃
+        ┡━━━━━━━━━━━━┩
+        │          3 │
+        └────────────┘
+
+    See Also:
+        - `count_false`
+    """
+    return _count_true(field)
+}
+
+func random() {
+    "Returns a random float number between 0 to 1"
+    return _random()
+}
+
+func str_index(substr: maybe_vectorized(string), s: maybe_vectorized(string)) {
+    """Finds in which index does `substr` appear in `s`.
+
+    Parameters:
+        substr: The substring to find
+        s: The string to search in
+
+    Returns:
+        A 0-based index (int) if found the substring, or -1 if not found.
+
+    Example:
+        >> str_index("re", "preql")
+        1
+        >> str_index("x", "preql")
+        -1
+    """
+    return _str_index(substr, s)
+}
+
+func char(n: maybe_vectorized(int)) {
+    """Returns the character with the given ASCII code"""
+    return _char(n)
+}
+func char_ord(n: maybe_vectorized(string)) {
+    "Returns the ascii code of the given character"
+    return _char_ord(n)
+}
+
+func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) {
+    """Repeats the string `num` times.
+
+    Example:
+        >> _repeat("ha", 3)
+        "hahaha"
+    """
+    return _repeat(s, num)
+}
+func now() {
+    "Returns the current datetime"
+    return _now()
+}
+
+// End of wrapping of database specific code
+
 
 func str_contains(substr: string, s: string) {
     """Tests whether string `substr` is contained in `s`

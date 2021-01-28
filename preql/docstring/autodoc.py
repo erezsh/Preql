@@ -64,7 +64,7 @@ def doc_func(f):
         raise ValueError(f"Error in docstring of function {f.name}")
 
 
-    assert {s.name for s in doc_tree.sections} <= {'Parameters', 'Example', 'Examples', 'Note', 'Returns'}, [s.name for s in doc_tree.sections]
+    assert {s.name for s in doc_tree.sections} <= {'Parameters', 'Example', 'Examples', 'Note', 'Returns', 'See Also'}, [s.name for s in doc_tree.sections]
     try:
         params_doc = doc_tree.get_section('Parameters')
     except KeyError:
@@ -109,4 +109,5 @@ def generate_rst(filename):
 
 # test_func()
 # test_module()
-# generate_rst('preql-api.rst')
+if __name__ == '__main__':
+    generate_rst('preql-api.rst')

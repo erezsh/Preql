@@ -48,11 +48,8 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
         This function is still experemental, and should be used with caution.
 
     Example:
-        >> PY("random.randrange(1, 10)", "import random")
-
-        >> x = "Hello World"
-        >> PY("'$x'[::-1]")
-        "dlroW olleH"
+        >> PY("sys.version", "import sys")
+        "3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10)"
     """
     py_code = cast_to_python(state, code_expr)
     py_setup = cast_to_python(state, code_setup)
