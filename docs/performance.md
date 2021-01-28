@@ -5,7 +5,7 @@
 For understanding performance, Preql should be considered as split into two components:
 
 | Component  | Type | Performance | Responsibility
-| -          |  -   | -           |
+| -          |  -   | -           | -
 | **Interpreter** | Procedural | Very slow | Control flow, and invoking the SQL Backend.
 | **SQL Backend** | Relational | Equivalent to SQL* | Compiling to SQL, and executing it.
 
@@ -21,8 +21,11 @@ Future versions of Preql will cut the constant-time cost significantly, by cachi
 
 The following benchmark compared the performance of hand-written SQL queries to Preql-generated SQL (without compilation costs).
 
-The code is available on [benchmark/test_chinook.py]([https://github.com/erezsh/Preql/blob/master/benchmark/test_chinook.py])
+The code is available on [benchmark/test_chinook.py](https://github.com/erezsh/Preql/blob/master/benchmark/test_chinook.py)
 
 Results for Sqlite3 (1000 iterations):
 
 ![-](benchmark1.png "Benchmark Graph")
+
+* Test A - Simple selection and projection
+* Test B - Multiple joins and a groupby
