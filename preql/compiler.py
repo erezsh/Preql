@@ -63,7 +63,7 @@ def _process_fields(state: State, fields):
 
         if v.type <= T.aggregate:
             v = v.primary_key()
-            t = T.list[v.type]
+            t = T.json_array[v.type]
             v = make_instance(sql.MakeArray(t, v.code), t, [v])
 
         suggested_name = str(f.name) if f.name else guess_field_name(f.value)
@@ -154,6 +154,11 @@ def compile_to_inst(state: State, i: ast.If):
     return make_instance(code, T.bool, [cond, then, else_])
 
 
+def kernel_type(t):
+    if t <= T.vectorized: # or t <= T.aggregate:
+        return kernel_type(t.elems['item'])
+    return t
+
 @dy
 def compile_to_inst(state: State, proj: ast.Projection):
     table = cast_to_instance(state, proj.table)
@@ -178,8 +183,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        t = T.union[T.primitive, T.struct, T.nulltype, T.unknown]
-        if not (f.type <= T.union[t, T.vectorized[t]]):
+        if not kernel_type(f.type) <= T.union[T.primitive, T.struct, T.json, T.nulltype, T.unknown]:
             raise exc.Signal.make(T.TypeError, state, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
@@ -541,6 +545,7 @@ def _compile_arith(state, arith, a: T.string, b: T.int):
     if arith.op != '*':
         raise Signal.make(T.TypeError, state, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
     return call_pql_func(state, "repeat", [a, b])
+
 
 @dp_inst
 def _compile_arith(state, arith, a: T.number, b: T.number):

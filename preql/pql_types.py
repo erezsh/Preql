@@ -228,6 +228,9 @@ T.t_relation = [T.number], (T.any,)   # t_id?
 
 T.vectorized = [T.container], (T.any,)  # sequence or collection?
 
+T.json = [T.container], (T.any,)
+T.json_array = [T.json]
+
 T.function = [T.object]
 T.module = [T.object]
 

@@ -1074,7 +1074,7 @@ def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.nulltype]],
 
 
 @dp_type
-def restructure_result(state, t: T.list[T.union[T.primitive, T.nulltype]], i):
+def restructure_result(state, t: T.json_array[T.union[T.primitive, T.nulltype]], i):
     res = next(i)
     if not res:
         return res
@@ -1082,6 +1082,7 @@ def restructure_result(state, t: T.list[T.union[T.primitive, T.nulltype]], i):
     if state.db.target == mysql:
         res = json.loads(res)
     elif state.db.target == sqlite:
+        assert isinstance(res, str), res
         res = res.split(_ARRAY_SEP)
 
     # XXX hack! TODO Use a generic form to cast types
