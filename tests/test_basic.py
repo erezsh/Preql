@@ -1405,6 +1405,11 @@ class BasicTests(PreqlTests):
         assert p('char_ord("A")') == 65
         assert p('char_range("a", "c")') == ['a', 'b', 'c']
 
+    def test_json(self):
+        p = self.Preql()
+        res = p('list([1,7,3,4]{item%2 => item}{count(item)})')
+        assert res == [1, 3], res
+
 
 
 class TestFlow(PreqlTests):

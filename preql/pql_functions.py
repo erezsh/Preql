@@ -233,19 +233,22 @@ def pql_isa(state: State, obj: T.any, type: T.type):
     res = obj.isa(type)
     return new_value_instance(res, T.bool)
 
-def _count(state, obj, table_func, name):
+def _count(state, obj, table_func, name='count'):
     if obj is objects.null:
         code = sql.FieldFunc(name, sql.AllFields(T.any))
     elif obj.type <= T.table:
         code = table_func(obj.code)
     elif isinstance(obj, objects.StructInstance):
         return new_value_instance(len(obj.attrs))
+
+    elif obj.type <= T.vectorized[T.json_array]:
+        code = sql.JsonLength(obj.code)
     else:
         if not (obj.type <= T.aggregate):
             raise Signal.make(T.TypeError, state, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
 
         obj = obj.primary_key()
-        code = sql.FieldFunc(name, obj.code)
+        code = sql.FieldFunc('count', obj.code)
 
     return objects.Instance.make(code, T.int, [obj])
 
@@ -272,7 +275,7 @@ def pql_count(state: State, obj: T.container.as_nullable() = objects.null):
         │    10 │
         └───────┘
     """
-    return _count(state, obj, sql.CountTable, 'count')
+    return _count(state, obj, sql.CountTable)
 
 
 def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() = objects.null):

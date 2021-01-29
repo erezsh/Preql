@@ -240,6 +240,20 @@ class CountTable(Scalar):
         return [f'(SELECT COUNT(*) FROM '] + self.table.compile_wrap(qb).code + [')']
 
 @dataclass
+class JsonLength(Scalar):
+    expr: Sql
+    type = T.int
+
+    def _compile(self, qb):
+        code = self.expr.compile_wrap(qb).code
+        if qb.target == sqlite:
+            return [f'(length('] + code + [') - length(replace('] + code + [f', "{_ARRAY_SEP}", ""))) / length("{_ARRAY_SEP}") + 1']
+        elif qb.target == postgres:
+            return [f'array_length('] + code + [', 1)']
+        else:
+            return [f'json_length('] + code + [')']
+
+@dataclass
 class FuncCall(SqlTree):
     type: Type
     name: str
