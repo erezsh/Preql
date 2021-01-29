@@ -1006,6 +1006,9 @@ def compile_type(idtype: T.t_id):
         s += " NOT NULL"
     return s
 
+@dp_type
+def compile_type(_type: T.json):
+    return 'JSON'
 
 
 
@@ -1068,6 +1071,10 @@ def from_sql(state, arr: T.table):
             raise Signal.make(T.TypeError, state, None, f"Expected {expected_length} columns, but got {len(row)}")
         i = iter(row)
         yield {name: restructure_result(state, col, i) for name, col in arr.type.elems.items()}
+
+@dp_type
+def restructure_result(state, t, i):
+    raise Signal.make(T.TypeError, state, None, f"Unexpected type used: {t}")
 
 @dp_type
 def restructure_result(state, t: T.table, i):

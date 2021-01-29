@@ -370,6 +370,8 @@ def _join2(state, join, a, b):
         return [a, b]
 
     if not ((a.type <= T.collection) and (b.type <= T.collection)):
+        a = a.type.repr(state)
+        b = b.type.repr(state)
         raise Signal.make(T.TypeError, state, None, f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}")
 
     return _auto_join(state, join, a, b)
