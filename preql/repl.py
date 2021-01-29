@@ -8,6 +8,8 @@ loop = asyncio.SelectorEventLoop(selector)
 asyncio.set_event_loop(loop)
 ### XXX End of fix
 
+from pathlib import Path
+
 from pygments.lexers.go import GoLexer
 from prompt_toolkit import PromptSession
 from prompt_toolkit.lexers import PygmentsLexer
@@ -158,6 +160,9 @@ class PreqlStyle(Style):
         Error:                  'bg:ansired ansigray',
     }
 
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+
 def start_repl(p, prompt=' >> '):
     save_last = '_'   # XXX A little hacky
 
@@ -173,6 +178,8 @@ def start_repl(p, prompt=' >> '):
             completer=Autocompleter(p.interp.state),
             # key_bindings=kb
             validator=MyValidator(),
+            history=FileHistory(str(Path.home() / '.preql_history')),
+            auto_suggest=AutoSuggestFromHistory(),
         )
 
         @Condition
