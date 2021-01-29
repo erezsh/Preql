@@ -292,7 +292,7 @@ class TableInstance(CollectionInstance):
 
     @property
     def __columns(self):
-        return {n:self.get_column(n) for n in self.type.elems}
+        return {n:self.get_column(n) for n in self.type.elems.keys()}
 
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
@@ -495,7 +495,10 @@ class SelectedColumnInstance(AbsInstance):
         return self.parent.get_column(self.name)
 
     def repr(self, state):
-        p = self.parent.repr(state)
+        try:
+            p = self.parent.type.options['name'].repr_name
+        except KeyError:
+            p = '?'
         return f'{p}.{self.name}'
 
 

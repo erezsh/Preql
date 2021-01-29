@@ -220,9 +220,9 @@ T.row = [T.struct]
 
 T.collection = [T.container], {}
 T.table = [T.collection], {}
-T.list = [T.table], (T.any,)
-T.set = [T.table], (T.any,)
-T.aggregate = [T.collection], (T.any,)
+T.list = [T.table], {ITEM_NAME: T.any}
+T.set = [T.table], {ITEM_NAME: T.any}
+T.aggregate = [T.collection], {ITEM_NAME: T.any}
 T.t_id = [T.number], (T.table,)
 T.t_relation = [T.number], (T.any,)   # t_id?
 

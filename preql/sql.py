@@ -204,7 +204,7 @@ class EmptyList(Table):
     _is_select = True
 
     def _compile(self, qb):
-        return ['SELECT NULL AS VALUE LIMIT 0']
+        return ['SELECT NULL AS ITEM LIMIT 0']
 
 @dataclass
 class TableName(Table):
