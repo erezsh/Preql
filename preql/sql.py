@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import List, Optional, Dict
 
-from .utils import dataclass, X, listgen, field_list
+from .utils import dataclass, X, listgen, field_list, safezip
 from . import pql_types
 from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst, Id
 from .types_impl import join_names, flatten_type
@@ -572,13 +572,22 @@ class SelectValue(Atom, TableOperation):
 
     type = property(X.value.type)
 
+# @dataclass
+# class RowDict(SqlTree):
+#     values: Dict[str, Sql]
+
+#     def _compile(self, qb):
+#         breakpoint()
+#         return {v.compile_wrap(qb).code + [f' as {name}'] for name, v in self.values.items()}
+
+
 @dataclass
-class RowDict(SqlTree):
-    values: Dict[str, Sql]
-
+class ValuesTuple(SqlTree):
+    type: Type
+    values: List[Sql]
     def _compile(self, qb):
-        return {v.compile_wrap(qb).code + [f' as {name}'] for name, v in self.values.items()}
-
+        values = [v.compile_wrap(qb) for v in self.values]
+        return join_comma(v.code for v in values)
 
 @dataclass
 class Values(Table):
@@ -812,7 +821,8 @@ def _sql_primitive_to_float(e):
 def create_list(name, elems):
     # Assumes all elems have the same type!
     list_type = T.list[elems[0].type]
-    fields = [Name(list_type.elem, ITEM_NAME)]
+    field_names = [name for name, c in flatten_type(list_type)]
+    fields = [Name(list_type.elem, name) for name in field_names]
     subq = Subquery(name, fields, Values(list_type, elems))
     table = TableName(list_type, Id(name))
     return table, subq, list_type
@@ -1058,9 +1068,14 @@ def _from_sql_primitive(p):
 
 @dp_inst
 def from_sql(state, arr: T.list):
-    if not all(len(e)==1 for e in arr.value):
+    fields = flatten_type(arr.type)
+    if not all(len(e)==len(fields) for e in arr.value):
         raise Signal.make(T.TypeError, state, None, f"Expected 1 column. Got {len(arr.value[0])}")
-    return [_from_sql_primitive(e[0]) for e in arr.value]
+
+    if arr.type.elem <= T.struct:
+        return [{n: _from_sql_primitive(e) for (n, _t), e in safezip(fields, tpl)} for tpl in arr.value]
+    else:
+        return [_from_sql_primitive(e[0]) for e in arr.value]
 
 @dp_inst
 @listgen

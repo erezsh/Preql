@@ -7,6 +7,7 @@ from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interp_common import new_value_instance
+from .context import context
 
 from .pql_functions import internal_funcs, joins
 from .pql_types import T, from_python, Object
@@ -36,7 +37,8 @@ class Interpreter:
                 bns[k] = v
 
     def call_func(self, fname, args):
-        return eval_func_call(self.state, self.state.get_var(fname), args)
+        with context(state=self.state):
+            return eval_func_call(self.state, self.state.get_var(fname), args)
 
     def execute_code(self, code, source_file, args=None):
         assert not args, "Not implemented yet: %s" % args
@@ -46,8 +48,9 @@ class Interpreter:
         except pql_SyntaxError as e:
             raise Signal(T.SyntaxError, [e.text_ref], e.message)
 
-        for stmt in stmts:
-            last = execute(self.state, stmt)
+        with context(state=self.state):
+            for stmt in stmts:
+                last = execute(self.state, stmt)
         return last
 
     def include(self, fn, rel_to=None):

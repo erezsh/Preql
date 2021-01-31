@@ -373,6 +373,7 @@ class AbsStructInstance(AbsInstance):
     @property
     def code(self):
         # XXX this shouldn't even be allowed to happen in the first place
+        breakpoint()
         raise Signal(T.TypeError, [], "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
 
 

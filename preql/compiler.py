@@ -646,13 +646,19 @@ def compile_to_inst(state: State, lst: ast.List_):
 
     elem_type ,= types
 
-    if not (elem_type <= T.union[T.primitive, T.nulltype]):
-        raise Signal.make(T.TypeError, state, lst, "Cannot create lists of type %s" % elem_type)
+    if elem_type <= T.struct:
+        rows = [sql.ValuesTuple(obj.type, obj.flatten_code()) for obj in elems]
+        list_type = T.table(elems=elem_type.elems)
+        name = state.unique_name("table_")
+        table_code, subq = sql.create_table(list_type, name, rows)
+    else:
+        if not (elem_type <= T.union[T.primitive, T.nulltype]):
+            raise Signal.make(T.TypeError, state, lst, "Cannot create lists of type %s" % elem_type)
 
-    assert elem_type <= lst.type.elems[ITEM_NAME], (elem_type, lst.type)
+        assert elem_type <= lst.type.elems[ITEM_NAME], (elem_type, lst.type)
 
-    name = state.unique_name("list_")
-    table_code, subq, list_type = sql.create_list(name, [e.code for e in elems])
+        name = state.unique_name("list_")
+        table_code, subq, list_type = sql.create_list(name, [e.code for e in elems])
 
     inst = objects.TableInstance.make(table_code, list_type, elems)
     inst.subqueries[name] = subq

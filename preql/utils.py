@@ -13,6 +13,7 @@ import runtype
 from rich.text import Text
 
 from . import settings
+from .context import Context
 
 mut_dataclass = runtype.dataclass(check_types=settings.typecheck, frozen=False)
 dataclass = runtype.dataclass(check_types=settings.typecheck)
@@ -255,3 +256,4 @@ def re_split(r, s):
         yield m, s[m.start():m.end()]
         offset = m.end()
     yield None, s[offset:]
+

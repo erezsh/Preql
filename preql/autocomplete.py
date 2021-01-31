@@ -11,6 +11,7 @@ from .evaluate import evaluate, resolve
 from .compiler import AutocompleteSuggestions
 from .pql_types import T
 from . import sql, parser
+from .context import context
 
 
 @dy
@@ -181,15 +182,16 @@ def autocomplete(state, code, source='<autocomplete>'):
             except pql_SyntaxError as e:
                 return {}
 
-            _eval_autocomplete(ac_state, stmts[:-1])
+            with context(state=ac_state):
+                _eval_autocomplete(ac_state, stmts[:-1])
 
-            try:
-                eval_autocomplete(ac_state, stmts[-1], True)
-            except AutocompleteSuggestions as e:
-                ns ,= e.args
-                return ns
-            except Signal as e:
-                ac_log.exception(e)
+                try:
+                    eval_autocomplete(ac_state, stmts[-1], True)
+                except AutocompleteSuggestions as e:
+                    ns ,= e.args
+                    return ns
+                except Signal as e:
+                    ac_log.exception(e)
 
     else:
         _eval_autocomplete(ac_state, stmts)

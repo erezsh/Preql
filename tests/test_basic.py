@@ -1410,6 +1410,15 @@ class BasicTests(PreqlTests):
         res = p('list([1,7,3,4]{item%2 => item}{count(item)})')
         assert res == [1, 3], res
 
+    def test_table_def_dicts(self):
+        p = self.Preql()
+        res = p('''[
+            {a: 1, b: 2}
+            {a: 10, b:20}
+        ]{c: a+b}''')
+        assert res == [{'c': 3}, {'c': 30}]
+
+
 
 
 class TestFlow(PreqlTests):

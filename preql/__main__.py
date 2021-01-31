@@ -15,6 +15,7 @@ parser.add_argument('-f', '--file', type=str, help='Path to a Preql script to ru
 parser.add_argument('-m', '--module', type=str, help='Name of a Preql module to run')
 parser.add_argument('--time', action='store_true', help='Displays how long the script ran')
 parser.add_argument('database', type=str, nargs='?', default=None, help="database url (postgres://user:password@host:port/db_name")
+parser.add_argument('--python-traceback', action='store_true', help="Show the Python traceback when an exception causes the interpreter to quit")
 
 
 def find_dot_preql():
@@ -62,6 +63,8 @@ def main():
     except Signal as e:
         display.print_exception(e)
         res = -1
+        if args.python_traceback:
+            raise
     except KeyboardInterrupt:
         print("Interrupted (Ctrl+C)")
 
