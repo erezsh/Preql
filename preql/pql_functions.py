@@ -512,8 +512,6 @@ class NoAutoJoinFound(Exception):
     pass
 
 def _auto_join(state, join, ta, tb):
-    # if len(ta.type.elems) == len(tb.type.elems) == 1:
-
     refs1 = _find_table_reference(ta, tb)
     refs2 = _find_table_reference(tb, ta)
     auto_join_count = len(refs1) + len(refs2)

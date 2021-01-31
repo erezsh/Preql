@@ -17,6 +17,8 @@ class Id:
     def __init__(self, *parts):
         assert all(isinstance(p, str) for p in parts), parts
         self.parts = parts
+    def __repr__(self):
+        return 'Id(%s)' % '.'.join(self.parts)
     def __str__(self):
         raise Exception("Operation not allowed!")
     def __hash__(self):

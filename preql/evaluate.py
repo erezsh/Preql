@@ -119,11 +119,12 @@ def _execute(state: State, table_def: ast.TableDef):
 
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
+    db_name = t.options['name']
 
-    # exists = table_exists(state, table_def.name)
-    exists = state.db.table_exists(table_def.name)
+    exists = state.db.table_exists(db_name.repr_name)
     if exists:
-        cur_type = state.db.import_table_type(state, table_def.name, None if ellipsis else set(t.elems) | {'id'})
+        assert not t.options['temporary']
+        cur_type = state.db.import_table_type(state, db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -146,19 +147,19 @@ def _execute(state: State, table_def: ast.TableDef):
             # if not (e1_type <= e2_type or (e1_type <= T.t_id and e2_type <= T.int)):
             #     raise Signal.make(T.TypeError, state, table_def, f"Cannot cast column '{e_name}' from type '{e2_type}' to '{e1_type}'")
 
-        inst = objects.new_table(t, Id(table_def.name), select_fields=True)
+        inst = objects.new_table(t, db_name, select_fields=True)
     else:
         # Auto-add id by default
         elems = dict(t.elems)
         if 'id' not in elems:
             elems = {'id': T.t_id, **elems}
         t = t(elems, pk=[['id']])
-        inst = objects.new_table(t, Id(table_def.name))
+        inst = objects.new_table(t, db_name)
 
     state.set_var(table_def.name, inst)
 
     if not exists:
-        sql_code = sql.compile_type_def(state, table_def.name, t)
+        sql_code = sql.compile_type_def(state, db_name.repr_name, t)
         db_query(state, sql_code)
 
 @dy
@@ -294,8 +295,6 @@ def import_module(state, r):
     for path in paths:
         module_path =  (path / r.module_path).with_suffix(".pql")
         if module_path.exists():
-            # with open(module_path, encoding='utf8') as f:
-            #     text = f.read()
             break
     else:
         raise Signal.make(T.ImportError, state, r, "Cannot find module")
