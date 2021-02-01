@@ -521,7 +521,7 @@ func bfs(edges: table, initial: table) {
 }
 
 
-func _walk_tree(edges: table, initial: table, max_rank: int) {
+func walk_tree(edges: table, initial: table, max_rank: int) {
     """Walks a tree and keeps track of the rank.
 
     Doesn't test for uniqueness. Nodes may be visited more than once.
