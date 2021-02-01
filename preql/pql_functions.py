@@ -551,6 +551,7 @@ def pql_type(state: State, obj: T.any):
     """
     return obj.type
 
+
 def pql_repr(state: State, obj: T.any):
     """Returns the representation text of the given object
     """

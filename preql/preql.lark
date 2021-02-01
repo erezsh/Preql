@@ -158,7 +158,7 @@ ellipsis: "..." [expr] exclude*
 ?exclude: "!" (name | marker)
 
 getattr: [molecule] "." (name | marker)
-name: NAME
+name: NAME | QUOTED_NAME
 var: name
 
 PK: "pk"
@@ -176,6 +176,7 @@ FLOAT: INT _EXP
 SIGNED_FLOAT: ["+"|"-"] FLOAT
 SIGNED_INT: ["+"|"-"] INT
 
+QUOTED_NAME: "`" /[^`\r\n]|``/+ "`"
 
 STRING : /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
 LONG_STRING: /(""".*?(?<!\\)(\\\\)*?"""|'''.*?(?<!\\)(\\\\)*?''')/is
