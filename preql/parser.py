@@ -111,6 +111,10 @@ class TreeToAst(Transformer):
 
     name = token_value
 
+    def QUOTED_NAME(self, name):
+        assert name[0] == name[-1] == '`'
+        return name[1:-1]
+
     def string(self, s):
         return ast.Const(T.string, _fix_escaping( s.value[1:-1]) )
     def long_string(self, s):
