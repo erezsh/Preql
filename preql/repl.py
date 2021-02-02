@@ -30,6 +30,7 @@ from .parser import parse_stmts
 from .loggers import repl_log
 from . import settings
 from .autocomplete import autocomplete
+from .context import context
 
 
 
@@ -198,7 +199,8 @@ def start_repl(p, prompt=' >> '):
                 start_time = time()
                 try:
                     if code == '.':
-                        console.print(table_more(p.interp.state), overflow='ellipsis')
+                        with context(state=p.interp.state):
+                            console.print(table_more(), overflow='ellipsis')
                         continue
 
                     # Evaluate (Really just compile)
@@ -211,7 +213,9 @@ def start_repl(p, prompt=' >> '):
                         if save_last:
                             p.interp.set_var(save_last, res)
 
-                        res_repr = res.repr(p.interp.state)
+                        with context(state=p.interp.state):
+                            res_repr = res.repr()
+
                         # repl_log.info(res)
                         if isinstance(res_repr, str) and res.type == T.string:  # Not text
                             if len(res_repr) > 200:

@@ -38,7 +38,7 @@ def cast_to_instance(state, x):
     if not isinstance(inst, AbsInstance):
         # TODO compile error? cast error?
         # TODO need to be able to catch this above, and provide better errors
-        raise Signal.make(T.TypeError, None, f"Could not compile {pql_repr(state, inst.type, inst)}")
+        raise Signal.make(T.TypeError, None, f"Could not compile {pql_repr(inst.type, inst)}")
 
     return inst
 

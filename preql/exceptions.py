@@ -31,7 +31,7 @@ class Signal(Object, Exception):
     #     ]
     #     return ''.join(texts)
 
-    def repr(self, state):
+    def repr(self):
         return f'{self.type}("{self.message}")'
 
 

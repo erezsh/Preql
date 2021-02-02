@@ -370,8 +370,8 @@ def _join2(state, join, a, b):
         return [a, b]
 
     if not ((a.type <= T.collection) and (b.type <= T.collection)):
-        a = a.type.repr(state)
-        b = b.type.repr(state)
+        a = a.type.repr()
+        b = b.type.repr()
         raise Signal.make(T.TypeError, None, f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}")
 
     return _auto_join(state, join, a, b)
@@ -556,7 +556,7 @@ def pql_repr(state: State, obj: T.any):
     """Returns the representation text of the given object
     """
     try:
-        return new_value_instance(obj.repr(state))
+        return new_value_instance(obj.repr())
     except ValueError:
         value = repr(cast_to_python(state, obj))
         return new_value_instance(value)
@@ -661,7 +661,7 @@ def pql_help(state: State, inst: T.any = objects.null):
 
     lines = []
     if isinstance(inst, objects.Function):
-        lines = ['', inst.help_str(state),'']
+        lines = ['', inst.help_str(),'']
         doc = inst.docstring
         if doc:
             lines += [doc]

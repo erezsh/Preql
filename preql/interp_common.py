@@ -224,7 +224,7 @@ def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s,
             type_str = ' or '.join("'%s'" % elem for elem in type_.elems)
         else:
             type_str = "'%s'" % type_
-        raise Signal.make(T.TypeError, state, ast, msg % (op, type_str, t))
+        raise Signal.make(T.TypeError, ast, msg % (op, type_str, t))
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(table, [ast.NamedField(None, ast.Ellipsis(None, exclude=list(fields) ), user_defined=False)])

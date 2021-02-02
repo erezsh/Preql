@@ -168,7 +168,7 @@ def _set_value(state: State, name: ast.Name, value):
 
 @dy
 def _set_value(state: State, attr: ast.Attr, value):
-    raise Signal.make(T.NotImplementedError, attr, f"Cannot set attribute for {attr.expr.repr(state)}")
+    raise Signal.make(T.NotImplementedError, attr, f"Cannot set attribute for {attr.expr.repr()}")
 
 @dy
 def _execute(state: State, var_def: ast.SetValue):
@@ -235,7 +235,7 @@ def _execute(state: State, p: ast.Print):
         if inst.type <= T.string:
             repr_ = cast_to_python(state, inst)
         else:
-            repr_ = inst.repr(state)
+            repr_ = inst.repr()
 
         display.print(repr_, end=" ")
     display.print("")
@@ -246,9 +246,9 @@ def _execute(state: State, p: ast.Assert):
     if not res:
         # TODO pretty print values
         if isinstance(p.cond, ast.Compare):
-            s = (' %s '%p.cond.op).join(str(evaluate(state, a).repr(state)) for a in p.cond.args)
+            s = (' %s '%p.cond.op).join(str(evaluate(state, a).repr()) for a in p.cond.args)
         else:
-            s = p.cond.repr(state)
+            s = p.cond.repr()
         raise Signal.make(T.AssertError, p.cond, f"Assertion failed: {s}")
 
 @dy
@@ -784,7 +784,7 @@ def apply_database_rw(state: State, new: ast.New):
         return res
 
     if not isinstance(obj, objects.TableInstance):
-        raise Signal.make(T.TypeError, new, f"'new' expects a table or exception, instead got {obj.repr(state)}")
+        raise Signal.make(T.TypeError, new, f"'new' expects a table or exception, instead got {obj.repr()}")
 
     table = obj
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
@@ -910,14 +910,14 @@ def localize(state, x):
 
 ### Added functions
 
-def function_help_str(self, state):
+def function_help_str(self):
     params = []
     for p in self.params:
         s = p.name
         if p.type:
             s += f": {p.type}"
         if p.default:
-            s += f"={p.default.repr(state)}"
+            s += f"={p.default.repr()}"
         params.append(s)
 
     if self.param_collector is not None:
@@ -932,8 +932,9 @@ objects.Function.help_str = function_help_str
 objects.Function._localize_keys = function_localize_keys
 
 
-def instance_repr(self, state):
-    return pql_repr(state, self.type, localize(state, self))
+from .context import context
+def instance_repr(self):
+    return pql_repr(self.type, localize(context.state, self))
 
 objects.Instance.repr = instance_repr
 
@@ -987,7 +988,7 @@ def new_table_from_expr(state, name, expr, const, temporary):
 
 @dy
 def cast_to_python(state, obj):
-    raise Signal.make(T.TypeError, None, f"Unexpected value: {pql_repr(state, obj.type, obj)}")
+    raise Signal.make(T.TypeError, None, f"Unexpected value: {pql_repr(obj.type, obj)}")
 
 @dy
 def cast_to_python(state, obj: ast.Ast):

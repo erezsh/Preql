@@ -11,12 +11,14 @@ from . import pql_ast as ast
 from .types_impl import dp_type, pql_repr
 from .interp_common import call_pql_func, cast_to_python
 
+from .context import context
+
 TABLE_PREVIEW_SIZE = 16
 LIST_PREVIEW_SIZE = 128
 MAX_AUTO_COUNT = 10000
 
 @dp_type
-def pql_repr(state, t: T.function, value):
+def pql_repr(t: T.function, value):
     params = []
     for p in value.params:
         s = p.name
@@ -27,29 +29,29 @@ def pql_repr(state, t: T.function, value):
     return f'{{func {value.name}({", ".join(params)})}}'
 
 @dp_type
-def pql_repr(state, t: T.decimal, value):
-    raise Signal.make(T.NotImplementedError, state, None, "Decimal not implemented")
+def pql_repr(t: T.decimal, value):
+    raise Signal.make(T.NotImplementedError, None, "Decimal not implemented")
 
 @dp_type
-def pql_repr(state, t: T.string, value):
+def pql_repr(t: T.string, value):
     assert isinstance(value, str), value
     value = value.replace('"', r'\"')
     res = f'"{value}"'
-    if state.fmt == 'html':
+    if context.state.fmt == 'html':
         res = html.escape(res)
     return res
 
 @dp_type
-def pql_repr(state, t: T.text, value):
+def pql_repr(t: T.text, value):
     assert isinstance(value, str), value
     return str(value)
 
 @dp_type
-def pql_repr(state, t: T.bool, value):
+def pql_repr(t: T.bool, value):
     return 'true' if value else 'false'
 
 @dp_type
-def pql_repr(state, t: T.nulltype, value):
+def pql_repr(t: T.nulltype, value):
     return 'null'
 
 
@@ -150,7 +152,8 @@ def _view_table(state, table, size, offset):
     return table_name, rows
 
 
-def table_repr(self, state, offset=0):
+def table_repr(self, offset=0):
+    state = context.state
 
     count = _call_pql_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)])
     if count == MAX_AUTO_COUNT:
@@ -183,21 +186,21 @@ def table_repr(self, state, offset=0):
 
     # raise NotImplementedError(f"Unknown format: {state.fmt}")
 
-def table_more(state):
+def table_more():
     if not _g_last_table:
-        raise Signal.make(T.ValueError, state, None, "No table yet")
+        raise Signal.make(T.ValueError, None, "No table yet")
 
-    return table_repr(_g_last_table, state, _g_last_offset)
+    return table_repr(_g_last_table, _g_last_offset)
 
 
-def module_repr(module, state):
+def module_repr(module):
     res = f'<Module {module.name} | {len(module.namespace)} members>'
     if state.fmt == 'html':
         res = html.escape(res)
     return res
 
-def function_repr(func, state):
-    res = '<%s>' % func.help_str(state)
+def function_repr(func):
+    res = '<%s>' % func.help_str()
     if state.fmt == 'html':
         res = html.escape(res)
     return res

@@ -37,7 +37,7 @@ class PreqlKernel(Kernel):
                 if res is null:
                     res = ''
                 elif res is not None:
-                    res = res.repr(pql.interp.state)
+                    res = res.repr()
 
                 json = {
                     'output': str(res),

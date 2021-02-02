@@ -1,6 +1,6 @@
 
 class Object:
-    def repr(self, state):
+    def repr(self):
         return repr(self)
 
     def all_attrs(self):

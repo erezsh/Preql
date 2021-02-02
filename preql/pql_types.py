@@ -169,7 +169,7 @@ class Type(Object):
             return self.elems
         return {}
 
-    def repr(self, state):
+    def repr(self):
         return repr(self)
 
     def __or__(self, other):

@@ -70,8 +70,8 @@ class Const(Expr):
     type: types.Type
     value: Any
 
-    def repr(self, state):
-        return pql_repr(state, self.type, self.value)
+    def repr(self):
+        return pql_repr(self.type, self.value)
 
 @dataclass
 class Ellipsis(Expr):

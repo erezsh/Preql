@@ -69,7 +69,7 @@ class Function(Object):
     def type(self):
         return T.function[tuple(p.type or T.any for p in self.params)](param_collector=self.param_collector is not None)
 
-    def help_str(self, state):
+    def help_str(self):
         raise NotImplementedError()
 
     def __repr__(self):
@@ -89,7 +89,7 @@ class Function(Object):
             yield p, v
 
 
-    def _localize_keys(self, state, struct):
+    def _localize_keys(self, _state, struct):
         raise NotImplementedError()
 
     def match_params(self, state, args):
@@ -237,7 +237,7 @@ class Instance(AbsInstance):
     def make(cls, code, type_, instances, *extra):
         return cls(code, type_, merge_subqueries(instances), *extra)
 
-    def repr(self, state):
+    def repr(self):
         # Overwritten in evaluate.py
         raise NotImplementedError()
         #     return f'<instance of {self.type.repr(state)}>'
@@ -275,8 +275,8 @@ def new_value_instance(value, type_=None, force_type=False):
 class ValueInstance(Instance):
     local_value: object
 
-    def repr(self, state):
-        return pql_repr(state, self.type, self.local_value)
+    def repr(self):
+        return pql_repr(self.type, self.local_value)
 
     @property
     def value(self):
@@ -400,8 +400,8 @@ class StructInstance(AbsStructInstance):
     def all_attrs(self):
         return self.attrs
 
-    def repr(self, state):
-        attrs = [f'{k}: {v.repr(state)}' for k, v in self.attrs.items()]
+    def repr(self):
+        attrs = [f'{k}: {v.repr()}' for k, v in self.attrs.items()]
         return '{%s}' % ', '.join(attrs)
 
 
@@ -433,8 +433,8 @@ class MapInstance(AbsStructInstance):
     def primary_key(self):
         return self
 
-    def repr(self, state):
-        inner = [f'{name}: {v.repr(state)}' for name, v in self.attrs.items()]
+    def repr(self):
+        inner = [f'{name}: {v.repr()}' for name, v in self.attrs.items()]
         return 'Map{%s}' % ', '.join(inner)
 
 
@@ -446,8 +446,8 @@ class RowInstance(StructInstance):
             # XXX this is a hack!
             return list(self.attrs.values())[0]
 
-    def repr(self, state):
-        inner = [f'{name}: {v.repr(state)}' for name, v in self.attrs.items()]
+    def repr(self):
+        inner = [f'{name}: {v.repr()}' for name, v in self.attrs.items()]
         return 'Row{%s}' % ', '.join(inner)
 
 
@@ -496,7 +496,7 @@ class SelectedColumnInstance(AbsInstance):
     def _resolve_attr(self):
         return self.parent.get_column(self.name)
 
-    def repr(self, state):
+    def repr(self):
         try:
             p = self.parent.type.options['name'].repr_name
         except KeyError:
