@@ -324,6 +324,18 @@ def compile_to_inst(state: State, o: ast.Not):
 
 ## Contains
 @dp_inst
+def _contains(state, op, a: T.vectorized, b: T.vectorized):
+    return vectorized(_contains(state, op, unvectorized(a), unvectorized(b)))
+
+@dp_inst
+def _contains(state, op, a: T.vectorized, b: T.any):
+    return vectorized(_contains(state, op, unvectorized(a), b))
+
+@dp_inst
+def _contains(state, op, a: T.any, b: T.vectorized):
+    return vectorized(_contains(state, op, a, unvectorized(b)))
+
+@dp_inst
 def _contains(state, op, a: T.string, b: T.string):
     f = {
         'in': 'str_contains',
@@ -347,9 +359,6 @@ def _contains(state, op, a: T.primitive, b: T.collection):
 def _contains(state, op, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, op, f"Contains not implemented for {a.type} and {b.type}")
 
-@dp_inst
-def _contains(state, op, a: T.vectorized, b: T.any):
-    return vectorized(_contains(state, op, unvectorized(a), b))
 
 ## Compare
 @dp_inst
