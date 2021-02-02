@@ -908,37 +908,6 @@ def localize(state, x):
 
 
 
-### Added functions
-
-def function_help_str(self):
-    params = []
-    for p in self.params:
-        s = p.name
-        if p.type:
-            s += f": {p.type}"
-        if p.default:
-            s += f"={p.default.repr()}"
-        params.append(s)
-
-    if self.param_collector is not None:
-        params.append(f"...{self.param_collector.name}")
-    param_str = ', '.join(params)
-    return f"func {self.name}({param_str}) = ..."
-
-def function_localize_keys(self, state, struct):
-    return cast_to_python(state, struct)
-
-objects.Function.help_str = function_help_str
-objects.Function._localize_keys = function_localize_keys
-
-
-from .context import context
-def instance_repr(self):
-    return pql_repr(self.type, localize(context.state, self))
-
-objects.Instance.repr = instance_repr
-
-
 
 
 def new_table_from_rows(state, name, columns, rows):
@@ -1011,4 +980,20 @@ def cast_to_python(state, obj: objects.AbsInstance):
         res = bool(res)
     assert isinstance(res, (int, str, float, dict, list, type(None))), (res, type(res))
     return res
+
+
+
+### Added functions
+
+def function_localize_keys(self, state, struct):
+    return cast_to_python(state, struct)
+
+objects.Function._localize_keys = function_localize_keys
+
+
+from .context import context
+def instance_repr(self):
+    return pql_repr(self.type, localize(context.state, self))
+
+objects.Instance.repr = instance_repr
 

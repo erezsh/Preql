@@ -206,6 +206,7 @@ T.nulltype = [T.object]
 T.primitive = [T.object]
 
 T.text = [T.primitive]
+T._rich = [T.text]
 T.string = [T.text]
 T.number = [T.primitive]
 T.int = [T.number]

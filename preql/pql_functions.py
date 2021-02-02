@@ -5,6 +5,7 @@ import csv
 import inspect
 import itertools
 from typing import Optional
+import runtype
 
 from .utils import safezip, listgen, re_split
 from .exceptions import Signal, ExitInterp
@@ -18,6 +19,7 @@ from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_
 from .pql_types import T, Type, union_types, Id, common_type
 from .types_impl import join_names
 from .casts import cast
+from .docstring.autodoc import autodoc
 
 def new_str(x):
     return new_value_instance(str(x), T.string)
@@ -660,16 +662,16 @@ def pql_help(state: State, inst: T.any = objects.null):
 
 
     lines = []
-    if isinstance(inst, objects.Function):
-        lines = ['', inst.help_str(),'']
-        doc = inst.docstring
+    try:
+        doc = autodoc(inst).print_text()    # TODO maybe html
         if doc:
             lines += [doc]
-    else:
-        raise Signal.make(T.TypeError, None, "help() only accepts functions at the moment")
+    except runtype.DispatchError:
+        lines += [f"<doc not available yet for object of type '{inst.type}>'"]
+
 
     text = '\n'.join(lines) + '\n'
-    return new_value_instance(text).replace(type=T.text)
+    return new_value_instance(text).replace(type=T._rich)
 
 def _get_doc(v):
     s = ''

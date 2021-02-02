@@ -70,7 +70,19 @@ class Function(Object):
         return T.function[tuple(p.type or T.any for p in self.params)](param_collector=self.param_collector is not None)
 
     def help_str(self):
-        raise NotImplementedError()
+        params = []
+        for p in self.params:
+            s = p.name
+            if p.type:
+                s += f": {p.type}"
+            if p.default:
+                s += f"={p.default.repr()}"
+            params.append(s)
+
+        if self.param_collector is not None:
+            params.append(f"...{self.param_collector.name}")
+        param_str = ', '.join(params)
+        return f"func {self.name}({param_str}) = ..."
 
     def __repr__(self):
         return f'<preql:Function | {self.name}: {self.type}>'

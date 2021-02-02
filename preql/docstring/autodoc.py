@@ -2,10 +2,10 @@ import rich
 
 from runtype import dataclass
 
-from preql.utils import safezip
+from preql.utils import safezip, dy
 
 from preql.docstring.docstring import parse, Section, Defin
-from preql import Preql, T
+from preql.pql_objects import Module, Function, T
 
 
 class AutoDocError(Exception):
@@ -81,7 +81,7 @@ def doc_func(f):
         for d, p in safezip(params_doc.items, params):
             assert d.name == p.name, (d.name, p.name)
             d.type = str(p.type) if p.type else ''
-            d.default = p.default.repr(None) if p.default else ''
+            d.default = p.default.repr() if p.default else ''
 
     return FuncDoc(f, doc_tree)
 
@@ -101,11 +101,20 @@ def test_module():
     rich.print(doc_module(p('__builtins__')).print_text())
 
 def generate_rst(filename):
+    from preql import Preql
     p = Preql()
     with open(filename, 'w', encoding='utf8') as f:
         print('Preql Modules', file=f)
         print('=============', file=f)
         print(doc_module(p('__builtins__')).print_rst(), file=f)
+
+@dy
+def autodoc(m: Module):
+    return doc_module(m)
+
+@dy
+def autodoc(f: Function):
+    return doc_func(f)
 
 # test_func()
 # test_module()

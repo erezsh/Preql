@@ -47,6 +47,10 @@ def pql_repr(t: T.text, value):
     return str(value)
 
 @dp_type
+def pql_repr(t: T._rich, value):
+    return rich.text.Text.from_markup(str(value))
+
+@dp_type
 def pql_repr(t: T.bool, value):
     return 'true' if value else 'false'
 
