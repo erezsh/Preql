@@ -32,7 +32,7 @@ def _pql_PY_callback(state: State, var: str):
     inst = evaluate(state, obj)
 
     if not isinstance(inst, objects.ValueInstance):
-        raise Signal.make(T.TypeError, state, None, f"Cannot convert {inst} to a Python value")
+        raise Signal.make(T.TypeError, None, f"Cannot convert {inst} to a Python value")
 
     return str(inst.local_value)
 
@@ -60,12 +60,12 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
         try:
             res = exec(py_setup)
         except Exception as e:
-            raise Signal.make(T.EvalError, state, code_expr, f"Python code provided returned an error: {e}")
+            raise Signal.make(T.EvalError, code_expr, f"Python code provided returned an error: {e}")
 
     try:
         res = eval(py_code)
     except Exception as e:
-        raise Signal.make(T.EvalError, state, code_expr, f"Python code provided returned an error: {e}")
+        raise Signal.make(T.EvalError, code_expr, f"Python code provided returned an error: {e}")
 
     return objects.from_python(res)
     # return new_value_instance(res)
@@ -75,7 +75,7 @@ def pql_inspect_sql(state: State, obj: T.object):
 
     """
     if not isinstance(obj, objects.Instance):
-        raise Signal.make(T.TypeError, state, None, f"inspect_sql() expects a concrete object. Instead got: {obj.type}")
+        raise Signal.make(T.TypeError, None, f"inspect_sql() expects a concrete object. Instead got: {obj.type}")
     s = state.db.compile_sql(obj.code, obj.subqueries)
     return objects.ValueInstance.make(sql.make_value(s), T.text, [], s)
 
@@ -245,7 +245,7 @@ def _count(state, obj, table_func, name='count'):
         code = sql.JsonLength(obj.code)
     else:
         if not (obj.type <= T.aggregate):
-            raise Signal.make(T.TypeError, state, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
+            raise Signal.make(T.TypeError, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
 
         obj = obj.primary_key()
         code = sql.FieldFunc('count', obj.code)
@@ -316,19 +316,19 @@ def pql_get_db_type(state: State):
 def sql_bin_op(state, op, t1, t2, name, additive=False):
 
     if not isinstance(t1, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, state, t1, f"First argument isn't a table, it's a {t1.type}")
+        raise Signal.make(T.TypeError, t1, f"First argument isn't a table, it's a {t1.type}")
     if not isinstance(t2, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, state, t2, f"Second argument isn't a table, it's a {t2.type}")
+        raise Signal.make(T.TypeError, t2, f"Second argument isn't a table, it's a {t2.type}")
 
     # TODO Smarter matching?
     l1 = len(t1.type.elems)
     l2 = len(t2.type.elems)
     if l1 != l2:
-        raise Signal.make(T.TypeError, state, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
+        raise Signal.make(T.TypeError, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
 
     for e1, e2 in zip(t1.type.elems.values(), t2.type.elems.values()):
         if not (e2 <= e1):
-            raise Signal.make(T.TypeError, state, None, f"Cannot {name}. Column types don't match: '{e1}' and '{e2}'")
+            raise Signal.make(T.TypeError, None, f"Cannot {name}. Column types don't match: '{e1}' and '{e2}'")
 
     code = sql.TableArith(op, [t1.code, t2.code])
 
@@ -341,7 +341,7 @@ def pql_table_intersect(state: State, t1: T.collection, t2: T.collection):
 def pql_table_substract(state: State, t1: T.collection, t2: T.collection):
     "Substract two tables (except). Used for `t1 - t2`"
     if state.db.target is sql.mysql:
-        raise Signal.make(T.NotImplementedError, state, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
+        raise Signal.make(T.NotImplementedError, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
 def pql_table_union(state: State, t1: T.collection, t2: T.collection):
@@ -362,7 +362,7 @@ def _get_table(t):
         return t.parent
 
     if not isinstance(t, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, state, None, f"join() arguments must be tables")
+        raise Signal.make(T.TypeError, None, f"join() arguments must be tables")
     return t
 
 def _join2(state, join, a, b):
@@ -372,7 +372,7 @@ def _join2(state, join, a, b):
     if not ((a.type <= T.collection) and (b.type <= T.collection)):
         a = a.type.repr(state)
         b = b.type.repr(state)
-        raise Signal.make(T.TypeError, state, None, f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}")
+        raise Signal.make(T.TypeError, None, f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}")
 
     return _auto_join(state, join, a, b)
 
@@ -384,11 +384,11 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
     # Validation and edge cases
     for x in exprs:
         if not isinstance(x, objects.AbsInstance):
-            raise Signal.make(T.TypeError, state, None, f"Unexpected object type: {x}")
+            raise Signal.make(T.TypeError, None, f"Unexpected object type: {x}")
 
     for e in exprs:
         if e is objects.EmptyList:
-            raise Signal.make(T.TypeError, state, None, "Cannot join on an untyped empty list")
+            raise Signal.make(T.TypeError, None, "Cannot join on an untyped empty list")
 
         if isinstance(e, objects.UnknownInstance):
             table_type = T.table({n: T.unknown for n in names})
@@ -417,10 +417,10 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
     if joinall:
         for e in exprs:
             if not isinstance(e, objects.CollectionInstance):
-                raise Signal.make(T.TypeError, state, None, f"joinall() expected tables. Got {e}")
+                raise Signal.make(T.TypeError, None, f"joinall() expected tables. Got {e}")
     else:
         if len(exprs) < 2:
-            raise Signal.make(T.TypeError, state, None, "join expected at least 2 arguments")
+            raise Signal.make(T.TypeError, None, "join expected at least 2 arguments")
 
         joined_exprs = set()
         for (na, ta), (nb, tb) in itertools.combinations(safezip(names, exprs), 2):
@@ -434,7 +434,7 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
         if {id(e) for e in exprs} != set(joined_exprs):
             # TODO better error!!! table name?? specific failed auto-join?
             s = ', '.join(repr(t.type) for t in exprs)
-            raise Signal.make(T.JoinError, state, None, f"Cannot auto-join: No plausible relations found between {s}")
+            raise Signal.make(T.JoinError, None, f"Cannot auto-join: No plausible relations found between {s}")
 
 
     code = sql.Join(table_type, join, [t.code for t in tables], conds)
@@ -518,7 +518,7 @@ def _auto_join(state, join, ta, tb):
     if auto_join_count < 1:
         raise NoAutoJoinFound(ta, tb)
     elif auto_join_count > 1:   # Ambiguity in auto join resolution
-        raise Signal.make(T.JoinError, state, None, "Cannot auto-join: Several plausible relations found")
+        raise Signal.make(T.JoinError, None, "Cannot auto-join: Several plausible relations found")
 
     if len(refs1) == 1:
         dst, src = refs1[0]
@@ -588,7 +588,7 @@ def pql_cast(state: State, obj: T.any, target_type: T.type):
     """
     type_ = target_type
     if not isinstance(type_, Type):
-        raise Signal.make(T.TypeError, state, type_, f"Cast expected a type, got {type_} instead.")
+        raise Signal.make(T.TypeError, type_, f"Cast expected a type, got {type_} instead.")
 
     if obj.type is type_:
         return obj
@@ -609,9 +609,9 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = o
     name_str = cast_to_python(state, name)
     columns_whitelist = cast_to_python(state, columns) or []
     if not isinstance(columns_whitelist, list):
-        raise Signal.make(T.TypeError, state, columns, "Expected list")
+        raise Signal.make(T.TypeError, columns, "Expected list")
     if not isinstance(name_str, str):
-        raise Signal.make(T.TypeError, state, name, "Expected string")
+        raise Signal.make(T.TypeError, name, "Expected string")
 
     columns_whitelist = set(columns_whitelist)
 
@@ -666,7 +666,7 @@ def pql_help(state: State, inst: T.any = objects.null):
         if doc:
             lines += [doc]
     else:
-        raise Signal.make(T.TypeError, state, None, "help() only accepts functions at the moment")
+        raise Signal.make(T.TypeError, None, "help() only accepts functions at the moment")
 
     text = '\n'.join(lines) + '\n'
     return new_value_instance(text).replace(type=T.text)
@@ -840,12 +840,12 @@ def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080
         from starlette.responses import JSONResponse
         from starlette.routing import Route
     except ImportError:
-        raise Signal.make(T.ImportError, state, None, "starlette not installed! Run 'pip install starlette'")
+        raise Signal.make(T.ImportError, None, "starlette not installed! Run 'pip install starlette'")
 
     try:
         import uvicorn
     except ImportError:
-        raise Signal.make(T.ImportError, state, None, "uvicorn not installed! Run 'pip install uvicorn'")
+        raise Signal.make(T.ImportError, None, "uvicorn not installed! Run 'pip install uvicorn'")
 
     port_ = cast_to_python(state, port)
 
@@ -866,7 +866,7 @@ def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080
         elif func.type <= T.collection:
             routes.append(Route(path, endpoint=_rest_table_endpoint(state, func)))
         else:
-            raise Signal.make(T.TypeError, state, func, f"Expected a function or a table, got {func.type}")
+            raise Signal.make(T.TypeError, func, f"Expected a function or a table, got {func.type}")
 
     app = Starlette(debug=True, routes=routes)
 

@@ -30,7 +30,7 @@ def cast_to_instance(state, x):
         inst = compile_to_inst(state, x)
         # inst = evaluate(state, x)
     except exc.ReturnSignal:
-        raise Signal.make(T.CompileError, state, None, f"Bad compilation of {x}")
+        raise Signal.make(T.CompileError, None, f"Bad compilation of {x}")
 
     if isinstance(inst, ast.ParameterizedSqlCode):
         raise exc.InsufficientAccessLevel(inst)
@@ -38,7 +38,7 @@ def cast_to_instance(state, x):
     if not isinstance(inst, AbsInstance):
         # TODO compile error? cast error?
         # TODO need to be able to catch this above, and provide better errors
-        raise Signal.make(T.TypeError, state, None, f"Could not compile {pql_repr(state, inst.type, inst)}")
+        raise Signal.make(T.TypeError, None, f"Could not compile {pql_repr(state, inst.type, inst)}")
 
     return inst
 
@@ -90,7 +90,7 @@ def _expand_ellipsis(state, obj, fields):
 
         if isinstance(f.value, ast.Ellipsis):
             if f.name:
-                raise Signal.make(T.SyntaxError, state, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
+                raise Signal.make(T.SyntaxError, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
                 t = obj.type
                 if t <= T.vectorized:
@@ -104,7 +104,7 @@ def _expand_ellipsis(state, obj, fields):
                                                       and k not in f.value.exclude})
 
                     if n in direct_names:
-                        raise Signal.make(T.NameError, state, n, f"Field to exclude '{n}' is explicitely included in projection")
+                        raise Signal.make(T.NameError, n, f"Field to exclude '{n}' is explicitely included in projection")
 
                 if f.value.from_struct:
                     # Inline struct
@@ -119,7 +119,7 @@ def _expand_ellipsis(state, obj, fields):
                     remaining_items = list(_exclude_items(items, set(f.value.exclude), direct_names))
                 except ValueError as e:
                     fte = set(e.args[0])
-                    raise Signal.make(T.NameError, state, obj, f"Fields to exclude '{fte}' not found")
+                    raise Signal.make(T.NameError, obj, f"Fields to exclude '{fte}' not found")
 
                 exclude = direct_names | set(f.value.exclude)
                 for name, value in remaining_items:
@@ -144,7 +144,7 @@ def compile_to_inst(state: State, cb: ast.CodeBlock):
         return compile_to_inst(state, cb.statements[0])
 
     # TODO some statements can be evaluated at compile time
-    raise Signal.make(T.CompileError, state, cb, "Cannot compile this code block")
+    raise Signal.make(T.CompileError, cb, "Cannot compile this code block")
 @dy
 def compile_to_inst(state: State, i: ast.If):
     cond = cast(state, cast_to_instance(state, i.cond), T.bool)
@@ -168,14 +168,14 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     t = T.union[T.collection, T.struct]
     if not (table.type <= T.union[t, T.vectorized[t]]):
-        raise Signal.make(T.TypeError, state, proj, f"Cannot project objects of type {table.type}")
+        raise Signal.make(T.TypeError, proj, f"Cannot project objects of type {table.type}")
 
     fields = _expand_ellipsis(state, table, proj.fields)
 
     # Test duplicates in field names. If an automatic name is used, collision should be impossible
     dup = find_duplicate([f for f in list(proj.fields) + list(proj.agg_fields) if f.name], key=lambda f: f.name)
     if dup:
-        raise Signal.make(T.TypeError, state, dup, f"Field '{dup.name}' was already used in this projection")
+        raise Signal.make(T.TypeError, dup, f"Field '{dup.name}' was already used in this projection")
 
     attrs = table.all_attrs()
 
@@ -184,7 +184,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     for name, f in fields:
         if not kernel_type(f.type) <= T.union[T.primitive, T.struct, T.json, T.nulltype, T.unknown]:
-            raise exc.Signal.make(T.TypeError, state, proj, f"Cannot project values of type: {f.type}")
+            raise exc.Signal.make(T.TypeError, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
         d = {n[1]:c for n, c in fields}     # Remove used_defined bool
@@ -236,7 +236,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     ]
 
     if not sql_fields:
-        raise Signal.make(T.TypeError, state, proj, "No column provided for projection (empty projection)")
+        raise Signal.make(T.TypeError, proj, "No column provided for projection (empty projection)")
 
     # Make Instance
     new_table = objects.TableInstance.make(sql.null, new_table_type, [table] + [inst for _, inst in all_fields])
@@ -269,7 +269,7 @@ def compile_to_inst(state: State, order: ast.Order):
     for f in fields:
         if not f.type <= T.primitive:
             # TODO Support 'ordering' trait?
-            raise Signal.make(T.TypeError, state, order, f"Arguments to 'order' must be primitive")
+            raise Signal.make(T.TypeError, order, f"Arguments to 'order' must be primitive")
 
 
     code = sql.table_order(table, [c.code for c in fields])
@@ -298,7 +298,7 @@ def compile_to_inst(state: State, o: ast.Or):
     args = cast_to_instance(state, o.args)
     a, b = args
     if base_type(a.type) != base_type(b.type):
-        raise Signal.make(T.TypeError, state, o, f"'or' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
+        raise Signal.make(T.TypeError, o, f"'or' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
     cond = cast(state, a, T.bool)
     code = sql.Case(cond.code, a.code, b.code)
     return objects.make_instance(code, a.type, args)
@@ -308,7 +308,7 @@ def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
     a, b = args
     if base_type(a.type) != base_type(b.type):
-        raise Signal.make(T.TypeError, state, o, f"'and' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
+        raise Signal.make(T.TypeError, o, f"'and' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
     cond = cast(state, a, T.bool)
     code = sql.Case(cond.code, b.code, a.code)
     return objects.make_instance(code, a.type, args)
@@ -336,7 +336,7 @@ def _contains(state, op, a: T.primitive, b: T.collection):
     b_list = cast(state, b, T.list)
     if not (a.type <= b_list.type.elem):
         a = cast(state, a, b_list.type.elem)
-        # raise Signal.make(T.TypeError, state, op, f"Error in contains: Mismatch between {a.type} and {b.type}")
+        # raise Signal.make(T.TypeError, op, f"Error in contains: Mismatch between {a.type} and {b.type}")
 
     if op == '!in':
         op = 'not in'
@@ -345,7 +345,7 @@ def _contains(state, op, a: T.primitive, b: T.collection):
 
 @dp_inst
 def _contains(state, op, a: T.any, b: T.any):
-    raise Signal.make(T.TypeError, state, op, f"Contains not implemented for {a.type} and {b.type}")
+    raise Signal.make(T.TypeError, op, f"Contains not implemented for {a.type} and {b.type}")
 
 @dp_inst
 def _contains(state, op, a: T.vectorized, b: T.any):
@@ -354,7 +354,7 @@ def _contains(state, op, a: T.vectorized, b: T.any):
 ## Compare
 @dp_inst
 def _compare(state, op, a: T.any, b: T.any):
-    raise Signal.make(T.TypeError, state, op, f"Compare not implemented for {a.type} and {b.type}")
+    raise Signal.make(T.TypeError, op, f"Compare not implemented for {a.type} and {b.type}")
 
 @dp_inst
 def _compare(state, op, a: T.vectorized, b: T.vectorized):
@@ -447,7 +447,7 @@ def _compare(state, op, a: T.type, b: T.type):
     if op == '<=':
         return call_pql_func(state, "issubclass", [a, b])
     if op != '=':
-        raise exc.Signal.make(T.NotImplementedError, state, op, f"Cannot compare types using: {op}")
+        raise exc.Signal.make(T.NotImplementedError, op, f"Cannot compare types using: {op}")
     return new_value_instance(a == b)
 
 @dp_inst
@@ -493,7 +493,7 @@ def compile_to_inst(state: State, arith: ast.BinOp):
 
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
-    raise Signal.make(T.TypeError, state, arith.op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
+    raise Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
 
 @dp_inst
 def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
@@ -522,7 +522,7 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
     try:
         op = ops[arith.op]
     except KeyError:
-        raise Signal.make(T.TypeError, state, arith.op, f"Operation '{arith.op}' not supported for tables ({a.type}, {b.type})")
+        raise Signal.make(T.TypeError, arith.op, f"Operation '{arith.op}' not supported for tables ({a.type}, {b.type})")
 
     return state.get_var(op).func(state, a, b)
 
@@ -543,7 +543,7 @@ def _compile_arith(state, arith, a: T.primitive, b: T.aggregate):
 @dp_inst
 def _compile_arith(state, arith, a: T.string, b: T.int):
     if arith.op != '*':
-        raise Signal.make(T.TypeError, state, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
+        raise Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
     return call_pql_func(state, "repeat", [a, b])
 
 
@@ -565,7 +565,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
             '**': operator.pow,
         }[arith.op]
     except KeyError:
-        raise Signal.make(T.TypeError, state, arith, f"Operator {arith.op} not supported between types '{a.type}' and '{b.type}'")
+        raise Signal.make(T.TypeError, arith, f"Operator {arith.op} not supported between types '{a.type}' and '{b.type}'")
 
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
         # Local folding for better performance.
@@ -574,7 +574,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
         try:
             value = f(a.local_value, b.local_value)
         except ZeroDivisionError as e:
-            raise Signal.make(T.ValueError, state, arith.args[-1], str(e))
+            raise Signal.make(T.ValueError, arith.args[-1], str(e))
         if arith.op == '**':
             value = float(value)
         return new_value_instance(value, res_type)
@@ -589,7 +589,7 @@ def _compile_arith(state, arith, a: T.string, b: T.string):
         return objects.Instance.make(code, T.bool, [a, b])
 
     if arith.op != '+':
-        raise exc.Signal.make(T.TypeError, state, arith.op, f"Operator '{arith.op}' not supported for strings.")
+        raise exc.Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not supported for strings.")
 
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
         # Local folding for better performance (optional, for better performance)
@@ -602,7 +602,7 @@ def _compile_arith(state, arith, a: T.string, b: T.string):
 
 @dy
 def compile_to_inst(state: State, x: ast.Ellipsis):
-    raise Signal.make(T.SyntaxError, state, x, "Ellipsis not allowed here")
+    raise Signal.make(T.SyntaxError, x, "Ellipsis not allowed here")
 
 
 @dy
@@ -642,7 +642,7 @@ def compile_to_inst(state: State, lst: ast.List_):
     types = {e.type for e in elems}
 
     if len(types) > 1:
-        raise Signal.make(T.TypeError, state, lst, f"List members must be of the same type. Got {types}")
+        raise Signal.make(T.TypeError, lst, f"List members must be of the same type. Got {types}")
 
     elem_type ,= types
 
@@ -653,7 +653,7 @@ def compile_to_inst(state: State, lst: ast.List_):
         table_code, subq = sql.create_table(list_type, name, rows)
     else:
         if not (elem_type <= T.union[T.primitive, T.nulltype]):
-            raise Signal.make(T.TypeError, state, lst, "Cannot create lists of type %s" % elem_type)
+            raise Signal.make(T.TypeError, lst, "Cannot create lists of type %s" % elem_type)
 
         assert elem_type <= lst.type.elems[ITEM_NAME], (elem_type, lst.type)
 
@@ -704,7 +704,7 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
         if isinstance(c, sql.Parameter):
             inst = evaluate(state, state.get_var(c.name))
             if inst.type != c.type:
-                raise Signal.make(T.CastError, state, None, f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})")
+                raise Signal.make(T.CastError, None, f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})")
             new_code += inst.code.compile_wrap(qb).code
             subqueries.update(inst.subqueries)
         else:
@@ -722,7 +722,7 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
 def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
     sql_code = cast_to_python(state, rps.string)
     if not isinstance(sql_code, str):
-        raise Signal.make(T.TypeError, state, rps, f"Expected string, got '{rps.string}'")
+        raise Signal.make(T.TypeError, rps, f"Expected string, got '{rps.string}'")
 
     type_ = evaluate(state, rps.type)
     if isinstance(type_, objects.Instance):
@@ -744,7 +744,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
             assert t[0] == '$'
             if t == '$self':
                 if self_table is None:
-                    raise exc.Signal.make(T.TypeError, state, rps, f"$self is only available for queries that return a table")
+                    raise exc.Signal.make(T.TypeError, rps, f"$self is only available for queries that return a table")
                 inst = self_table
             else:
                 obj = state.get_var(t[1:])
@@ -834,7 +834,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     else:
         for i, c in enumerate(conds):
             if not (c.type <= T.union[T.bool, T.vectorized[T.bool]]):
-                raise exc.Signal.make(T.TypeError, state, sel.conds[i], f"Selection expected boolean, got {c.type}")
+                raise exc.Signal.make(T.TypeError, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
         code = sql.table_selection(table, [c.code for c in conds])
 
@@ -861,38 +861,38 @@ def compile_to_inst(state: State, attr: ast.Attr):
         raise AutocompleteSuggestions(attrs)
 
     if not attr.expr:
-        raise Signal.make(T.NotImplementedError, state, attr, "Implicit attribute syntax not supported")
+        raise Signal.make(T.NotImplementedError, attr, "Implicit attribute syntax not supported")
 
     inst = evaluate(state, attr.expr)
     try:
         return evaluate(state, inst.get_attr(attr.name))
     except exc.pql_AttributeError as e:
-        raise Signal.make(T.AttributeError, state, attr, e.message)
+        raise Signal.make(T.AttributeError, attr, e.message)
 
 
 
 def _apply_type_generics(state, gen_type, type_names):
     type_objs = evaluate(state, type_names)
     if not type_objs:
-        raise Signal.make(T.TypeError, state, None, f"Generics expression expected a type, got nothing.")
+        raise Signal.make(T.TypeError, None, f"Generics expression expected a type, got nothing.")
     for o in type_objs:
         if not isinstance(o, Type):
             if isinstance(o.code, sql.Parameter):
                 # XXX hacky test, hacky solution
                 raise exc.InsufficientAccessLevel()
-            raise Signal.make(T.TypeError, state, None, f"Generics expression expected a type, got '{o}'.")
+            raise Signal.make(T.TypeError, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:
         if gen_type in (T.union,):
             return gen_type(tuple(type_objs))
 
-        raise Signal.make(T.TypeError, state, None, "Union types not yet supported!")
+        raise Signal.make(T.TypeError, None, "Union types not yet supported!")
 
     t ,= type_objs
     try:
         return gen_type[t]
     except TypeError:
-        raise Signal.make(T.TypeError, state, None, f"Type {t} isn't a container!")
+        raise Signal.make(T.TypeError, None, f"Type {t} isn't a container!")
 
 
 
@@ -925,15 +925,15 @@ def compile_to_inst(state: State, marker: ast.Marker):
 def compile_to_inst(state: State, range: ast.Range):
     start = cast_to_python(state, range.start) if range.start else 0
     if not isinstance(start, int):
-        raise Signal.make(T.TypeError, state, range, "Range must be between integers")
+        raise Signal.make(T.TypeError, range, "Range must be between integers")
     if range.stop:
         stop = cast_to_python(state, range.stop)
         if not isinstance(stop, int):
-            raise Signal.make(T.TypeError, state, range, "Range must be between integers")
+            raise Signal.make(T.TypeError, range, "Range must be between integers")
         stop_str = f" WHERE item+1<{stop}"
     else:
         if state.db.target is sql.mysql:
-            raise Signal.make(T.NotImplementedError, state, range, "MySQL doesn't support infinite recursion!")
+            raise Signal.make(T.NotImplementedError, range, "MySQL doesn't support infinite recursion!")
         stop_str = ''
 
     type_ = T.list[T.int]

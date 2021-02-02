@@ -12,6 +12,12 @@ class Context(threading.local):
 
         raise AttributeError(name)
 
+    def get(self, name, default=None):
+        try:
+            return getattr(self, name)
+        except AttributeError:
+            return default
+
     @contextmanager
     def __call__(self, **attrs):
         self._ctx.append(attrs)

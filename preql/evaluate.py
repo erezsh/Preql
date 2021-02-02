@@ -86,7 +86,7 @@ def db_query(state: State, sql_code, subqueries=None):
     try:
         return state.db.query(sql_code, subqueries, state=state)
     except exc.DatabaseQueryError as e:
-        raise Signal.make(T.DbQueryError, state, None, e.args[0]) from e
+        raise Signal.make(T.DbQueryError, None, e.args[0]) from e
 
 def drop_table(state, table_type):
     name ,= table_type.options['name'].parts
@@ -115,7 +115,7 @@ def _execute(state: State, table_def: ast.TableDef):
 
     if any(isinstance(c, ast.Ellipsis) for c in table_def.columns):
         # XXX why must it? just ensure it appears once
-        raise Signal.make(T.SyntaxError, state, table_def, "Ellipsis must appear at the end")
+        raise Signal.make(T.SyntaxError, table_def, "Ellipsis must appear at the end")
 
     # Create type and a corresponding table in the database
     t = resolve(state, table_def)
@@ -140,12 +140,12 @@ def _execute(state: State, table_def: ast.TableDef):
         for e_name, e1_type in t.elems.items():
 
             if e_name not in cur_type.elems:
-                raise Signal.make(T.TypeError, state, table_def, f"Column '{e_name}' defined, but doesn't exist in database.")
+                raise Signal.make(T.TypeError, table_def, f"Column '{e_name}' defined, but doesn't exist in database.")
 
             e2_type = cur_type.elems[e_name]
             # XXX use can_cast() instead of hardcoding it
             # if not (e1_type <= e2_type or (e1_type <= T.t_id and e2_type <= T.int)):
-            #     raise Signal.make(T.TypeError, state, table_def, f"Cannot cast column '{e_name}' from type '{e2_type}' to '{e1_type}'")
+            #     raise Signal.make(T.TypeError, table_def, f"Cannot cast column '{e_name}' from type '{e2_type}' to '{e1_type}'")
 
         inst = objects.new_table(t, db_name, select_fields=True)
     else:
@@ -168,7 +168,7 @@ def _set_value(state: State, name: ast.Name, value):
 
 @dy
 def _set_value(state: State, attr: ast.Attr, value):
-    raise Signal.make(T.NotImplementedError, state, attr, f"Cannot set attribute for {attr.expr.repr(state)}")
+    raise Signal.make(T.NotImplementedError, attr, f"Cannot set attribute for {attr.expr.repr(state)}")
 
 @dy
 def _execute(state: State, var_def: ast.SetValue):
@@ -188,7 +188,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
     params = dict(table_params(target.type))
     for p in params:
         if p not in source.type.elems:
-            raise Signal.make(T.TypeError, state, source, f"Missing column '{p}' in {source.type}")
+            raise Signal.make(T.TypeError, source, f"Missing column '{p}' in {source.type}")
 
     primary_keys, columns = table_flat_for_insert(target.type)
 
@@ -249,7 +249,7 @@ def _execute(state: State, p: ast.Assert):
             s = (' %s '%p.cond.op).join(str(evaluate(state, a).repr(state)) for a in p.cond.args)
         else:
             s = p.cond.repr(state)
-        raise Signal.make(T.AssertError, state, p.cond, f"Assertion failed: {s}")
+        raise Signal.make(T.AssertError, p.cond, f"Assertion failed: {s}")
 
 @dy
 def _execute(state: State, cb: ast.CodeBlock):
@@ -297,7 +297,7 @@ def import_module(state, r):
         if module_path.exists():
             break
     else:
-        raise Signal.make(T.ImportError, state, r, "Cannot find module")
+        raise Signal.make(T.ImportError, r, "Cannot find module")
 
     from .interpreter import Interpreter    # XXX state.new_interp() ?
     i = Interpreter(state.db, state.fmt, use_core=r.use_core)
@@ -415,7 +415,7 @@ def simplify(state: State, obj: ast.Or):
     a, b = evaluate(state, obj.args)
     _, (ta, tb) = objects.unvectorize_args([a,b])
     if ta.type != tb.type:
-        raise Signal.make(T.TypeError, state, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
+        raise Signal.make(T.TypeError, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
     try:
         if test_nonzero(state, a):
             return a
@@ -429,7 +429,7 @@ def simplify(state: State, obj: ast.And):
     a, b = evaluate(state, obj.args)
     _, (ta, tb) = objects.unvectorize_args([a,b])
     if ta.type != tb.type:
-        raise Signal.make(T.TypeError, state, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
+        raise Signal.make(T.TypeError, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
     try:
         if not test_nonzero(state, a):
             return a
@@ -455,7 +455,7 @@ def simplify(state: State, funccall: ast.FuncCall):
 
     if isinstance(func, objects.UnknownInstance):
         # evaluate(state, [a.value for a in funccall.args])
-        raise Signal.make(T.TypeError, state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
+        raise Signal.make(T.TypeError, funccall.func, f"Error: Object of type '{func.type}' is not callable")
 
     args = funccall.args
     if isinstance(func, Type):
@@ -464,7 +464,7 @@ def simplify(state: State, funccall: ast.FuncCall):
         func = state.get_var('cast')
 
     if not isinstance(func, objects.Function):
-        raise Signal.make(T.TypeError, state, funccall.func, f"Error: Object of type '{func.type}' is not callable")
+        raise Signal.make(T.TypeError, funccall.func, f"Error: Object of type '{func.type}' is not callable")
 
     state.stacktrace.append(funccall.text_ref)
     try:
@@ -497,7 +497,7 @@ def eval_func_call(state, func, args):
         # TODO cast?
         # if p.type and not a.type <= T.union[p.type, T.vectorized[p.type]]:
         if p.type and not a.type <= p.type:
-            raise Signal.make(T.TypeError, state, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
+            raise Signal.make(T.TypeError, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
         args[p.name] = a
 
 
@@ -583,7 +583,7 @@ def apply_database_rw(state: State, o: ast.One):
     obj = evaluate(state, o.expr)
     if obj.type <= T.struct:
         if len(obj.attrs) != 1:
-            raise Signal.make(T.ValueError, state, o, f"'one' expected a struct with a single attribute, got {len(obj.attrs)}")
+            raise Signal.make(T.ValueError, o, f"'one' expected a struct with a single attribute, got {len(obj.attrs)}")
         x ,= obj.attrs.values()
         return x
 
@@ -594,10 +594,10 @@ def apply_database_rw(state: State, o: ast.One):
     rows = localize(state, table) # Must be 1 row
     if len(rows) == 0:
         if not o.nullable:
-            raise Signal.make(T.ValueError, state, o, "'one' expected a single result, got an empty expression")
+            raise Signal.make(T.ValueError, o, "'one' expected a single result, got an empty expression")
         return objects.null
     elif len(rows) > 1:
-        raise Signal.make(T.ValueError, state, o, "'one' expected a single result, got more")
+        raise Signal.make(T.ValueError, o, "'one' expected a single result, got more")
 
     row ,= rows
     rowtype = T.row[table.type]
@@ -620,15 +620,15 @@ def apply_database_rw(state: State, d: ast.Delete):
     table = evaluate(state, cond_table)
 
     if not (table.type <= T.table):
-        raise Signal.make(T.TypeError, state, d.table, f"Expected a table. Got: {table.type}")
+        raise Signal.make(T.TypeError, d.table, f"Expected a table. Got: {table.type}")
 
     if not 'name' in table.type.options:
-        raise Signal.make(T.ValueError, state, d.table, "Cannot delete. Table is not persistent")
+        raise Signal.make(T.ValueError, d.table, "Cannot delete. Table is not persistent")
 
     rows = list(localize(state, table))
     if rows:
         if 'id' not in rows[0]:
-            raise Signal.make(T.TypeError, state, d, "Delete error: Table does not contain id")
+            raise Signal.make(T.TypeError, d, "Delete error: Table does not contain id")
 
         ids = [row['id'] for row in rows]
 
@@ -645,14 +645,14 @@ def apply_database_rw(state: State, u: ast.Update):
     table = evaluate(state, u.table)
 
     if not (table.type <= T.table):
-        raise Signal.make(T.TypeError, state, u.table, f"Expected a table. Got: {table.type}")
+        raise Signal.make(T.TypeError, u.table, f"Expected a table. Got: {table.type}")
 
     if not 'name' in table.type.options:
-        raise Signal.make(T.ValueError, state, u.table, "Cannot update: Table is not persistent")
+        raise Signal.make(T.ValueError, u.table, "Cannot update: Table is not persistent")
 
     for f in u.fields:
         if not f.name:
-            raise Signal.make(T.SyntaxError, state, f, f"Update requires that all fields have a name")
+            raise Signal.make(T.SyntaxError, f, f"Update requires that all fields have a name")
 
     # TODO verify table is concrete (i.e. lvalue, not a transitory expression)
 
@@ -663,9 +663,9 @@ def apply_database_rw(state: State, u: ast.Update):
     rows = list(localize(state, table))
     if rows:
         if 'id' not in rows[0]:
-            raise Signal.make(T.TypeError, state, u, "Update error: Table does not contain id")
+            raise Signal.make(T.TypeError, u, "Update error: Table does not contain id")
         if not set(proj) < set(rows[0]):
-            raise Signal.make(T.TypeError, state, u, "Update error: Not all keys exist in table")
+            raise Signal.make(T.TypeError, u, "Update error: Not all keys exist in table")
 
         ids = [row['id'] for row in rows]
 
@@ -683,7 +683,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
     obj = state.get_var(new.type)
 
     if len(new.args) > 1:
-        raise Signal.make(T.NotImplementedError, state, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
+        raise Signal.make(T.NotImplementedError, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
 
     if isinstance(obj, objects.UnknownInstance):
         arg ,= new.args
@@ -728,9 +728,9 @@ def _destructure_param_match(state, ast_node, param_match):
         if (k.type <= T.struct):
             names = [name for name, t in flatten_type(k.orig, [k.name])]
             if not isinstance(v, list):
-                raise Signal.make(T.TypeError, state, ast_node, f"Parameter {k.name} received a bad value: {v} (expecting a struct or a list)")
+                raise Signal.make(T.TypeError, ast_node, f"Parameter {k.name} received a bad value: {v} (expecting a struct or a list)")
             if len(v) != len(names):
-                raise Signal.make(T.TypeError, state, ast_node, f"Parameter {k.name} received a bad value (size of {len(names)})")
+                raise Signal.make(T.TypeError, ast_node, f"Parameter {k.name} received a bad value (size of {len(names)})")
             yield from safezip(names, v)
         else:
             yield k.name, v
@@ -784,7 +784,7 @@ def apply_database_rw(state: State, new: ast.New):
         return res
 
     if not isinstance(obj, objects.TableInstance):
-        raise Signal.make(T.TypeError, state, new, f"'new' expects a table or exception, instead got {obj.repr(state)}")
+        raise Signal.make(T.TypeError, new, f"'new' expects a table or exception, instead got {obj.repr(state)}")
 
     table = obj
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
@@ -969,7 +969,7 @@ def new_table_from_expr(state, name, expr, const, temporary):
         return objects.TableInstance.make(sql.null, expr.type, [])
 
     if 'id' in elems and not const:
-        raise Signal.make(T.NameError, state, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
+        raise Signal.make(T.NameError, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
 
     table = T.table(dict(elems), name=Id(name), pk=[] if const else [['id']], temporary=temporary)
 
@@ -987,7 +987,7 @@ def new_table_from_expr(state, name, expr, const, temporary):
 
 @dy
 def cast_to_python(state, obj):
-    raise Signal.make(T.TypeError, state, None, f"Unexpected value: {pql_repr(state, obj.type, obj)}")
+    raise Signal.make(T.TypeError, None, f"Unexpected value: {pql_repr(state, obj.type, obj)}")
 
 @dy
 def cast_to_python(state, obj: ast.Ast):
@@ -999,7 +999,7 @@ def cast_to_python(state, obj: objects.AbsInstance):
     # if state.access_level <= state.AccessLevels.QUERY:
     if obj.type <= T.vectorized:
         raise exc.InsufficientAccessLevel(state.access_level)
-        # raise Signal.make(T.CastError, state, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
+        # raise Signal.make(T.CastError, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
     res = localize(state, obj)
     if obj.type == T.float:
         res = float(res)

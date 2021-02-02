@@ -170,19 +170,19 @@ def _eval_autocomplete(ac_state, stmts):
 
 def autocomplete(state, code, source='<autocomplete>'):
     ac_state = AcState.clone(state)
-    try:
-        stmts = parser.parse_stmts(code, source, wrap_syntax_error=False)
-    except UnexpectedCharacters as e:
-        return {}
-    except UnexpectedToken as e:
-        tree = autocomplete_tree(e.puppet)
-        if tree:
-            try:
-                stmts = parser.TreeToAst(code_ref=(code, source)).transform(tree)
-            except pql_SyntaxError as e:
-                return {}
+    with context(state=ac_state):
+        try:
+            stmts = parser.parse_stmts(code, source, wrap_syntax_error=False)
+        except UnexpectedCharacters as e:
+            return {}
+        except UnexpectedToken as e:
+            tree = autocomplete_tree(e.puppet)
+            if tree:
+                try:
+                    stmts = parser.TreeToAst(code_ref=(code, source)).transform(tree)
+                except pql_SyntaxError as e:
+                    return {}
 
-            with context(state=ac_state):
                 _eval_autocomplete(ac_state, stmts[:-1])
 
                 try:
@@ -193,7 +193,7 @@ def autocomplete(state, code, source='<autocomplete>'):
                 except Signal as e:
                     ac_log.exception(e)
 
-    else:
-        _eval_autocomplete(ac_state, stmts)
+        else:
+            _eval_autocomplete(ac_state, stmts)
 
     return ac_state.get_all_vars_with_rank()

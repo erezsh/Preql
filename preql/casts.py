@@ -7,7 +7,7 @@ from .exceptions import Signal
 def _cast(state, inst_type, target_type, inst):
     if inst_type == target_type or target_type is T.any:
         return inst
-    raise Signal.make(T.TypeError, state, None, f"Cast not implemented for {inst_type}->{target_type}")
+    raise Signal.make(T.TypeError, None, f"Cast not implemented for {inst_type}->{target_type}")
 
 @dp_type
 def _cast(state, inst_type: T.list, target_type: T.list, inst):
@@ -32,9 +32,9 @@ def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
 def _cast(state, inst_type: T.table, target_type: T.list, inst):
     t = inst.type
     if len(t.elems) != 1:
-        raise Signal.make(T.TypeError, state, None, f"Cannot cast {inst_type} to {target_type}. Too many columns")
+        raise Signal.make(T.TypeError, None, f"Cannot cast {inst_type} to {target_type}. Too many columns")
     if not (inst_type.elem <= target_type.elem):
-        raise Signal.make(T.TypeError, state, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
+        raise Signal.make(T.TypeError, None, f"Cannot cast {inst_type} to {target_type}. Elements not matching")
 
     (elem_name, elem_type) ,= inst_type.elems.items()
     code = sql.Select(T.list[elem_type], inst.code, [sql.ColumnAlias(sql.Name(elem_type, elem_name), ITEM_NAME)])

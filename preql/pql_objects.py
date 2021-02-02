@@ -76,14 +76,14 @@ class Function(Object):
         return f'<preql:Function | {self.name}: {self.type}>'
 
     @listgen
-    def match_params_fast(self, state, args):
+    def match_params_fast(self, args):
         for i, p in enumerate(self.params):
             if i < len(args):
                 v = args[i]
             else:
                 v = p.default
                 if v is None:
-                    raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
+                    raise Signal.make(T.TypeError, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
 
 
             yield p, v
@@ -96,7 +96,7 @@ class Function(Object):
 
         # If no keyword arguments, matching is much simpler and faster
         if all(not isinstance(a, (ast.NamedField, ast.Ellipsis)) for a in args):
-            return self.match_params_fast(state, args)
+            return self.match_params_fast(args)
 
         # Canonize args for the rest of the function
         inline_args = []
@@ -109,9 +109,10 @@ class Function(Object):
                     raise NotImplementedError("Cannot exclude keys when inlining struct")
 
                 # XXX we only want to localize the keys, not the values
+                # TODO remove this?
                 d = self._localize_keys(state, a.from_struct)
                 if not isinstance(d, dict):
-                    raise Signal.make(T.TypeError, state, None, f"Expression to inline is not a map: {d}")
+                    raise Signal.make(T.TypeError, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
                     inline_args.append(ast.NamedField(k, new_value_instance(v)))
             else:
@@ -126,11 +127,11 @@ class Function(Object):
         else:
             if not all(n for n in named[first_named:]):
                 # TODO meta
-                raise Signal.make(T.TypeError, state, None, f"Function {self.name} received a non-named argument after a named one!")
+                raise Signal.make(T.TypeError, None, f"Function {self.name} received a non-named argument after a named one!")
 
         if first_named > len(self.params):
             # TODO meta
-            raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' takes {len(self.params)} parameters but received {first_named} arguments.")
+            raise Signal.make(T.TypeError, None, f"Function '{self.name}' takes {len(self.params)} parameters but received {first_named} arguments.")
 
         values = {p.name: p.default for p in self.params}
 
@@ -149,13 +150,13 @@ class Function(Object):
                     collected[arg_name] = named_arg.value
                 else:
                     # TODO meta
-                    raise Signal.make(T.TypeError, state, None, f"Function '{self.name}' has no parameter named '{arg_name}'")
+                    raise Signal.make(T.TypeError, None, f"Function '{self.name}' has no parameter named '{arg_name}'")
 
 
         for name, value in values.items():
             if value is None:
                 # TODO meta
-                raise Signal.make(T.TypeError, state, None, f"Error calling function '{self.name}': parameter '{name}' has no value")
+                raise Signal.make(T.TypeError, None, f"Error calling function '{self.name}': parameter '{name}' has no value")
 
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-from .exceptions import Signal, pql_SyntaxError
+from .exceptions import Signal, pql_SyntaxError, ReturnSignal
 from .evaluate import State, execute, eval_func_call, import_module
 from .parser import parse_stmts
 from . import pql_ast as ast
@@ -42,15 +42,19 @@ class Interpreter:
 
     def execute_code(self, code, source_file, args=None):
         assert not args, "Not implemented yet: %s" % args
-        last = None
         try:
             stmts = parse_stmts(code, source_file)
         except pql_SyntaxError as e:
             raise Signal(T.SyntaxError, [e.text_ref], e.message)
 
+        last = None
         with context(state=self.state):
             for stmt in stmts:
-                last = execute(self.state, stmt)
+                try:
+                    last = execute(self.state, stmt)
+                except ReturnSignal:
+                    raise Signal.make(T.CodeError, stmt, "'return' outside of function")
+
         return last
 
     def include(self, fn, rel_to=None):

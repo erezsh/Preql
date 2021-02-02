@@ -3,7 +3,6 @@ from .exceptions import Signal, pql_AttributeError
 from .base import Object
 from .utils import listgen, concat_for, classify_bool
 from .pql_types import ITEM_NAME, T, Type, dp_type
-from .context import context
 
 
 def Object_repr(self, state):
@@ -14,7 +13,7 @@ def Object_get_attr(self, attr):
 
 def Object_isa(self, t):
     if not isinstance(t, Type):
-        raise Signal.make(T.TypeError, context.state, None, f"'type' argument to isa() isn't a type. It is {t}")
+        raise Signal.make(T.TypeError, None, f"'type' argument to isa() isn't a type. It is {t}")
     return self.type <= t
 
 Object.repr = Object_repr
@@ -22,7 +21,7 @@ Object.get_attr = Object_get_attr
 Object.isa = Object_isa
 
 def _type_flatten_code(self):
-    raise Signal.make(T.TypeError, context.state, None, f"Found type 'type' in unexpected place")
+    raise Signal.make(T.TypeError, None, f"Found type 'type' in unexpected place")
 
 Type.flatten_code = _type_flatten_code
 

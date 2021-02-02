@@ -89,11 +89,11 @@ class State:
         try:
             self.db = create_engine(uri, self.db._print_sql, auto_create)
         except NotImplementedError as e:
-            raise Signal.make(T.NotImplementedError, self, None, *e.args) from e
+            raise Signal.make(T.NotImplementedError, None, *e.args) from e
         except ConnectError as e:
-            raise Signal.make(T.DbConnectionError, self, None, *e.args) from e
+            raise Signal.make(T.DbConnectionError, None, *e.args) from e
         except ValueError as e:
-            raise Signal.make(T.ValueError, self, None, *e.args) from e
+            raise Signal.make(T.ValueError, None, *e.args) from e
 
         self._db_uri = uri
 
@@ -115,7 +115,7 @@ class State:
             except KeyError:
                 pass
 
-            raise Signal.make(T.NameError, self, name, f"Name '{name}' not found")
+            raise Signal.make(T.NameError, name, f"Name '{name}' not found")
 
 
     def set_var(self, name, value):

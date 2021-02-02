@@ -5,6 +5,8 @@ from lark.exceptions import GrammarError
 from .utils import dataclass, TextReference
 from .base import Object
 
+from .context import context
+
 @dataclass
 class Signal(Object, Exception):
     type: object    # Type
@@ -12,9 +14,12 @@ class Signal(Object, Exception):
     message: Optional[str]
 
     @classmethod
-    def make(cls, type, state, ast, message):
+    def make(cls, type, ast, message):
         ast_ref = getattr(ast, 'text_ref', None)
-        refs = state.stacktrace+([ast_ref] if ast_ref else [])
+        try:
+            refs = context.state.stacktrace+([ast_ref] if ast_ref else [])
+        except AttributeError:
+            refs = []
         return cls(type, refs, message)
 
     # def __str__(self):

@@ -139,10 +139,7 @@ class Preql:
 
     def _run_code(self, pq: str, source_file: str, **args):
         pql_args = {name: objects.from_python(value) for name, value in args.items()}
-        try:
-            return self.interp.execute_code(pq + "\n", source_file, pql_args)
-        except exc.ReturnSignal:
-            raise Signal.make(T.CodeError, self.interp.state, None, "'return' outside of function")
+        return self.interp.execute_code(pq + "\n", source_file, pql_args)
 
     def __call__(self, pq, **args):
         res = self._run_code(pq, '<inline>', **args)
