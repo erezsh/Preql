@@ -1,7 +1,5 @@
 import operator
 
-from runtype import DispatchError
-
 from .utils import safezip, listgen, find_duplicate, SafeDict, re_split
 from .exceptions import Signal
 from . import exceptions as exc
@@ -11,7 +9,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
-from .pql_types import T, Type, union_types, Id, ITEM_NAME, dp_inst
+from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr
 from .casts import cast
 from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
@@ -151,7 +149,11 @@ def compile_to_inst(state: State, i: ast.If):
     then = cast_to_instance(state, i.then)
     else_ = cast_to_instance(state, i.else_)
     code = sql.Case(cond.code, then.code, else_.code)
-    return make_instance(code, T.bool, [cond, then, else_])
+    # TODO simplify this with a better type system
+    res_type = kernel_type(then.type) | kernel_type(else_.type)
+    if cond.type <= T.vectorized or then.type <= T.vectorized or else_.type <= T.vectorized:
+        res_type = T.vectorized[res_type]
+    return make_instance(code, res_type, [cond, then, else_])
 
 
 def kernel_type(t):
@@ -952,3 +954,6 @@ def compile_to_inst(state: State, range: ast.Range):
     subq = sql.Subquery(name, [], sql.RawSql(type_, code))
     code = sql.TableName(type_, Id(name))
     return objects.TableInstance(code, type_, SafeDict({name: subq}))
+
+
+    

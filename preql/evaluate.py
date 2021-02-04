@@ -16,7 +16,6 @@ from .interp_common import State, dy, new_value_instance, cast_to_python
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
-from .pql_objects import vectorized
 from .display import display
 
 

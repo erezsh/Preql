@@ -62,6 +62,11 @@ class Module(Object):
     def __repr__(self):
         return f'<preql:Module | {len(self.namespace)} members>'
 
+    def public_functions(self):
+        funcs = [v for v in self.namespace.values() if v.type <= T.function and v.docstring and not v.name.startswith('_')]
+        funcs.sort(key=lambda f: f.name)
+        return funcs
+
 
 class Function(Object):
 

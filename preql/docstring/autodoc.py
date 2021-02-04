@@ -4,8 +4,11 @@ from runtype import dataclass
 
 from preql.utils import safezip, dy
 
-from preql.docstring.docstring import parse, Section, Defin
+from preql.docstring.docstring import parse, Section, Defin, Text
 from preql.pql_objects import Module, Function, T
+from preql.pql_types import Type
+
+from . import type_docs
 
 
 class AutoDocError(Exception):
@@ -52,6 +55,16 @@ class FuncDoc:
         s = f".. function:: {self.func.name}({params})\n\n"
         return s + self.doc.print_rst()
 
+@dataclass
+class TypeDoc:
+    type: object
+    doc: object
+
+    def print_text(self, indent=0):
+        indent_str = ' ' * indent
+        s = f'{indent_str}[dodger_blue2]type[/dodger_blue2] [bold white]{self.type.typename}[/bold white]\n\n'
+        return s + self.doc.print_text(indent+4)
+
 
 from lark import LarkError
 
@@ -87,9 +100,7 @@ def doc_func(f):
 
 
 def doc_module(m):
-    funcs = [v for v in m.namespace.values() if v.type <= T.function and v.docstring and not v.name.startswith('_')]
-    funcs.sort(key=lambda f: f.name)
-    return ModuleDoc(m, list(map(doc_func, funcs)))
+    return ModuleDoc(m, list(map(doc_func, m.public_functions())))
 
 
 def test_func():
@@ -115,6 +126,20 @@ def autodoc(m: Module):
 @dy
 def autodoc(f: Function):
     return doc_func(f)
+
+@dy
+def autodoc(t: Type):
+    try:
+        doc_tree = parse(type_docs.DOCS[t])
+    except LarkError as e:
+        raise ValueError(f"Error in docstring of type {t}")
+
+    assert {s.name for s in doc_tree.sections} <= {'Example', 'Examples', 'Note', 'See Also'}, [s.name for s in doc_tree.sections]
+
+    params_doc = Section('Supertypes', [Text([str(st)]) for st in t.supertypes])
+    doc_tree.sections.insert(0, params_doc)
+
+    return TypeDoc(t, doc_tree)
 
 # test_func()
 # test_module()

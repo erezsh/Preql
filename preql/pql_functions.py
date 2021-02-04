@@ -570,6 +570,8 @@ def pql_columns(state: State, table: T.collection):
         >> columns([0])
         {item: int}
     """
+    # TODO table: T.table, not collection
+
     elems = table.type.elems
     if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
         elems = {f't{i}':e for i, e in enumerate(elems)}
