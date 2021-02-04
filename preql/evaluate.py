@@ -929,6 +929,7 @@ def new_table_from_rows(state, name, columns, rows):
 
     x = objects.new_table(table)
     state.set_var(name, x)
+    return x
 
 
 def new_table_from_expr(state, name, expr, const, temporary):

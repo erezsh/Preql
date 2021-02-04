@@ -4,11 +4,12 @@
 
 - [primes.pql](primes.pql) - Fault-tolerant Primes Calculator
 - [fizzbuzz.pql](fizzbuzz.pql) - FizzBuzz implementation
+- [airports.pql](airports.pql) - Loads a JSON into a table and queries it
 
 ## Intermediate
 
 - [movie_recommender.pql](movie_recommender.pql) - Toy recommender-system for movies
-- [chinook.pql](chinook.pql) - Declares a convenient interface for a multi-table database. 
+- [chinook.pql](chinook.pql) - Declares a convenient interface for a multi-table database
 
 ## Advanced
 

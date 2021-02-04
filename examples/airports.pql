@@ -1,0 +1,46 @@
+//
+//    Airports - Download and load a JSON
+//  =======================================
+//
+
+
+// Download the JSON and import it as table 'airports'.
+// Uses Pandas' read_json() function.
+import_json("airports", "https://gist.githubusercontent.com/tdreyno/4278655/raw/7b0762c09b519f40397e4c3e100b097d861f5588/airports.json")
+
+// Remove unhelpful fields
+airports_short = airports{... !url !tz !phone !email !type}
+
+// All airports sorted by elevation (highest first)
+airports_by_highest = airports order {^elev}
+
+// Count of airports in each country, sorted by highest
+airports_by_country = airports {country => airport_count: count()} order {^airport_count}
+
+
+print "Highest airports:"
+print airports_by_highest {code, lat, lon, name, city, state, country}
+
+
+// Outputs:
+// ┏━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+// ┃ code ┃      lat ┃      lon ┃ name                                 ┃ city            ┃ state             ┃ country  ┃
+// ┡━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+// │ BPX  │  31.1442 │   97.174 │ Bangda Airport                       │ Qamdo           │ Tibet             │ China    │
+// │ LPB  │ -16.5094 │ -68.1906 │ El Alto International Airport        │ La Paz          │ La Paz            │ Bolivia  │
+// │ JUL  │ -15.4642 │ -70.1544 │ Juliaca Airport                      │ Juliaca         │ Puno              │ Peru     │
+// │ JZH  │  32.8369 │  103.682 │ Jiu Zhai Huang Long                  │ Song Pan        │ 四川省            │ China    │
+// │ IXL  │  34.1667 │  77.5833 │ Leh Airport                          │ Leh             │ Jammu and Kashmir │ India    │
+// │ CUZ  │ -13.5308 │ -71.9472 │ Velazco Astete Airport               │ San Sebastián   │ Cusco             │ Peru     │
+// │ IPI  │   0.8611 │ -77.6681 │ San Luis Airport                     │ Ipiales         │ Narino            │ Colombia │
+// │ SRE  │ -19.0008 │ -65.2878 │ Juana Azurduy de Padilla Airport     │ Sucre           │ Chuquisaca        │ Bolivia  │
+// │ UIO  │  -0.1381 │ -78.4833 │ Mariscal Sucre International Airport │ Quito           │ Pichincha         │ Ecuador  │
+// │ LUA  │  27.6833 │  86.7333 │ Lukla Airport                        │ Solukhumbu      │ Central           │ Nepal    │
+// │ PPL  │  28.3948 │  84.1278 │ Nepal                                │ Phaplu          │                   │ Nepal    │
+// │ CJA  │  -7.1322 │ -78.4889 │ Maj Gen Fap A R Iglesias Airport     │ Cajamarca       │ Cajamarca         │ Peru     │
+// │ JUM  │  40.6152 │ -83.7891 │                                      │ Jumla           │ Midwest           │ Nepal    │
+// │ TLC  │  19.3356 │  -99.565 │ Jose Maria Morelos Y Pavon Airport   │ Toluca de Lerdo │ Mexico            │ Mexico   │
+// │ AQP  │ -16.3372 │ -71.5692 │ Rodriguez Ballon Airport             │ Arequipa        │ Arequipa          │ Peru     │
+// │ CBB  │ -17.4161 │ -66.1744 │ Jorge Wilsterman Airport             │ Cochabamba      │ Cochabamba        │ Bolivia  │
+// │ ...  │      ... │      ... │ ...                                  │ ...             │ ...               │ ...      │
+// └──────┴──────────┴──────────┴──────────────────────────────────────┴─────────────────┴───────────────────┴──────────┘

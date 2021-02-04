@@ -1,11 +1,13 @@
 import inspect
 from preql.compiler import cast_to_instance
 import re
+import os
+from datetime import datetime
 import csv
 import inspect
 import itertools
-from typing import Optional
 import runtype
+import json
 
 from .utils import safezip, listgen, re_split
 from .exceptions import Signal, ExitInterp
@@ -15,7 +17,7 @@ from . import pql_ast as ast
 from . import sql
 
 from .interp_common import State, new_value_instance, assert_type
-from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr
+from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
 from .pql_types import T, Type, union_types, Id, common_type
 from .types_impl import join_names
 from .casts import cast
@@ -668,6 +670,8 @@ def pql_help(state: State, inst: T.any = objects.null):
         doc = autodoc(inst).print_text()    # TODO maybe html
         if doc:
             lines += [doc]
+    except NotImplementedError:
+        lines = [f"No help available for {inst.repr()}"]
     except runtype.DispatchError:
         lines += [f"<doc not available yet for object of type '{inst.type}>'"]
 
@@ -713,6 +717,17 @@ def pql_tables(state: State):
     return objects.new_const_table(state, table_type, tuples)
 
 
+def pql_env_vars(state: State):
+    """Returns a table of all the environment variables.
+
+    The resulting table has two columns: name, and value.
+    """
+    tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in os.environ.items()]
+
+    table_type = T.table({'name':T.string, 'value': T.string})
+    return objects.new_const_table(state, table_type, tuples)
+
+
 
 def create_internal_funcs(d):
     new_d = {}
@@ -738,6 +753,45 @@ def pql_exit(state, value: T.any.as_nullable() = None):
 
     """
     raise ExitInterp(value)
+
+
+
+def import_pandas(state, dfs):
+    """Import pandas.DataFrame instances into SQL tables
+
+    Example:
+        >>> pql.import_pandas(a=df_a, b=df_b)
+    """
+    import pandas as pd
+    def normalize_item(i):
+        if pd.isna(i):
+            return None
+        i = i.item() if hasattr(i, 'item') else i
+        return i
+
+    for name, df in dfs.items():
+        if isinstance(df, pd.Series):
+            cols = ['key', 'value']
+            rows = [(dt.to_pydatetime() if isinstance(dt, datetime) else dt,v) for dt, v in df.items()]
+        else:
+            assert isinstance(df, pd.DataFrame)
+            cols = list(df)
+            rows = [[normalize_item(i) for i in rec]
+                    for rec in df.to_records()]
+            rows = [ row[1:] for row in rows ]    # drop index
+
+        yield new_table_from_rows(state, name, cols, rows)
+
+def pql_import_json(state: State, table_name: T.string, filename: T.string, header: T.bool = ast.Const(T.bool, False)):
+    table_name = cast_to_python(state, table_name)
+    filename = cast_to_python(state, filename)
+    header = cast_to_python(state, header)
+    print(f"Importing JSON file: '{filename}'")
+
+    import pandas
+    df = pandas.read_json(filename)
+    tbl ,= import_pandas(state, {table_name: df})
+    return tbl
 
 
 
@@ -770,8 +824,8 @@ def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.b
 
     with open(filename, 'r', encoding='utf8') as f:
         line_count = len(list(f))
+        f.seek(0)
 
-    with open(filename, 'r', encoding='utf8') as f:
         reader = csv.reader(f)
         for i, row in enumerate(tqdm(reader, total=line_count)):
             if i == 0:
@@ -883,6 +937,7 @@ internal_funcs = create_internal_funcs({
     'help': pql_help,
     'names': pql_names,
     'tables': pql_tables,
+    'env_vars': pql_env_vars,
     'dir': pql_names,
     'connect': pql_connect,
     'import_table': pql_import_table,
@@ -905,6 +960,7 @@ internal_funcs = create_internal_funcs({
     'cast': pql_cast,
     'columns': pql_columns,
     'import_csv': pql_import_csv,
+    'import_json': pql_import_json,
     'serve_rest': pql_serve_rest,
     'force_eval': pql_force_eval,
     'fmt': pql_fmt,

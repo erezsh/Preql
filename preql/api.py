@@ -1,17 +1,15 @@
 from contextlib import contextmanager
-from datetime import datetime
 
 
 from . import settings
 from . import pql_ast as ast
 from . import pql_objects as objects
-from . import exceptions as exc
 from .utils import classify
 from .interpreter import Interpreter
-from .evaluate import cast_to_python, localize, evaluate, new_table_from_rows
+from .evaluate import cast_to_python, localize, evaluate
 from .interp_common import create_engine, call_pql_func
 from .pql_types import T
-from .exceptions import Signal
+from .pql_functions import import_pandas
 
 from . import display
 display.install_reprs()
@@ -187,25 +185,8 @@ class Preql:
         Example:
             >>> pql.import_pandas(a=df_a, b=df_b)
         """
-        import pandas as pd
-        def normalize_item(i):
-            if pd.isna(i):
-                return None
-            i = i.item() if hasattr(i, 'item') else i
-            return i
+        return list(import_pandas(self.interp.state, dfs))
 
-        for name, df in dfs.items():
-            if isinstance(df, pd.Series):
-                cols = ['key', 'value']
-                rows = [(dt.to_pydatetime() if isinstance(dt, datetime) else dt,v) for dt, v in df.items()]
-            else:
-                assert isinstance(df, pd.DataFrame)
-                cols = list(df)
-                rows = [[normalize_item(i) for i in rec]
-                        for rec in df.to_records()]
-                rows = [ row[1:] for row in rows ]    # drop index
-
-            new_table_from_rows(self.interp.state, name, cols, rows)
 
     def load_all_tables(self):
         table_types = self.interp.state.db.import_table_types(self.interp.state)
