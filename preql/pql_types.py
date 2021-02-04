@@ -3,6 +3,7 @@ from typing import Union
 from datetime import datetime
 from dataclasses import field
 from decimal import Decimal
+from collections import defaultdict
 
 import runtype
 from runtype.typesystem import TypeSystem
@@ -270,6 +271,15 @@ T.CastError = [T.TypeError]
 
 T.ImportError = [T.Exception]   # XXX
 
+
+def _get_subtypes():
+    d = defaultdict(list)
+    for t in T.values():
+        for st in t.supertypes:
+            d[st].append(t)
+    return dict(d)
+
+subtypes = _get_subtypes()
 
 #-------------
 

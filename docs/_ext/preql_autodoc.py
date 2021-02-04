@@ -12,7 +12,7 @@ from preql.docstring.autodoc import generate_rst
 def setup(app):
     # app.add_directive("helloworld", HelloWorld)
     print("Generating documentation for Preql's modules")
-    generate_rst('preql-modules.rst')
+    generate_rst('preql-modules.rst', 'preql-types.rst')
 
     return {
         'version': '0.1',

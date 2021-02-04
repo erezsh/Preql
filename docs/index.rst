@@ -35,6 +35,7 @@
    :hidden:
 
    language
+   preql-types
    preql-modules
    python-api
 
@@ -65,6 +66,7 @@ Resources
 -  Reference
 
    -  :doc:`language`
+   -  :doc:`preql-types`
    -  :doc:`preql-modules`
    -  :doc:`python-api`
 

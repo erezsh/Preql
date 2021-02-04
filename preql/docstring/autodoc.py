@@ -6,7 +6,7 @@ from preql.utils import safezip, dy
 
 from preql.docstring.docstring import parse, Section, Defin, Text
 from preql.pql_objects import Module, Function, T
-from preql.pql_types import Type
+from preql.pql_types import Type, subtypes
 
 from . import type_docs
 
@@ -61,9 +61,18 @@ class TypeDoc:
     doc: object
 
     def print_text(self, indent=0):
+        params = [str(p) for p in self.type.elems]
+        params = ', '.join(params)
+        if params:
+            params = f'\\[{params}]'
         indent_str = ' ' * indent
-        s = f'{indent_str}[dodger_blue2]type[/dodger_blue2] [bold white]{self.type.typename}[/bold white]\n\n'
+        s = f'{indent_str}[dodger_blue2]type[/dodger_blue2] [bold white]{self.type.typename}[/bold white]{params}\n\n'
         return s + self.doc.print_text(indent+4)
+
+    def print_rst(self):
+        s = f".. class:: {str(self.type)}⁣\n\n"     # includes an invisible unicode separator to trick sphinx
+        return s + self.doc.print_rst()
+
 
 
 from lark import LarkError
@@ -111,10 +120,20 @@ def test_module():
     p = Preql()
     rich.print(doc_module(p('__builtins__')).print_text())
 
-def generate_rst(filename):
+def generate_rst(modules_fn, types_fn):
     from preql import Preql
     p = Preql()
-    with open(filename, 'w', encoding='utf8') as f:
+
+    with open(types_fn, 'w', encoding='utf8') as f:
+        print('Preql Types', file=f)
+        print('===========', file=f)
+        for t in T.values():
+            try:
+                print(autodoc(t).print_rst(), file=f)
+            except NotImplementedError:
+                pass
+
+    with open(modules_fn, 'w', encoding='utf8') as f:
         print('Preql Modules', file=f)
         print('=============', file=f)
         print(doc_module(p('__builtins__')).print_rst(), file=f)
@@ -130,18 +149,28 @@ def autodoc(f: Function):
 @dy
 def autodoc(t: Type):
     try:
-        doc_tree = parse(type_docs.DOCS[t])
+        docstr = type_docs.DOCS[t]
+    except KeyError:
+        raise NotImplementedError(t)
+    try:
+        doc_tree = parse(docstr)
     except LarkError as e:
         raise ValueError(f"Error in docstring of type {t}")
 
     assert {s.name for s in doc_tree.sections} <= {'Example', 'Examples', 'Note', 'See Also'}, [s.name for s in doc_tree.sections]
 
-    params_doc = Section('Supertypes', [Text([str(st)]) for st in t.supertypes])
-    doc_tree.sections.insert(0, params_doc)
+    if t in subtypes:
+        subtypes_doc = Section('Subtypes', [Text([str(st) + ", "]) for st in subtypes[t]])
+        doc_tree.sections.insert(0, subtypes_doc)
+
+
+    if t.supertypes:
+        supertypes_doc = Section('Supertypes', [Text([str(st)]) for st in t.supertypes])
+        doc_tree.sections.insert(0, supertypes_doc)
 
     return TypeDoc(t, doc_tree)
 
 # test_func()
 # test_module()
 if __name__ == '__main__':
-    generate_rst('preql-api.rst')
+    generate_rst('preql-modules.rst', 'preql-types.rst')
