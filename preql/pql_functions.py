@@ -758,9 +758,6 @@ def pql_exit(state, value: T.any.as_nullable() = None):
 
 def import_pandas(state, dfs):
     """Import pandas.DataFrame instances into SQL tables
-
-    Example:
-        >>> pql.import_pandas(a=df_a, b=df_b)
     """
     import pandas as pd
     def normalize_item(i):
@@ -782,14 +779,24 @@ def import_pandas(state, dfs):
 
         yield new_table_from_rows(state, name, cols, rows)
 
-def pql_import_json(state: State, table_name: T.string, filename: T.string, header: T.bool = ast.Const(T.bool, False)):
+def pql_import_json(state: State, table_name: T.string, uri: T.string):
+    """Imports a json file into a new table.
+
+    Returns the newly created table.
+
+    Parameters:
+        table_name: The name of the table to create
+        uri: A path or URI to the JSON file
+
+    Note:
+        This function requires the `pandas` Python package.
+    """
     table_name = cast_to_python(state, table_name)
-    filename = cast_to_python(state, filename)
-    header = cast_to_python(state, header)
-    print(f"Importing JSON file: '{filename}'")
+    uri = cast_to_python(state, uri)
+    print(f"Importing JSON file: '{uri}'")
 
     import pandas
-    df = pandas.read_json(filename)
+    df = pandas.read_json(uri)
     tbl ,= import_pandas(state, {table_name: df})
     return tbl
 
