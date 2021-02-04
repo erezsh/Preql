@@ -1,0 +1,28 @@
+"""
+An implementation of FizzBuzz, based on the famous FizzBuzz test.
+
+Very useful for job interviews.
+
+See: https://wiki.c2.com/?FizzBuzzTest
+
+"""
+
+func fizz(i) {
+	if (i % 3 == 0) {
+		return "Fizz"
+	} else {
+		return ""
+	}
+}
+
+func buzz(i) {
+	if (i % 5 == 0) {
+		return "Buzz"
+	} else {
+		return ""
+	}
+}
+
+func fizzbuzz(i) = (fizz(i) + buzz(i)) or string(i)
+
+print [1..100] {fizzbuzz(item)}

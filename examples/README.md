@@ -3,6 +3,7 @@
 ## Basic
 
 - [primes.pql](primes.pql) - Fault-tolerant Primes Calculator
+- [fizzbuzz.pql](fizzbuzz.pql) - FizzBuzz implementation
 
 ## Intermediate
 
