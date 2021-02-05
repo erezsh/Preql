@@ -5,8 +5,8 @@ from typing import List, Optional, Dict
 
 from .utils import dataclass, X, listgen, field_list, safezip
 from . import pql_types
-from .pql_types import ITEM_NAME, T, Type, dp_type, dp_inst, Id
-from .types_impl import join_names, flatten_type
+from .pql_types import T, Type, dp_type, dp_inst, Id
+from .types_impl import join_names, flatten_type, kernel_type
 from .exceptions import Signal
 
 duck = 'duck'
@@ -1085,11 +1085,11 @@ def from_sql(state, arr: T.table):
         if len(row) != expected_length:
             raise Signal.make(T.TypeError, state, None, f"Expected {expected_length} columns, but got {len(row)}")
         i = iter(row)
-        yield {name: restructure_result(state, col, i) for name, col in arr.type.elems.items()}
+        yield {name: restructure_result(state, kernel_type(col), i) for name, col in arr.type.elems.items()}
 
 @dp_type
 def restructure_result(state, t, i):
-    raise Signal.make(T.TypeError, state, None, f"Unexpected type used: {t}")
+    raise Signal.make(T.TypeError, None, f"Unexpected type used: {t}")
 
 @dp_type
 def restructure_result(state, t: T.table, i):
@@ -1098,14 +1098,10 @@ def restructure_result(state, t: T.table, i):
 
 @dp_type
 def restructure_result(state, t: T.struct, i):
-    return ({name: restructure_result(state, col, i) for name, col in t.elems.items()})
+    return ({name: restructure_result(state, kernel_type(col), i) for name, col in t.elems.items()})
 
 @dp_type
 def restructure_result(state, t: T.union[T.primitive, T.nulltype], i):
-    return next(i)
-
-@dp_type
-def restructure_result(state, t: T.vectorized[T.union[T.primitive, T.nulltype]], i):
     return next(i)
 
 

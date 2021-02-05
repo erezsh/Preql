@@ -12,7 +12,7 @@ from . import sql
 from . import pql_types
 
 from .pql_types import ITEM_NAME, T, Type, Object
-from .types_impl import flatten_type, join_names, pql_repr
+from .types_impl import flatten_type, join_names, pql_repr, kernel_type
 
 
 # Functions
@@ -382,9 +382,7 @@ class AbsStructInstance(AbsInstance):
     def get_attr(self, name):
         if name in self.attrs:
             attr = self.attrs[name]
-            if self.type <= T.vectorized:
-                attr = vectorized(attr)
-            return attr
+            return inherit_vectorized(attr, [self])
         else:
             raise pql_AttributeError(name)
 
@@ -401,7 +399,7 @@ class StructInstance(AbsStructInstance):
     attrs: Dict[str, Object]
 
     def __post_init__(self):
-        assert self.type <= T.union[T.struct, T.vectorized[T.struct]]
+        assert kernel_type( self.type ) <= T.struct
 
     @property
     def subqueries(self):
@@ -542,6 +540,19 @@ def vectorized(inst):
 def unvectorized(inst):
     assert inst.type <= T.vectorized
     return inst.replace(type=inst.type.elem)
+
+def inherit_vectorized_type(t, objs):
+    for src in objs:
+        if src.type <= T.vectorized:
+            return T.vectorized[t]
+    return t
+
+def inherit_vectorized(o, objs):
+    for src in objs:
+        if src.type <= T.vectorized:
+            return vectorized(o)
+    return o
+
 
 
 @dy

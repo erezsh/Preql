@@ -122,9 +122,7 @@ class Type(Object):
 
     def issubtype(self, t):
         assert isinstance(t, Type), t
-        if self.typename == 'union':
-            return all(t2.issubtype(t) for t2 in self.elem_types)
-        elif t.typename == 'union':   # XXX a little hacky. Change to issupertype?
+        if t.typename == 'union':   # XXX a little hacky. Change to issupertype?
             return any(self.issubtype(t2) for t2 in t.elem_types)
 
         if self is T.nulltype:
@@ -132,7 +130,7 @@ class Type(Object):
                 return True
 
         # TODO zip should be aware of lengths
-        if t.typename in {s.typename for s in self.supertype_chain()}:
+        if t.typename in (s.typename for s in self.supertype_chain()):
             return all(e1.issubtype(e2) for e1, e2 in zip(self.elem_types, t.elem_types))
         return False
 
@@ -140,11 +138,9 @@ class Type(Object):
         return self.issubtype(other)
 
     def __getitem__(self, elems):
-        if self is T.union or self is T.function:
-            elems = tuple(elems)
-        else:
-            assert not isinstance(elems, tuple), (self, elems)
-            elems = {ITEM_NAME: elems}
+        # TODO assert elems = (any,)
+        assert not isinstance(elems, tuple), (self, elems)
+        elems = {ITEM_NAME: elems}
         return self.replace(elems=elems)
 
     def __call__(self, elems=None, **options):
@@ -176,11 +172,27 @@ class Type(Object):
     def __or__(self, other):
         return T.union[self, other]
 
+class TupleType(Type):
+    def __getitem__(self, elems):
+        assert not self.elems
+        return self.replace(elems=tuple(elems))
+
+    def __or__(self, other):
+        return self.replace(elems=self.elems + (other,))
+
+class SumType(TupleType):
+    def issubtype(self, other):
+        return all(t.issubtype(other) for t in self.elem_types)
+
+class ProductType(TupleType):
+    def issubtype(self, other):
+        return all(a.issubtype(b) for a, b in zip(self.elem_types, other.elem_types))
+
 
 class TypeDict(dict):
 
-    def _register(self, name, supertypes=(), elems=()):
-        t = Type(name, frozenset(supertypes), elems)
+    def _register(self, name, supertypes=(), elems=(), type_class=Type):
+        t = type_class(name, frozenset(supertypes), elems)
         assert name not in self
         T[name] = t
         dict.__setattr__(self, name, t)
@@ -192,12 +204,15 @@ class TypeDict(dict):
             self._register(name, args)
 
 
+
 T = TypeDict()
 
 T.any = ()
 T.unknown = [T.any]
 
-T.union = [T.any]
+# T.union = [T.any]
+T._register('union', type_class=SumType)
+
 T.type = [T.any]
 Type.type = T.type
 
@@ -235,7 +250,9 @@ T.vectorized = [T.container], (T.any,)  # sequence or collection?
 T.json = [T.container], (T.any,)
 T.json_array = [T.json]
 
-T.function = [T.object]
+# T.function = [T.object]
+T._register('function', [T.object], type_class=TupleType)
+
 T.module = [T.object]
 
 T.signal = [T.object]
@@ -367,3 +384,4 @@ class TS_Preql_subclass(ProtoTS):
 
 dp_type = runtype.Dispatch(TS_Preql_subclass())
 dp_inst = runtype.Dispatch(TS_Preql())
+

@@ -1,7 +1,5 @@
 "Built-in functions for Preql. Automatically imported by the interpreter."
 
-func maybe_vectorized(t) = union[t, vectorized[t]]
-
 func _sql_agg_func(name, obj, t=null) {
     "Helper function. Do not call"
     if (t==null) {
@@ -145,17 +143,17 @@ func enum(tbl: collection) {
     return tbl{index: SQL(int, "(row_number() over ())-1"), ...}
 }
 
-func upper(s: maybe_vectorized(string)) {
+func upper(s: string) {
     "Return a copy of the string converted to uppercase."
     return SQL(string, "upper($s)")
 }
 
-func lower(s: maybe_vectorized(string)) {
+func lower(s: string) {
     "Return a copy of the string converted to lowercase."
     return SQL(string, "lower($s)")
 }
 
-func length(s: maybe_vectorized(string)) {
+func length(s: string) {
     """Returns the length of the string
 
     For tables or lists, use `count()`
@@ -163,7 +161,7 @@ func length(s: maybe_vectorized(string)) {
     return SQL(int, "length($s)")
 }
 
-func round(n: maybe_vectorized(number)) {
+func round(n: number) {
     """Returns a rounded float
 
     Example:
@@ -293,7 +291,7 @@ func _pi() = SQL(float, "PI()")
 //
 // Start of database-specific code
 //
-func _repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "REPEAT($s, $num)")
+func _repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")
 func _now() = SQL(datetime, "NOW()")
 func _count_false(field: aggregate) = SQL(int, "sum(cast($field=0 as int))")
 func _count_true(field: aggregate) = SQL(int, "sum(cast($field!=0 as int))")
@@ -303,12 +301,12 @@ db_type = get_db_type()
 if (db_type == "postgres") {
     func _random() = SQL(float, "RANDOM()")
 
-    func _str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "POSITION($a in $b)-1")
+    func _str_index(a: string, b: string) = SQL(int, "POSITION($a in $b)-1")
 
-    func _char(n: maybe_vectorized(int)) = SQL(string, "chr($n)")
-    func _char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
+    func _char(n: int) = SQL(string, "chr($n)")
+    func _char_ord(n: string) = SQL(int, "ascii($n)")
 } else if (db_type == "sqlite" or db_type == "duck") {
-    func _repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
+    func _repeat(s: string, num: int) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
     func _now() = SQL(datetime, "datetime('now')")
     func _random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
     func _pi() = SQL(float, "3.141592653589793")
@@ -322,15 +320,15 @@ if (db_type == "postgres") {
     func week_of_year(date) = SQL(int, "strftime('%W', $date)")
     func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
 
-    func _str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")
-    func _char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
-    func _char_ord(n: maybe_vectorized(string)) = SQL(int, "unicode($n)")
+    func _str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)-1")
+    func _char(n: int) = SQL(string, "char($n)")
+    func _char_ord(n: string) = SQL(int, "unicode($n)")
 } else if (db_type == "mysql") {
     func _random() = SQL(float, "RAND()")
 
-    func _str_index(a: maybe_vectorized(string), b: maybe_vectorized(string)) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
-    func _char(n: maybe_vectorized(int)) = SQL(string, "char($n)")
-    func _char_ord(n: maybe_vectorized(string)) = SQL(int, "ascii($n)")
+    func _str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
+    func _char(n: int) = SQL(string, "char($n)")
+    func _char_ord(n: string) = SQL(int, "ascii($n)")
 
     // TODO use AST interface instead?
     func _count_false(field) = SQL(int, "sum(cast($field=0 as unsigned))")
@@ -383,7 +381,7 @@ func random() {
     return _random()
 }
 
-func str_index(substr: maybe_vectorized(string), s: maybe_vectorized(string)) {
+func str_index(substr: string, s: string) {
     """Finds in which index does `substr` appear in `s`.
 
     Parameters:
@@ -402,16 +400,16 @@ func str_index(substr: maybe_vectorized(string), s: maybe_vectorized(string)) {
     return _str_index(substr, s)
 }
 
-func char(n: maybe_vectorized(int)) {
+func char(n: int) {
     """Returns the character with the given ASCII code"""
     return _char(n)
 }
-func char_ord(n: maybe_vectorized(string)) {
+func char_ord(n: string) {
     "Returns the ascii code of the given character"
     return _char_ord(n)
 }
 
-func repeat(s: maybe_vectorized(string), num: maybe_vectorized(int)) {
+func repeat(s: string, num: int) {
     """Repeats the string `num` times.
 
     Example:

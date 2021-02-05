@@ -10,9 +10,9 @@ from . import pql_ast as ast
 from . import sql
 from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
-from .types_impl import flatten_type, pql_repr
+from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
-from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance
+from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance, inherit_vectorized_type
 
 class AutocompleteSuggestions(Exception):
     pass
@@ -90,9 +90,7 @@ def _expand_ellipsis(state, obj, fields):
             if f.name:
                 raise Signal.make(T.SyntaxError, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
-                t = obj.type
-                if t <= T.vectorized:
-                    t = t.elem
+                t = kernel_type(obj.type)
                 assert t <= T.table or t <= T.struct # some_table{ ... } or some_table{ some_struct_item {...} }
 
                 for n in f.value.exclude:
@@ -151,15 +149,10 @@ def compile_to_inst(state: State, i: ast.If):
     code = sql.Case(cond.code, then.code, else_.code)
     # TODO simplify this with a better type system
     res_type = kernel_type(then.type) | kernel_type(else_.type)
-    if cond.type <= T.vectorized or then.type <= T.vectorized or else_.type <= T.vectorized:
-        res_type = T.vectorized[res_type]
+    res_type = inherit_vectorized_type(res_type, [cond, then, else_])
     return make_instance(code, res_type, [cond, then, else_])
 
 
-def kernel_type(t):
-    if t <= T.vectorized: # or t <= T.aggregate:
-        return kernel_type(t.elems['item'])
-    return t
 
 @dy
 def compile_to_inst(state: State, proj: ast.Projection):
@@ -169,7 +162,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         return table   # Empty list projection is always an empty list.
 
     t = T.union[T.collection, T.struct]
-    if not (table.type <= T.union[t, T.vectorized[t]]):
+    if not (kernel_type(table.type) <= t):
         raise Signal.make(T.TypeError, proj, f"Cannot project objects of type {table.type}")
 
     fields = _expand_ellipsis(state, table, proj.fields)
@@ -209,8 +202,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     elems = {}
     for (user_defined, name), type_ in field_types:
         # Unvectorize for placing in the table type
-        if type_ <= T.vectorized:
-            type_ = type_.elem
+        type_ = kernel_type(type_)
 
         # Find name without collision
         if not user_defined:
@@ -290,16 +282,11 @@ def compile_to_inst(state: State, lst: list):
     return [evaluate(state, e) for e in lst]
 
 
-def base_type(t):
-    if t <= T.vectorized:
-        return t.elem
-    return t
-
 @dy
 def compile_to_inst(state: State, o: ast.Or):
     args = cast_to_instance(state, o.args)
     a, b = args
-    if base_type(a.type) != base_type(b.type):
+    if kernel_type(a.type) != kernel_type(b.type):
         raise Signal.make(T.TypeError, o, f"'or' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
     cond = cast(state, a, T.bool)
     code = sql.Case(cond.code, a.code, b.code)
@@ -309,7 +296,7 @@ def compile_to_inst(state: State, o: ast.Or):
 def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
     a, b = args
-    if base_type(a.type) != base_type(b.type):
+    if kernel_type(a.type) != kernel_type(b.type):
         raise Signal.make(T.TypeError, o, f"'and' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
     cond = cast(state, a, T.bool)
     code = sql.Case(cond.code, b.code, a.code)
@@ -745,7 +732,6 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
     else:
         self_table = None
 
-    params_vectorized = False
     instances = []
     subqueries = SafeDict()
     tokens = re_split(r"\$\w+", sql_code)
@@ -765,8 +751,6 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
                     inst = objects.new_table(obj)
                 else:
                     inst = cast_to_instance(state, obj)
-                    if inst.type <= T.vectorized:
-                        params_vectorized = True
 
             instances.append(inst)
             new_code += _resolve_sql_parameters(state, inst.code, wrap=bool(new_code), subqueries=subqueries).code
@@ -787,8 +771,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
         inst.subqueries[name] = subq
         return inst
 
-    if params_vectorized:
-        type_ = T.vectorized[type_]
+    type_ = inherit_vectorized_type(type_, instances)
     code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
     return make_instance(code, type_, instances)
 
@@ -796,7 +779,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
 def compile_to_inst(state: State, s: ast.Slice):
     obj = cast_to_instance(state, s.obj)
 
-    assert_type(obj.type, T.union[T.string, T.collection, T.vectorized[T.string]], state, s, "Slice")
+    assert_type(kernel_type(obj.type), T.union[T.string, T.collection], state, s, "Slice")
 
     instances = [obj]
     if s.range.start:
@@ -811,7 +794,7 @@ def compile_to_inst(state: State, s: ast.Slice):
     else:
         stop = None
 
-    if obj.type <= T.string or obj.type <= T.vectorized[T.string]:
+    if kernel_type(obj.type) <= T.string:
         code = sql.StringSlice(obj.code, sql.add_one(start.code), stop and sql.add_one(stop.code))
     else:
         start_n = cast_to_python(state, start)
@@ -828,9 +811,9 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     table = cast_to_instance(state, obj)
 
-    if table.type <= T.string or table.type <= T.vectorized[T.string]:
+    if kernel_type(table.type) <= T.string:
         index ,= cast_to_instance(state, sel.conds)
-        assert index.type <= T.int or index.type <= T.vectorized[T.int], index.type
+        assert kernel_type(index.type) <= T.int, index.type
         table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
         slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
@@ -844,7 +827,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
         code = sql.unknown
     else:
         for i, c in enumerate(conds):
-            if not (c.type <= T.union[T.bool, T.vectorized[T.bool]]):
+            if not (kernel_type(c.type) <= T.bool):
                 raise exc.Signal.make(T.TypeError, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
         code = sql.table_selection(table, [c.code for c in conds])

@@ -15,7 +15,7 @@ from .parser import Str
 from .interp_common import State, dy, new_value_instance, cast_to_python
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
-from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr
+from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr, kernel_type
 from .display import display
 
 
@@ -494,8 +494,7 @@ def eval_func_call(state, func, args):
     for i, (p, a) in enumerate(matched_args):
         a = evaluate(state, a)
         # TODO cast?
-        # if p.type and not a.type <= T.union[p.type, T.vectorized[p.type]]:
-        if p.type and not a.type <= p.type:
+        if p.type and not kernel_type(a.type) <= p.type:
             raise Signal.make(T.TypeError, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
         args[p.name] = a
 

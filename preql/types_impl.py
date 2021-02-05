@@ -1,7 +1,7 @@
 from .exceptions import Signal, pql_AttributeError
 
 from .base import Object
-from .utils import listgen, concat_for, classify_bool
+from .utils import concat_for, classify_bool
 from .pql_types import ITEM_NAME, T, Type, dp_type
 
 
@@ -11,7 +11,7 @@ def Object_get_attr(self, attr):
 def Object_isa(self, t):
     if not isinstance(t, Type):
         raise Signal.make(T.TypeError, None, f"'type' argument to isa() isn't a type. It is {t}")
-    return self.type <= t
+    return kernel_type(self.type) <= t
 
 Object.get_attr = Object_get_attr
 Object.isa = Object_isa
@@ -65,3 +65,9 @@ def join_names(names):
 @dp_type
 def pql_repr(t, value):
     return repr(value)
+
+
+def kernel_type(t):
+    if t <= T.vectorized: # or t <= T.aggregate:
+        return kernel_type(t.elems['item'])
+    return t
