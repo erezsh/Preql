@@ -538,8 +538,9 @@ def vectorized(inst):
     return inst.replace(type=T.vectorized[inst.type])
 
 def unvectorized(inst):
-    assert inst.type <= T.vectorized
-    return inst.replace(type=inst.type.elem)
+    if inst.type <= T.vectorized:
+        return inst.replace(type=inst.type.elem)
+    return inst
 
 def inherit_vectorized_type(t, objs):
     for src in objs:
@@ -553,24 +554,6 @@ def inherit_vectorized(o, objs):
             return vectorized(o)
     return o
 
-
-
-@dy
-def unvectorize_args(x: list):
-    if not x:
-        return False, x
-    was_vec, objs = zip(*[unvectorize_args(i) for i in x])
-    return any(was_vec), list(objs)
-
-@dy
-def unvectorize_args(x: AbsInstance):
-    if x.type <= T.vectorized:
-        return True, unvectorized(x)
-    return False, x
-
-@dy
-def unvectorize_args(x):
-    return False, x
 
 
 null = ValueInstance.make(sql.null, T.nulltype, [], None)

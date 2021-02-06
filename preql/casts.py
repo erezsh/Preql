@@ -1,6 +1,7 @@
 from . import pql_objects as objects
 from . import sql
 from .pql_types import T, dp_type, ITEM_NAME
+from .types_impl import kernel_type 
 from .exceptions import Signal
 
 @dp_type
@@ -106,8 +107,5 @@ def _cast(state, inst_type: T.t_relation, target_type: T.int, inst):
     raise Signal.make(T.TypeError, state, None, f"Cast not implemented for {inst_type}->{target_type}")
 
 def cast(state, obj, t):
-    was_vec, [obj, t] = objects.unvectorize_args([obj, t])
-    res = _cast(state, obj.type, t, obj)
-    if was_vec:
-        res = objects.vectorized(res)
-    return res
+    res = _cast(state, kernel_type(obj.type), t, obj)
+    return objects.inherit_vectorized(res, [obj])

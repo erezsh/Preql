@@ -412,9 +412,10 @@ def simplify(state: State, x):
 @dy
 def simplify(state: State, obj: ast.Or):
     a, b = evaluate(state, obj.args)
-    _, (ta, tb) = objects.unvectorize_args([a,b])
-    if ta.type != tb.type:
-        raise Signal.make(T.TypeError, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
+    ta = kernel_type(a.type)
+    tb = kernel_type(b.type)
+    if ta != tb:
+        raise Signal.make(T.TypeError, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta}' and '{tb}'.")
     try:
         if test_nonzero(state, a):
             return a
@@ -426,9 +427,10 @@ def simplify(state: State, obj: ast.Or):
 @dy
 def simplify(state: State, obj: ast.And):
     a, b = evaluate(state, obj.args)
-    _, (ta, tb) = objects.unvectorize_args([a,b])
-    if ta.type != tb.type:
-        raise Signal.make(T.TypeError, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta.type}' and '{tb.type}'.")
+    ta = kernel_type(a.type)
+    tb = kernel_type(b.type)
+    if ta != tb:
+        raise Signal.make(T.TypeError, obj, f"'and' operator requires both arguments to be of the same type, but got '{ta}' and '{tb}'.")
     try:
         if not test_nonzero(state, a):
             return a
@@ -503,12 +505,7 @@ def eval_func_call(state, func, args):
         # TODO ensure pure function?
         # TODO Ensure correct types
         args = list(args.values())
-        # args = evaluate(state, args)
-        # was_vec, args = objects.unvectorize_args(args)
-        res = func.func(state, *args)
-        # if was_vec:
-        #     res = vectorized(res)
-        return res
+        return func.func(state, *args)
     else:
         # TODO make tests to ensure caching was successful
         if settings.cache:

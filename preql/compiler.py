@@ -12,7 +12,7 @@ from .interp_common import dy, State, assert_type, new_value_instance, evaluate,
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
-from .pql_objects import AbsInstance, vectorized, unvectorized, make_instance, inherit_vectorized_type
+from .pql_objects import AbsInstance, vectorized, make_instance, inherit_vectorized_type, unvectorized
 
 class AutocompleteSuggestions(Exception):
     pass
@@ -312,17 +312,10 @@ def compile_to_inst(state: State, o: ast.Not):
 
 
 ## Contains
-@dp_inst
-def _contains(state, op, a: T.vectorized, b: T.vectorized):
-    return vectorized(_contains(state, op, unvectorized(a), unvectorized(b)))
+def contains(state, op, a, b):
+    res = _contains(state, op, unvectorized(a), unvectorized(b))
+    return objects.inherit_vectorized(res, [a, b])
 
-@dp_inst
-def _contains(state, op, a: T.vectorized, b: T.any):
-    return vectorized(_contains(state, op, unvectorized(a), b))
-
-@dp_inst
-def _contains(state, op, a: T.any, b: T.vectorized):
-    return vectorized(_contains(state, op, a, unvectorized(b)))
 
 @dp_inst
 def _contains(state, op, a: T.string, b: T.string):
@@ -350,22 +343,13 @@ def _contains(state, op, a: T.any, b: T.any):
 
 
 ## Compare
+def compare(state, op, a, b):
+    res = _compare(state, op, unvectorized(a), unvectorized(b))
+    return objects.inherit_vectorized(res, [a, b])
+
 @dp_inst
 def _compare(state, op, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, op, f"Compare not implemented for {a.type} and {b.type}")
-
-@dp_inst
-def _compare(state, op, a: T.vectorized, b: T.vectorized):
-    return vectorized(_compare(state, op, unvectorized(a), unvectorized(b)))
-
-@dp_inst
-def _compare(state, op, a: T.vectorized, b: T.any):
-    return vectorized(_compare(state, op, unvectorized(a), b))
-
-@dp_inst
-def _compare(state, op, a: T.any, b: T.vectorized):
-    return vectorized(_compare(state, op, a, unvectorized(b)))
-
 
 
 @dp_inst
@@ -467,13 +451,13 @@ def compile_to_inst(state: State, cmp: ast.Compare):
     insts = evaluate(state, cmp.args)
 
     if cmp.op == 'in' or cmp.op == '!in':
-        return _contains(state, cmp.op, insts[0], insts[1])
+        return contains(state, cmp.op, insts[0], insts[1])
 
     op = {
         '==': '=',
         '<>': '!=',
     }.get(cmp.op, cmp.op)
-    return _compare(state, op, insts[0], insts[1])
+    return compare(state, op, insts[0], insts[1])
 
 @dy
 def compile_to_inst(state: State, neg: ast.Neg):
@@ -486,24 +470,16 @@ def compile_to_inst(state: State, neg: ast.Neg):
 @dy
 def compile_to_inst(state: State, arith: ast.BinOp):
     args = cast_to_instance(state, arith.args)
-    return _compile_arith(state, arith, *args)
+    return compile_arith(state, arith, *args)
 
+
+def compile_arith(state, op, a, b):
+    res = _compile_arith(state, op, unvectorized(a), unvectorized(b))
+    return objects.inherit_vectorized(res, [a, b])
 
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
     raise Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not implemented for {a.type} and {b.type}")
-
-@dp_inst
-def _compile_arith(state, arith, a: T.vectorized, b: T.vectorized):
-    return vectorized(_compile_arith(state, arith, unvectorized(a), unvectorized(b)))
-
-@dp_inst
-def _compile_arith(state, arith, a: T.any, b: T.vectorized):
-    return vectorized(_compile_arith(state, arith, a, unvectorized(b)))
-
-@dp_inst
-def _compile_arith(state, arith, a: T.vectorized, b: T.any):
-    return vectorized(_compile_arith(state, arith, unvectorized(a), b))
 
 
 
