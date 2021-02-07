@@ -221,16 +221,17 @@ class BigQueryInterface(SqlInterface):
 
 
     def table_exists(self, name):
-        # sql_code = "SELECT count(*) FROM information_schema.tables where table_name='%s'" % name
-        # cnt = self._execute_sql(T.int, sql_code, None)
-        # return cnt > 0
-        return False
+        from google.api_core.exceptions import NotFound
+        try:
+            self._client.get_table(name)
+        except NotFound:
+            return False
+        return True
 
     def list_tables(self):
-        # sql_code = "SELECT table_name FROM information_schema.tables where table_schema='public'"
-        # return self._execute_sql(T.list[T.string], sql_code, None)
-        return []
-
+        for ds in self._client.list_datasets():
+            for t in self._client.list_tables(ds.reference):
+                yield t.full_table_id.replace(':', '.')     # Hacky
 
     def _execute_sql(self, sql_type, sql_code, state):
         try:
@@ -245,8 +246,6 @@ class BigQueryInterface(SqlInterface):
 
 
 
-    # Row(('bigquery-public-data', 'usa_names', 'usa_1910_2013', 'BASE TABLE', 'YES', 'NO', datetime.datetime(2016, 3, 12, 1, 2, 22, 425000, tzinfo=<UTC>)), {'table_catalog': 0, 'table_schema': 1, 'table_name': 2, 'table_type': 3, 'is_insertable_into': 4, 'is_typed': 5, 'creation_time': 6})
-    # Row(('bigquery-public-data', 'usa_names', 'usa_1910_current', 'BASE TABLE', 'YES', 'NO', datetime.datetime(2017, 2, 27, 21, 35, 45, 458000, tzinfo=<UTC>)), {'table_catalog': 0, 'table_schema': 1, 'table_name': 2, 'table_type': 3, 'is_insertable_into': 4, 'is_typed': 5, 'creation_time': 6})
     _schema_columns_t = T.table(dict(
         schema=T.string,
         table=T.string,
@@ -256,8 +255,16 @@ class BigQueryInterface(SqlInterface):
         type=T.string,
     ))
 
-    def import_table_types(self, state):
-        return []
+    def import_table_type(self, state, name, columns_whitelist=None):
+        cols = {}
+        for f in self._client.get_table(name).schema:
+            if columns_whitelist is None or f.name in columns_whitelist:
+                cols[f.name] = _type_from_sql(f.field_type, f.is_nullable)
+
+        return T.table(cols, name=Id(name))
+
+    # def import_table_types(self, state):
+    #     return []
         # columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
         #     FROM information_schema.columns
         #     """

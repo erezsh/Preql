@@ -842,11 +842,10 @@ class BigQueryValues(SqlTree):
         cols = list(self.type.elems)
 
         rows = [
-             ['STRUCT('] + 
-             (join_comma(v.compile(qb).code + [" as ", name]
-                                  for name, v in safezip(cols, row.values))
-             if isinstance(row, Tuple) else row.compile(qb).code)
-             + [")"]
+            (
+             ['STRUCT('] + join_comma(v.compile(qb).code + [" as ", name]
+                                  for name, v in safezip(cols, row.values)) + [")"]
+            ) if isinstance(row, Tuple) else row.compile(qb).code
              for row in self.values
         ]
 
@@ -1002,11 +1001,13 @@ def compile_type_def(state, table_name, table) -> Sql:
             if target == postgres:
                 type_ = "SERIAL" # Postgres
             elif target == mysql:
-                type_ = "INT NOT NULL AUTO_INCREMENT"
+                type_ = "INTEGER NOT NULL AUTO_INCREMENT"
+            elif target == bigquery:
+                type_ = "INT64 NOT NULL"
             else:
                 type_ = "INTEGER"   # TODO non-int idtypes
         else:
-            type_ = compile_type(c)
+            type_ = compile_type(target, c)
 
         columns.append( f'{_quote(target, name)} {type_}' )
 
@@ -1020,7 +1021,7 @@ def compile_type_def(state, table_name, table) -> Sql:
                     s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, _tbl_name)}({rel['column']})"
                     posts.append(s)
 
-    if pks:
+    if pks and target != bigquery:
         names = ", ".join(pks)
         posts.append(f"PRIMARY KEY ({names})")
 
@@ -1033,40 +1034,56 @@ def compile_drop_table(state, table_name) -> Sql:
     return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
 
 @dp_type
-def compile_type(type_: T.t_relation):
+def compile_type(target, type_: T.t_relation):
     # TODO might have a different type
     #return 'INTEGER'    # Foreign-key is integer
-    return compile_type(type_.elems['item'])
+    return compile_type(target, type_.elems['item'])
 
 @dp_type
-def compile_type(type_: T.primitive):
-    assert type_ <= T.primitive
-    s = {
-        'int': "INTEGER",
-        'string': "VARCHAR(4000)",
-        'float': "FLOAT",
-        'bool': "BOOLEAN",
-        'text': "TEXT",
-        # 't_relation': "INTEGER",
-        'datetime': "TIMESTAMP",
-    }[type_.typename]
+def compile_type(target, type_: T.primitive):
+    if target == bigquery:
+        d = {
+            'int': "INT64",
+            'string': "STRING",
+            'float': "FLOAT",
+            'bool': "BOOLEAN",
+            'text': "TEXT",
+            # 't_relation': "INTEGER",
+            'datetime': "TIMESTAMP",
+        }
+    else:
+        d = {
+            'int': "INTEGER",
+            'string': "VARCHAR(4000)",
+            'float': "FLOAT",
+            'bool': "BOOLEAN",
+            'text': "TEXT",
+            # 't_relation': "INTEGER",
+            'datetime': "TIMESTAMP",
+        }
+    s = d[type_.typename]
     if not type_.maybe_null():
         s += " NOT NULL"
     return s
 
 @dp_type
-def compile_type(_type: T.nulltype):
+def compile_type(target, _type: T.nulltype):
+    if target == bigquery:
+        return 'INT64'
     return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
 
 @dp_type
-def compile_type(idtype: T.t_id):
-    s = "INTEGER"   # TODO non-int idtypes
+def compile_type(target, idtype: T.t_id):
+    if target == bigquery:
+        s = "INT64"
+    else:
+        s = "INTEGER"   # TODO non-int idtypes
     if not idtype.maybe_null():
         s += " NOT NULL"
     return s
 
 @dp_type
-def compile_type(_type: T.json):
+def compile_type(target, _type: T.json):
     return 'JSON'
 
 
