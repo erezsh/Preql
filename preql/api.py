@@ -10,14 +10,16 @@ from .evaluate import cast_to_python, localize, evaluate
 from .interp_common import create_engine, call_pql_func
 from .pql_types import T
 from .pql_functions import import_pandas
+from .context import context
 
 from . import display
 display.install_reprs()
 
 
 def _call_pql_func(state, name, args):
-    count = call_pql_func(state, name, args)
-    return cast_to_python(state, count)
+    with context(state=state):
+        count = call_pql_func(state, name, args)
+        return cast_to_python(state, count)
 
 
 class TablePromise:
@@ -59,15 +61,15 @@ class TablePromise:
 
     def __getitem__(self, index):
         "Run a slice query on table"
-        if isinstance(index, slice):
-            offset = index.start or 0
-            limit = index.stop - offset
-            return call_pql_func(self._state, 'limit_offset', [self._inst, ast.make_const(limit), ast.make_const(offset)])
+        with context(state=self._state):
+            if isinstance(index, slice):
+                offset = index.start or 0
+                limit = index.stop - offset
+                return call_pql_func(self._state, 'limit_offset', [self._inst, ast.make_const(limit), ast.make_const(offset)])
 
-        # TODO different debug log level / mode
-        # inst = evaluate(self._state,
-        res ,= cast_to_python(self._state, self[index:index+1])
-        return res
+            # TODO different debug log level / mode
+            res ,= cast_to_python(self._state, self[index:index+1])
+            return res
 
     def __repr__(self):
         return repr(self.to_json())
@@ -185,7 +187,8 @@ class Preql:
         Example:
             >>> pql.import_pandas(a=df_a, b=df_b)
         """
-        return list(import_pandas(self.interp.state, dfs))
+        with context(state=self.interp.state):
+            return list(import_pandas(self.interp.state, dfs))
 
 
     def load_all_tables(self):

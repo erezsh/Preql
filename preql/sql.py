@@ -72,7 +72,10 @@ class SqlTree(Sql):
     def finalize_with_subqueries(self, qb, subqueries):
         if subqueries:
             subqs = [q.compile_wrap(qb).finalize(qb) for (name, q) in subqueries.items()]
-            sql_code = ['WITH RECURSIVE ']
+            if qb.target in (postgres, mysql):
+                sql_code = ['WITH RECURSIVE ']
+            else:
+                sql_code = ['WITH ']
             sql_code += join_comma([q, '\n    '] for q in subqs)
         else:
             sql_code = []
@@ -107,7 +110,7 @@ class CompiledSQL(Sql):
         else:
             if self._is_select and not self._needs_select:
                 # Bad recursion
-                if qb.target == 'postgres' or qb.target == 'mysql' or qb.target == 'duck':
+                if qb.target in (postgres, mysql, duck):
                     code = ['('] + code + [') ', qb.unique_name()]  # postgres requires an alias
                 else:
                     code = ['('] + code + [')']
@@ -743,11 +746,12 @@ class Select(TableOperation):
 @listgen
 def join_sep(code_list, sep):
     code_list = list(code_list)
-    yield from code_list[0]
-    for c in code_list[1:]:
-        assert isinstance(c, list)
-        yield sep
-        yield from c
+    if code_list:
+        yield from code_list[0]
+        for c in code_list[1:]:
+            assert isinstance(c, list)
+            yield sep
+            yield from c
 
 def join_comma(code_list):
     return join_sep(code_list, ", ")
@@ -755,14 +759,17 @@ def join_comma(code_list):
 @dataclass
 class Subquery(SqlTree):
     table_name: str
-    fields: List[Name]
+    fields: Optional[List[Name]]
     query: Sql
     type = property(X.query.type)
 
     def _compile(self, qb):
         query = self.query.compile(qb).code
-        fields = [f.compile_wrap(qb.replace(is_root=False)).code for f in self.fields]
-        fields_str = ["("] + join_comma(fields) + [")"] if fields else []
+        if qb.target == bigquery:
+            fields_str = []
+        else:
+            fields = [f.compile_wrap(qb.replace(is_root=False)).code for f in self.fields]
+            fields_str = ["("] + join_comma(fields) + [")"] if fields else []
         return [f"{self.table_name}"] + fields_str + [" AS ("] + query + [")"]
 
 def _enum_is_last(seq):
@@ -820,17 +827,55 @@ def _sql_primitive_to_float(e):
 
 def create_list(name, elems):
     # Assumes all elems have the same type!
-    list_type = T.list[elems[0].type]
-    field_names = [name for name, c in flatten_type(list_type)]
-    fields = [Name(list_type.elem, name) for name in field_names]
-    subq = Subquery(name, fields, Values(list_type, elems))
-    table = TableName(list_type, Id(name))
-    return table, subq, list_type
+    t = T.list[elems[0].type]
+    subq = TableQueryValues(t, name, elems)
+    table = TableName(t, Id(name))
+    return table, subq, t
 
-def create_table(table_type, name, rows):
-    fields = [Name(col_type, col_name) for col_name, col_type in table_type.elems.items()]
-    subq = Subquery(name, fields, Values(table_type, rows))
-    table = TableName(table_type, Id(name))
+
+@dataclass
+class BigQueryValues(SqlTree):
+    type: Type
+    values: List[Sql]
+
+    def _compile(self, qb):
+        cols = list(self.type.elems)
+
+        rows = [
+             ['STRUCT('] + 
+             (join_comma(v.compile(qb).code + [" as ", name]
+                                  for name, v in safezip(cols, row.values))
+             if isinstance(row, Tuple) else row.compile(qb).code)
+             + [")"]
+             for row in self.values
+        ]
+
+        return ["SELECT * FROM UNNEST(["] + join_comma(rows) + ["])"]
+
+
+
+@dataclass
+class TableQueryValues(SqlTree):
+    "A subquery which returns a table of given values"
+
+    type: Type
+    name: str
+    rows: list
+
+    def _compile(self, qb):
+        if qb.target != 'bigquery':
+            values_cls = Values
+            fields = [Name(col_type, col_name) for col_name, col_type in self.type.elems.items()]
+        else:
+            values_cls = BigQueryValues
+            fields = None
+
+        subq = Subquery(self.name, fields, values_cls(self.type, self.rows))
+        return subq._compile(qb)
+
+def create_table(t, name, rows):
+    subq = TableQueryValues(t, name, rows)
+    table = TableName(t, Id(name))
     return table, subq
 
 def table_slice(table, start, stop):
@@ -911,9 +956,13 @@ def _repr(t: T.datetime, x):
     # TODO Better to pass the object instead of a string?
     return repr(str(x))
 
+from .context import context
 @dp_type
 def _repr(t: T.union[T.string, T.text], x):
-    return "'%s'" % str(x).replace("'", "''")
+    if context.state.db.target == bigquery:
+        return "'%s'" % str(x).replace("'", r"\'")
+    else:
+        return "'%s'" % str(x).replace("'", "''")
 
 def make_value(x):
     if x is None:

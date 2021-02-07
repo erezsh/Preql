@@ -334,6 +334,8 @@ if (db_type == "postgres") {
     func _count_false(field) = SQL(int, "sum(cast($field=0 as unsigned))")
     func _count_true(field) = SQL(int, "sum(cast($field!=0 as unsigned))")
 
+} else if (db_type == "bigquery") {
+    func _char(n: int) = SQL(string, "char($n)")
 } else {
     throw new TypeError("Unexpected")
 }
