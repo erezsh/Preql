@@ -269,11 +269,11 @@ class FuncCall(SqlTree):
 @dataclass
 class Cast(SqlTree):
     type: Type
-    as_type: str
     value: Sql
 
     def _compile(self, qb):
-        return [f'CAST('] + self.value.compile_wrap(qb).code + [f' AS {self.as_type})']
+        t = compile_type(qb.target, self.type.as_nullable())     # XXX as-nullable here is a hack
+        return [f'CAST('] + self.value.compile_wrap(qb).code + [f' AS {t})']
 
 
 @dataclass
@@ -899,7 +899,7 @@ def arith(target, res_type, op, args):
     elif op == '/':
         if target != mysql:
             # In MySQL division returns a float. All others return int
-            arg_codes[0] = Cast(T.float, 'float', arg_codes[0])
+            arg_codes[0] = Cast(T.float, arg_codes[0])
     elif op == '/~':
         if target == mysql:
             op = 'DIV'
@@ -1009,7 +1009,7 @@ def compile_type_def(state, table_name, table) -> Sql:
             else:
                 type_ = "INTEGER"   # TODO non-int idtypes
         else:
-            type_ = compile_type(target, c)
+            type_ = compile_type(target if target != mysql else 'mysql_def', c)
 
         columns.append( f'{_quote(target, name)} {type_}' )
 
@@ -1047,10 +1047,18 @@ def compile_type(target, type_: T.primitive):
         d = {
             'int': "INT64",
             'string': "STRING",
+            'float': "FLOAT64",
+            'bool': "BOOLEAN",
+            'text': "TEXT",
+            'datetime': "TIMESTAMP",
+        }
+    elif target == mysql:
+        d = {
+            'int': "SIGNED",
+            'string': "VARCHAR(4000)",
             'float': "FLOAT",
             'bool': "BOOLEAN",
             'text': "TEXT",
-            # 't_relation': "INTEGER",
             'datetime': "TIMESTAMP",
         }
     else:
@@ -1060,7 +1068,6 @@ def compile_type(target, type_: T.primitive):
             'float': "FLOAT",
             'bool': "BOOLEAN",
             'text': "TEXT",
-            # 't_relation': "INTEGER",
             'datetime': "TIMESTAMP",
         }
     s = d[type_.typename]

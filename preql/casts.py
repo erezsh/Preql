@@ -52,11 +52,7 @@ def _cast(state, inst_type: T.int, target_type: T.t_id, inst):
 
 @dp_type
 def _cast(state, inst_type: T.union[T.float, T.bool], target_type: T.int, inst):
-    if state.db.target is sql.mysql:
-        t = "signed integer"
-    else:
-        t = "int"
-    code = sql.Cast(T.int, t, inst.code)
+    code = sql.Cast(T.int, inst.code)
     return objects.Instance.make(code, T.int, [inst])
 
 @dp_type
@@ -81,7 +77,7 @@ def _cast(state, inst_type: T.string, target_type: T.string, inst):     # Disamb
 
 @dp_type
 def _cast(state, inst_type: T.union[T.int, T.bool], target_type: T.float, inst):
-    code = sql.Cast(T.float, "float", inst.code)
+    code = sql.Cast(T.float, inst.code)
     return objects.Instance.make(code, T.float, [inst])
 
 # @dp_type
@@ -92,7 +88,7 @@ def _cast(state, inst_type: T.union[T.int, T.bool], target_type: T.float, inst):
 
 @dp_type
 def _cast(state, inst_type: T.primitive, target_type: T.string, inst):
-    code = sql.Cast(T.string, "varchar", inst.code)
+    code = sql.Cast(T.string, inst.code)
     return objects.Instance.make(code, T.string, [inst])
 
 @dp_type
