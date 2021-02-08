@@ -11,13 +11,13 @@ func _sql_agg_func(name, obj, t=null) {
         t = type(obj).item
     }
 
-    if (not (issubclass(t, number))) {
-        throw new TypeError(name + "() expects numeric elements, instead got: '" + repr(t) + "'")
-    }
-
     if (isa(obj, aggregate)) {
         return SQL(t, name + "($obj)")
     } else {
+        if (not (issubclass(t, number))) {
+            throw new TypeError(name + "() expects numeric elements, instead got: '" + repr(t) + "'")
+        }
+        
         obj = list(obj)
         if (isa(obj, list)) {
             return one one obj{ => item: _sql_agg_func(name, item, t) }     // Recursive
@@ -546,8 +546,9 @@ func char_range(start: string, end: string) {
     Example:
         >> char_range('a', 'z')
     """
-
-    return list([char_ord(start)..(char_ord(end)+1)]{char(item)})
+    a = char_ord(start)
+    b = char_ord(end)+1
+    return list([a..b]{char(item)})
 }
 
 

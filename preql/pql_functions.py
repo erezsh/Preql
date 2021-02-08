@@ -602,7 +602,7 @@ def pql_cast(state: State, obj: T.any, target_type: T.type):
     return cast(state, obj, type_)
 
 
-def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = objects.null):
+def pql_import_table(state: State, name: T.string, columns: T.list[T.string].as_nullable() = objects.null):
     """Import an existing table from the database, and fill in the types automatically.
 
     Parameters:
@@ -613,13 +613,11 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string] = o
         >> import_table("my_sql_table", ["some_column", "another_column])
     """
     name_str = cast_to_python(state, name)
-    columns_whitelist = cast_to_python(state, columns) or []
-    if not isinstance(columns_whitelist, list):
-        raise Signal.make(T.TypeError, columns, "Expected list")
-    if not isinstance(name_str, str):
-        raise Signal.make(T.TypeError, name, "Expected string")
-
-    columns_whitelist = set(columns_whitelist)
+    assert isinstance(name_str, str)
+    columns_whitelist = cast_to_python(state, columns)
+    if columns_whitelist is not None:
+        assert isinstance(columns_whitelist, list)
+        columns_whitelist = set(columns_whitelist)
 
     # Get table type
     t = state.db.import_table_type(state, name_str, columns_whitelist)

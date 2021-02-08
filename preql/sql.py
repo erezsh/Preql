@@ -308,6 +308,8 @@ class MakeArray(SqlTree):
             return ['array_agg('] + field + [')']
         elif qb.target == mysql:
             return ['json_arrayagg('] + field + [')']
+        elif qb.target == bigquery:
+            return ['array_agg('] + field + [')']
 
         assert False, qb.target
 
