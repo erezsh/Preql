@@ -1,4 +1,4 @@
-from preql.sql import mysql
+from preql.sql import mysql, bigquery
 from unittest import skip
 
 from parameterized import parameterized_class
@@ -9,17 +9,17 @@ from preql.exceptions import Signal
 from preql import sql, settings
 from preql.pql_types import T
 
-from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI
+from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI, BIGQUERY_URI
 
 def uses_tables(*names):
     names = [n.lower() for n in names]  # Table names are case insensitive
     def decorator(decorated):
         def wrapper(self):
-            if self.uri != MYSQL_URI:
+            if self.uri not in (MYSQL_URI, BIGQUERY_URI):
                 return decorated(self)
 
             p = self.Preql()
-            tables = p.interp.state.db.list_tables()
+            tables = list(p.interp.state.db.list_tables())
             def _key(t):
                 try:
                     return names.index(t.lower())
@@ -34,7 +34,8 @@ def uses_tables(*names):
                 return decorated(self)
             finally:
                 p = self.preql
-                if p.interp.state.db.target is mysql:
+                # Table contents weren't dropped, due to autocommit
+                if p.interp.state.db.target in (mysql, ):
                     p._drop_tables(*names)
                 tables = p.interp.state.db.list_tables()
                 assert not tables, tables
@@ -50,6 +51,7 @@ def is_eq(a, b):
     ("Normal_Lt", SQLITE_URI, True),
     ("Normal_Pg", POSTGRES_URI, True),
     ("Normal_My", MYSQL_URI, True),
+    # ("Normal_Bq", BIGQUERY_URI, True),
     # ("Normal_Dk", DUCK_URI, True),
     ("Unoptimized_Lt", SQLITE_URI, False),
     ("Unoptimized_Pg", POSTGRES_URI, False),

@@ -177,9 +177,11 @@ class Preql:
         return self.interp.state.db.rollback()
 
     def _drop_tables(self, *tables):
+        state = self.interp.state
         # XXX temporary. Used for testing
         for t in tables:
-            self.interp.state.db._execute_sql(T.nulltype, f"DROP TABLE {t};", self.interp.state)
+            t = state.db.qualified_name(t)
+            state.db._execute_sql(T.nulltype, f"DROP TABLE {t};", state)
 
     def import_pandas(self, **dfs):
         """Import pandas.DataFrame instances into SQL tables

@@ -286,6 +286,13 @@ class BigQueryInterface(SqlInterface):
             return name
         return self.get_default_dataset() + '.' + name
 
+    def rollback(self):
+        # XXX No error? No warning?
+        pass
+    def commit(self):
+        # XXX No error? No warning?
+        pass
+
 
 class SqliteInterface(SqlInterface):
     target = sqlite
