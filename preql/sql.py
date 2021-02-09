@@ -905,6 +905,9 @@ def arith(target, res_type, op, args):
             op = 'DIV'
         else:
             op = '/'
+    elif op == '%':
+        if target is bigquery:
+            return FuncCall(res_type, 'mod', arg_codes)
     elif op == '**':
         return FuncCall(T.float, 'power', arg_codes)
 

@@ -893,20 +893,33 @@ def compile_to_inst(state: State, marker: ast.Marker):
 
 @dy
 def compile_to_inst(state: State, range: ast.Range):
+    # TODO move to sql.py
+    # Requires subqueries to be part of 'code' instead of a separate 'subqueries'?
+    # But then what's the point of an instance, other than carrying methods...
     start = cast_to_python(state, range.start) if range.start else 0
     if not isinstance(start, int):
         raise Signal.make(T.TypeError, range, "Range must be between integers")
+
+    stop = None
     if range.stop:
         stop = cast_to_python(state, range.stop)
         if not isinstance(stop, int):
             raise Signal.make(T.TypeError, range, "Range must be between integers")
-        stop_str = f" WHERE item+1<{stop}"
-    else:
-        if state.db.target is sql.mysql:
-            raise Signal.make(T.NotImplementedError, range, "MySQL doesn't support infinite recursion!")
-        stop_str = ''
+    elif state.db.target in (sql.mysql, sql.bigquery):
+            raise Signal.make(T.NotImplementedError, range, f"{state.db.target} doesn't support infinite series!")
 
     type_ = T.list[T.int]
+
+    if state.db.target == sql.bigquery:
+        code = sql.RawSql(type_, f'UNNEST(GENERATE_ARRAY({start}, {stop})) as item')
+        return objects.TableInstance.make(code, type_, [])
+
+    if stop is None:
+        stop_str = ''
+    else:
+        stop_str = f" WHERE item+1<{stop}"
+
+
     name = state.unique_name("range")
     skip = 1
     code = f"SELECT {start} AS item UNION ALL SELECT item+{skip} FROM {name}{stop_str}"
