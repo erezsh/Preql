@@ -518,14 +518,16 @@ class InsertConsts(SqlTree):
     type = T.nulltype
 
     def _compile(self, qb):
+        cols = self.cols
+        tuples = self.tuples
         assert self.tuples, self
 
         values = join_comma(
             parens(join_comma([e.compile_wrap(qb).code for e in tpl]))
-            for tpl in self.tuples
+            for tpl in tuples
         )
 
-        cols = [qb.quote(Id(c)) for c in self.cols]
+        cols = [qb.quote(Id(c)) for c in cols]
         q = ['INSERT INTO', qb.safe_name(self.table),
              "(", ', '.join(cols), ")",
              "VALUES ",
@@ -1008,7 +1010,7 @@ def compile_type_def(state, table_name, table) -> Sql:
             elif target == mysql:
                 type_ = "INTEGER NOT NULL AUTO_INCREMENT"
             elif target == bigquery:
-                type_ = "INT64 NOT NULL"
+                type_ = "STRING NOT NULL"
             else:
                 type_ = "INTEGER"   # TODO non-int idtypes
         else:
@@ -1087,7 +1089,7 @@ def compile_type(target, _type: T.nulltype):
 @dp_type
 def compile_type(target, idtype: T.t_id):
     if target == bigquery:
-        s = "INT64"
+        s = "STRING"
     else:
         s = "INTEGER"   # TODO non-int idtypes
     if not idtype.maybe_null():

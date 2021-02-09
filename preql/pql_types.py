@@ -242,7 +242,7 @@ T.table = [T.collection], {}
 T.list = [T.table], {ITEM_NAME: T.any}
 T.set = [T.table], {ITEM_NAME: T.any}
 T.aggregate = [T.collection], {ITEM_NAME: T.any}
-T.t_id = [T.number], (T.table,)
+T.t_id = [T.primitive], (T.table,)
 T.t_relation = [T.number], (T.any,)   # t_id?
 
 T.vectorized = [T.container], (T.any,)  # sequence or collection?

@@ -199,13 +199,13 @@ def table_more():
 
 def module_repr(module):
     res = f'<Module {module.name} | {len(module.namespace)} members>'
-    if state.fmt == 'html':
+    if context.state.fmt == 'html':
         res = html.escape(res)
     return res
 
 def function_repr(func):
     res = '<%s>' % func.help_str()
-    if state.fmt == 'html':
+    if context.state.fmt == 'html':
         res = html.escape(res)
     return res
 

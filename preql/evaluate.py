@@ -30,6 +30,7 @@ def resolve(state: State, struct_def: ast.StructDef):
 def resolve(state: State, table_def: ast.TableDef):
     name = table_def.name
     if is_global_scope(state):
+        name = state.db.qualified_name(name)
         temporary = False
     else:
         name = '__local_' + state.unique_name(name)
@@ -58,8 +59,7 @@ def resolve(state: State, col_def: ast.ColumnDef):
         return T.t_relation[coltype.type](rel={'table': coltype.parent.type, 'column': coltype.name, 'key': False}).replace(_nullable=coltype.type._nullable)
 
     elif coltype <= T.table:
-        # TODO what if 'id' isn't an int?
-        return T.t_relation[T.int.as_nullable()](rel={'table': coltype, 'column': 'id', 'key': True}).replace(_nullable=coltype._nullable)
+        return T.t_relation[T.t_id.as_nullable()](rel={'table': coltype, 'column': 'id', 'key': True}).replace(_nullable=coltype._nullable)
 
     return coltype(default=col_def.default)
 
@@ -133,7 +133,7 @@ def _execute(state: State, table_def: ast.TableDef):
         # Auto-add id only if it exists already and not defined by user
         if 'id' in cur_type.elems: #and 'id' not in t.elems:
             # t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
-            assert cur_type.elems['id'] <= T.int
+            assert cur_type.elems['id'] <= T.primitive, cur_type.elems['id']
             t.elems['id'] = T.t_id
 
         for e_name, e1_type in t.elems.items():
@@ -141,7 +141,7 @@ def _execute(state: State, table_def: ast.TableDef):
             if e_name not in cur_type.elems:
                 raise Signal.make(T.TypeError, table_def, f"Column '{e_name}' defined, but doesn't exist in database.")
 
-            e2_type = cur_type.elems[e_name]
+            # e2_type = cur_type.elems[e_name]
             # XXX use can_cast() instead of hardcoding it
             # if not (e1_type <= e2_type or (e1_type <= T.t_id and e2_type <= T.int)):
             #     raise Signal.make(T.TypeError, table_def, f"Cannot cast column '{e_name}' from type '{e2_type}' to '{e1_type}'")
@@ -752,9 +752,18 @@ def _new_row(state, new_ast, table, matched):
     values = [sql.make_value(v) for (_,v) in destructured_pairs]
     assert keys and values
     # XXX use regular insert?
-    q = sql.InsertConsts(new_ast.type, keys, [values])
-    db_query(state, q)
-    rowid = db_query(state, sql.LastRowId())
+
+    if state.db.target == sql.bigquery:
+        rowid = db_query(state, sql.FuncCall(T.string, 'GENERATE_UUID', []))
+        keys += ['id']
+        values += [sql.make_value(rowid)]
+        q = sql.InsertConsts(table.options['name'].repr_name, keys, [values])
+        db_query(state, q)
+    else:
+        q = sql.InsertConsts(table.options['name'].repr_name, keys, [values])
+        # q = sql.InsertConsts(new_ast.type, keys, [values])
+        db_query(state, q)
+        rowid = db_query(state, sql.LastRowId())
 
     d = SafeDict({'id': objects.new_value_instance(rowid)})
     d.update({p.name:v for p, v in matched})

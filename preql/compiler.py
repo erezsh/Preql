@@ -433,11 +433,11 @@ def _compare(state, op, a: T.type, b: T.type):
     return new_value_instance(a == b)
 
 @dp_inst
-def _compare(state, op, a: T.number, b: T.row):
+def _compare(state, op, a: T.primitive, b: T.row):
     return _compare(state, op, a, b.primary_key())
 
 @dp_inst
-def _compare(state, op, a: T.row, b: T.number):
+def _compare(state, op, a: T.row, b: T.primitive):
     return _compare(state, op, b, a)
 
 @dp_inst

@@ -79,6 +79,9 @@ class SqlInterface:
             table_type = self.import_table_type(state, table_name)
             yield None, table_name, table_type
 
+    def qualified_name(self, name):
+        return name
+
 
 
 def log_sql(sql):
@@ -216,6 +219,7 @@ class BigQueryInterface(SqlInterface):
         from google.cloud import bigquery
 
         self._client = bigquery.Client(project)
+        self._default_dataset = None
 
         self._print_sql = print_sql
 
@@ -263,22 +267,24 @@ class BigQueryInterface(SqlInterface):
 
         return T.table(cols, name=Id(name))
 
-    # def import_table_types(self, state):
-    #     return []
-        # columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
-        #     FROM information_schema.columns
-        #     """
-        # sql_columns = self._execute_sql(self._schema_columns_t, columns_q, state)
+    def list_datasets(self):
+        return [ds.dataset_id for ds in self._client.list_datasets()]
 
-        # columns_by_table = classify(sql_columns, lambda c: (c['schema'], c['table']))
+    def set_default_dataset(self, dataset):
+        self._default_dataset = dataset
 
-        # for (schema, table_name), columns in columns_by_table.items():
-        #     cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in columns]
-        #     cols.sort()
-        #     cols = dict(c[1:] for c in cols)
+    def get_default_dataset(self):
+        if self._default_dataset is None:
+            datasets = self.list_datasets()
+            if not datasets:
+                raise exceptions.Signal(T.ValueError, None, "No dataset found.")
+            self._default_dataset = datasets[0]
+        return self._default_dataset
 
-        #     # name = '%s.%s' % (schema, table_name)
-        #     yield schema, table_name, T.table(cols, name=Id(schema, table_name))
+    def qualified_name(self, name):
+        if '.' in name: # already has dataset
+            return name
+        return self.get_default_dataset() + '.' + name
 
 
 class SqliteInterface(SqlInterface):
