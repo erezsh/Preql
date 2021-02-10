@@ -12,14 +12,14 @@ from preql.pql_types import T
 from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI, BIGQUERY_URI
 
 def uses_tables(*names):
-    names = [n.lower() for n in names]  # Table names are case insensitive
+    names = [n for n in names]
     def decorator(decorated):
         def wrapper(self):
             if self.uri not in (MYSQL_URI, BIGQUERY_URI):
                 return decorated(self)
 
             p = self.Preql()
-            tables = list(p.interp.state.db.list_tables())
+            tables = p.interp.state.db.list_tables()
             def _key(t):
                 try:
                     return names.index(t.lower())
@@ -35,7 +35,7 @@ def uses_tables(*names):
             finally:
                 p = self.preql
                 # Table contents weren't dropped, due to autocommit
-                if p.interp.state.db.target in (mysql, ):
+                if p.interp.state.db.target in (mysql, bigquery):
                     p._drop_tables(*names)
                 tables = p.interp.state.db.list_tables()
                 assert not tables, tables
@@ -478,7 +478,7 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql.f1(), 9)
         self.assertEqual( len(preql.f2()), 2)
         self.assertEqual( len(preql.f3()), 3)
-        self.assertEqual( preql.f3().to_json()[0]['y'], [3] )
+        # self.assertEqual( preql.f3().to_json()[0]['y'], [3] )     # bad test, assumes ordering
         self.assertEqual( len(preql.f4()), 1)
         self.assertEqual( preql.f4().to_json(), [{'y': 7}])
 

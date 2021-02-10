@@ -232,10 +232,14 @@ class BigQueryInterface(SqlInterface):
             return False
         return True
 
-    def list_tables(self):
+    def _list_tables(self):
         for ds in self._client.list_datasets():
             for t in self._client.list_tables(ds.reference):
                 yield t.full_table_id.replace(':', '.')     # Hacky
+
+    def list_tables(self):
+        return list(self._list_tables())
+
 
     def _execute_sql(self, sql_type, sql_code, state):
         try:

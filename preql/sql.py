@@ -905,6 +905,9 @@ def arith(target, res_type, op, args):
     elif op == '/~':
         if target == mysql:
             op = 'DIV'
+        elif target == bigquery:
+            # safe div?
+            return FuncCall(res_type, 'div', arg_codes)
         else:
             op = '/'
     elif op == '%':

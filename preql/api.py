@@ -11,6 +11,7 @@ from .interp_common import create_engine, call_pql_func
 from .pql_types import T
 from .pql_functions import import_pandas
 from .context import context
+from . import sql
 
 from . import display
 display.install_reprs()
@@ -180,7 +181,7 @@ class Preql:
         state = self.interp.state
         # XXX temporary. Used for testing
         for t in tables:
-            t = state.db.qualified_name(t)
+            t = sql._quote(state.db.target, state.db.qualified_name(t))
             state.db._execute_sql(T.nulltype, f"DROP TABLE {t};", state)
 
     def import_pandas(self, **dfs):
