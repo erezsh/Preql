@@ -853,7 +853,7 @@ class BigQueryValues(SqlTree):
              for row in self.values
         ]
 
-        return ["SELECT * FROM UNNEST(["] + join_comma(rows) + ["])"]
+        return ["SELECT * FROM UNNEST(["] + join_comma(rows) + ["]) as item"]
 
 
 
@@ -1022,14 +1022,15 @@ def compile_type_def(state, table_name, table) -> Sql:
         columns.append( f'{_quote(target, name)} {type_}' )
 
         if c <= T.t_relation:
-            # TODO any column, using projection / get_attr
-            if not table.options.get('temporary', False):
-                # In postgres, constraints on temporary tables may reference only temporary tables
-                rel = c.options['rel']
-                if rel['key']:          # Requires a unique constraint
-                    _tbl_name ,= rel['table'].options['name'].parts   # TODO fix for multiple parts
-                    s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, _tbl_name)}({rel['column']})"
-                    posts.append(s)
+            if state.db.target != 'bigquery':
+                # TODO any column, using projection / get_attr
+                if not table.options.get('temporary', False):
+                    # In postgres, constraints on temporary tables may reference only temporary tables
+                    rel = c.options['rel']
+                    if rel['key']:          # Requires a unique constraint
+                        _tbl_name ,= rel['table'].options['name'].parts   # TODO fix for multiple parts
+                        s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, _tbl_name)}({rel['column']})"
+                        posts.append(s)
 
     if pks and target != bigquery:
         names = ", ".join(pks)

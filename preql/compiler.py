@@ -911,7 +911,7 @@ def compile_to_inst(state: State, range: ast.Range):
     type_ = T.list[T.int]
 
     if state.db.target == sql.bigquery:
-        code = sql.RawSql(type_, f'UNNEST(GENERATE_ARRAY({start}, {stop})) as item')
+        code = sql.RawSql(type_, f'UNNEST(GENERATE_ARRAY({start}, {stop-1})) as item')
         return objects.TableInstance.make(code, type_, [])
 
     if stop is None:

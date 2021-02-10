@@ -51,7 +51,7 @@ def is_eq(a, b):
     ("Normal_Lt", SQLITE_URI, True),
     ("Normal_Pg", POSTGRES_URI, True),
     ("Normal_My", MYSQL_URI, True),
-    # ("Normal_Bq", BIGQUERY_URI, True),
+    ("Normal_Bq", BIGQUERY_URI, True),
     # ("Normal_Dk", DUCK_URI, True),
     ("Unoptimized_Lt", SQLITE_URI, False),
     ("Unoptimized_Pg", POSTGRES_URI, False),
@@ -85,14 +85,15 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql("[1,2,3]{item: item/~2 => sum(item)}").to_json(), [{'item':0, 'sum': 1}, {'item':1, 'sum':5}])
 
 
-        preql("""func query1() = Country[language=="en"]{name}""")
+        preql("""func query1() = list(Country[language=="en"]{name})""")
 
-        assert is_eq(preql.query1(), [("England",), ("United States",)]), preql.query1()
+        assert set(preql.query1()) == {"England", "United States"}, preql.query1()
 
-        assert is_eq(preql("Person[country==isr]{name}"), [("Erez Shinan",), ("Ephraim Kishon",)])
+        res = preql("list(Person[country==isr]{name})")
+        assert set(res) == {"Erez Shinan", "Ephraim Kishon"}
 
-        res = preql("Person[id!=me]{name}")
-        assert is_eq(res, [("Ephraim Kishon",), ("Eric Blaire",), ("H.G. Wells",), ("John Steinbeck",)])
+        res = preql("list(Person[id!=me]{name})")
+        assert set(res) == {"Ephraim Kishon", "Eric Blaire", "H.G. Wells", "John Steinbeck"}    # order not guaranteed
 
     def _test_cache(self, preql):
         # Ensure that names affect type
@@ -367,8 +368,8 @@ class BasicTests(PreqlTests):
 
     def _test_joins(self, preql):
         nonenglish_speakers = [
-            ("Erez Shinan", None),
             ("Ephraim Kishon", None),
+            ("Erez Shinan", None),
         ]
         english_speakers = [
             ("Eric Blaire", "England"),
@@ -376,42 +377,42 @@ class BasicTests(PreqlTests):
             ("John Steinbeck", "United States"),
         ]
 
-        preql("""func manual_join() = join(c: Country[language=="en"].id, p: Person.country) { p.name, country: c.name }""")
+        preql("""func manual_join() = join(c: Country[language=="en"].id, p: Person.country) { p.name, country: c.name } order {name}""")
         res = preql.manual_join()
         assert is_eq(res, english_speakers)
 
         # Auto join
-        res = preql(""" join(c: Country[language=="en"], p: Person) { p.name, country: c.name } """)
+        res = preql(""" join(c: Country[language=="en"], p: Person) { p.name, country: c.name } order {name}""")
         assert is_eq(res, english_speakers), res
 
-        res = preql(""" join(p: Person, c: Country[language=="en"]) { p.name, country: c.name } """)
+        res = preql(""" join(p: Person, c: Country[language=="en"]) { p.name, country: c.name } order {name}""")
         assert is_eq(res, english_speakers)
 
         # Left joins
-        res = preql(""" leftjoin(p:Person.country, c: Country[language=="en"].id) { p.name, country: c.name } """)
+        res = preql(""" leftjoin(p:Person.country, c: Country[language=="en"].id) { p.name, country: c.name } order {name}""")
         assert is_eq(res, nonenglish_speakers + english_speakers)
 
-        res = preql(""" leftjoin(c: Country[language=="en"].id, p:Person.country) { p.name, country: c.name } """)
+        res = preql(""" leftjoin(c: Country[language=="en"].id, p:Person.country) { p.name, country: c.name } order {name}""")
         assert is_eq(res, english_speakers)
 
         # Auto left joins
 
-        res = preql(""" leftjoin(p:Person, c: Country[language=="en"]) { p.name, country: c.name } """)
+        res = preql(""" leftjoin(p:Person, c: Country[language=="en"]) { p.name, country: c.name } order {name}""")
         assert is_eq(res, nonenglish_speakers + english_speakers)
 
-        res = preql(""" leftjoin(c: Country[language=="en"], p:Person) { p.name, country: c.name } """)
+        res = preql(""" leftjoin(c: Country[language=="en"], p:Person) { p.name, country: c.name } order {name}""")
         assert is_eq(res, english_speakers)
 
-        res = preql(""" leftjoin(c: Country, p:Person[id==me]) { person: p.name, country: c.name } """)
+        res = preql(""" leftjoin(c: Country, p:Person[id==me]) { person: p.name, country: c.name } order {country}""")
         expected = [
-            ("Erez Shinan", "Israel"),
             (None, "England"),
+            ("Erez Shinan", "Israel"),
             (None, "United States"),
         ]
         assert is_eq(res, expected)
 
         preql("""func j() = join(c: Country[language=="en"], p: Person)""")
-        res = preql("j() {person: p.name, country: c.name}")
+        res = preql("j() {person: p.name, country: c.name} order {person}")
         assert is_eq(res, english_speakers)
 
         # res = preql("""count(joinall(a: [1,2,3], b: ["a", "b", "c"]))""")
@@ -713,21 +714,21 @@ class BasicTests(PreqlTests):
             ("England", 2),
             ("Israel", 2),
             ("United States", 1),
-        ])
+        ]), res
 
-        res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name}")
+        res = preql("join(p:Person order {name}, c:Country) {country:c.name => citizens: p.name} order {country}")
         assert is_eq(res, [
             ("England", ["Eric Blaire", "H.G. Wells"]),
-            ("Israel", ["Erez Shinan", "Ephraim Kishon"]),
+            ("Israel", ["Ephraim Kishon", "Erez Shinan"]),
             ("United States", ["John Steinbeck"]),
         ]), list(res)
 
-        res = preql("join(p:Person, c:Country) {country:c.name => citizens: p.name, count(p.id)}")
+        res = preql("join(p:Person order {name}, c:Country) {country:c.name => citizens: p.name, count(p.id)} order {country}")
         assert is_eq(res, [
             ("England", ["Eric Blaire", "H.G. Wells"], 2),
-            ("Israel", ["Erez Shinan", "Ephraim Kishon"], 2),
+            ("Israel", ["Ephraim Kishon", "Erez Shinan"], 2),
             ("United States", ["John Steinbeck"], 1),
-        ])
+        ]), res
 
         res = preql('[1,2,3]{=>sum(item*item)}')
         assert res == [{'sum': 14}], list(res)

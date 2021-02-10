@@ -335,7 +335,14 @@ if (db_type == "postgres") {
     func _count_true(field) = SQL(int, "sum(cast($field!=0 as unsigned))")
 
 } else if (db_type == "bigquery") {
+    func _random() = SQL(float, "RAND()")
+    
+    func _str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
     func _char(n: int) = SQL(string, "char($n)")
+    func _char_ord(n: string) = SQL(int, "ascii($n)")
+
+    func _count_false(field) = SQL(int, "sum(cast($field=0 as int64))")
+    func _count_true(field) = SQL(int, "sum(cast($field!=0 as int64))")
 } else {
     throw new TypeError("Unexpected")
 }
