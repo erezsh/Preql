@@ -5,6 +5,7 @@
 - [primes.pql](primes.pql) - Fault-tolerant Primes Calculator
 - [fizzbuzz.pql](fizzbuzz.pql) - FizzBuzz implementation
 - [airports.pql](airports.pql) - Loads a JSON into a table and queries it
+- [bigquery_covid19.pql](bigquery_covid19.pql) - BigQuery's public Covid19 data
 
 ## Intermediate
 
