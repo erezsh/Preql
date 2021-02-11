@@ -941,7 +941,7 @@ class StringSlice(SqlTree):
             params = string + [', '] + start
             if length:
                 params += [', '] + length
-        elif qb.target in (postgres, mysql):
+        elif qb.target in (postgres, mysql, bigquery):
             f = 'substring'
             params = string + [' from '] + start
             if length:
@@ -1058,7 +1058,7 @@ def compile_type(target, type_: T.primitive):
             'string': "STRING",
             'float': "FLOAT64",
             'bool': "BOOLEAN",
-            'text': "TEXT",
+            'text': "STRING",
             'datetime': "TIMESTAMP",
         }
     elif target == mysql:
