@@ -27,7 +27,7 @@ def _cast(state, inst_type: T.list, target_type: T.list, inst):
 
 
 @dp_type
-def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
+def _cast(state, inst_type: T.aggregated, target_type: T.list, inst):
     res = _cast(state, inst_type.elem, target_type.elem, inst)
     return objects.aggregate(res)   # ??
 

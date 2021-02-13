@@ -242,14 +242,14 @@ def _count(state, obj, table_func, name='count'):
         code = sql.FieldFunc(name, sql.AllFields(T.any))
     elif obj.type <= T.table:
         code = table_func(obj.code)
-    elif isinstance(obj, objects.StructInstance) and not obj.type <= T.aggregate:
+    elif isinstance(obj, objects.StructInstance) and not obj.type <= T.aggregated:
         # XXX is count() even the right method for this?
         return new_value_instance(len(obj.attrs))
 
-    elif obj.type <= T.vectorized[T.json_array]:
+    elif obj.type <= T.projected[T.json_array]:
         code = sql.JsonLength(obj.code)
     else:
-        if not (obj.type <= T.aggregate):
+        if not (obj.type <= T.aggregated):
             raise Signal.make(T.TypeError, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
 
         obj = obj.primary_key()
@@ -560,6 +560,9 @@ def pql_type(state: State, obj: T.any):
 def pql_repr(state: State, obj: T.any):
     """Returns the representation text of the given object
     """
+    if obj.type <= T.projected | T.aggregated:
+        raise Signal.make(T.CompileError, obj, "repr() cannot run in projected/aggregated mode")
+
     try:
         return new_value_instance(obj.repr())
     except ValueError:

@@ -3,7 +3,7 @@
 func _sql_agg_func(name, obj, t=null) {
     "Helper function. Do not call"
     if (t==null) {
-        if (not (isa(obj, union[table, aggregate]) and count(columns(obj))==1)) {
+        if (not (isa(obj, union[table, aggregated]) and count(columns(obj))==1)) {
             throw new TypeError(name + "() only accepts lists or tables with one column. Got '" + repr(type(obj)) + "'")
         }
 
@@ -11,7 +11,7 @@ func _sql_agg_func(name, obj, t=null) {
         t = type(obj).item
     }
 
-    if (isa(obj, aggregate)) {
+    if (isa(obj, aggregated)) {
         return SQL(t, name + "($obj)")
     } else {
         if (not (issubclass(t, number))) {
@@ -25,7 +25,7 @@ func _sql_agg_func(name, obj, t=null) {
     }
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
 }
-func _table_or_agg(n) = union[table[n], aggregate[n]]
+func _table_or_agg(n) = union[table[n], aggregated[n]]
 
 func sum(col: _table_or_agg(number)) {
     """Sums up a column or a list.
@@ -68,7 +68,7 @@ func max(col: _table_or_agg(number)) {
     return _sql_agg_func("MAX", col)
 }
 
-func first(obj: union[table, aggregate]) {
+func first(obj: union[table, aggregated]) {
     """Returns the first member of a column or a list
 
     Examples:
@@ -83,7 +83,7 @@ func first(obj: union[table, aggregate]) {
         └───────┘
     """
 
-    if (isa(obj, aggregate)) {
+    if (isa(obj, aggregated)) {
         return SQL(type(obj).item, "($obj)")
     } else {
         obj = list(obj)
@@ -93,13 +93,13 @@ func first(obj: union[table, aggregate]) {
     }
 }
 
-func first_or_null(obj: union[table, vectorized]) {
+func first_or_null(obj: union[table, projected]) {
     """Returns the first member of a column or a list, or null if it's empty
 
     See Also `first()`.
     """
 
-    if (isa(obj, aggregate)) {
+    if (isa(obj, aggregated)) {
         return SQL(type(obj).item, "($obj)")
     } else {
         obj = list(obj)
@@ -294,8 +294,8 @@ func _pi() = SQL(float, "PI()")
 //
 func _repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")
 func _now() = SQL(datetime, "NOW()")
-func _count_false(field: aggregate) = SQL(int, "sum(cast($field=0 as int))")
-func _count_true(field: aggregate) = SQL(int, "sum(cast($field!=0 as int))")
+func _count_false(field: aggregated) = SQL(int, "sum(cast($field=0 as int))")
+func _count_true(field: aggregated) = SQL(int, "sum(cast($field!=0 as int))")
 
 
 db_type = get_db_type()
@@ -319,7 +319,7 @@ if (db_type == "postgres") {
     func minute(date) = SQL(int, "strftime('%M', $date)")
     func day_of_week(date) = SQL(int, "strftime('%w', $date)")
     func week_of_year(date) = SQL(int, "strftime('%W', $date)")
-    func count_distinct(field: aggregate) = SQL(int, "count(distinct $field)")
+    func count_distinct(field: aggregated) = SQL(int, "count(distinct $field)")
 
     func _str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)-1")
     func _char(n: int) = SQL(string, "char($n)")
@@ -351,7 +351,7 @@ if (db_type == "postgres") {
 // Wrapping database specific code
 
 
-func count_false(field: aggregate) {
+func count_false(field: aggregated) {
     """Count how many values in the field are false or zero
 
     Example:
@@ -368,7 +368,7 @@ func count_false(field: aggregate) {
     """
     return _count_false(field)
 }
-func count_true(field: aggregate) {
+func count_true(field: aggregated) {
     """Count how many values in the field are true (non-zero)
 
     Example:

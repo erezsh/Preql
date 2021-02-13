@@ -89,14 +89,14 @@ T.table: """A table type.
 
 T.list: """A list type""",
 T.set: """A set type, in which all elements are unique""",
-T.vectorized: """A meta-type to signify vectorized operations, i.e. operations inside a projection.
+T.projected: """A meta-type to signify vectorized operations, i.e. operations inside a projection.
 
 	Example:
 		>> x = [1]
 		>> one one x{ repr(type(item)) }
 		"vectorized[item: int]"
 """,
-T.aggregate: """A meta-type to signify aggregated operations, i.e. operations inside a grouping
+T.aggregated: """A meta-type to signify aggregated operations, i.e. operations inside a grouping
 
 	Example:
 		>> x = [1]

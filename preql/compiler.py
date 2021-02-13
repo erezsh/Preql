@@ -12,7 +12,7 @@ from .interp_common import dy, State, assert_type, new_value_instance, evaluate,
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
-from .pql_objects import AbsInstance, vectorized, make_instance, remove_phantom_type
+from .pql_objects import AbsInstance, projected, make_instance, remove_phantom_type
 
 class AutocompleteSuggestions(Exception):
     pass
@@ -54,7 +54,7 @@ def _process_fields(state: State, fields):
 
         # In Preql, {=>v} creates an array. In SQL, it selects the first element.
         # Here we mitigate that disparity.
-        if v.type <= T.aggregate:
+        if v.type <= T.aggregated:
             v = v.primary_key()
             t = T.json_array[v.type]
             v = make_instance(sql.MakeArray(t, v.code), t, [v])
@@ -169,7 +169,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     attrs = table.all_attrs()
 
-    with state.use_scope({n: vectorized(c) for n, c in attrs.items()}):
+    with state.use_scope({n: projected(c) for n, c in attrs.items()}):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
@@ -718,8 +718,8 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
         return inst
 
     # Cannot inherit aggregated, because some expressions such as `sum()` cancel it out.
-    # XXX So why is it okay for vectorized?
-    #     Maybe all results should be vectorized?
+    # XXX So why is it okay for projected?
+    #     Maybe all results should be projected?
     type_ = objects.inherit_vectorized_type(type_, instances)
     code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
     return make_instance(code, type_, instances)
@@ -763,13 +763,13 @@ def compile_to_inst(state: State, sel: ast.Selection):
     if table.type <= T.string:
         index ,= cast_to_instance(state, sel.conds)
         assert index.type <= T.int, index.type
-        table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
+        table = table.replace(type=T.string)    # XXX why get rid of projected here? because it's a table operation node?
         slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
 
     assert_type(table.type, T.table, state, sel, "Selection")
 
-    with state.use_scope({n:vectorized(c) for n, c in table.all_attrs().items()}):
+    with state.use_scope({n:projected(c) for n, c in table.all_attrs().items()}):
         conds = cast_to_instance(state, sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):

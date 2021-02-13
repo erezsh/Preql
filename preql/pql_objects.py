@@ -502,26 +502,27 @@ def ensure_phantom_type(inst, ptype):
     return inst.replace(type=ptype[inst.type])
 
 def aggregate(inst):
-    return ensure_phantom_type(inst, T.aggregate)
+    return ensure_phantom_type(inst, T.aggregated)
 
-def vectorized(inst):
-    return ensure_phantom_type(inst, T.vectorized)
+def projected(inst):
+    return ensure_phantom_type(inst, T.projected)
 
 
 def remove_phantom_type(inst):
-    if inst.type <= T.vectorized | T.aggregate:
+    if inst.type <= T.projected | T.aggregated:
         return inst.replace(type=inst.type.elem)
     return inst
 
 def inherit_vectorized_type(t, objs):
+    # XXX reevaluate this function
     for src in objs:
-        if src.type <= T.vectorized:
-            return T.vectorized[t]
+        if src.type <= T.projected:
+            return T.projected[t]
     return t
 
 def inherit_phantom_type(o, objs):
     for src in objs:
-        if src.type <= T.vectorized | T.aggregate:
+        if src.type <= T.projected | T.aggregated:
             return ensure_phantom_type(o, src.type)
     return o
 

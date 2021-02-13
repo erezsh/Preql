@@ -249,8 +249,8 @@ T.t_id = [T.primitive], (T.table,)
 T.t_relation = [T.number], (T.any,)   # t_id?
 
 # XXX sequence instead of container?
-T._register('aggregate', [T.container], (T.any,), type_class=PhantomType)
-T._register('vectorized', [T.container], (T.any,), type_class=PhantomType)
+T._register('aggregated', [T.container], (T.any,), type_class=PhantomType)
+T._register('projected', [T.container], (T.any,), type_class=PhantomType)
 
 T.json = [T.container], (T.any,)
 T.json_array = [T.json]

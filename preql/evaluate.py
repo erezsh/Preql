@@ -972,9 +972,9 @@ def cast_to_python(state, obj: ast.Ast):
 @dy
 def cast_to_python(state, obj: objects.AbsInstance):
     # if state.access_level <= state.AccessLevels.QUERY:
-    if obj.type <= T.vectorized | T.aggregate:
+    if obj.type <= T.projected | T.aggregated:
         raise exc.InsufficientAccessLevel(state.access_level)
-        # raise Signal.make(T.CastError, None, f"Internal error. Cannot cast vectorized (i.e. projected) obj: {obj}")
+        # raise Signal.make(T.CastError, None, f"Internal error. Cannot cast projected obj: {obj}")
     res = localize(state, obj)
     if obj.type == T.float:
         res = float(res)

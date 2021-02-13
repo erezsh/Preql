@@ -68,6 +68,6 @@ def pql_repr(t, value):
 
 
 def kernel_type(t):
-    if t <= T.vectorized: # or t <= T.aggregate:
+    if t <= T.projected: # or t <= T.aggregated:
         return kernel_type(t.elems['item'])
     return t
