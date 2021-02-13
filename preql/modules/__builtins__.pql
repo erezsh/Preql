@@ -44,29 +44,23 @@ func sum(col: _table_or_agg(number)) {
     return _sql_agg_func("SUM", col)
 }
 
-func mean(col: _table_or_agg(number)) {
+func mean(col: _table_or_agg(number)) = _sql_agg_func("AVG", col, float)
     """Returns the mean average of a column or a list
 
     See Also `sum`.
     """
-    return _sql_agg_func("AVG", col, float)
-}
 
-func min(col: _table_or_agg(number)) {
+func min(col: _table_or_agg(number)) = _sql_agg_func("MIN", col)
     """Finds the minimum of a column or a list
 
     See Also `sum`.
     """
-    return _sql_agg_func("MIN", col)
-}
 
-func max(col: _table_or_agg(number)) {
+func max(col: _table_or_agg(number)) = _sql_agg_func("MAX", col)
     """Finds the maximum of a column or a list
 
     See Also `sum`.
     """
-    return _sql_agg_func("MAX", col)
-}
 
 func first(obj: union[table, aggregated]) {
     """Returns the first member of a column or a list
@@ -115,17 +109,15 @@ func first_or_null(obj: union[table, projected]) {
 
 
 
-func limit(tbl: table, n: int) {
+func limit(tbl: table, n: int) = tbl[..n]
     """Returns the first 'n' rows in the table """
-    return tbl[..n]
-}
 
 func limit_offset(tbl: table, lim: int, offset: int) {
     "Returns the first 'n' rows in the table at the given offset"
     return SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
 }
 
-func enum(tbl: table) {
+func enum(tbl: table) = tbl{index: SQL(int, "(row_number() over ())-1"), ...}
     """Return the table with a new index column
 
     Count starts from 0.
@@ -141,42 +133,30 @@ func enum(tbl: table) {
         │     2 │ c    │
         └───────┴──────┘
     """
-    return tbl{index: SQL(int, "(row_number() over ())-1"), ...}
-}
 
-func upper(s: string) {
+func upper(s: string) = SQL(string, "upper($s)")
     "Return a copy of the string converted to uppercase."
-    return SQL(string, "upper($s)")
-}
 
-func lower(s: string) {
+func lower(s: string) = SQL(string, "lower($s)")
     "Return a copy of the string converted to lowercase."
-    return SQL(string, "lower($s)")
-}
 
-func length(s: string) {
+func length(s: string) = SQL(int, "length($s)")
     """Returns the length of the string
 
     For tables or lists, use `count()`
     """
-    return SQL(int, "length($s)")
-}
 
-func round(n: number) {
+func round(n: number) = SQL(float, "round($n)")
     """Returns a rounded float
 
     Example:
         >> round(3.14)
         3.0
     """
-    return SQL(float, "round($n)")
-}
 
 
-func dict(...x) {
+func dict(...x) = x
     "Constructs a dictionary"
-    return x
-}
 
 func _zipjoin(join_func, table1, table2) {
 	"Helper function. Adds index to each table, and then join them"
@@ -351,7 +331,7 @@ if (db_type == "postgres") {
 // Wrapping database specific code
 
 
-func count_false(field: aggregated) {
+func count_false(field: aggregated) = _count_false(field)
     """Count how many values in the field are false or zero
 
     Example:
@@ -366,9 +346,8 @@ func count_false(field: aggregated) {
     See Also:
         - `count_true`
     """
-    return _count_false(field)
-}
-func count_true(field: aggregated) {
+
+func count_true(field: aggregated) = _count_true(field)
     """Count how many values in the field are true (non-zero)
 
     Example:
@@ -383,15 +362,11 @@ func count_true(field: aggregated) {
     See Also:
         - `count_false`
     """
-    return _count_true(field)
-}
 
-func random() {
+func random() = _random()
     "Returns a random float number between 0 to 1"
-    return _random()
-}
 
-func str_index(substr: string, s: string) {
+func str_index(substr: string, s: string) = _str_index(substr, s)
     """Finds in which index does `substr` appear in `s`.
 
     Parameters:
@@ -407,36 +382,28 @@ func str_index(substr: string, s: string) {
         >> str_index("x", "preql")
         -1
     """
-    return _str_index(substr, s)
-}
 
-func char(n: int) {
-    """Returns the character with the given ASCII code"""
-    return _char(n)
-}
-func char_ord(n: string) {
+func char(n: int) = _char(n)
+    "Returns the character with the given ASCII code"
+
+func char_ord(n: string) = _char_ord(n)
     "Returns the ascii code of the given character"
-    return _char_ord(n)
-}
 
-func repeat(s: string, num: int) {
+func repeat(s: string, num: int) = _repeat(s, num)
     """Repeats the string `num` times.
 
     Example:
         >> _repeat("ha", 3)
         "hahaha"
     """
-    return _repeat(s, num)
-}
-func now() {
+
+func now() = _now()
     "Returns the current datetime"
-    return _now()
-}
 
 // End of wrapping of database specific code
 
 
-func str_contains(substr: string, s: string) {
+func str_contains(substr: string, s: string) = str_index(substr, s) >= 0
     """Tests whether string `substr` is contained in `s`
 
     Example:
@@ -445,16 +412,12 @@ func str_contains(substr: string, s: string) {
         >> str_contains("i", "team")
         false
     """
-    return str_index(substr, s) >= 0
-}
 
-func str_notcontains(substr: string, s: string) {
+func str_notcontains(substr: string, s: string) = str_index(substr, s) < 0
     """Tests whether string `substr` is not contained in `s`
 
     Equivalent to `not str_contains(substr, s)`.
     """
-    return str_index(substr, s) < 0
-}
 
 func sample_ratio_fast(tbl, ratio) {
     "Returns a random sample of rows from the table, at the approximate amount of (ratio*count(tbl))."

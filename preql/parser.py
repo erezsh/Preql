@@ -115,10 +115,15 @@ class TreeToAst(Transformer):
         assert name[0] == name[-1] == '`'
         return name[1:-1]
 
+    def STRING(self, s):
+        return _fix_escaping(s[1:-1])
+    def LONG_STRING(self, s):
+        return _fix_escaping(s[3:-3])
+
     def string(self, s):
-        return ast.Const(T.string, _fix_escaping( s.value[1:-1]) )
+        return ast.Const(T.string, s)
     def long_string(self, s):
-        return ast.Const(T.string, _fix_escaping( s.value[3:-3]) )
+        return ast.Const(T.string, s)
 
     @with_meta
     def pql_dict(self, meta, items):
@@ -211,6 +216,14 @@ class TreeToAst(Transformer):
     param_variadic = objects.ParamVariadic
 
     @with_meta
+    def func_def_short(self, meta, name, params, expr, doc):
+        res = self.func_def(meta, name, params, expr)
+        if doc:
+            # Add docstring
+            res = res.replace(userfunc=res.userfunc.replace(docstring=doc))
+        return res
+
+    @with_meta
     def func_def(self, meta, name, params, expr):
         collector = None
         for i, p in enumerate(params):
@@ -221,7 +234,14 @@ class TreeToAst(Transformer):
                 collector = p
                 params = params[:-1]
 
-        return ast.FuncDef(objects.UserFunction(name, params, expr, collector))
+
+        docstring = None
+        if isinstance(expr, ast.CodeBlock):
+            stmts = expr.statements
+            if stmts and isinstance(stmts[0], ast.Const) and stmts[0].type is T.string:
+                docstring = stmts[0].value
+
+        return ast.FuncDef(objects.UserFunction(name, params, expr, collector, docstring=docstring))
 
     @with_meta
     def func_call(self, meta, func, args):

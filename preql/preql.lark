@@ -51,7 +51,9 @@ member_def: name ":" type -> as_list
 
 typemod: PK | NULLABLE
 
-func_def: "func" name func_params ("=" expr _NL | codeblock _NL)
+func_def: "func" name func_params "=" expr [_NL (STRING|LONG_STRING)] _NL -> func_def_short
+        | "func" name func_params codeblock _NL
+
 try_catch: "try" codeblock _NL? "catch" "(" expr ")" codeblock _NL
 if_stmt: "if" "(" expr ")" codeblock (_NL? "else" (codeblock _NL|if_stmt) | _NL)
 for_stmt: "for" "(" name "in" expr ")" codeblock _NL
@@ -145,12 +147,14 @@ named_expr: [name ":"] expr
 
 ?const: SIGNED_INT -> int
       | SIGNED_FLOAT -> float
-      | STRING -> string
-      | LONG_STRING -> long_string
       | "null" -> null
       | "false" -> false
       | "true" -> true
+      | string | long_string
      //  | range
+
+string: STRING
+long_string: LONG_STRING
 
 
 marker: MARKER

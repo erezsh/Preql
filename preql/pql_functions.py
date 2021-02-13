@@ -21,7 +21,7 @@ from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_
 from .pql_types import T, Type, Id
 from .types_impl import join_names
 from .casts import cast
-from .docstring.autodoc import autodoc
+from .docstring.autodoc import autodoc, AutoDocError
 
 def new_str(x):
     return new_value_instance(str(x), T.string)
@@ -675,6 +675,8 @@ def pql_help(state: State, inst: T.any = objects.null):
         lines = [f"No help available for {inst.repr()}"]
     except runtype.DispatchError:
         lines += [f"<doc not available yet for object of type '{inst.type}>'"]
+    except AutoDocError:
+        lines += [f"<error generating documentation for object '{inst}'"]
 
 
     text = '\n'.join(lines) + '\n'

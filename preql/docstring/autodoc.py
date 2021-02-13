@@ -78,12 +78,10 @@ class TypeDoc:
 from lark import LarkError
 
 def doc_func(f):
-    assert f.docstring
-
     try:
-        doc_tree = parse(f.docstring)
+        doc_tree = parse(f.docstring or '')
     except LarkError as e:
-        raise ValueError(f"Error in docstring of function {f.name}")
+        raise AutoDocError(f"Error in docstring of function {f.name}")
 
 
     assert {s.name for s in doc_tree.sections} <= {'Parameters', 'Example', 'Examples', 'Note', 'Returns', 'See Also'}, [s.name for s in doc_tree.sections]
@@ -155,7 +153,7 @@ def autodoc(t: Type):
     try:
         doc_tree = parse(docstr)
     except LarkError as e:
-        raise ValueError(f"Error in docstring of type {t}")
+        raise AutoDocError(f"Error in docstring of type {t}")
 
     assert {s.name for s in doc_tree.sections} <= {'Example', 'Examples', 'Note', 'See Also'}, [s.name for s in doc_tree.sections]
 

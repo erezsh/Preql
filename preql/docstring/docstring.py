@@ -16,6 +16,8 @@ class Text:
     lines: List[str]
 
     def _print_text(self, indent, inline=False):
+        if not self.lines:
+            return
         s = indent_str(indent)
         if inline:
             yield self.lines[0] + '\n'
@@ -213,7 +215,10 @@ parser = Lark.open('docstring.lark', rel_to=__file__,
 
 
 def parse(s):
-    tree = parser.parse(s.strip()+'\n')
+    s = s.strip()
+    if not s:
+        return DocString(Text([]), [])
+    tree = parser.parse(s+'\n')
     return DocTransformer().transform(tree)
 
 

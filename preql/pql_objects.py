@@ -189,13 +189,7 @@ class UserFunction(Function):
     params: List[Param]
     expr: (ast.Expr, ast.CodeBlock)
     param_collector: Optional[Param]
-
-    @property
-    def docstring(self):
-        if isinstance(self.expr, ast.CodeBlock):
-            stmts = self.expr.statements
-            if stmts and isinstance(stmts[0], ast.Const) and stmts[0].type is T.string:
-                return stmts[0].value
+    docstring: Optional[str]
 
     def __repr__(self):
         return super().__repr__()
