@@ -7,7 +7,7 @@ import csv
 import inspect
 import itertools
 import runtype
-import json
+import rich.progress
 
 from .utils import safezip, listgen, re_split
 from .exceptions import Signal, ExitInterp
@@ -18,7 +18,7 @@ from . import sql
 
 from .interp_common import State, new_value_instance, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
-from .pql_types import T, Type, union_types, Id, common_type
+from .pql_types import T, Type, Id
 from .types_impl import join_names
 from .casts import cast
 from .docstring.autodoc import autodoc
@@ -809,12 +809,10 @@ def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.b
         header: If true, skips the first line
     """
     # TODO better error handling, validation
-    from tqdm import tqdm   # TODO use rich instead?
-
 
     filename = cast_to_python(state, filename)
     header = cast_to_python(state, header)
-    print(f"Importing CSV file: '{filename}'")
+    msg = f"Importing CSV file: '{filename}'"
 
     ROWS_PER_QUERY = 1024
 
@@ -832,7 +830,7 @@ def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.b
         f.seek(0)
 
         reader = csv.reader(f)
-        for i, row in enumerate(tqdm(reader, total=line_count)):
+        for i, row in enumerate(rich.progress.track(reader, total=line_count, description=msg)):
             if i == 0:
                 matched = cons.match_params(state, row)
                 keys = [p.name for (p, _) in matched]
