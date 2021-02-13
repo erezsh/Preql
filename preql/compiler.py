@@ -90,7 +90,7 @@ def _expand_ellipsis(state, obj, fields):
             if f.name:
                 raise Signal.make(T.SyntaxError, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
             else:
-                t = kernel_type(obj.type)
+                t = obj.type
                 assert t <= T.table or t <= T.struct # some_table{ ... } or some_table{ some_struct_item {...} }
 
                 for n in f.value.exclude:
@@ -162,7 +162,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         return table   # Empty list projection is always an empty list.
 
     t = T.union[T.collection, T.struct]
-    if not (kernel_type(table.type) <= t):
+    if not (table.type <= t):
         raise Signal.make(T.TypeError, proj, f"Cannot project objects of type {table.type}")
 
     fields = _expand_ellipsis(state, table, proj.fields)
@@ -178,7 +178,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         fields = _process_fields(state, fields)
 
     for name, f in fields:
-        if not kernel_type(f.type) <= T.union[T.primitive, T.struct, T.json, T.nulltype, T.unknown]:
+        if not f.type <= T.union[T.primitive, T.struct, T.json, T.nulltype, T.unknown]:
             raise exc.Signal.make(T.TypeError, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
@@ -755,7 +755,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
 def compile_to_inst(state: State, s: ast.Slice):
     obj = cast_to_instance(state, s.obj)
 
-    assert_type(kernel_type(obj.type), T.union[T.string, T.collection], state, s, "Slice")
+    assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
 
     instances = [obj]
     if s.range.start:
@@ -770,7 +770,7 @@ def compile_to_inst(state: State, s: ast.Slice):
     else:
         stop = None
 
-    if kernel_type(obj.type) <= T.string:
+    if obj.type <= T.string:
         code = sql.StringSlice(obj.code, sql.add_one(start.code), stop and sql.add_one(stop.code))
     else:
         start_n = cast_to_python(state, start)
@@ -787,9 +787,9 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     table = cast_to_instance(state, obj)
 
-    if kernel_type(table.type) <= T.string:
+    if table.type <= T.string:
         index ,= cast_to_instance(state, sel.conds)
-        assert kernel_type(index.type) <= T.int, index.type
+        assert index.type <= T.int, index.type
         table = table.replace(type=T.string)    # XXX why get rid of vectorized here? because it's a table operation node?
         slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
@@ -803,7 +803,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
         code = sql.unknown
     else:
         for i, c in enumerate(conds):
-            if not (kernel_type(c.type) <= T.bool):
+            if not (c.type <= T.bool):
                 raise exc.Signal.make(T.TypeError, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
         code = sql.table_selection(table, [c.code for c in conds])

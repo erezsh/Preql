@@ -11,7 +11,7 @@ def Object_get_attr(self, attr):
 def Object_isa(self, t):
     if not isinstance(t, Type):
         raise Signal.make(T.TypeError, None, f"'type' argument to isa() isn't a type. It is {t}")
-    return kernel_type(self.type) <= t
+    return self.type <= t
 
 Object.get_attr = Object_get_attr
 Object.isa = Object_isa

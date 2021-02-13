@@ -496,7 +496,7 @@ def eval_func_call(state, func, args):
     for i, (p, a) in enumerate(matched_args):
         a = evaluate(state, a)
         # TODO cast?
-        if p.type and not kernel_type(a.type) <= p.type:
+        if p.type and not a.type <= p.type:
             raise Signal.make(T.TypeError, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
         args[p.name] = a
 

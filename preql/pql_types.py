@@ -188,6 +188,10 @@ class ProductType(TupleType):
     def issubtype(self, other):
         return all(a.issubtype(b) for a, b in zip(self.elem_types, other.elem_types))
 
+class PhantomType(Type):
+    def issubtype(self, other):
+        return super().issubtype(other) or self.elem.issubtype(other)
+
 
 class TypeDict(dict):
 
@@ -245,7 +249,8 @@ T.aggregate = [T.collection], {ITEM_NAME: T.any}
 T.t_id = [T.primitive], (T.table,)
 T.t_relation = [T.number], (T.any,)   # t_id?
 
-T.vectorized = [T.container], (T.any,)  # sequence or collection?
+# T.vectorized = [T.container], (T.any,)  # sequence or collection?
+T._register('vectorized', [T.container], (T.any,), type_class=PhantomType)
 
 T.json = [T.container], (T.any,)
 T.json_array = [T.json]

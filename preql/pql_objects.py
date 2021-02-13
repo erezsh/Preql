@@ -12,7 +12,7 @@ from . import sql
 from . import pql_types
 
 from .pql_types import ITEM_NAME, T, Type, Object
-from .types_impl import flatten_type, join_names, pql_repr, kernel_type
+from .types_impl import flatten_type, join_names, pql_repr
 
 
 # Functions
@@ -399,7 +399,7 @@ class StructInstance(AbsStructInstance):
     attrs: Dict[str, Object]
 
     def __post_init__(self):
-        assert kernel_type( self.type ) <= T.struct
+        assert self.type <= T.struct
 
     @property
     def subqueries(self):
