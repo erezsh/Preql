@@ -260,7 +260,7 @@ class Instance(AbsInstance):
         #     return f'<instance of {self.type.repr(state)}>'
 
     def __post_init__(self):
-        assert not self.type.issubtype(T.union[T.struct, T.aggregate, T.table, T.unknown])
+        assert not self.type.issubtype(T.union[T.struct, T.table, T.unknown])
 
     def flatten_code(self):
         assert not self.type.issubtype(T.struct)
@@ -342,54 +342,24 @@ def make_instance(code, t, insts):
     assert not t.issubtype(T.struct), t
     if t <= T.table:
         return TableInstance.make(code, t, insts)
-    elif t <= T.aggregate:
-        return AggregateInstance(t, make_instance(code, t.elem, insts))
     elif t <= T.unknown:
         return unknown
     else:
         return Instance.make(code, t, insts)
 
 
-@dataclass
-class AggregateInstance(AbsInstance):
-    type: Type
-    elem: AbsInstance
-
-    @property
-    def code(self):
-        return self.elem.code
-
-    @property
-    def subqueries(self):
-        return self.elem.subqueries
-
-    def get_attr(self, name):
-        x = self.elem.get_attr(name)
-        return make_instance(x.code, T.aggregate[x.type], [x])
-
-    def all_attrs(self):
-        return self.elem.all_attrs()
-
-    def flatten_code(self):
-        return self.elem.flatten_code()
-
-    def primary_key(self):
-        # TODO should return aggregate key, no?
-        return self.elem.primary_key()
-
 
 class AbsStructInstance(AbsInstance):
     def get_attr(self, name):
         if name in self.attrs:
             attr = self.attrs[name]
-            return inherit_vectorized(attr, [self])
+            return inherit_phantom_type(attr, [self])
         else:
             raise pql_AttributeError(name)
 
     @property
     def code(self):
         # XXX this shouldn't even be allowed to happen in the first place
-        breakpoint()
         raise Signal(T.TypeError, [], "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
 
 
@@ -524,21 +494,21 @@ def merge_subqueries(instances):
     return SafeDict().update(*[i.subqueries for i in instances])
 
 
-def aggregate(inst):
+def ensure_phantom_type(inst, ptype):
     if not isinstance(inst, AbsInstance):
         return inst
-    if inst.type <= T.aggregate:
+    if inst.type <= ptype:
         return inst
-    return AggregateInstance(T.aggregate[inst.type], inst)
+    return inst.replace(type=ptype[inst.type])
+
+def aggregate(inst):
+    return ensure_phantom_type(inst, T.aggregate)
 
 def vectorized(inst):
-    if not isinstance(inst, AbsInstance):
-        return inst
-    if inst.type <= T.vectorized:
-        return inst
-    return inst.replace(type=T.vectorized[inst.type])
+    return ensure_phantom_type(inst, T.vectorized)
 
-def unvectorized(inst):
+
+def remove_phantom_type(inst):
     if inst.type <= T.vectorized | T.aggregate:
         return inst.replace(type=inst.type.elem)
     return inst
@@ -549,12 +519,10 @@ def inherit_vectorized_type(t, objs):
             return T.vectorized[t]
     return t
 
-def inherit_vectorized(o, objs):
+def inherit_phantom_type(o, objs):
     for src in objs:
-        if src.type <= T.vectorized:
-            return vectorized(o)
-        if src.type <= T.aggregate:
-            return aggregate(o)
+        if src.type <= T.vectorized | T.aggregate:
+            return ensure_phantom_type(o, src.type)
     return o
 
 

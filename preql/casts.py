@@ -6,8 +6,10 @@ from .exceptions import Signal
 
 @dp_type
 def _cast(state, inst_type, target_type, inst):
-    if inst_type == target_type or target_type is T.any:
+    if inst_type <= target_type:
         return inst
+    # if inst_type == target_type or target_type is T.any:
+    #     return inst
     raise Signal.make(T.TypeError, None, f"Cast not implemented for {inst_type}->{target_type}")
 
 @dp_type
@@ -26,7 +28,7 @@ def _cast(state, inst_type: T.list, target_type: T.list, inst):
 
 @dp_type
 def _cast(state, inst_type: T.aggregate, target_type: T.list, inst):
-    res = _cast(state, inst_type.elem, target_type.elem, inst.elem)
+    res = _cast(state, inst_type.elem, target_type.elem, inst)
     return objects.aggregate(res)   # ??
 
 @dp_type
@@ -104,4 +106,4 @@ def _cast(state, inst_type: T.t_relation, target_type: T.int, inst):
 
 def cast(state, obj, t):
     res = _cast(state, kernel_type(obj.type), t, obj)
-    return objects.inherit_vectorized(res, [obj])
+    return objects.inherit_phantom_type(res, [obj])

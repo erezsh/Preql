@@ -12,7 +12,7 @@ from .interp_common import dy, State, assert_type, new_value_instance, evaluate,
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
-from .pql_objects import AbsInstance, vectorized, make_instance, inherit_vectorized_type, unvectorized
+from .pql_objects import AbsInstance, vectorized, make_instance, remove_phantom_type
 
 class AutocompleteSuggestions(Exception):
     pass
@@ -52,13 +52,8 @@ def _process_fields(state: State, fields):
                 raise e.replace(message=f"Cannot use object of type '{evaluate(state, f.value).type}' in projection.")
             raise
 
-        # TODO proper error message
-        # if not isinstance(v, objects.AbsInstance):
-        #     raise Signal.make(T.TypeError, state, None, f"Projection field is not an instance. Instead it is: {v}")
-
         # In Preql, {=>v} creates an array. In SQL, it selects the first element.
         # Here we mitigate that disparity.
-
         if v.type <= T.aggregate:
             v = v.primary_key()
             t = T.json_array[v.type]
@@ -149,8 +144,8 @@ def compile_to_inst(state: State, i: ast.If):
     code = sql.Case(cond.code, then.code, else_.code)
     # TODO simplify this with a better type system
     res_type = kernel_type(then.type) | kernel_type(else_.type)
-    res_type = inherit_vectorized_type(res_type, [cond, then, else_])
-    return make_instance(code, res_type, [cond, then, else_])
+    inst = make_instance(code, res_type, [cond, then, else_])
+    return objects.inherit_phantom_type(inst, [cond, then, else_])
 
 
 
@@ -313,8 +308,8 @@ def compile_to_inst(state: State, o: ast.Not):
 
 ## Contains
 def contains(state, op, a, b):
-    res = _contains(state, op, unvectorized(a), unvectorized(b))
-    return objects.inherit_vectorized(res, [a, b])
+    res = _contains(state, op, remove_phantom_type(a), remove_phantom_type(b))
+    return objects.inherit_phantom_type(res, [a, b])
 
 
 @dp_inst
@@ -344,8 +339,8 @@ def _contains(state, op, a: T.any, b: T.any):
 
 ## Compare
 def compare(state, op, a, b):
-    res = _compare(state, op, unvectorized(a), unvectorized(b))
-    return objects.inherit_vectorized(res, [a, b])
+    res = _compare(state, op, remove_phantom_type(a), remove_phantom_type(b))
+    return objects.inherit_phantom_type(res, [a, b])
 
 @dp_inst
 def _compare(state, op, a: T.any, b: T.any):
@@ -461,8 +456,8 @@ def compile_to_inst(state: State, arith: ast.BinOp):
 
 
 def compile_arith(state, op, a, b):
-    res = _compile_arith(state, op, unvectorized(a), unvectorized(b))
-    return objects.inherit_vectorized(res, [a, b])
+    res = _compile_arith(state, op, remove_phantom_type(a), remove_phantom_type(b))
+    return objects.inherit_phantom_type(res, [a, b])
 
 @dp_inst
 def _compile_arith(state, arith, a: T.any, b: T.any):
@@ -722,7 +717,10 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
         inst.subqueries[name] = subq
         return inst
 
-    type_ = inherit_vectorized_type(type_, instances)
+    # Cannot inherit aggregated, because some expressions such as `sum()` cancel it out.
+    # XXX So why is it okay for vectorized?
+    #     Maybe all results should be vectorized?
+    type_ = objects.inherit_vectorized_type(type_, instances)
     code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
     return make_instance(code, type_, instances)
 

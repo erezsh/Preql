@@ -242,7 +242,8 @@ def _count(state, obj, table_func, name='count'):
         code = sql.FieldFunc(name, sql.AllFields(T.any))
     elif obj.type <= T.table:
         code = table_func(obj.code)
-    elif isinstance(obj, objects.StructInstance):
+    elif isinstance(obj, objects.StructInstance) and not obj.type <= T.aggregate:
+        # XXX is count() even the right method for this?
         return new_value_instance(len(obj.attrs))
 
     elif obj.type <= T.vectorized[T.json_array]:

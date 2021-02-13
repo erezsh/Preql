@@ -1396,6 +1396,9 @@ class BasicTests(PreqlTests):
         res = p('list([-2..3]{sign(item)})')
         assert res == [-1, -1, 0, 1, 1], res
 
+        res = p('[-2..3]{=>sign(item)}')
+        assert res == [{'sign': [-1, -1, 0, 1, 1]}], res
+
     def test_builtins(self):
         p = self.Preql()
 
