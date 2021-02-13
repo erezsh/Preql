@@ -241,21 +241,20 @@ T.container = [T.object]
 T.struct = [T.container]
 T.row = [T.struct]
 
-T.collection = [T.container], {}
-T.table = [T.collection], {}
+# T.collection = [T.container], {}
+T.table = [T.container], {}
 T.list = [T.table], {ITEM_NAME: T.any}
 T.set = [T.table], {ITEM_NAME: T.any}
-T.aggregate = [T.collection], {ITEM_NAME: T.any}
 T.t_id = [T.primitive], (T.table,)
 T.t_relation = [T.number], (T.any,)   # t_id?
 
-# T.vectorized = [T.container], (T.any,)  # sequence or collection?
+# XXX sequence instead of container?
+T.aggregate = [T.container], {ITEM_NAME: T.any}
 T._register('vectorized', [T.container], (T.any,), type_class=PhantomType)
 
 T.json = [T.container], (T.any,)
 T.json_array = [T.json]
 
-# T.function = [T.object]
 T._register('function', [T.object], type_class=TupleType)
 
 T.module = [T.object]

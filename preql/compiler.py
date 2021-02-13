@@ -161,7 +161,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     if table is objects.EmptyList:
         return table   # Empty list projection is always an empty list.
 
-    t = T.union[T.collection, T.struct]
+    t = T.union[T.table, T.struct]
     if not (table.type <= t):
         raise Signal.make(T.TypeError, proj, f"Cannot project objects of type {table.type}")
 
@@ -326,7 +326,7 @@ def _contains(state, op, a: T.string, b: T.string):
     return call_pql_func(state, f, [a, b])
 
 @dp_inst
-def _contains(state, op, a: T.primitive, b: T.collection):
+def _contains(state, op, a: T.primitive, b: T.table):
     b_list = cast(state, b, T.list)
     if not (a.type <= b_list.type.elem):
         a = cast(state, a, b_list.type.elem)
@@ -410,19 +410,6 @@ def _compare(_state, op, a: T.primitive, b: T.primitive):
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 
-@dp_inst
-def _compare(state, ast_node, a: T.aggregate, b: T.aggregate):
-    res = _compare(state, ast_node, a.elem, b.elem)
-    return objects.aggregate(res)
-
-@dp_inst
-def _compare(state, ast_node, a: T.aggregate, b: T.int):
-    res = _compare(state, ast_node, a.elem, b)
-    return objects.aggregate(res)
-
-@dp_inst
-def _compare(state, ast_node, a: T.int, b: T.aggregate):
-    return _compare(state, ast_node, b, a)
 
 @dp_inst
 def _compare(state, op, a: T.type, b: T.type):
@@ -484,7 +471,7 @@ def _compile_arith(state, arith, a: T.any, b: T.any):
 
 
 @dp_inst
-def _compile_arith(state, arith, a: T.collection, b: T.collection):
+def _compile_arith(state, arith, a: T.table, b: T.table):
     # TODO validate types
     ops = {
         "+": 'table_concat',
@@ -501,18 +488,6 @@ def _compile_arith(state, arith, a: T.collection, b: T.collection):
     return state.get_var(op).func(state, a, b)
 
 
-@dp_inst
-def _compile_arith(state, arith, a: T.aggregate, b: T.aggregate):
-    res = _compile_arith(state, arith, a.elem, b.elem)
-    return objects.aggregate(res)
-
-@dp_inst
-def _compile_arith(state, arith, a: T.aggregate, b: T.primitive):
-    res = _compile_arith(state, arith, a.elem, b)
-    return objects.aggregate(res)
-@dp_inst
-def _compile_arith(state, arith, a: T.primitive, b: T.aggregate):
-    return _compile_arith(state, arith, b, a)
 
 @dp_inst
 def _compile_arith(state, arith, a: T.string, b: T.int):
@@ -755,7 +730,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
 def compile_to_inst(state: State, s: ast.Slice):
     obj = cast_to_instance(state, s.obj)
 
-    assert_type(obj.type, T.union[T.string, T.collection], state, s, "Slice")
+    assert_type(obj.type, T.union[T.string, T.table], state, s, "Slice")
 
     instances = [obj]
     if s.range.start:
@@ -794,7 +769,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
         slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
 
-    assert_type(table.type, T.collection, state, sel, "Selection")
+    assert_type(table.type, T.table, state, sel, "Selection")
 
     with state.use_scope({n:vectorized(c) for n, c in table.all_attrs().items()}):
         conds = cast_to_instance(state, sel.conds)

@@ -525,10 +525,11 @@ def merge_subqueries(instances):
 
 
 def aggregate(inst):
-    if isinstance(inst, AbsInstance):
-        return AggregateInstance(T.aggregate[inst.type], inst)
-
-    return inst
+    if not isinstance(inst, AbsInstance):
+        return inst
+    if inst.type <= T.aggregate:
+        return inst
+    return AggregateInstance(T.aggregate[inst.type], inst)
 
 def vectorized(inst):
     if not isinstance(inst, AbsInstance):
@@ -538,7 +539,7 @@ def vectorized(inst):
     return inst.replace(type=T.vectorized[inst.type])
 
 def unvectorized(inst):
-    if inst.type <= T.vectorized:
+    if inst.type <= T.vectorized | T.aggregate:
         return inst.replace(type=inst.type.elem)
     return inst
 
@@ -552,6 +553,8 @@ def inherit_vectorized(o, objs):
     for src in objs:
         if src.type <= T.vectorized:
             return vectorized(o)
+        if src.type <= T.aggregate:
+            return aggregate(o)
     return o
 
 

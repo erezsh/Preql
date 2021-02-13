@@ -205,7 +205,7 @@ def _execute(state: State, insert_rows: ast.InsertRows):
 
     rval = evaluate(state, insert_rows.value)
 
-    assert_type(rval.type, T.collection, state, insert_rows, '+=')
+    assert_type(rval.type, T.table, state, insert_rows, '+=')
 
     return _copy_rows(state, insert_rows.name, rval)
 
@@ -585,7 +585,7 @@ def apply_database_rw(state: State, o: ast.One):
     slice_ast = ast.Slice(obj, ast.Range(None, ast.Const(T.int, 2))).set_text_ref(o.text_ref)
     table = evaluate(state, slice_ast)
 
-    assert (table.type <= T.collection), table
+    assert (table.type <= T.table), table
     rows = localize(state, table) # Must be 1 row
     if len(rows) == 0:
         if not o.nullable:
@@ -815,7 +815,7 @@ class TableConstructor(objects.Function):
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
-    code_cls = sql.TableName if (inst.type <= T.collection) else sql.Name
+    code_cls = sql.TableName if (inst.type <= T.table) else sql.Name
     name = state.unique_name(inst)
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 

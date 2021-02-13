@@ -3,7 +3,7 @@
 func _sql_agg_func(name, obj, t=null) {
     "Helper function. Do not call"
     if (t==null) {
-        if (not (isa(obj, collection) and count(columns(obj))==1)) {
+        if (not (isa(obj, union[table, aggregate]) and count(columns(obj))==1)) {
             throw new TypeError(name + "() only accepts lists or tables with one column. Got '" + repr(type(obj)) + "'")
         }
 
@@ -25,8 +25,9 @@ func _sql_agg_func(name, obj, t=null) {
     }
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
 }
+func _table_or_agg(n) = union[table[n], aggregate[n]]
 
-func sum(col: collection[number]) {
+func sum(col: _table_or_agg(number)) {
     """Sums up a column or a list.
 
     Examples:
@@ -43,7 +44,7 @@ func sum(col: collection[number]) {
     return _sql_agg_func("SUM", col)
 }
 
-func mean(col: collection[number]) {
+func mean(col: _table_or_agg(number)) {
     """Returns the mean average of a column or a list
 
     See Also `sum`.
@@ -51,7 +52,7 @@ func mean(col: collection[number]) {
     return _sql_agg_func("AVG", col, float)
 }
 
-func min(col: collection[number]) {
+func min(col: _table_or_agg(number)) {
     """Finds the minimum of a column or a list
 
     See Also `sum`.
@@ -59,7 +60,7 @@ func min(col: collection[number]) {
     return _sql_agg_func("MIN", col)
 }
 
-func max(col: collection[number]) {
+func max(col: _table_or_agg(number)) {
     """Finds the maximum of a column or a list
 
     See Also `sum`.
@@ -67,7 +68,7 @@ func max(col: collection[number]) {
     return _sql_agg_func("MAX", col)
 }
 
-func first(obj: collection) {
+func first(obj: union[table, aggregate]) {
     """Returns the first member of a column or a list
 
     Examples:
@@ -92,7 +93,7 @@ func first(obj: collection) {
     }
 }
 
-func first_or_null(obj: union[collection, vectorized]) {
+func first_or_null(obj: union[table, vectorized]) {
     """Returns the first member of a column or a list, or null if it's empty
 
     See Also `first()`.
@@ -114,17 +115,17 @@ func first_or_null(obj: union[collection, vectorized]) {
 
 
 
-func limit(tbl: collection, n: int) {
+func limit(tbl: table, n: int) {
     """Returns the first 'n' rows in the table """
     return tbl[..n]
 }
 
-func limit_offset(tbl: collection, lim: int, offset: int) {
+func limit_offset(tbl: table, lim: int, offset: int) {
     "Returns the first 'n' rows in the table at the given offset"
     return SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
 }
 
-func enum(tbl: collection) {
+func enum(tbl: table) {
     """Return the table with a new index column
 
     Count starts from 0.
@@ -221,7 +222,7 @@ func list_median(x: list) {
     return mean(mid_items)
 }
 
-func zipjoin(a: collection, b: collection) {
+func zipjoin(a: table, b: table) {
     """Joins two tables on their row index.
 
     Column names are always `a` and `b`.
@@ -244,7 +245,7 @@ func zipjoin(a: collection, b: collection) {
     return _zipjoin(join, a, b)
 }
 
-func zipjoin_left(a: collection, b: collection) {
+func zipjoin_left(a: table, b: table) {
     """Similar to `zipjoin`, but the result is as long as the first parameter.
 
     Missing rows will be assigned `null`.
@@ -261,7 +262,7 @@ func zipjoin_left(a: collection, b: collection) {
     """
     return _zipjoin(leftjoin, a, b)
 }
-func zipjoin_longest(a: collection, b: collection) {
+func zipjoin_longest(a: table, b: table) {
     """Similar to `zipjoin`, but the result is as long as the longest table.
 
     Missing rows will be assigned `null`.
@@ -269,7 +270,7 @@ func zipjoin_longest(a: collection, b: collection) {
     return _zipjoin(outerjoin, a, b)
 }
 
-func distinct(t: collection) {
+func distinct(t: table) {
     """Removes identical rows from the given table
 
     Example:
@@ -318,7 +319,7 @@ if (db_type == "postgres") {
     func minute(date) = SQL(int, "strftime('%M', $date)")
     func day_of_week(date) = SQL(int, "strftime('%w', $date)")
     func week_of_year(date) = SQL(int, "strftime('%W', $date)")
-    func count_distinct(field: collection) = SQL(int, "count(distinct $field)")
+    func count_distinct(field: aggregate) = SQL(int, "count(distinct $field)")
 
     func _str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)-1")
     func _char(n: int) = SQL(string, "char($n)")
@@ -460,7 +461,7 @@ func sample_ratio_fast(tbl, ratio) {
     return tbl[random() < ratio]    // random() will be re-evaluated for every row
 }
 
-func sample_fast(tbl: collection, n: int, bias: number=0.05) {
+func sample_fast(tbl: table, n: int, bias: number=0.05) {
     """Returns a random sample of n rows from the table in one query (or at worst two queries)
 
     Parameters:

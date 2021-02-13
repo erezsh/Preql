@@ -84,7 +84,7 @@ def pql_inspect_sql(state: State, obj: T.object):
     return objects.ValueInstance.make(sql.make_value(s), T.text, [], s)
 
 
-def pql_SQL(state: State, result_type: T.union[T.collection, T.type], sql_code: T.string):
+def pql_SQL(state: State, result_type: T.union[T.table, T.type], sql_code: T.string):
     """Create an object with the given SQL evaluation code, and given result type.
 
     The object will only be evaluated when required by the program flow.
@@ -282,7 +282,7 @@ def pql_count(state: State, obj: T.container.as_nullable() = objects.null):
     return _count(state, obj, sql.CountTable)
 
 
-def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() = objects.null):
+def pql_temptable(state: State, expr: T.table, const: T.bool.as_nullable() = objects.null):
     """Generate a temporary table with the contents of the given table
 
     It will remain available until the database session ends, unless manually removed.
@@ -298,7 +298,7 @@ def pql_temptable(state: State, expr: T.collection, const: T.bool.as_nullable() 
     # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
     # 'const table' doesn't
     const = cast_to_python(state, const)
-    assert_type(expr.type, T.collection, state, expr, 'temptable')
+    assert_type(expr.type, T.table, state, expr, 'temptable')
 
     name = state.unique_name("temp")    # TODO get name from table options
 
@@ -338,21 +338,21 @@ def sql_bin_op(state, op, t1, t2, name, additive=False):
 
     return type(t1).make(code, t1.type, [t1, t2])
 
-def pql_table_intersect(state: State, t1: T.collection, t2: T.collection):
+def pql_table_intersect(state: State, t1: T.table, t2: T.table):
     "Intersect two tables. Used for `t1 & t2`"
     return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
 
-def pql_table_substract(state: State, t1: T.collection, t2: T.collection):
+def pql_table_substract(state: State, t1: T.table, t2: T.table):
     "Substract two tables (except). Used for `t1 - t2`"
     if state.db.target is sql.mysql:
         raise Signal.make(T.NotImplementedError, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
 
-def pql_table_union(state: State, t1: T.collection, t2: T.collection):
+def pql_table_union(state: State, t1: T.table, t2: T.table):
     "Union two tables. Used for `t1 | t2`"
     return sql_bin_op(state, "UNION", t1, t2, "union", True)
 
-def pql_table_concat(state: State, t1: T.collection, t2: T.collection):
+def pql_table_concat(state: State, t1: T.table, t2: T.table):
     "Concatenate two tables (union all). Used for `t1 + t2`"
     if isinstance(t1, objects.EmptyListInstance):
         return t2
@@ -373,7 +373,7 @@ def _join2(state, join, a, b):
     if isinstance(a, objects.SelectedColumnInstance) and isinstance(b, objects.SelectedColumnInstance):
         return [a, b]
 
-    if not ((a.type <= T.collection) and (b.type <= T.collection)):
+    if not ((a.type <= T.table) and (b.type <= T.table)):
         a = a.type.repr()
         b = b.type.repr()
         raise Signal.make(T.TypeError, None, f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}")
@@ -400,7 +400,7 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
 
     # Initialization
     tables = [_get_table(x) for x in exprs]
-    assert all((t.type <= T.collection) for t in tables)
+    assert all((t.type <= T.table) for t in tables)
 
     structs = {name: T.struct(table.type.elems) for name, table in safezip(names, tables)}
 
@@ -565,16 +565,15 @@ def pql_repr(state: State, obj: T.any):
         value = repr(cast_to_python(state, obj))
         return new_value_instance(value)
 
-def pql_columns(state: State, table: T.collection):
+def pql_columns(state: State, obj: T.container):
     """Returns a dictionary `{column_name: column_type}` for the given table
 
     Example:
         >> columns([0])
         {item: int}
     """
-    # TODO table: T.table, not collection
 
-    elems = table.type.elems
+    elems = obj.type.elems
     if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
         elems = {f't{i}':e for i, e in enumerate(elems)}
 
@@ -924,7 +923,7 @@ def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080
                 path += "/{%s}" % p.name
 
             routes.append(Route(path, endpoint=_rest_func_endpoint(state, func)))
-        elif func.type <= T.collection:
+        elif func.type <= T.table:
             routes.append(Route(path, endpoint=_rest_table_endpoint(state, func)))
         else:
             raise Signal.make(T.TypeError, func, f"Expected a function or a table, got {func.type}")

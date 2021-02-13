@@ -70,10 +70,10 @@ T.struct: "A structure type",
 
 T.row: "A row in a table. (essentially a named-tuple)",
 
-T.collection: """The base class of collections.
+# T.collection: """The base class of collections.
 
-	A collection holds an array of other objects inside it.
-""",
+# 	A collection holds an array of other objects inside it.
+# """,
 
 T.table: """A table type.
 
