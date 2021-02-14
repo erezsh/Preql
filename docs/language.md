@@ -65,28 +65,43 @@ list[int]
 - Functions are defined with `func`, like in Go
 
 ```javascript
-func add1(x) = x + 1        // short-hand syntax
-
+// normal syntax
 func abs(x) {
+    "docstring"
     if (x < 0) {
         return -x
     }
     return x
 }
+
+// short-hand syntax
+func add1(x) = x + 1
+    "docstring"
+
 ```
 
 ### Keywords
 
-table
-struct
-func .. return
-if .. else
-while
-import
-throw
-try .. catch
-one
-new
+| Category     | Keyword   | Meaning  |
+| ------------ |:---------:| -------- |
+| Definitions  | | |
+|              | table | Define a new table |
+|              | struct | Define a new struct |
+|              | func | Define a new function |
+|              | const | Modifier for definition, signifying a constant (immutable) |
+| Control Flow | | |
+|              | if, else | Conditional |
+|              | while, for, in | Loop |
+|              | try, catch, throw | Exception handling |
+| Operators        | | |
+|              | new, one | See below |
+|              | and, or, not | See below |
+| Other        | | |
+|              | import | Imports a module |
+|              | assert | Assert a condition or throw an exception |
+|              | print | Prints to stdout |
+|              | null, false, true | Value constants |
+
 
 ### Operators
 
@@ -100,11 +115,12 @@ new
 |               | /~ | Divide into integer | Numbers
 |               | % | Modulo | Numbers
 |               | & | Element-wise 'and' | Lists, Tables
-|               | | | Element-wise 'or' | Lists, Tables
+|               | \| | Element-wise 'or' | Lists, Tables
 |               | ^ | Element-wise 'xor' | Lists, Tables
 | Comparison    | | |
 |               | in | Find if value exists      | Primitive in Lists, Tables
 |               | !in | Find if value does not exist | Primitive in Lists, Tables
+|               | ~, like | 'Like' pattern matching | Strings
 |               | == | Equal | Any
 |               | != | Not equal | Any
 |               | <> | Not equal | Any
@@ -119,6 +135,9 @@ new
 |                  | [] | Filter (where) | Lists, Tables
 |                  | {} | Project (select) | Lists, Tables
 |                  | [a..b] | Slice (limit, offset) | Lists, Tables
+|                  | order{} | Order | Lists, Tables
+|                  | update{} | Update | Tables
+|                  | delete{} | Delete | Tables
 | Other | | |
 |                  | () | Call Function | Functions
 |                  | = | Assign value | Any
@@ -126,4 +145,4 @@ new
 |                  | [..] | Slice | Strings, Collections
 |                  | new | Create a new row in table | Tables
 |                  | new[] | Create new rows in table | Tables
-
+|                  | one | Returns one item, or throws an exception  | Lists, Tables
