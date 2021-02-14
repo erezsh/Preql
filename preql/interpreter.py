@@ -33,8 +33,9 @@ class Interpreter:
             bns = self.state.get_var('__builtins__').namespace
             # safe-update
             for k, v in mns.items():
-                assert k not in bns
-                bns[k] = v
+                if not k.startswith('__'):
+                    assert k not in bns
+                    bns[k] = v
 
     def call_func(self, fname, args):
         with context(state=self.state):
@@ -47,8 +48,13 @@ class Interpreter:
         except pql_SyntaxError as e:
             raise Signal(T.SyntaxError, [e.text_ref], e.message)
 
+
         last = None
         with context(state=self.state):
+            if stmts:
+                if isinstance(stmts[0], ast.Const) and stmts[0].type == T.string:
+                    self.set_var('__doc__', stmts[0].value) 
+
             for stmt in stmts:
                 try:
                     last = execute(self.state, stmt)

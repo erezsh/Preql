@@ -110,15 +110,15 @@ func first_or_null(obj: union[table, projected]) {
 
 
 func limit(tbl: table, n: int) = tbl[..n]
-    """Returns the first 'n' rows in the table """
+    """Returns the first 'n' rows in the table."""
 
 func limit_offset(tbl: table, lim: int, offset: int) {
-    "Returns the first 'n' rows in the table at the given offset"
+    "Returns the first 'n' rows in the table at the given offset."
     return SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
 }
 
 func enum(tbl: table) = tbl{index: SQL(int, "(row_number() over ())-1"), ...}
-    """Return the table with a new index column
+    """Return the table with a new index column.
 
     Count starts from 0.
 

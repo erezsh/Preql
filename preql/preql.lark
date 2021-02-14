@@ -1,4 +1,4 @@
-stmts: _NL? stmt+   -> as_list
+module: _NL? stmt+   -> as_list
 ?stmt: table_def
      | struct_def
      | func_def
@@ -51,7 +51,7 @@ member_def: name ":" type -> as_list
 
 typemod: PK | NULLABLE
 
-func_def: "func" name func_params "=" expr [_NL (STRING|LONG_STRING)] _NL -> func_def_short
+func_def: "func" name func_params "=" expr [_NL string_raw] _NL -> func_def_short
         | "func" name func_params codeblock _NL
 
 try_catch: "try" codeblock _NL? "catch" "(" expr ")" codeblock _NL
@@ -150,12 +150,10 @@ named_expr: [name ":"] expr
       | "null" -> null
       | "false" -> false
       | "true" -> true
-      | string | long_string
+      | string_raw -> string
      //  | range
 
-string: STRING
-long_string: LONG_STRING
-
+?string_raw: STRING | LONG_STRING
 
 marker: MARKER
 ellipsis: "..." [expr] exclude*

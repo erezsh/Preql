@@ -46,6 +46,11 @@ def make_text_reference(text, source_file, meta, children=()):
     return TextReference(text, str(source_file), ref)
 
 
+def get_docstring(expr):
+    if isinstance(expr, ast.CodeBlock):
+        stmts = expr.statements
+        if stmts and isinstance(stmts[0], ast.Const) and stmts[0].type is T.string:
+            return stmts[0].value
 
 
 # Taken from Lark (#TODO provide it in lark utils?)
@@ -121,8 +126,6 @@ class TreeToAst(Transformer):
         return _fix_escaping(s[3:-3])
 
     def string(self, s):
-        return ast.Const(T.string, s)
-    def long_string(self, s):
         return ast.Const(T.string, s)
 
     @with_meta
@@ -235,11 +238,7 @@ class TreeToAst(Transformer):
                 params = params[:-1]
 
 
-        docstring = None
-        if isinstance(expr, ast.CodeBlock):
-            stmts = expr.statements
-            if stmts and isinstance(stmts[0], ast.Const) and stmts[0].type is T.string:
-                docstring = stmts[0].value
+        docstring = get_docstring(expr)
 
         return ast.FuncDef(objects.UserFunction(name, params, expr, collector, docstring=docstring))
 
@@ -323,7 +322,7 @@ parser = Lark.open(
     rel_to=__file__,
     parser='lalr',
     postlex=Postlexer(),
-    start=['stmts', 'expr'],
+    start=['module', 'expr'],
     maybe_placeholders=True,
     propagate_positions=True,
     cache=True,
@@ -344,7 +343,7 @@ def terminal_list_desc(term_list):
 
 def parse_stmts(s, source_file, wrap_syntax_error=True):
     try:
-        tree = parser.parse(s+"\n", start="stmts")
+        tree = parser.parse(s+"\n", start="module")
     except UnexpectedInput as e:
         if not wrap_syntax_error:
             raise
