@@ -38,61 +38,29 @@ That means in Preql you can do anything you could do in Python or Javascript, ev
 
 ### Better syntax, semantics, and practices
 
-Preql's syntax is inspired by javascript. It's concise and natural for programmers.
+Preql's syntax is inspired by javascript. It's relatively concise, and familiar to programmers.
 
 It integrates important ideas like Fail-Early, and the Principle Of Least Astonishment.
 
-Preql code is stored in files, instead of the database, which means it can be version-controlled (using git or similar)
+The code itself is stored in files, instead of a database, which means it can be version-controlled (using git or similar)
 
-It also comes with an interactive prompt, auto-complete, and IDE support (**TODO**)
+Preql also comes with an interactive prompt with auto-complete.
 
 ### Escape hatch to SQL
 
 There are many dialects of SQL, and even more plugins and extensions. Luckily, we don't need to support all of them.
 
-Preql provides the builtin function `SQL()`, which allows you to run arbitrary SQL code.
-
-The `SQL()` function can be embedded anywhere within your Preql code.
-
-Here's a small example demonstrating this:
-
-```javascript
->> func my_upper(s) = SQL(string, "upper($s) || '!'")
->> foo_bar = ["foo", "bar"]   // define a list
->> foo_bar{my_upper(item)}   // apply 'my_upper' to each item
-["FOO!", "BAR!"]
-```
-
-
-## Preql vs *
-
-### vs SQL
-
-SQL first appeared in 1974, and aimed to provide a database interface that was based on natural language. It was clever and innovative at the time of its conception, but today we can look back on its design and see many fundamental mistakes.
-
-Among its many faults, SQL is excessively verbose, is bad at catching and reporting errors, has no first-class or high-order functions, is awkward for interactive work, and it has a fragmented ecosystem and many different and incompatible dialects.
-
-Some attempts have been made to address these issues, mainly in the form of ORMs.
-
-### vs ORMs
-
-ORMs are frameworks written within other programming languages, that let their users use sane and relatively concise phrases that in turn are compiled to SQL, and executed on the database.
-
-However, they are themselves limited by their host languages, which were never designed for relational data processing. For the most part, they have awkward syntax, and they only support simple constructs and queries.
-
-### vs Pandas
-
-Given the failings of SQL and ORMs, it's no wonder that many programmers and data analysts choose to disregard relational databases altogether, and use completely new approaches.
-
-Pandas is one of those new approaches. Implemented entirely on top of Python and Numpy, it has gained a lot of popularity in recent years due to its accessibility and relative simplicity. It also has a wide range of features that were designed specifically for data scientists.
-
-Unfortunately, it comes with its own set of faults. Pandas is slow (despite recent efforts to accelerate it), it has awkward syntax, it isn't well suited for relational, structured or linked data,
-
+Preql provides the builtin function [SQL()](preql-modules.html#SQL), which allows you to run arbitrary SQL code, anywhere in your Preql code.
 
 ## Conclusion
 
-Preql's design choices allow it to be fast and flexible, with an elegant and concise syntax.
+Preql's design choices allow it to be fast and flexible, with a concise syntax.
 
-While still young, it has the potential to one day replace SQL as the standard query language for relational databases.
+Preql adopts the good parts of SQL, and offers improvements to its weakest points.
 
-To learn more about Preql, read the [tutorial](tutorial.md), or check out the [code comparison](comparison.md).
+Where to go next?
+
+- [Read the tutorial](tutorial.md) as it takes you through the basics of Preql
+
+- [Browse the examples](https://github.com/erezsh/Preql/tree/master/examples) and learn how Preql can be used.
+

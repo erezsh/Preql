@@ -30,6 +30,8 @@
    :maxdepth: 2
    :caption: Propaganda
    :hidden:
+   
+   competition
    comparison
    comparison_sql
 
@@ -65,6 +67,7 @@ Resources
 
 -  Propaganda
 
+   -  :doc:`competition`
    -  :doc:`comparison`
    -  :doc:`comparison_sql`
 

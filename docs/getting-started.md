@@ -2,7 +2,7 @@
 
 ## Install
 
-Ensure you have Python 3.8 or up installed on your system.
+Important: Ensure you have Python 3.8, or above, installed on your system.
 
 Install using pip:
 
@@ -12,7 +12,7 @@ Install using pip:
 
 ## Run the interpreter in the console (REPL)
 
-After installation, just enter:
+To start the interpreter, run the following in your shell:
 
 ```sh
     preql
@@ -52,34 +52,28 @@ Use introspective methods to see a list of the tables, and of the available func
 
     // For example:
     >> help(connect)
-
-    func connect(uri: string) = ...
+    func connect(uri, load_all_tables, auto_create) = ...
 
         Connect to a new database, specified by the uri
+        ...
 ```
-
-### See the SQL
-
-If you want to see the SQL code that is being executed, you can run Preql with `preql --print-sql`.
-
-It can be useful for debugging, but isn't recommended for regular workflow.
 
 ## Run in Jupyter Notebook
 
-First you need to install the plugin, using the following command:
+1. Install the Preql kernel into the jupyter:
 
 ```sh
     preql --install-jupyter
 ```
 
-Then just run Jupyter Notebook as usual:
+2. Run Jupyter Notebook as usual:
 ```sh
     jupyter notebook
 ```
 
-    And create a new notebook with the `Preql` kernel.
+3. create a new notebook with the `Preql` kernel, or open an existing one.
 
-Use the `connect()` function to connect to a database.
+Inside the notebook, use the `connect()` function to connect to a database.
 
 For an example, view the following Jupyter notebook: [Tutorial: Exploring a database with Preql](https://github.com/erezsh/Preql/blob/master/docs/chinook_tutorial.ipynb)
 

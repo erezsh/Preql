@@ -194,6 +194,7 @@ def pql_debug(state: State):
     """Breaks the execution of the interpreter, and enters into a debug
     session using the REPL environment.
 
+    Use `c()` to continue the execution.
     """
     py_api = state._py_api
 
