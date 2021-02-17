@@ -18,6 +18,7 @@
    :hidden:
 
    tutorial
+   comparison
 
 .. toctree::
    :maxdepth: 2
@@ -30,10 +31,8 @@
    :maxdepth: 2
    :caption: Propaganda
    :hidden:
-   
+
    competition
-   comparison
-   comparison_sql
 
 
 .. toctree::
@@ -63,13 +62,12 @@ Resources
 -  Tutorials
 
    -  :doc:`tutorial`
+   -  :doc:`comparison`
    -  `Jupyter tutorial <https://github.com/erezsh/Preql/blob/master/docs/chinook_tutorial.ipynb>`_
 
 -  Propaganda
 
    -  :doc:`competition`
-   -  :doc:`comparison`
-   -  :doc:`comparison_sql`
 
 -  Reference
 

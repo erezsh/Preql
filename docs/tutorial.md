@@ -2,9 +2,9 @@
 
 ## What is Preql?
 
-Preql (pronounced: Prequel) is a new programming language for relational databases.
+Preql is a relational programming language that runs on relational databases, such as PostgreSql, MySql, and Sqlite.
 
-It lets you use syntax and semantics that are similar to Javascript and Python, but compiles to SQL queries, and runs them on a database backend.
+It does so by compiling to SQL. However, its syntax and semantics resemble those of Javascript and Python.
 
 By combining these elements, Preql lets you write simple and elegant code that runs as fast as SQL.
 

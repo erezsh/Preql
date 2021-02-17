@@ -1,6 +1,7 @@
 from typing import List, Optional
 import logging
 from pathlib import Path
+from datetime import datetime
 
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func, is_global_scope
@@ -983,7 +984,7 @@ def cast_to_python(state, obj: objects.AbsInstance):
     elif obj.type == T.bool:
         assert res in (0, 1), res
         res = bool(res)
-    assert isinstance(res, (int, str, float, dict, list, type(None))), (res, type(res))
+    assert isinstance(res, (int, str, float, dict, list, type(None), datetime)), (res, type(res))
     return res
 
 
