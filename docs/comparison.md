@@ -6,26 +6,28 @@ Use the checkboxes to hide/show the code examples for each language.
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cash/8.1.0/cash.min.js"></script>
 
-<form>
-<table>
-	<tr>
-		<td> <input type="checkbox" id="preql" onclick="$('.preql').toggle()" checked="checked"> </td>
-		<td> <label for="preql">Preql</label> </td>
-	</tr>
-	<tr>
-		<td> <input type="checkbox" id="sql" onclick="$('.sql').toggle()" checked="checked"> </td>
-		<td> <label for="sql">SQL</label> </td>
-	</tr>
-	<tr>
-		<td> <input type="checkbox" id="pandas" onclick="$('.pandas').toggle()" checked="checked"> </td>
-		<td> <label for="pandas">Pandas</label> </td>
-	</tr>
-	<tr>
-		<td> <input type="checkbox" id="sqlalchemy" onclick="$('.sqlalchemy').toggle()" checked="checked"> </td>
-		<td> <label for="sqlalchemy">SQLAlchemy</label> </td>
-	</tr>
-</table>
-</form>
+<div class="sticky">
+	<form>
+		<div id="dialect_choices">
+			<div class="choice">
+				<input type="checkbox" id="preql" onclick="$('.preql').toggle()" checked="checked">
+				<label for="preql">Preql</label>
+			</div>
+			<div class="choice">
+				<input type="checkbox" id="sql" onclick="$('.sql').toggle()" checked="checked">
+				<label for="sql">SQL</label>
+			</div>
+			<div class="choice">
+				<input type="checkbox" id="pandas" onclick="$('.pandas').toggle()" checked="checked">
+				<label for="pandas">Pandas</label>
+			</div>
+			<div class="choice">
+				<input type="checkbox" id="sqlalchemy" onclick="$('.sqlalchemy').toggle()" checked="checked">
+				<label for="sqlalchemy">SQLAlchemy</label>
+			</div>
+		</div>
+	</form>
+</div>
 
 <style>
 	.preql::before {
@@ -47,6 +49,20 @@ Use the checkboxes to hide/show the code examples for each language.
 	  margin-bottom: 5px;
 	  text-decoration: underline;
 	  line-height: 2em;
+	}
+	div.sticky {
+		position: -webkit-sticky;
+		position: sticky;
+		top: 0;
+	}
+	.choice {
+		display: flex;
+		padding: 10px;
+	}
+	#dialect_choices {
+		background: white;
+		padding: 20px;
+		display: flex;
 	}
 </style> 
 
