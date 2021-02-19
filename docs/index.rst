@@ -52,7 +52,7 @@ It is designed for use by data engineers, analysts and data scientists.
 
 It features modern syntax and semantics, Python integration, inline SQL, and an interactive enviroment.
 
-It supports PostgreSQL, MySQL, SQLite, and BigQuery (experimental).
+It supports PostgreSQL, MySQL, SQLite, BigQuery (WIP), and soon more.
 
 
 Resources

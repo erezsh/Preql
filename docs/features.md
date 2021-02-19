@@ -15,8 +15,8 @@ Preql is a programming language, a library, an interactive shell, and a set of t
         - **SQLite**
         - **PostgreSQL**
         - **MySQL**
+        - **BigQuery** (work in progress)
         - Askgit :)
-        - BigQuery (soon)
         - More to come!
 
 - **Python integration**
