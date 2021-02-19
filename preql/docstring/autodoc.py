@@ -135,6 +135,8 @@ def generate_rst(modules_fn, types_fn):
         print('Preql Modules', file=f)
         print('=============', file=f)
         print(doc_module(p('__builtins__')).print_rst(), file=f)
+        p('import graph')
+        print(doc_module(p('graph')).print_rst(), file=f)
 
 @dy
 def autodoc(m: Module):

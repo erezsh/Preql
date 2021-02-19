@@ -831,31 +831,34 @@ def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.b
         db_query(state, q)
 
 
-    with open(filename, 'r', encoding='utf8') as f:
-        line_count = len(list(f))
-        f.seek(0)
+    try:
+        with open(filename, 'r', encoding='utf8') as f:
+            line_count = len(list(f))
+            f.seek(0)
 
-        reader = csv.reader(f)
-        for i, row in enumerate(rich.progress.track(reader, total=line_count, description=msg)):
-            if i == 0:
-                matched = cons.match_params(state, row)
-                keys = [p.name for (p, _) in matched]
+            reader = csv.reader(f)
+            for i, row in enumerate(rich.progress.track(reader, total=line_count, description=msg)):
+                if i == 0:
+                    matched = cons.match_params(state, row)
+                    keys = [p.name for (p, _) in matched]
 
-            if header and i == 0:
-                # Skip first line if header=True
-                continue
+                if header and i == 0:
+                    # Skip first line if header=True
+                    continue
 
-            values = ["'%s'" % (v.replace("'", "''")) for v in row]
-            rows.append(values)
+                values = ["'%s'" % (v.replace("'", "''")) for v in row]
+                rows.append(values)
 
-            if (i+1) % ROWS_PER_QUERY == 0:
-                insert_values()
-                rows = []
+                if (i+1) % ROWS_PER_QUERY == 0:
+                    insert_values()
+                    rows = []
 
-    if keys and rows:
-        insert_values()
+        if keys and rows:
+            insert_values()
 
-    return table
+        return table
+    except FileNotFoundError as e:
+        raise Signal.make(T.FileError, None, str(e))
 
 
 def _rest_func_endpoint(state, func):

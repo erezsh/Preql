@@ -10,6 +10,7 @@
 //      preql -m tree
 //
 
+import graph
 
 // Define Tree table
 table Tree {
@@ -110,7 +111,7 @@ func print_most_common_ancestor(a, b) {
 func print_hierarchy() {
     // Uses the builtin `walk_tree()` function, which is defined similarly to `bfs()`
     // This is all done with a single SQL statement.
-    nodes_by_rank = walk_tree(edges_downwards, roots{id}, 1000)
+    nodes_by_rank = graph.walk_tree(edges_downwards, roots{id}, 1000)
     print join(r: nodes_by_rank.id, t: Tree.id) {
         hierarchy: repeat(" ", r.rank*2) + t.value
     }

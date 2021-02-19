@@ -1,0 +1,36 @@
+"Graph-related functions"
+
+func bfs(edges: table, initial: table) {
+    """Performs a breadth-first search on a graph.
+
+    Parameters:
+        edges: a table of type `{src: int, dst: int}`, defining the edges of the graph
+        initial: list[int], specifies from which nodes to start
+    """
+    if (count(names(edges){name} & ["src", "dst"]) != 2) {
+        throw new TypeError("bfs: 'edges' expected to contain 'src' and 'dst'")
+    }
+    initial = list(initial)
+    bfs = SQL(list[int], "SELECT * FROM $initial UNION SELECT e.dst FROM $edges e JOIN $self bfs ON e.src = bfs.item")
+    return SQL(list[int], "SELECT bfs.item FROM $bfs bfs")
+}
+
+
+func walk_tree(edges: table, initial: table, max_rank: int) {
+    """Walks a tree and keeps track of the rank.
+
+    Doesn't test for uniqueness. Nodes may be visited more than once.
+    Cycles will repeat until max_rank.
+
+    Parameters:
+        edges: a table of type {src: int, dst: int}, defining the edges of the graph
+        initial: list[int], specifies from which nodes to start
+        max_rank: integer limiting how far to search
+    """
+    table node {
+        id: int
+        rank: int
+    }
+    bfs = SQL(node, "SELECT *, 0 FROM $initial UNION ALL SELECT e.dst, bfs.rank+1 FROM $edges e JOIN $self bfs ON e.src = bfs.id WHERE bfs.rank < $max_rank")
+    return SQL(node, "SELECT bfs.id, bfs.rank FROM $bfs bfs")
+}
