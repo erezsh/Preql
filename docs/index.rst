@@ -50,6 +50,11 @@ Preql (*pronounced: Prequel*) is an interpreted relational query language, that 
 
 It is designed for use by data engineers, analysts and data scientists.
 
+It features modern syntax and semantics, Python integration, inline SQL, and an interactive enviroment.
+
+It supports PostgreSQL, MySQL, SQLite, and BigQuery (experimental).
+
+
 Resources
 ---------
 

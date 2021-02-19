@@ -12,8 +12,8 @@ Preql is a programming language, a library, an interactive shell, and a set of t
     - Compiles to SQL whenever possible (guaranteed for all table operations)
     - Escape hatch to SQL (write raw SQL expression within Preql code)
     - Support for multiple SQL targets
-        - **Sqlite**
-        - **Postgres**
+        - **SQLite**
+        - **PostgreSQL**
         - **MySQL**
         - Askgit :)
         - BigQuery (soon)

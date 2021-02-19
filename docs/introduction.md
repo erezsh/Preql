@@ -20,15 +20,17 @@ These are big shoes to fill. Here is how Preql intends to do it:
 
 Like SQL, Preql is guided by relational algebra, and is designed around operations on tables.
 
-In Preql, `table` is a built-in type, and all table operations, such as filtering, sorting, and group-by, are compiled to SQL.
+In Preql, `table` is a built-in type that represents a database table, and all table operations, such as filtering, sorting, and group-by, are compiled to SQL.
 
 That means Preql code can run as fast and be as expressive as SQL.
 
-Preql supports multiple targets, including Postgres, MySQL and Sqlite. See [features](features.md) for a complete list.
+Preql supports multiple targets, including PostgreSQL, MySQL and SQLite. See [features](features.md) for a complete list.
 
 ### Preql is interpreted
 
 Not everything can be done in SQL. Control-flow constructs like for-loops, or downloading a remote JSON file, aren't possible in every database implementation.
+
+Some things, such as first-class functions, or reflection, aren't possible at all.
 
 Whenever your Preql code can't be compiled to SQL, it will be interpreted instead.
 

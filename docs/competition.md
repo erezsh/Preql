@@ -49,5 +49,7 @@ Given the failings of SQL and ORMs, it's no wonder that many programmers and dat
 
 Pandas is one of those new approaches. Implemented entirely on top of Python and Numpy, it has gained a lot of popularity in recent years due to its accessibility and relative simplicity. It also has a wide range of features that were designed specifically for data scientists.
 
-Unfortunately, it comes with its own set of faults. Pandas is slow (despite recent efforts to accelerate it), it has awkward syntax, it isn't well suited for relational, structured or linked data,
+Unfortunately, it comes with its own set of faults. Pandas is slow (despite recent efforts to accelerate it), it has awkward syntax, and it isn't well suited for working with relational, structured or linked data.
+
+See also: [Code comparison](comparison.html)
 

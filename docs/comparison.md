@@ -20,6 +20,10 @@ Use the checkboxes to hide/show the code examples for each language.
 		<td> <input type="checkbox" id="pandas" onclick="$('.pandas').toggle()" checked="checked"> </td>
 		<td> <label for="pandas">Pandas</label> </td>
 	</tr>
+	<tr>
+		<td> <input type="checkbox" id="sqlalchemy" onclick="$('.sqlalchemy').toggle()" checked="checked"> </td>
+		<td> <label for="sqlalchemy">SQLAlchemy</label> </td>
+	</tr>
 </table>
 </form>
 
@@ -33,7 +37,10 @@ Use the checkboxes to hide/show the code examples for each language.
 	.pandas::before {
 	  content: "Pandas ";
 	}
-	.preql::before, .sql::before, .pandas::before {
+	.sqlalchemy::before {
+	  content: "SQLAlchemy ";
+	}
+	.preql::before, .sql::before, .pandas::before, .sqlalchemy::before {
 	  font-weight: bold;
 	  font-size: 1.1em;
 	  color: #489;
@@ -77,6 +84,7 @@ tips[['total_bill', 'tip', 'smoker', 'time']]
 
 </div>
 
+
 ### Filtering rows
 
 <div class="preql">
@@ -102,6 +110,15 @@ DataFrames can be filtered in multiple ways; Pandas suggest using boolean indexi
 ```python
 tips[(tips['size'] >= 5) | (tips['total_bill'] > 45)]
 ```
+</div>
+
+<div class="sqlalchemy">
+
+```python
+from sqlalchemy import or_
+session.query(Tips).filter(or_(Tips.size >= 5, Tips.total_bill > 45))
+```
+
 </div>
 
 ### Group by / Aggregation
@@ -135,6 +152,14 @@ tips.groupby('day').agg({'tip': np.mean, 'day': np.size})
 
 </div>
 
+<div class="sqlalchemy">
+
+```python
+from sqlalchemy import func
+session.query(Tips.day, func.avg(Tips.tip), func.count(Tips.id)).group_by(Tips.day).all()
+```
+</div>
+
 ### Concat, Union
 
 In this example, we will concatenate and union two tables together.
@@ -142,11 +167,11 @@ In this example, we will concatenate and union two tables together.
 <div class="preql">
 
 ```javascript
-df1 + df2	// concat
+table1 + table2	// concat
 ```
 
 ```javascript
-df1 | df2	// union
+table1 | table2	// union
 ```
 
 </div>
@@ -154,27 +179,37 @@ df1 | df2	// union
 <div class="sql">
 
 ```SQL
-SELECT * FROM df1 UNION ALL SELECT * FROM df2;  -- concat
+SELECT * FROM table1 UNION ALL SELECT * FROM table2;  -- concat
 ```
 
 Union:
 ```SQL
-SELECT * FROM df1 UNION SELECT * FROM df2;      -- union
+SELECT * FROM table1 UNION SELECT * FROM table2;      -- union
 ```
 </div>
 
 <div class="pandas">
 
 ```python
-pd.concat([df1, df2])                      # concat
+pd.concat([table1, table2])                      # concat
 ```
 
 ```python
-pd.concat([df1, df2]).drop_duplicates()    # union
+pd.concat([table1, table2]).drop_duplicates()    # union
 ```
 </div>
 
 
+<div class="sqlalchemy">
+
+```python
+union_all(session.query(table1), session.query(table2))      # concat
+```
+
+```python
+union(session.query(table1), session.query(table2))          # union
+```
+</div>
 
 ### Top n rows with offset (limit)
 
@@ -233,6 +268,7 @@ SELECT * FROM table1 INNER JOIN table2 ON table1.key1 = table2.key2;
 </div>
 
 <div class="pandas">
+
 ```python
 pd.merge(df1, df2, on='key')
 ```
@@ -240,6 +276,48 @@ pd.merge(df1, df2, on='key')
 (it gets complicated if the key isn't with the same name)
 </div>
 
+
+<div class="sqlalchemy">
+
+```python
+session.query(Table1).join(Tables2).filter(Table1.key1 == Table2.key2)
+```
+
+</div>
+
+### Insert row
+
+Insert a row to the table, and specifying the columns by name.
+
+<div class="preql">
+
+```javascript
+new Country(name: "Spain", language: "Spanish")
+```
+</div>
+
+<div class="sql">
+
+```sql
+INSERT INTO Country (name, language) VALUES ("Spain", "Spanish")
+```
+
+</div>
+
+<div class="pandas">
+
+```python
+countries = countries.append({'name':'Spain', 'language': 'Spanish'}, ignore_index=True)
+```
+
+</div>
+
+<div class="sqlalchemy">
+
+```python
+session.add(Country(name='Spain', language='Spanish'))
+```
+</div>
 
 
 ### Update rows
@@ -303,4 +381,49 @@ tips[tips['col2'].isna()]
 
 ## Programming
 
-### Embedding functions in queries
+### Defining a function, and calling it from the query
+
+<div class="preql">
+
+Comparisons to `null` behave like in Python.
+
+```javascript
+func add_one(x: int) = x + 1
+
+my_table{ add_one(my_column) }
+```
+
+</div>
+
+<div class="sql">
+
+(Postgres dialect)
+
+```SQL
+CREATE FUNCTION add_one(x int)
+RETURNS int
+AS
+$$
+ SELECT x + 1
+$$
+LANGUAGE SQL IMMUTABLE STRICT;
+
+SELECT add_one(my_column) FROM my_table;
+```
+</div>
+
+<div class="pandas">
+
+```python
+def add_one(x: int):
+    return x + 1
+
+my_table['my_column'].apply(add_one)
+```
+</div>
+
+<div class="sqlalchemy">
+
+Impossible?
+
+</div>
