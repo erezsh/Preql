@@ -1,7 +1,8 @@
-lark-parser==0.11.1
-runtype==0.1.6
+preql-lang
+lark-parser
+runtype
 dsnparse
 prompt-toolkit
 pygments
-rich==9.10.0
+rich
 
