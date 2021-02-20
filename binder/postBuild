@@ -1,4 +1,3 @@
-set -ex
 pip install preql
 preql --install-jupyter
 
