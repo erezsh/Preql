@@ -1,0 +1,14 @@
+h2 {
+/*	text-decoration: underline;
+*/	font-size: 170%;
+	padding-top: 0.7em;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding-bottom: 0.3em;
+}
+
+h1 {
+	font-size: 200%;
+	border-bottom: 4px solid rgba(0, 0, 0, 0.1);
+	padding-bottom: 0.5em;
+	padding-top: 1em;
+}

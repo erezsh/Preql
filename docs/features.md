@@ -2,8 +2,6 @@
 
 Preql is a programming language, a library, an interactive shell, and a set of tools.
 
-## Programming Language
-
 - **Modern syntax and semantics**
     - Interpreted, everything is an object
     - Strong type system with gradual type validation and duck-typing

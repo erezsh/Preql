@@ -89,6 +89,11 @@ def pql_SQL(state: State, result_type: T.union[T.table, T.type], sql_code: T.str
 
     The object will only be evaluated when required by the program flow.
 
+    Using $var_name in the code will embed it in the query. Both primitives and tables are supported.
+
+    A special `$self` variable allows to perform recursion, if supported by the dialect.
+
+
     Parameters:
         result_type: The expected type of the result of the SQL query
         sql_code: The SQL code to be evaluated

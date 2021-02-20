@@ -1,4 +1,4 @@
-# Code comparison: Preql, SQL and Pandas
+# Code comparison: Preql, SQL and the rest
 
 This document was written with the aid of [Pandas' comparison with SQL](https://pandas.pydata.org/docs/getting_started/comparison/comparison_with_sql.html).
 
