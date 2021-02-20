@@ -37,8 +37,11 @@ class Interpreter:
                     assert k not in bns
                     bns[k] = v
 
+    def setup_context(self):
+        return context(state=self.state)
+
     def call_func(self, fname, args):
-        with context(state=self.state):
+        with self.setup_context():
             return eval_func_call(self.state, self.state.get_var(fname), args)
 
     def execute_code(self, code, source_file, args=None):
@@ -50,7 +53,7 @@ class Interpreter:
 
 
         last = None
-        with context(state=self.state):
+        with self.setup_context():
             if stmts:
                 if isinstance(stmts[0], ast.Const) and stmts[0].type == T.string:
                     self.set_var('__doc__', stmts[0].value) 

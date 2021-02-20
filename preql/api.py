@@ -190,7 +190,7 @@ class Preql:
         Example:
             >>> pql.import_pandas(a=df_a, b=df_b)
         """
-        with context(state=self.interp.state):
+        with self.interp.setup_context():
             return list(import_pandas(self.interp.state, dfs))
 
 

@@ -30,24 +30,25 @@ class PreqlKernel(Kernel):
             # res = pql(code)
 
             # Evaluate (Really just compile)
-            try:
-                res = pql._run_code(code, '<jupyter>')
+            with pql.interp.setup_context():
+                try:
+                    res = pql._run_code(code, '<jupyter>')
 
-                # Print
-                if res is null:
-                    res = ''
-                elif res is not None:
-                    res = res.repr()
+                    # Print
+                    if res is null:
+                        res = ''
+                    elif res is not None:
+                        res = res.repr()
 
-                json = {
-                    'output': str(res),
-                    'success': True
-                }
-            except Signal as e:
-                json = {
-                    'output': '<pre>%s</pre>' % str(e),
-                    'success': False
-                }
+                    json = {
+                        'output': str(res),
+                        'success': True
+                    }
+                except Signal as e:
+                    json = {
+                        'output': '<pre>%s</pre>' % str(e),
+                        'success': False
+                    }
 
 
             if json['success']:
