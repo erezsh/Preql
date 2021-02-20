@@ -1,9 +1,9 @@
-pip --version
+pip -V
 pip install dsnparse
 pip install runtype
 pip install prompt-toolkit
 pip install pygments
 pip install rich
 pip install lark-parser
-python -m preql --install-jupyter
+python -m preql "--install-jupyter"
 
