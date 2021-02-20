@@ -15,11 +15,6 @@ module: _NL? stmt+   -> as_list
      | try_catch
      | expr _NL
 
-_ml_seperated{item}: (item _ml_sep)* item _ml_sep?
-_ml_sep: "," | "," _NL | _NL
-_separated{item, sep}: (item sep)* item
-_cs_list{item}: (item ",")* item ","?
-
 pql_dict: "{" _ml_sep? ml_list{named_expr} _ml_sep? "}"
 key_value: name ":" expr
 
@@ -86,9 +81,7 @@ update: molecule "update" "{" _NL? proj_exprs _NL? "}"
 delete: molecule "delete" expr_list
 
 
-?expr: or_test //contains | like
-
-// like: molecule "~" molecule
+?expr: or_test
 
 !comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="| "in" | NOT_IN //|"is"|"is" "not"
 NOT_IN: "!in"
@@ -151,7 +144,6 @@ named_expr: [name ":"] expr
       | "false" -> false
       | "true" -> true
       | string_raw -> string
-     //  | range
 
 ?string_raw: STRING | LONG_STRING
 
@@ -183,6 +175,12 @@ QUOTED_NAME: "`" /[^`\r\n]|``/+ "`"
 STRING : /("(?!"").*?(?<!\\)(\\\\)*?"|'(?!'').*?(?<!\\)(\\\\)*?')/i
 LONG_STRING: /(""".*?(?<!\\)(\\\\)*?"""|'''.*?(?<!\\)(\\\\)*?''')/is
 
+_ml_seperated{item}: (item _ml_sep)* item _ml_sep?
+_ml_sep: "," | "," _NL | _NL
+_separated{item, sep}: (item sep)* item
+_cs_list{item}: (item ",")* item ","?
+
+
 %import common.CNAME -> NAME
 
 %import common.WS_INLINE
@@ -191,4 +189,4 @@ LONG_STRING: /(""".*?(?<!\\)(\\\\)*?"""|'''.*?(?<!\\)(\\\\)*?''')/is
 %ignore /\\[\t \f]*\r?\n/   // LINE_CONT
 %ignore COMMENT
 
-%declare MARKER
+%declare MARKER             // Used for internal analysis
