@@ -1,3 +1,8 @@
+pip --version
 pip install dsnparse
+pip install runtype
+pip install prompt-toolkit
+pip install pygments
+pip install rich
 python -m preql --install-jupyter
 
