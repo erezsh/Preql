@@ -27,10 +27,9 @@ python = "^3.8"
 lark-parser = "^0.11.1"
 runtype = "^0.1.6"
 dsnparse = "*"
-tqdm = "*"
 prompt-toolkit = "*"
 pygments = "*"
-rich = "^9.5.1"
+rich = "^9.10.0"
 
 psycopg2 = { version = "*", optional = true }
 mysqlclient = { version = "*", optional = true }
