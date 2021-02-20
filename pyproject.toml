@@ -29,7 +29,7 @@ runtype = "^0.1.6"
 dsnparse = "*"
 prompt-toolkit = "*"
 pygments = "*"
-rich = "^9.10.0"
+rich = "*"
 
 psycopg2 = { version = "*", optional = true }
 mysqlclient = { version = "*", optional = true }
