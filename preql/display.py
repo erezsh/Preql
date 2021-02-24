@@ -48,7 +48,12 @@ def pql_repr(t: T.text, value):
 
 @dp_type
 def pql_repr(t: T._rich, value):
-    return rich.text.Text.from_markup(str(value))
+    r = rich.text.Text.from_markup(str(value))
+    if context.state.fmt == 'html':
+        console = rich.console.Console(record=True)
+        console.print(r)
+        return console.export_html(code_format='<style>{stylesheet}</style><pre>{code}</pre>').replace('━', '-')
+    return r
 
 @dp_type
 def pql_repr(t: T.bool, value):
@@ -234,6 +239,12 @@ class RichDisplay(Display):
             self.console.print()
         self.console.print(rich.text.Text('%s: %s' % (e.type, e.message)))
 
+class HtmlDisplay(Display):
+    def __init__(self):
+        self.console = rich.console.Console(record=True)
+
+    print = RichDisplay.print
+    print_exception = RichDisplay.print_exception
 
 
 def install_reprs():
@@ -241,4 +252,4 @@ def install_reprs():
     objects.Module.repr = module_repr
     objects.Function.repr = function_repr
 
-display = RichDisplay()
+display = HtmlDisplay()

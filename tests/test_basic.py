@@ -1492,9 +1492,9 @@ class TestFunctions(PreqlTests):
 
 
 
-from pandas import DataFrame
 class TestPandas(PreqlTests):
     def test_pandas(self):
+        from pandas import DataFrame
         f = DataFrame([[1,2,"a"], [4,5,"b"], [7,8,"c"]], columns=['x', 'y', 'z'])
         p = self.Preql()
         p.import_pandas(x=f)

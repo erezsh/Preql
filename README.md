@@ -40,6 +40,7 @@ For features that are database-specific, or aren't implemented in Preql, there i
 
 - [Browse the examples](https://github.com/erezsh/Preql/tree/master/examples)
 
+- Check out the online demo: [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/erezsh/preql-binder/master?filepath=tutorial_exploring_a_database.ipynb)
 
 # Get started
 

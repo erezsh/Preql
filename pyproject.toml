@@ -10,7 +10,8 @@ documentation = "https://preql.readthedocs.io/en/latest/"
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.8",
-    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.9",
+    "Development Status :: 4 - Beta",
     "License :: Free To Use But Restricted",
     "Environment :: Console",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -25,9 +26,8 @@ packages = [{ include = "preql" }]
 [tool.poetry.dependencies]
 python = "^3.8"
 lark-parser = "^0.11.1"
-runtype = "^0.1.6"
+runtype = "^0.1.7"
 dsnparse = "*"
-tqdm = "*"
 prompt-toolkit = "*"
 pygments = "*"
 rich = "^9.5.1"

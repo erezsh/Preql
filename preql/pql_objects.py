@@ -586,6 +586,8 @@ def from_python(value):
         return null
     elif isinstance(value, str):
         return ast.Const(T.string, value)
+    elif isinstance(value, bytes):
+        return ast.Const(T.string, value.decode())
     elif isinstance(value, bool):
         return ast.Const(T.bool, value)
     elif isinstance(value, int):

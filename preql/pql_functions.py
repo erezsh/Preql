@@ -675,6 +675,7 @@ def pql_help(state: State, inst: T.any = objects.null):
     lines = []
     try:
         doc = autodoc(inst).print_text()    # TODO maybe html
+        print(doc)
         if doc:
             lines += [doc]
     except NotImplementedError:
