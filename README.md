@@ -1,5 +1,3 @@
-![tests badge](https://github.com/erezsh/preql/actions/workflows/tests.yml/badge.svg)
-
 ![alt text](logo_small.png "Logo")
 
 Preql is an interpreted, relational programming language, that specializes in database queries.
@@ -33,6 +31,8 @@ For features that are database-specific, or aren't implemented in Preql, there i
 
 
 **Note: Preql is still work in progress, and isn't ready for production use, or any serious use quite yet.**
+
+[![tests](https://github.com/erezsh/preql/actions/workflows/tests.yml/badge.svg)](https://github.com/erezsh/Preql/actions/workflows/tests.yml)
 
 # Learn More
 
