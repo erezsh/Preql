@@ -30,13 +30,12 @@ def _is_root():
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument('--user', action='store_true',
-        help="Install to the per-user kernels registry. Default if not root.")
+    ap.add_argument('--user', action='store_true', 
+                    help="Install to the per-user kernels registry. Default if not root.")
     ap.add_argument('--sys-prefix', action='store_true',
-        help="Install to sys.prefix (e.g. a virtualenv or conda env)")
-    ap.add_argument('--prefix',
-        help="Install to the given prefix. "
-             "Kernelspec will be installed in {PREFIX}/share/jupyter/kernels/")
+                    help="Install to sys.prefix (e.g. a virtualenv or conda env)")
+    ap.add_argument('--prefix', 
+                    help="Install to the given prefix. Kernelspec will be installed in {PREFIX}/share/jupyter/kernels/")
     args = ap.parse_args(argv)
 
     if args.sys_prefix:

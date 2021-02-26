@@ -1,4 +1,3 @@
-from decimal import Decimal
 from .utils import classify, dataclass
 from .loggers import sql_log
 

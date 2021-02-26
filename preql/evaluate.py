@@ -507,43 +507,42 @@ def eval_func_call(state, func, args):
         # TODO Ensure correct types
         args = list(args.values())
         return func.func(state, *args)
-    else:
-        # TODO make tests to ensure caching was successful
-        if settings.cache:
-            params = {name: ast.Parameter(name, value.type) for name, value in args.items()}
-            sig = (func.name,) + tuple(a.type for a in args.values())
 
-            try:
-                with state.use_scope(params):
-                    if sig in state._cache:
-                        expr = state._cache[sig]
-                    else:
-                        logging.info(f"Compiling.. {func}")
-                        expr = _call_expr(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
-                        logging.info("Compiled successfully")
-                        if isinstance(expr, objects.Instance):
-                            # XXX a little ugly
-                            qb = sql.QueryBuilder(state.db.target, True)
-                            x = expr.code.compile(qb)
-                            x = x.optimize()
-                            expr = expr.replace(code=x)
-                        state._cache[sig] = expr
+    # TODO make tests to ensure caching was successful
+    expr = func.expr
+    if settings.cache:
+        params = {name: ast.Parameter(name, value.type) for name, value in args.items()}
+        sig = (func.name,) + tuple(a.type for a in args.values())
 
-                expr = ast.ResolveParameters(expr, args)
+        try:
+            with state.use_scope(params):
+                if sig in state._cache:
+                    compiled_expr = state._cache[sig]
+                else:
+                    logging.info(f"Compiling.. {func}")
+                    compiled_expr = _call_expr(state.reduce_access(state.AccessLevels.COMPILE), func.expr)
+                    logging.info("Compiled successfully")
+                    if isinstance(compiled_expr, objects.Instance):
+                        # XXX a little ugly
+                        qb = sql.QueryBuilder(state.db.target, True)
+                        x = compiled_expr.code.compile(qb)
+                        x = x.optimize()
+                        compiled_expr = compiled_expr.replace(code=x)
+                    state._cache[sig] = compiled_expr
 
-            except exc.InsufficientAccessLevel:
-                # Don't cache
-                expr = func.expr
-        else:
-            expr = func.expr
+            expr = ast.ResolveParameters(compiled_expr, args)
 
-        with state.use_scope(args):
-            res = _call_expr(state, expr)
+        except exc.InsufficientAccessLevel:
+            # Don't cache
+            pass
 
-        if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
-            raise exc.InsufficientAccessLevel()
+    with state.use_scope(args):
+        res = _call_expr(state, expr)
 
-        return res
+    if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
+        raise exc.InsufficientAccessLevel()
+
+    return res
 
 
 def _call_expr(state, expr):

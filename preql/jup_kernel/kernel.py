@@ -1,12 +1,12 @@
 from ipykernel.kernelbase import Kernel
-# import requests
 
-from . import __version__
 import preql
 from preql.autocomplete import autocomplete
-from preql import Preql, Signal
 from preql.pql_objects import null
-pql = Preql()
+
+from . import __version__
+
+pql = preql.Preql()
 pql.set_output_format('html')
 
 class PreqlKernel(Kernel):
@@ -44,7 +44,7 @@ class PreqlKernel(Kernel):
                         'output': str(res),
                         'success': True
                     }
-                except Signal as e:
+                except preql.Signal as e:
                     json = {
                         'output': '<pre>%s</pre>' % str(e),
                         'success': False
