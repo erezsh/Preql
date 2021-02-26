@@ -22,5 +22,5 @@ jobs:
         uses: Gr1N/setup-poetry@v4
       - name: Run tests
         run: |
-          poetry install
+          poetry update
           python -m tests minimal
