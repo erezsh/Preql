@@ -12,10 +12,10 @@ pql.set_output_format('html')
 class PreqlKernel(Kernel):
     implementation = 'Preql'
     implementation_version = __version__
-    language = 'preql'
+    language = 'go'
     language_version = preql.__version__
     language_info = {
-        'name': 'Preql',
+        'name': 'Go',
         'mimetype': 'text/x-pql',
         'file_extension': '.pql',
         'pygments_lexer': 'go',

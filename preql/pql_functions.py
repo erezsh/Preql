@@ -661,21 +661,19 @@ def pql_help(state: State, inst: T.any = objects.null):
     """
     if inst is objects.null:
         text = (
-            "Welcome to Preql!\n\n"
-            "To see the list of functions and objects available in the namespace, type 'names()'\n"
+            "To see the list of functions and objects available in the namespace, type '[b]names()[/b]'\n"
             "To see the next page of a table preview, type '.' and then enter\n"
             "\n"
-            "To get help for a specific function, type 'help(func_object)'\n\n"
+            "To get help for a specific function, type '[b]help(an_object)[/b]'\n\n"
             "For example:\n"
             "    >> help(help)\n"
         )
-        return new_value_instance(text, T.string).replace(type=T.text)
+        return new_value_instance(text, T.string).replace(type=T._rich)
 
 
     lines = []
     try:
         doc = autodoc(inst).print_text()    # TODO maybe html
-        print(doc)
         if doc:
             lines += [doc]
     except NotImplementedError:

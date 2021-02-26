@@ -443,3 +443,48 @@ my_table['my_column'].apply(add_one)
 Impossible?
 
 </div>
+
+### Counting a table from Python
+
+This example demonstrates Preql's Python API.
+
+All examples set `row_count` to an integer value.
+
+
+<div class="preql">
+
+(assumes `p` is a preql instance)
+
+```javascript
+row_count = len(p.my_table)
+```
+
+Or:
+
+```javascript
+row_count = p('count(my_table)')
+```
+</div>
+
+
+<div class="sql">
+
+```SQL
+cur = conn.execute('SELECT COUNT() FROM my_table')
+row_count = cur.fetchall()[0][0]
+```
+</div>
+
+<div class="pandas">
+
+```python
+row_count = len(my_table.index)
+```
+
+<div class="sqlalchemy">
+
+```python
+row_count = session.query(my_table).count()
+```
+
+</div>

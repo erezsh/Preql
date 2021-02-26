@@ -9,12 +9,12 @@ While plans can always change, here is a list of features that will probably mak
     - API for Graph computation over SQL
     - Multiple Dispatch (multimethods)
     - Automatic joins via attribute access
-    - Many-to-many
+    - Automatic Many-to-many
 - **Compilation Technology**
     - JIT compilation (PoC is already working!)
     - Compile control flow to SQL
 - **Support for more databases**
-    - BigQuery
+    - BigQuery (partial support already available)
     - Redshift
     - CockroachDB
     - TimeSeries
