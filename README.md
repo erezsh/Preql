@@ -1,3 +1,5 @@
+![tests badge](https://github.com/erezsh/preql/actions/workflows/tests.yml/badge.svg)
+
 ![alt text](logo_small.png "Logo")
 
 Preql is an interpreted, relational programming language, that specializes in database queries.
