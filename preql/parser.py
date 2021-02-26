@@ -1,7 +1,7 @@
 from ast import literal_eval
 from pathlib import Path
 
-from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken, Token
+from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken
 
 from .utils import TextPos, TextRange, TextReference
 from .exceptions import pql_SyntaxError
@@ -86,19 +86,19 @@ def _wrap_result(res, f, meta, children):
         res.set_text_ref(ref)
     return res
 
-def _args_wrapper(f, data, children, meta):
+def _args_wrapper(f, _data, children, meta):
     "Create meta with 'code' from transformer"
     res = f(*children)
     return _wrap_result(res, f, meta, children)
 
-def _args_wrapper_meta(f, data, children, meta):
+def _args_wrapper_meta(f, _data, children, meta):
     ref = make_text_reference(*f.__self__.code_ref, meta, children)
     res = f(ref, *children)
     if isinstance(res, (Str, ast.Ast)):
         res.set_text_ref(ref)
     return res
 
-def _args_wrapper_list(f, data, children, meta):
+def _args_wrapper_list(f, _data, children, meta):
     res = f(children)
     return _wrap_result(res, f, meta, children)
 
@@ -112,6 +112,7 @@ def token_value(self, t):
 @v_args(wrapper=_args_wrapper)
 class TreeToAst(Transformer):
     def __init__(self, code_ref):
+        super().__init__()
         self.code_ref = code_ref
 
     name = token_value
@@ -232,7 +233,8 @@ class TreeToAst(Transformer):
         for i, p in enumerate(params):
             if isinstance(p, objects.ParamVariadic):
                 if i != len(params)-1:
-                    raise pql_SyntaxError(meta, f"A variadic parameter may only appear at the end of the function ({p.name})")
+                    msg = f"A variadic parameter may only appear at the end of the function ({p.name})"
+                    raise pql_SyntaxError(meta, msg)
 
                 collector = p
                 params = params[:-1]

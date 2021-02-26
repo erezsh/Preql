@@ -1,27 +1,25 @@
 import inspect
-from preql.compiler import cast_to_instance
 import re
 import os
 from datetime import datetime
 import csv
-import inspect
 import itertools
-import runtype
+
 import rich.progress
+import runtype
 
 from .utils import safezip, listgen, re_split
 from .exceptions import Signal, ExitInterp
-
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-
 from .interp_common import State, new_value_instance, assert_type
 from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
 from .pql_types import T, Type, Id
 from .types_impl import join_names
 from .casts import cast
 from .docstring.autodoc import autodoc, AutoDocError
+from .compiler import cast_to_instance
 
 def new_str(x):
     return new_value_instance(str(x), T.string)
@@ -84,7 +82,7 @@ def pql_inspect_sql(state: State, obj: T.object):
     return objects.ValueInstance.make(sql.make_value(s), T.text, [], s)
 
 
-def pql_SQL(state: State, result_type: T.union[T.table, T.type], sql_code: T.string):
+def pql_SQL(_state: State, result_type: T.union[T.table, T.type], sql_code: T.string):
     """Create an object with the given SQL evaluation code, and given result type.
 
     The object will only be evaluated when required by the program flow.
@@ -153,7 +151,7 @@ def pql_fmt(state: State, s: T.string):
             assert t[0] == '$'
             obj = state.get_var(t[1:])
             inst = cast_to_instance(state, obj)
-            as_str = cast(state, inst, T.string)
+            as_str = cast(inst, T.string)
             string_parts.append(as_str)
         elif t:
             string_parts.append(objects.new_value_instance(t))
@@ -177,7 +175,8 @@ def _canonize_default(d):
 def create_internal_func(fname, f):
     sig = inspect.signature(f)
     return objects.InternalFunction(fname, [
-        objects.Param(pname, type_ if isinstance(type_, Type) else T.any, _canonize_default(sig.parameters[pname].default))
+        objects.Param(pname, type_ if isinstance(type_, Type) else T.any,
+                      _canonize_default(sig.parameters[pname].default))
         for pname, type_ in list(f.__annotations__.items())[1:]
     ], f)
 
@@ -255,8 +254,9 @@ def _count(state, obj, table_func, name='count'):
     elif obj.type <= T.projected[T.json_array]:
         code = sql.JsonLength(obj.code)
     else:
-        if not (obj.type <= T.aggregated):
-            raise Signal.make(T.TypeError, None, f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?")
+        if not obj.type <= T.aggregated:
+            msg = f"Function '{name}' expected an aggregated list, but got '{obj.type}' instead. Did you forget to group?"
+            raise Signal.make(T.TypeError, None, msg)
 
         obj = obj.primary_key()
         code = sql.FieldFunc('count', obj.code)
@@ -324,7 +324,7 @@ def pql_get_db_type(state: State):
 
 
 
-def sql_bin_op(state, op, t1, t2, name, additive=False):
+def sql_bin_op(op, t1, t2, name):
 
     if not isinstance(t1, objects.CollectionInstance):
         raise Signal.make(T.TypeError, t1, f"First argument isn't a table, it's a {t1.type}")
@@ -335,37 +335,38 @@ def sql_bin_op(state, op, t1, t2, name, additive=False):
     l1 = len(t1.type.elems)
     l2 = len(t2.type.elems)
     if l1 != l2:
-        raise Signal.make(T.TypeError, None, f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)")
+        msg = f"Cannot {name} tables due to column mismatch (table1 has {l1} columns, table2 has {l2} columns)"
+        raise Signal.make(T.TypeError, None, msg)
 
     for e1, e2 in zip(t1.type.elems.values(), t2.type.elems.values()):
-        if not (e2 <= e1):
+        if not e2 <= e1:
             raise Signal.make(T.TypeError, None, f"Cannot {name}. Column types don't match: '{e1}' and '{e2}'")
 
     code = sql.TableArith(op, [t1.code, t2.code])
 
     return type(t1).make(code, t1.type, [t1, t2])
 
-def pql_table_intersect(state: State, t1: T.table, t2: T.table):
+def pql_table_intersect(_state: State, t1: T.table, t2: T.table):
     "Intersect two tables. Used for `t1 & t2`"
-    return sql_bin_op(state, "INTERSECT", t1, t2, "intersect")
+    return sql_bin_op("INTERSECT", t1, t2, "intersect")
 
 def pql_table_substract(state: State, t1: T.table, t2: T.table):
     "Substract two tables (except). Used for `t1 - t2`"
     if state.db.target is sql.mysql:
         raise Signal.make(T.NotImplementedError, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
-    return sql_bin_op(state, "EXCEPT", t1, t2, "subtract")
+    return sql_bin_op("EXCEPT", t1, t2, "subtract")
 
-def pql_table_union(state: State, t1: T.table, t2: T.table):
+def pql_table_union(_state: State, t1: T.table, t2: T.table):
     "Union two tables. Used for `t1 | t2`"
-    return sql_bin_op(state, "UNION", t1, t2, "union", True)
+    return sql_bin_op("UNION", t1, t2, "union")
 
-def pql_table_concat(state: State, t1: T.table, t2: T.table):
+def pql_table_concat(_state: State, t1: T.table, t2: T.table):
     "Concatenate two tables (union all). Used for `t1 + t2`"
     if isinstance(t1, objects.EmptyListInstance):
         return t2
     if isinstance(t2, objects.EmptyListInstance):
         return t1
-    return sql_bin_op(state, "UNION ALL", t1, t2, "concatenate", True)
+    return sql_bin_op("UNION ALL", t1, t2, "concatenate")
 
 
 def _get_table(t):
@@ -376,7 +377,7 @@ def _get_table(t):
         raise Signal.make(T.TypeError, None, f"join() arguments must be tables")
     return t
 
-def _join2(state, join, a, b):
+def _join2(a, b):
     if isinstance(a, objects.SelectedColumnInstance) and isinstance(b, objects.SelectedColumnInstance):
         return [a, b]
 
@@ -385,7 +386,26 @@ def _join2(state, join, a, b):
         b = b.type.repr()
         raise Signal.make(T.TypeError, None, f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}")
 
-    return _auto_join(state, join, a, b)
+    return _auto_join(a, b)
+
+def _auto_join(ta, tb):
+    refs1 = _find_table_reference(ta, tb)
+    refs2 = _find_table_reference(tb, ta)
+    auto_join_count = len(refs1) + len(refs2)
+    if auto_join_count < 1:
+        raise NoAutoJoinFound(ta, tb)
+    elif auto_join_count > 1:   # Ambiguity in auto join resolution
+        raise Signal.make(T.JoinError, None, "Cannot auto-join: Several plausible relations found")
+
+    if len(refs1) == 1:
+        dst, src = refs1[0]
+    elif len(refs2) == 1:
+        src, dst = refs2[0]
+    else:
+        assert False
+
+    return src, dst
+
 
 def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=None):
 
@@ -418,10 +438,10 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
 
     tables = [objects.alias_table_columns(t, n) for n, t in safezip(names, tables)]
 
-    primary_keys = [ [name] + pk
+    primary_keys = [[name] + pk
                     for name, t in safezip(names, tables)
                     for pk in t.type.options.get('pk', [])
-                ]
+                   ]
     table_type = T.table(structs, name=Id(state.unique_name("joinall" if joinall else "join")), pk=primary_keys)
 
     conds = []
@@ -436,8 +456,9 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
         joined_exprs = set()
         for (na, ta), (nb, tb) in itertools.combinations(safezip(names, exprs), 2):
             try:
-                cols = _join2(state, join, ta, tb)
-                conds.append( sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip([na, nb], cols)]) )
+                cols = _join2(ta, tb)
+                cond = sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip([na, nb], cols)])
+                conds.append(cond)
                 joined_exprs |= {id(ta), id(tb)}
             except NoAutoJoinFound as e:
                 pass
@@ -522,34 +543,16 @@ def pql_joinall(state: State, tables):
 class NoAutoJoinFound(Exception):
     pass
 
-def _auto_join(state, join, ta, tb):
-    refs1 = _find_table_reference(ta, tb)
-    refs2 = _find_table_reference(tb, ta)
-    auto_join_count = len(refs1) + len(refs2)
-    if auto_join_count < 1:
-        raise NoAutoJoinFound(ta, tb)
-    elif auto_join_count > 1:   # Ambiguity in auto join resolution
-        raise Signal.make(T.JoinError, None, "Cannot auto-join: Several plausible relations found")
-
-    if len(refs1) == 1:
-        dst, src = refs1[0]
-    elif len(refs2) == 1:
-        src, dst = refs2[0]
-    else:
-        assert False
-
-    return src, dst
-
 
 @listgen
 def _find_table_reference(t1, t2):
     for name, c in t1.type.elems.items():
-        if (c <= T.t_relation):
+        if c <= T.t_relation:
             rel = c.options['rel']
             if rel['table'] == t2.type:     # if same table
                 yield t2.get_attr(rel['column']), objects.SelectedColumnInstance(t1, c, name)
 
-def pql_type(state: State, obj: T.any):
+def pql_type(_state: State, obj: T.any):
     """Returns the type of the given object
 
     Example:
@@ -575,7 +578,7 @@ def pql_repr(state: State, obj: T.any):
         value = repr(cast_to_python(state, obj))
         return new_value_instance(value)
 
-def pql_columns(state: State, obj: T.container):
+def pql_columns(_state: State, obj: T.container):
     """Returns a dictionary `{column_name: column_type}` for the given table
 
     Example:
@@ -590,7 +593,7 @@ def pql_columns(state: State, obj: T.container):
     return ast.Dict_(elems)
 
 
-def pql_cast(state: State, obj: T.any, target_type: T.type):
+def pql_cast(_state: State, obj: T.any, target_type: T.type):
     """Attempt to cast an object to a specified type
 
     The resulting object will be of type `target_type`, or a `TypeError`
@@ -608,7 +611,7 @@ def pql_cast(state: State, obj: T.any, target_type: T.type):
     if obj.type is type_:
         return obj
 
-    return cast(state, obj, type_)
+    return cast(obj, type_)
 
 
 def pql_import_table(state: State, name: T.string, columns: T.list[T.string].as_nullable() = objects.null):
@@ -656,7 +659,7 @@ def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.false
         state._py_api.load_all_tables()     # XXX
     return objects.null
 
-def pql_help(state: State, inst: T.any = objects.null):
+def pql_help(_state: State, inst: T.any = objects.null):
     """Provides a brief summary for the given object
     """
     if inst is objects.null:
@@ -923,7 +926,7 @@ def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080
 
     port_ = cast_to_python(state, port)
 
-    async def root(request):
+    async def root(_request):
         return JSONResponse(list(endpoints.attrs))
 
     routes = [

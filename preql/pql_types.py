@@ -3,11 +3,10 @@ from typing import Union
 from datetime import datetime
 from dataclasses import field
 from decimal import Decimal
-from collections import defaultdict
+from collections import defaultdict, deque
 
 import runtype
 from runtype.typesystem import TypeSystem
-
 
 from .base import Object
 from .utils import dataclass
@@ -318,7 +317,6 @@ def from_python(t):
     return _t[t]
 
 
-from collections import deque
 def common_type(t1, t2):
     "Returns a type which is the closest ancestor of both t1 and t2"
     v1 = {t1}
@@ -388,4 +386,3 @@ class TS_Preql_subclass(ProtoTS):
 
 dp_type = runtype.Dispatch(TS_Preql_subclass())
 dp_inst = runtype.Dispatch(TS_Preql())
-

@@ -1,3 +1,4 @@
+from pathlib import Path
 from time import time
 
 ### XXX Fix for Python 3.8 bug (https://github.com/prompt-toolkit/python-prompt-toolkit/issues/1023)
@@ -8,9 +9,10 @@ loop = asyncio.SelectorEventLoop(selector)
 asyncio.set_event_loop(loop)
 ### XXX End of fix
 
-from pathlib import Path
-
 from pygments.lexers.go import GoLexer
+from pygments.style import Style
+from pygments.token import Keyword, Name, Comment, String, Error, Number, Operator, Generic
+from prompt_toolkit.styles.pygments import style_from_pygments_cls
 from prompt_toolkit import PromptSession
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.filters import Condition
@@ -18,9 +20,12 @@ from prompt_toolkit.validation import Validator, ValidationError
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text.html import HTML, html_escape
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
 from . import __version__
 from . import pql_objects as objects
+from . import settings
 from .pql_types import T
 from .utils import memoize
 from .display import display, table_more
@@ -28,7 +33,6 @@ from .exceptions import Signal, ExitInterp, pql_SyntaxError
 from .pql_types import Object
 from .parser import parse_stmts
 from .loggers import repl_log
-from . import settings
 from .autocomplete import autocomplete
 from .context import context
 
@@ -53,20 +57,20 @@ class Autocompleter(Completer):
         self.state = state
 
     def _get_completions(self, document):
-        context, fragment = last_word(document.text_before_cursor)
+        previous_text, fragment = last_word(document.text_before_cursor)
 
         if not settings.autocomplete:
             return
 
-        context = context.rstrip()
-        open_complete = context and context[-1] in '.{['
+        previous_text = previous_text.rstrip()
+        open_complete = previous_text and previous_text[-1] in '.{['
         if not fragment and not open_complete:
             return
 
         assert open_complete or is_name(fragment[-1]), fragment
 
         try:
-            all_vars = dict(autocomplete(self.state, context))
+            all_vars = dict(autocomplete(self.state, previous_text))
         except:
             if settings.debug:
                 raise
@@ -137,14 +141,10 @@ def _code_is_valid(code):
         except pql_SyntaxError as e:
             return False
         except Exception as e:
-            repl_log.warn(e)
+            repl_log.warning(e)
 
     return True
 
-
-from pygments.style import Style
-from pygments.token import Keyword, Name, Comment, String, Error, Number, Operator, Generic
-from prompt_toolkit.styles.pygments import style_from_pygments_cls
 
 class PreqlStyle(Style):
     default_style = ""
@@ -161,8 +161,6 @@ class PreqlStyle(Style):
         Error:                  'bg:ansired ansigray',
     }
 
-from prompt_toolkit.history import FileHistory
-from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
 def start_repl(p, prompt=' >> '):
     save_last = '_'   # XXX A little hacky
@@ -245,4 +243,3 @@ def start_repl(p, prompt=' >> '):
 
     except (KeyboardInterrupt, EOFError):
         repl_log.info('Exiting Preql interaction')
-

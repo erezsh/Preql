@@ -4,14 +4,14 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
-from .utils import dataclass, SafeDict, X, listgen, dy
+from .utils import dataclass, SafeDict, X, listgen
 from .exceptions import pql_AttributeError, Signal
 from . import settings
 from . import pql_ast as ast
 from . import sql
 from . import pql_types
 
-from .pql_types import ITEM_NAME, T, Type, Object
+from .pql_types import T, Type, Object
 from .types_impl import flatten_type, join_names, pql_repr
 
 
@@ -63,12 +63,19 @@ class Module(Object):
         return f'<preql:Module | {len(self.namespace)} members>'
 
     def public_functions(self):
-        funcs = [v for v in self.namespace.values() if v.type <= T.function and v.docstring and not v.name.startswith('_')]
+        funcs = [v for v in self.namespace.values()
+                 if v.type <= T.function and v.docstring and not v.name.startswith('_')]
         funcs.sort(key=lambda f: f.name)
         return funcs
 
 
 class Function(Object):
+    # Abstract class
+    name: str
+    params: List[Param]
+    expr: (ast.Expr, ast.CodeBlock)
+    param_collector: Optional[Param]
+    docstring: Optional[str]
 
     @property
     def type(self):
@@ -100,7 +107,8 @@ class Function(Object):
             else:
                 v = p.default
                 if v is None:
-                    raise Signal.make(T.TypeError, None, f"Function '{self.name}' is missing a value for parameter '{p.name}'")
+                    msg = f"Function '{self.name}' is missing a value for parameter '{p.name}'"
+                    raise Signal.make(T.TypeError, None, msg)
 
 
             yield p, v
@@ -144,11 +152,13 @@ class Function(Object):
         else:
             if not all(n for n in named[first_named:]):
                 # TODO meta
-                raise Signal.make(T.TypeError, None, f"Function {self.name} received a non-named argument after a named one!")
+                msg = f"Function {self.name} received a non-named argument after a named one!"
+                raise Signal.make(T.TypeError, None, msg)
 
         if first_named > len(self.params):
             # TODO meta
-            raise Signal.make(T.TypeError, None, f"Function '{self.name}' takes {len(self.params)} parameters but received {first_named} arguments.")
+            msg = f"Function '{self.name}' takes {len(self.params)} parameters but received {first_named} arguments."
+            raise Signal.make(T.TypeError, None, msg)
 
         values = {p.name: p.default for p in self.params}
 
@@ -173,7 +183,8 @@ class Function(Object):
         for name, value in values.items():
             if value is None:
                 # TODO meta
-                raise Signal.make(T.TypeError, None, f"Error calling function '{self.name}': parameter '{name}' has no value")
+                msg = f"Error calling function '{self.name}': parameter '{name}' has no value"
+                raise Signal.make(T.TypeError, None, msg)
 
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values
@@ -191,9 +202,6 @@ class UserFunction(Function):
     param_collector: Optional[Param]
     docstring: Optional[str]
 
-    def __repr__(self):
-        return super().__repr__()
-
 
 @dataclass
 class InternalFunction(Function):
@@ -207,9 +215,6 @@ class InternalFunction(Function):
     @property
     def docstring(self):
         return self.func.__doc__
-
-    def __repr__(self):
-        return super().__repr__()
 
 # Instances
 
@@ -276,10 +281,10 @@ def new_value_instance(value, type_=None, force_type=False):
         assert r.type == type_, (r.type, type_)
     else:
         type_ = r.type
+
     if settings.optimize:   # XXX a little silly? But maybe good for tests
         return ValueInstance.make(r, type_, [], value)
-    else:
-        return Instance.make(r, type_, [])
+    return Instance.make(r, type_, [])
 
 
 @dataclass
@@ -338,23 +343,27 @@ def make_instance(code, t, insts):
         return TableInstance.make(code, t, insts)
     elif t <= T.unknown:
         return unknown
-    else:
-        return Instance.make(code, t, insts)
+
+    return Instance.make(code, t, insts)
 
 
 
 class AbsStructInstance(AbsInstance):
+    type: Type
+    attrs: Dict[str, Object]
+
     def get_attr(self, name):
         if name in self.attrs:
             attr = self.attrs[name]
             return inherit_phantom_type(attr, [self])
-        else:
-            raise pql_AttributeError(name)
+
+        raise pql_AttributeError(name)
 
     @property
     def code(self):
         # XXX this shouldn't even be allowed to happen in the first place
-        raise Signal(T.TypeError, [], "structs are abstract objects and cannot be sent to target. Choose one of its members instead.")
+        msg = "structs are abstract objects and cannot be sent to target. Choose one of its members instead."
+        raise Signal(T.TypeError, None, msg)
 
 
 @dataclass
@@ -444,7 +453,7 @@ class UnknownInstance(AbsInstance):
     def flatten_code(self):
         return [self.code]
 
-    def replace(self, **kw):
+    def replace(self, **_kw):
         # XXX Is this right?
         return self
 
@@ -530,7 +539,7 @@ class EmptyListInstance(TableInstance):
     """
 
 _empty_list_type = T.list[T.nulltype]
-EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, []) #, defaultdict(_any_column))    # Singleton
+EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, [])
 
 
 def alias_table_columns(t, prefix):
@@ -595,11 +604,8 @@ def from_python(value):
     elif isinstance(value, float):
         return ast.Const(T.float, value)
     elif isinstance(value, list):
-        # return ast.List_(T.list[T.any], list(map(from_python, value)))
         return PythonList(value)
     elif isinstance(value, dict):
-        #return ast.Dict_(value)
         elems = {k:from_python(v) for k,v in value.items()}
         return ast.Dict_(elems)
     assert False, value
-
