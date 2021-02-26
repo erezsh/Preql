@@ -30,7 +30,7 @@ runtype = "^0.1.7"
 dsnparse = "*"
 prompt-toolkit = "*"
 pygments = "*"
-rich = "^9.5.1"
+rich = "^9.12.0"
 
 psycopg2 = { version = "*", optional = true }
 mysqlclient = { version = "*", optional = true }
@@ -42,6 +42,7 @@ pgsql = ["psycopg2"]
 server = ["starlette"]
 
 [tool.poetry.dev-dependencies]
+parameterized = "*"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
