@@ -66,7 +66,7 @@ def _process_fields(state: State, fields):
 
 
 def _exclude_items(d, req_exclude, opt_exclude):
-    if not (req_exclude <= set(d)):
+    if not req_exclude <= set(d):
         raise ValueError(req_exclude - set(d))
 
     for k, v in d.items():
@@ -83,49 +83,50 @@ def _expand_ellipsis(state, obj, fields):
 
         if isinstance(f.value, ast.Ellipsis):
             if f.name:
-                raise Signal.make(T.SyntaxError, f, "Cannot use a name for ellipsis (inlining operation doesn't accept a name)")
+                msg = "Cannot use a name for ellipsis (inlining operation doesn't accept a name)"
+                raise Signal.make(T.SyntaxError, f, msg)
+
+            t = obj.type
+            assert t <= T.table or t <= T.struct # some_table{ ... } or some_table{ some_struct_item {...} }
+
+            for n in f.value.exclude:
+                if isinstance(n, ast.Marker):
+                    raise AutocompleteSuggestions({k:(0, v) for k, v in t.elems.items()
+                                                   if k not in direct_names
+                                                   and k not in f.value.exclude})
+
+                if n in direct_names:
+                    raise Signal.make(T.NameError, n, f"Field to exclude '{n}' is explicitely included in projection")
+
+            if f.value.from_struct:
+                # Inline struct
+                with state.use_scope(obj.all_attrs()):
+                    s = evaluate(state, f.value.from_struct)
+                    items = s.attrs
             else:
-                t = obj.type
-                assert t <= T.table or t <= T.struct # some_table{ ... } or some_table{ some_struct_item {...} }
+                # Ellipsis for current projection
+                items = obj.all_attrs()
 
-                for n in f.value.exclude:
-                    if isinstance(n, ast.Marker):
-                        raise AutocompleteSuggestions({k:(0, v) for k, v in t.elems.items()
-                                                      if k not in direct_names
-                                                      and k not in f.value.exclude})
+            try:
+                remaining_items = list(_exclude_items(items, set(f.value.exclude), direct_names))
+            except ValueError as e:
+                fte = set(e.args[0])
+                raise Signal.make(T.NameError, obj, f"Fields to exclude '{fte}' not found")
 
-                    if n in direct_names:
-                        raise Signal.make(T.NameError, n, f"Field to exclude '{n}' is explicitely included in projection")
-
-                if f.value.from_struct:
-                    # Inline struct
-                    with state.use_scope(obj.all_attrs()):
-                        s = evaluate(state, f.value.from_struct)
-                        items = s.attrs
-                else:
-                    # Ellipsis for current projection
-                    items = obj.all_attrs()
-
-                try:
-                    remaining_items = list(_exclude_items(items, set(f.value.exclude), direct_names))
-                except ValueError as e:
-                    fte = set(e.args[0])
-                    raise Signal.make(T.NameError, obj, f"Fields to exclude '{fte}' not found")
-
-                exclude = direct_names | set(f.value.exclude)
-                for name, value in remaining_items:
-                    assert isinstance(name, str)
-                    assert name not in exclude
-                    yield ast.NamedField(name, value, user_defined=False).set_text_ref(f.text_ref)
+            exclude = direct_names | set(f.value.exclude)
+            for name, value in remaining_items:
+                assert isinstance(name, str)
+                assert name not in exclude
+                yield ast.NamedField(name, value, user_defined=False).set_text_ref(f.text_ref)
         else:
             yield f
 
 
 @dy
-def compile_to_inst(state: State, x):
+def compile_to_inst(_state: State, x):
     return x
 @dy
-def compile_to_inst(state: State, node: ast.Ast):
+def compile_to_inst(_state: State, node: ast.Ast):
     return node
 
 
@@ -138,7 +139,7 @@ def compile_to_inst(state: State, cb: ast.CodeBlock):
     raise Signal.make(T.CompileError, cb, "Cannot compile this code block")
 @dy
 def compile_to_inst(state: State, i: ast.If):
-    cond = cast(state, cast_to_instance(state, i.cond), T.bool)
+    cond = cast(cast_to_instance(state, i.cond), T.bool)
     then = cast_to_instance(state, i.then)
     else_ = cast_to_instance(state, i.else_)
     code = sql.Case(cond.code, then.code, else_.code)
@@ -157,7 +158,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
         return table   # Empty list projection is always an empty list.
 
     t = T.union[T.table, T.struct]
-    if not (table.type <= t):
+    if not table.type <= t:
         raise Signal.make(T.TypeError, proj, f"Cannot project objects of type {table.type}")
 
     fields = _expand_ellipsis(state, table, proj.fields)
@@ -282,8 +283,9 @@ def compile_to_inst(state: State, o: ast.Or):
     args = cast_to_instance(state, o.args)
     a, b = args
     if kernel_type(a.type) != kernel_type(b.type):
-        raise Signal.make(T.TypeError, o, f"'or' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
-    cond = cast(state, a, T.bool)
+        msg = f"'or' operator requires both arguments to be of the same type, got {a.type} and {b.type}"
+        raise Signal.make(T.TypeError, o, msg)
+    cond = cast(a, T.bool)
     code = sql.Case(cond.code, a.code, b.code)
     return objects.make_instance(code, a.type, args)
 
@@ -292,15 +294,16 @@ def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
     a, b = args
     if kernel_type(a.type) != kernel_type(b.type):
-        raise Signal.make(T.TypeError, o, f"'and' operator requires both arguments to be of the same type, got {a.type} and {b.type}")
-    cond = cast(state, a, T.bool)
+        msg = f"'and' operator requires both arguments to be of the same type, got {a.type} and {b.type}"
+        raise Signal.make(T.TypeError, o, msg)
+    cond = cast(a, T.bool)
     code = sql.Case(cond.code, b.code, a.code)
     return objects.make_instance(code, a.type, args)
 
 @dy
 def compile_to_inst(state: State, o: ast.Not):
     expr = cast_to_instance(state, o.expr)
-    expr_bool = cast(state, expr, T.bool)
+    expr_bool = cast(expr, T.bool)
     code = sql.LogicalNot(expr_bool.code)
     return objects.make_instance(code, T.bool, [expr])
 
@@ -322,9 +325,9 @@ def _contains(state, op, a: T.string, b: T.string):
 
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.table):
-    b_list = cast(state, b, T.list)
-    if not (a.type <= b_list.type.elem):
-        a = cast(state, a, b_list.type.elem)
+    b_list = cast(b, T.list)
+    if not a.type <= b_list.type.elem:
+        a = cast(a, b_list.type.elem)
         # raise Signal.make(T.TypeError, op, f"Error in contains: Mismatch between {a.type} and {b.type}")
 
     if op == '!in':
@@ -348,11 +351,11 @@ def _compare(state, op, a: T.any, b: T.any):
 
 
 @dp_inst
-def _compare(state, op, a: T.nulltype, b: T.nulltype):
+def _compare(_state, op, _a: T.nulltype, _b: T.nulltype):
     return new_value_instance(op in ('=', '<=', '>='))
 
 @dp_inst
-def _compare(state, op, a: T.type, b: T.nulltype):
+def _compare(state, _op, a: T.type, _b: T.nulltype):
     assert not a.type.maybe_null()
     return new_value_instance(False)
 @dp_inst
@@ -363,7 +366,7 @@ def _compare(state, op, a: T.nulltype, b: T.type):
 primitive_or_struct = T.union[T.primitive, T.struct]
 
 @dp_inst
-def _compare(state, op, a: T.nulltype, b: primitive_or_struct):
+def _compare(_state, op, a: T.nulltype, b: primitive_or_struct):
     # TODO Enable this type-based optimization:
     # if not b.type.nullable:
     #     return objects.new_value_instance(False)
@@ -377,29 +380,29 @@ def _compare(state, op, a: primitive_or_struct, b: T.nulltype):
 
 
 @dp_inst
-def _compare(state, op, _a: T.unknown, _b: T.object):
+def _compare(_state, _op, _a: T.unknown, _b: T.object):
     return objects.UnknownInstance()
 @dp_inst
-def _compare(state, op, _a: T.object, _b: T.unknown):
+def _compare(_state, _op, _a: T.object, _b: T.unknown):
     return objects.UnknownInstance()
 @dp_inst
-def _compare(state, op, _a: T.unknown, _b: T.unknown):
+def _compare(_state, _op, _a: T.unknown, _b: T.unknown):
     return objects.UnknownInstance()
 
 
 @dp_inst
 def _compare(_state, op, a: T.primitive, b: T.primitive):
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
-                f = {
-                    '=': operator.eq,
-                    '!=': operator.ne,
-                    '<>': operator.ne,
-                    '>': operator.gt,
-                    '<': operator.lt,
-                    '>=': operator.ge,
-                    '<=': operator.le,
-                }[op]
-                return new_value_instance(f(a.local_value, b.local_value))
+        f = {
+            '=': operator.eq,
+            '!=': operator.ne,
+            '<>': operator.ne,
+            '>': operator.gt,
+            '<': operator.lt,
+            '>=': operator.ge,
+            '<=': operator.le,
+        }[op]
+        return new_value_instance(f(a.local_value, b.local_value))
 
     # TODO regular equality for primitives? (not 'is')
     code = sql.Compare(op, [a.code, b.code])
@@ -545,12 +548,12 @@ def _compile_arith(state, arith, a: T.string, b: T.string):
 
 
 @dy
-def compile_to_inst(state: State, x: ast.Ellipsis):
+def compile_to_inst(_state: State, x: ast.Ellipsis):
     raise Signal.make(T.SyntaxError, x, "Ellipsis not allowed here")
 
 
 @dy
-def compile_to_inst(state: State, c: ast.Const):
+def compile_to_inst(_state: State, c: ast.Const):
     if c.type == T.nulltype:
         assert c.value is None
         return objects.null
@@ -567,7 +570,7 @@ def compile_to_inst(state: State, d: ast.Dict_):
 @dy
 def compile_to_inst(state: State, lst: objects.PythonList):
     t = lst.type.elem
-    x = [sql.Primitive(t, sql._repr(t,i)) for i in (lst.items)]
+    x = [sql.Primitive(t, sql._repr(t,i)) for i in lst.items]
     name = state.unique_name("list_")
     table_code, subq, list_type = sql.create_list(name, x)
     inst = objects.TableInstance.make(table_code, list_type, [])
@@ -648,7 +651,8 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
         if isinstance(c, sql.Parameter):
             inst = evaluate(state, state.get_var(c.name))
             if inst.type != c.type:
-                raise Signal.make(T.CastError, None, f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})")
+                msg = f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})"
+                raise Signal.make(T.CastError, None, msg)
             new_code += inst.code.compile_wrap(qb).code
             subqueries.update(inst.subqueries)
         else:
@@ -764,7 +768,9 @@ def compile_to_inst(state: State, sel: ast.Selection):
         index ,= cast_to_instance(state, sel.conds)
         assert index.type <= T.int, index.type
         table = table.replace(type=T.string)    # XXX why get rid of projected here? because it's a table operation node?
-        slice = ast.Slice(table, ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))).set_text_ref(sel.text_ref)
+        slice = ast.Slice(table,
+                          ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))
+                         ).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
 
     assert_type(table.type, T.table, state, sel, "Selection")
@@ -776,7 +782,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
         code = sql.unknown
     else:
         for i, c in enumerate(conds):
-            if not (c.type <= T.bool):
+            if not c.type <= T.bool:
                 raise exc.Signal.make(T.TypeError, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
         code = sql.table_selection(table, [c.code for c in conds])

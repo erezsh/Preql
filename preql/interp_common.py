@@ -1,9 +1,6 @@
 from contextlib import contextmanager
 from copy import copy
 from logging import getLogger
-from pathlib import Path
-
-import dsnparse
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -11,7 +8,7 @@ from .utils import dy
 from .exceptions import Signal
 from .exceptions import InsufficientAccessLevel
 from .pql_types import Type, T
-from .sql_interface import (ConnectError, DuckInterface, GitInterface, MysqlInterface, PostgresInterface, SqliteInterface, BigQueryInterface)
+from .sql_interface import ConnectError, create_engine
 
 logger = getLogger('interp')
 
@@ -187,36 +184,7 @@ class Namespace:
 
 
 
-
-def create_engine(db_uri, print_sql, auto_create):
-    dsn = dsnparse.parse(db_uri)
-    if len(dsn.paths) != 1:
-        raise ValueError("Bad value for uri: %s" % db_uri)
-    path ,= dsn.paths
-    if len(dsn.schemes) > 1:
-        raise NotImplementedError("Preql doesn't support multiple schemes")
-    scheme ,= dsn.schemes
-    if scheme == 'sqlite':
-        if not auto_create and path != ':memory:':
-            if not Path(path).exists():
-                raise ConnectError("File %r doesn't exist. To create it, set auto_create to True" % path)
-        return SqliteInterface(path, print_sql=print_sql)
-    elif scheme == 'postgres':
-        return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
-    elif scheme == 'mysql':
-        return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
-    elif scheme == 'git':
-        return GitInterface(path, print_sql=print_sql)
-    elif scheme == 'duck':
-        return DuckInterface(path, print_sql=print_sql)
-    elif scheme == 'bigquery':
-        return BigQueryInterface(path, print_sql=print_sql)
-
-    raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
-
-
-
-def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s, instead got '%s'"):
+def assert_type(t, type_, state, ast_node, op, msg="%s expected an object of type %s, instead got '%s'"):
     assert isinstance(t, Type), t
     assert isinstance(type_, Type)
     if not t <= type_:
@@ -224,7 +192,7 @@ def assert_type(t, type_, state, ast, op, msg="%s expected an object of type %s,
             type_str = ' or '.join("'%s'" % elem for elem in type_.elems)
         else:
             type_str = "'%s'" % type_
-        raise Signal.make(T.TypeError, ast, msg % (op, type_str, t))
+        raise Signal.make(T.TypeError, ast_node, msg % (op, type_str, t))
 
 def exclude_fields(state, table, fields):
     proj = ast.Projection(table, [ast.NamedField(None, ast.Ellipsis(None, exclude=list(fields) ), user_defined=False)])
@@ -243,6 +211,5 @@ new_value_instance = objects.new_value_instance
 
 
 def is_global_scope(state):
-    assert len(state.ns)
+    assert len(state.ns) != 0
     return len(state.ns) == 1
-

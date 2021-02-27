@@ -8,6 +8,7 @@ from . import pql_types
 from .pql_types import T, Type, dp_type, dp_inst, Id
 from .types_impl import join_names, flatten_type
 from .exceptions import Signal
+from .context import context
 
 duck = 'duck'
 sqlite = 'sqlite'
@@ -57,7 +58,8 @@ class SqlTree(Sql):
     _is_select = False
     _needs_select = False
 
-    _compile = NotImplemented
+    def _compile(self, qb):
+        raise NotImplementedError()
 
     def compile_wrap(self, qb):  # Move to Expr? Doesn't apply to statements
         return self.compile(qb).wrap(qb)
@@ -953,21 +955,24 @@ class StringSlice(SqlTree):
 
 
 @dp_type
-def _repr(t: T.union[T.number, T.bool], x):
+def _repr(_t: T.number, x):
     return str(x)
 
 @dp_type
-def _repr(t: T.decimal, x):
+def _repr(_t: T.bool, x):
+    return ['0', '1'][x]    # For sqlite
+
+@dp_type
+def _repr(_t: T.decimal, x):
     return repr(float(x))  # TODO SQL decimal?
 
 @dp_type
-def _repr(t: T.datetime, x):
+def _repr(_t: T.datetime, x):
     # TODO Better to pass the object instead of a string?
     return repr(str(x))
 
-from .context import context
 @dp_type
-def _repr(t: T.union[T.string, T.text], x):
+def _repr(_t: T.union[T.string, T.text], x):
     if context.state.db.target == bigquery:
         return "'%s'" % str(x).replace("'", r"\'")
     else:
@@ -1116,11 +1121,11 @@ def _from_datetime(state, s):
 
     # Sqlite
     if not isinstance(s, str):
-        raise Signal.make(T.TypeError, state, None, f"datetime expected a string. Instead got: {s}")
+        raise Signal.make(T.TypeError, None, f"datetime expected a string. Instead got: {s}")
     try:
         return datetime.fromisoformat(s)
     except ValueError as e:
-        raise Signal.make(T.ValueError, state, None, str(e))
+        raise Signal.make(T.ValueError, None, str(e))
 
 
 @dp_inst
@@ -1129,7 +1134,7 @@ def from_sql(state, res: T.primitive):
         row ,= res.value
         item ,= row
     except ValueError:
-        raise Signal.make(T.TypeError, state, None, "Expected primitive. Got: '%s'" % res.value)
+        raise Signal.make(T.TypeError, None, "Expected primitive. Got: '%s'" % res.value)
     # t = from_python(type(item))
     # if not (t <= res.type):
     #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
@@ -1154,7 +1159,7 @@ def _from_sql_primitive(p):
 def from_sql(state, arr: T.list):
     fields = flatten_type(arr.type)
     if not all(len(e)==len(fields) for e in arr.value):
-        raise Signal.make(T.TypeError, state, None, f"Expected 1 column. Got {len(arr.value[0])}")
+        raise Signal.make(T.TypeError, None, f"Expected 1 column. Got {len(arr.value[0])}")
 
     if arr.type.elem <= T.struct:
         return [{n: _from_sql_primitive(e) for (n, _t), e in safezip(fields, tpl)} for tpl in arr.value]
@@ -1167,7 +1172,7 @@ def from_sql(state, arr: T.table):
     expected_length = len(flatten_type(arr.type))   # TODO optimize?
     for row in arr.value:
         if len(row) != expected_length:
-            raise Signal.make(T.TypeError, state, None, f"Expected {expected_length} columns, but got {len(row)}")
+            raise Signal.make(T.TypeError, None, f"Expected {expected_length} columns, but got {len(row)}")
         i = iter(row)
         yield {name: restructure_result(state, col, i) for name, col in arr.type.elems.items()}
 
@@ -1185,7 +1190,7 @@ def restructure_result(state, t: T.struct, i):
     return ({name: restructure_result(state, col, i) for name, col in t.elems.items()})
 
 @dp_type
-def restructure_result(state, t: T.union[T.primitive, T.nulltype], i):
+def restructure_result(state, _t: T.union[T.primitive, T.nulltype], i):
     return next(i)
 
 
@@ -1209,6 +1214,6 @@ def restructure_result(state, t: T.json_array[T.union[T.primitive, T.nulltype]],
     return res
 
 @dp_type
-def restructure_result(state, t: T.datetime, i):
+def restructure_result(state, _t: T.datetime, i):
     s = next(i)
     return _from_datetime(state, s)

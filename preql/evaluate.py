@@ -57,10 +57,12 @@ def resolve(state: State, col_def: ast.ColumnDef):
     assert not query
 
     if isinstance(coltype, objects.SelectedColumnInstance):
-        return T.t_relation[coltype.type](rel={'table': coltype.parent.type, 'column': coltype.name, 'key': False}).replace(_nullable=coltype.type._nullable)
+        x = T.t_relation[coltype.type](rel={'table': coltype.parent.type, 'column': coltype.name, 'key': False})
+        return x.replace(_nullable=coltype.type._nullable)  # inherit is_nullable (TODO: use sumtypes?)
 
     elif coltype <= T.table:
-        return T.t_relation[T.t_id.as_nullable()](rel={'table': coltype, 'column': 'id', 'key': True}).replace(_nullable=coltype._nullable)
+        x = T.t_relation[T.t_id.as_nullable()](rel={'table': coltype, 'column': 'id', 'key': True})
+        return x.replace(_nullable=coltype._nullable)     # inherit is_nullable (TODO: use sumtypes?)
 
     return coltype(default=col_def.default)
 
@@ -202,7 +204,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
 def _execute(state: State, insert_rows: ast.InsertRows):
     if not isinstance(insert_rows.name, ast.Name):
         # TODO support Attr
-        raise Signal.make(T.SyntaxError, state, insert_rows, "L-value must be table name")
+        raise Signal.make(T.SyntaxError, insert_rows, "L-value must be table name")
 
     rval = evaluate(state, insert_rows.value)
 
@@ -269,7 +271,7 @@ def _execute(state: State, i: ast.If):
 
 @dy
 def _execute(state: State, w: ast.While):
-    while(cast_to_python(state, w.cond)):
+    while cast_to_python(state, w.cond):
         execute(state, w.do)
 
 @dy
@@ -389,7 +391,6 @@ def simplify(state: State, x):
 
 # @dy
 # def simplify(state: State, node: ast.Ast):
-#     # TODO implement automatically with prerequisites
 #     # return _simplify_ast(state, node)
 #     return node
 
@@ -408,6 +409,7 @@ def simplify(state: State, x):
 #         else:
 #             return if_.else_
 #     return if_
+
 
 # TODO Optimize these, right now failure to evaluate will lose all work
 @dy
@@ -614,7 +616,7 @@ def apply_database_rw(state: State, d: ast.Delete):
     cond_table = ast.Selection(d.table, d.conds).set_text_ref(d.text_ref)
     table = evaluate(state, cond_table)
 
-    if not (table.type <= T.table):
+    if not table.type <= T.table:
         raise Signal.make(T.TypeError, d.table, f"Expected a table. Got: {table.type}")
 
     if not 'name' in table.type.options:
@@ -639,7 +641,7 @@ def apply_database_rw(state: State, u: ast.Update):
     # TODO Optimize: Update on condition, not id, when possible
     table = evaluate(state, u.table)
 
-    if not (table.type <= T.table):
+    if not table.type <= T.table:
         raise Signal.make(T.TypeError, u.table, f"Expected a table. Got: {table.type}")
 
     if not 'name' in table.type.options:
@@ -720,12 +722,14 @@ def _destructure_param_match(state, ast_node, param_match):
             v = v.primary_key()
         v = localize(state, v)
 
-        if (k.type <= T.struct):
+        if k.type <= T.struct:
             names = [name for name, t in flatten_type(k.orig, [k.name])]
             if not isinstance(v, list):
-                raise Signal.make(T.TypeError, ast_node, f"Parameter {k.name} received a bad value: {v} (expecting a struct or a list)")
+                msg = f"Parameter {k.name} received a bad value: {v} (expecting a struct or a list)"
+                raise Signal.make(T.TypeError, ast_node, msg)
             if len(v) != len(names):
-                raise Signal.make(T.TypeError, ast_node, f"Parameter {k.name} received a bad value (size of {len(names)})")
+                msg = f"Parameter {k.name} received a bad value (size of {len(names)})"
+                raise Signal.make(T.TypeError, ast_node, msg)
             yield from safezip(names, v)
         else:
             yield k.name, v
@@ -810,8 +814,10 @@ class TableConstructor(objects.Function):
 
     @classmethod
     def make(cls, table):
-        return cls([objects.Param(name, p, p.options.get('default'), orig=p).set_text_ref(getattr(name, 'text_ref', None))
-                    for name, p in table_params(table)])
+        return cls([
+            objects.Param(name, p, p.options.get('default'), orig=p).set_text_ref(getattr(name, 'text_ref', None))
+            for name, p in table_params(table)
+        ])
 
 
 def add_as_subquery(state: State, inst: objects.Instance):
@@ -944,7 +950,8 @@ def new_table_from_expr(state, name, expr, const, temporary):
         return objects.TableInstance.make(sql.null, expr.type, [])
 
     if 'id' in elems and not const:
-        raise Signal.make(T.NameError, None, "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is.")
+        msg = "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is."
+        raise Signal.make(T.NameError, None, msg)
 
     table = T.table(dict(elems), name=Id(name), pk=[] if const else [['id']], temporary=temporary)
 

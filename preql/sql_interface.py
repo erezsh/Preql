@@ -1,11 +1,14 @@
+from pathlib import Path
+import subprocess
+import json
+
+import dsnparse
+
 from .utils import classify, dataclass
 from .loggers import sql_log
-
 from .sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, from_sql, bigquery
 from . import exceptions
-
 from .pql_types import T, Type, Object, Id
-
 
 @dataclass
 class Const(Object):
@@ -16,6 +19,8 @@ class ConnectError(Exception):
     pass
 
 class SqlInterface:
+    _conn: object
+
     def __init__(self, print_sql=False):
         self._print_sql = print_sql
 
@@ -360,8 +365,6 @@ class DuckInterface(SqliteInterface):
         pass    # XXX
 
 
-import subprocess
-import json
 class GitInterface(SqliteInterface):
     "Uses https://github.com/augmentable-dev/askgit"
 
@@ -478,3 +481,32 @@ def _type_from_sql(type, nullable):
     nullable = _bool_from_sql(nullable)
 
     return v.replace(_nullable=nullable)
+
+
+
+
+def create_engine(db_uri, print_sql, auto_create):
+    dsn = dsnparse.parse(db_uri)
+    if len(dsn.paths) != 1:
+        raise ValueError("Bad value for uri: %s" % db_uri)
+    path ,= dsn.paths
+    if len(dsn.schemes) > 1:
+        raise NotImplementedError("Preql doesn't support multiple schemes")
+    scheme ,= dsn.schemes
+    if scheme == 'sqlite':
+        if not auto_create and path != ':memory:':
+            if not Path(path).exists():
+                raise ConnectError("File %r doesn't exist. To create it, set auto_create to True" % path)
+        return SqliteInterface(path, print_sql=print_sql)
+    elif scheme == 'postgres':
+        return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+    elif scheme == 'mysql':
+        return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+    elif scheme == 'git':
+        return GitInterface(path, print_sql=print_sql)
+    elif scheme == 'duck':
+        return DuckInterface(path, print_sql=print_sql)
+    elif scheme == 'bigquery':
+        return BigQueryInterface(path, print_sql=print_sql)
+
+    raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")

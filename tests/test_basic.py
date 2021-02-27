@@ -1,4 +1,4 @@
-from preql.sql import mysql, bigquery
+from preql.sql import mysql, bigquery, sqlite
 from unittest import skip
 
 from parameterized import parameterized_class
@@ -805,8 +805,15 @@ class BasicTests(PreqlTests):
         res = preql("""[1,2,3]{v:item*2}[v !in [2,6]]""")
         assert res == [{'v': 4}], res
 
-        res = preql("""enum([1,8,4,4])[index+1==item]{item}""")
-        assert res == [{'item': 1}, {'item': 4}]
+        try:
+            res = preql("""enum([1,8,4,4])[index+1==item]{item}""")
+        except Signal as e:
+            assert e.type <= T.NotImplementedError
+            assert preql.interp.state.db.target is sqlite
+            import sqlite3
+            assert sqlite3.sqlite_version_info < (3, 25)    # Only excute
+        else:
+            assert res == [{'item': 1}, {'item': 4}]
 
         res = preql("""[1,2,3][..2]""")
         assert res == [1,2]
