@@ -58,7 +58,7 @@ Then just run the interpreter:
     preql
 ```
 
-Requires Python 3.8+
+Requires Python 3.6+
 
 [Read more](https://preql.readthedocs.io/en/latest/getting-started.html)
 
