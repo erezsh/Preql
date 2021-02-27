@@ -955,8 +955,12 @@ class StringSlice(SqlTree):
 
 
 @dp_type
-def _repr(_t: T.union[T.number, T.bool], x):
+def _repr(_t: T.number, x):
     return str(x)
+
+@dp_type
+def _repr(_t: T.bool, x):
+    return ['0', '1'][x]    # For sqlite
 
 @dp_type
 def _repr(_t: T.decimal, x):

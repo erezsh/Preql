@@ -13,7 +13,6 @@ import runtype
 from rich.text import Text
 
 from . import settings
-from .context import Context
 
 mut_dataclass = runtype.dataclass(check_types=settings.typecheck, frozen=False)
 dataclass = runtype.dataclass(check_types=settings.typecheck)
@@ -152,16 +151,29 @@ def classify(seq, key=None, value=None):
 
 
 
-@dataclass
+# @dataclasses.dataclass
 class TextPos:
     char_index: int
     line: int
     column: int
 
-@dataclass
+    __slots__ = 'char_index', 'line', 'column'
+
+    def __init__(self, char_index, line, column):
+        self.char_index = char_index
+        self.line = line
+        self.column = column
+
+# @dataclasses.dataclass
 class TextRange:
     start: TextPos
     end: TextPos
+
+    __slots__ = 'start', 'end'
+
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
 
 
 def expand_tab(s):

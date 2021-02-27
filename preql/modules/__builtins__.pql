@@ -117,22 +117,7 @@ func limit_offset(tbl: table, lim: int, offset: int) {
     return SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
 }
 
-func enum(tbl: table) = tbl{index: SQL(int, "(row_number() over ())-1"), ...}
-    """Return the table with a new index column.
 
-    Count starts from 0.
-
-    Example:
-        >> enum(["a", "b", "c"])
-        table  =3
-        ┏━━━━━━━┳━━━━━━┓
-        ┃ index ┃ item ┃
-        ┡━━━━━━━╇━━━━━━┩
-        │     0 │ a    │
-        │     1 │ b    │
-        │     2 │ c    │
-        └───────┴──────┘
-    """
 
 func upper(s: string) = SQL(string, "upper($s)")
     "Return a copy of the string converted to uppercase."
@@ -279,6 +264,30 @@ func _count_true(field: aggregated) = SQL(int, "sum(cast($field!=0 as int))")
 
 
 db_type = get_db_type()
+
+if (db_type == 'sqlite' and PY("sqlite3.sqlite_version_info < (3, 25)", "import sqlite3")) {
+    func enum(tbl: table) {
+        throw new NotImplementedError("Sqlite doesn't support windows functions before version 3.25")
+    }
+} else {
+    func enum(tbl: table) = tbl{index: SQL(int, "(row_number() over ())-1"), ...}
+        """Return the table with a new index column.
+
+        Count starts from 0.
+
+        Example:
+            >> enum(["a", "b", "c"])
+            table  =3
+            ┏━━━━━━━┳━━━━━━┓
+            ┃ index ┃ item ┃
+            ┡━━━━━━━╇━━━━━━┩
+            │     0 │ a    │
+            │     1 │ b    │
+            │     2 │ c    │
+            └───────┴──────┘
+        """
+}
+
 if (db_type == "postgres") {
     func _random() = SQL(float, "RANDOM()")
 
