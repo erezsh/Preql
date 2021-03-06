@@ -122,6 +122,10 @@ SELECT * FROM subq_1
 
 See more examples in [the examples folder](https://github.com/erezsh/Preql/tree/master/examples).
 
+# Interactive Environment
+
+![Screenshot.png](docs/screenshot.png)
+
 # License
 
 Preql uses an “Interface-Protection Clause” on top of the MIT license.

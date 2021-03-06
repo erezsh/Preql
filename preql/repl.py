@@ -22,6 +22,7 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text.html import HTML, html_escape
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.output.color_depth import ColorDepth
 
 from . import __version__
 from . import pql_objects as objects
@@ -94,7 +95,9 @@ class Autocompleter(Completer):
 
                 yield Completion(
                     b, start_position=0,
-                    display=HTML('<b>%s</b>%s: <blue>%s</blue>' % (a, b, html_escape(t))),
+                    display=HTML('<b>%s</b>%s<ansibrightblack> : %s</ansibrightblack>' % (a, b, html_escape(t))),
+                    style='bg:ansigray fg:black',
+                    selected_style="fg:black bg:ansibrightyellow",
                     )
 
     def get_completions(self, document, complete_event):
@@ -179,6 +182,7 @@ def start_repl(p, prompt=' >> '):
             validator=MyValidator(),
             history=FileHistory(str(Path.home() / '.preql_history')),
             auto_suggest=AutoSuggestFromHistory(),
+            color_depth=ColorDepth.TRUE_COLOR,
         )
 
         @Condition
