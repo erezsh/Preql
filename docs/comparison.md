@@ -198,7 +198,6 @@ table1 | table2	// union
 SELECT * FROM table1 UNION ALL SELECT * FROM table2;  -- concat
 ```
 
-Union:
 ```SQL
 SELECT * FROM table1 UNION SELECT * FROM table2;      -- union
 ```
@@ -360,7 +359,7 @@ UPDATE tips SET tip = tip*2 WHERE tip < 2;
 ```python
 tips.loc[tips['tip'] < 2, 'tip'] *= 2
 ```
-(takes a different form for complex operations):
+(takes a different form for complex operations)
 </div>
 
 ## Gotchas
@@ -401,13 +400,13 @@ tips[tips['col2'].isna()]
 
 <div class="preql">
 
-Comparisons to `null` behave like in Python.
-
 ```javascript
 func add_one(x: int) = x + 1
 
 my_table{ add_one(my_column) }
 ```
+
+(Type annotations validate the values at compile-time)
 
 </div>
 
