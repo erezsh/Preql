@@ -132,6 +132,4 @@ Preql uses an “Interface-Protection Clause” on top of the MIT license.
 
 See: [LICENSE](LICENSE)
 
-In simple words, it can be used for any commercial or non-commercial purpose, as long as your product doesn't base its value on exposing the Preql language itself to your users.
-
-If you want to add the Preql language interface as a user-facing part of your commercial product, contact us for a commercial license.
+In simple words, it's free for personal use. Also, it can be used for any commercial or non-commercial purpose, as long as your product doesn't base its value on exposing the Preql language itself to your users. [Read more](https://preql.readthedocs.io/en/latest/faq.html#license)
