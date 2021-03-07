@@ -11,6 +11,7 @@
    features
    performance
    roadmap
+   faq
 
 .. toctree::
    :maxdepth: 2
@@ -63,6 +64,7 @@ Resources
 -  :doc:`features`
 -  :doc:`performance`
 -  :doc:`roadmap`
+-  :doc:`faq`
 
 -  Tutorials
 
