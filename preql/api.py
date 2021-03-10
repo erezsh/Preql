@@ -125,9 +125,11 @@ class Preql:
         var = self.interp.state.get_var(fname)
         if isinstance(var, objects.Function):
             def delegate(*args, **kw):
-                assert not kw
+                if kw:
+                    raise NotImplementedError("No support for keywords yet")
                 pql_args = [objects.from_python(a) for a in args]
                 pql_res = self.interp.call_func(fname, pql_args)
+                pql_res = evaluate(self.interp.state, pql_res)
                 return self._wrap_result( pql_res )
             return delegate
         else:
@@ -135,7 +137,8 @@ class Preql:
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
-        assert not isinstance(res, ast.Ast), res
+        if isinstance(res, ast.Ast):
+            raise TypeError("Returned object cannot be converted into a Python representation")
         return promise(self.interp.state, res)  # TODO session, not state
 
     def _run_code(self, pq: str, source_file: str, **args):

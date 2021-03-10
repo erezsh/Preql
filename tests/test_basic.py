@@ -260,13 +260,20 @@ class BasicTests(PreqlTests):
 
 
     def test_from_python(self):
-        preql = self.Preql()
+        p = self.Preql()
 
-        preql('func f(x) = count(x)')
-        assert preql.f([1,2,3]) == 3
+        p('func f(x) = count(x)')
+        assert p.f([1,2,3]) == 3
 
         # TODO
-        # assert preql.f([(1,2), (2,3), (3,4)]) == 3
+        # assert p.f([(1,2), (2,3), (3,4)]) == 3
+        assert p.count([1,2,3]) == 3
+        assert p.enum([1]) == [{'index': 0, 'item': 1}]
+
+        assert p.SQL(int, "SELECT 2") == 2
+        assert p.SQL(p.int, "SELECT 2") == 2
+        assert p.SQL(p.list[p.int], "SELECT 1 UNION ALL SELECT 2") == [1,2]
+        assert p.SQL(p('list[int]'), "SELECT 1 UNION ALL SELECT 2") == [1,2]
 
 
     def test_vectorized_logic2(self):

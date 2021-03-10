@@ -608,4 +608,9 @@ def from_python(value):
     elif isinstance(value, dict):
         elems = {k:from_python(v) for k,v in value.items()}
         return ast.Dict_(elems)
-    assert False, value
+    elif isinstance(value, type):
+        return pql_types.from_python(value)
+    elif isinstance(value, Type):
+        return value
+
+    raise TypeError(f"Cannot import into Preql a Python object of type {type}")
