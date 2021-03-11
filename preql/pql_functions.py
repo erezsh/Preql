@@ -219,8 +219,8 @@ def pql_issubclass(state: State, a: T.type, b: T.type):
         >> issubclass(list, table)
         true
     """
-    assert_type(a.type, T.type, state, a, 'issubclass')
-    assert_type(b.type, T.type, state, b, 'issubclass')
+    assert_type(a.type, T.type, a, 'issubclass')
+    assert_type(b.type, T.type, b, 'issubclass')
     assert isinstance(a, Type)
     assert isinstance(b, Type)
     return new_value_instance(a <= b, T.bool)
@@ -238,7 +238,7 @@ def pql_isa(state: State, obj: T.any, type: T.type):
         >> isa([1], table)
         true
     """
-    assert_type(type.type, T.type, state, obj, 'isa')
+    assert_type(type.type, T.type, obj, 'isa')
     res = obj.isa(type)
     return new_value_instance(res, T.bool)
 
@@ -305,7 +305,7 @@ def pql_temptable(state: State, expr: T.table, const: T.bool.as_nullable() = obj
     # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
     # 'const table' doesn't
     const = cast_to_python(state, const)
-    assert_type(expr.type, T.table, state, expr, 'temptable')
+    assert_type(expr.type, T.table, expr, 'temptable')
 
     name = state.unique_name("temp")    # TODO get name from table options
 

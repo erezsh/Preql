@@ -113,7 +113,7 @@ class State:
             except KeyError:
                 pass
 
-            raise Signal.make(T.NameError, name, f"Name '{name}' not found")
+            raise Signal.make(T.NameError, name, f"Name '{name}' is not defined")
 
 
     def set_var(self, name, value):
@@ -185,7 +185,7 @@ class Namespace:
 
 
 
-def assert_type(t, type_, state, ast_node, op, msg="%s expected an object of type %s, instead got '%s'"):
+def assert_type(t, type_, ast_node, op, msg="%s expected an object of type %s, instead got '%s'"):
     assert isinstance(t, Type), t
     assert isinstance(type_, Type)
     if not t <= type_:

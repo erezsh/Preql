@@ -232,6 +232,9 @@ class BasicTests(PreqlTests):
         assert preql('1 and 2 or 3') == 2
         assert preql('1 or 2 and 3') == 1
 
+        self.assertEqual( preql('[1] or [2]'), [1])
+        self.assertEqual( preql('[1] and [2]'), [2])
+
     def test_basic2(self):
         # More basic tests
         preql = self.Preql()

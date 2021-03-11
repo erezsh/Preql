@@ -251,7 +251,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 @dy
 def compile_to_inst(state: State, order: ast.Order):
     table = cast_to_instance(state, order.table)
-    assert_type(table.type, T.table, state, order, "'order'")
+    assert_type(table.type, T.table, order, "'order'")
 
     with state.use_scope(table.all_attrs()):
         fields = cast_to_instance(state, order.fields)
@@ -447,7 +447,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 @dy
 def compile_to_inst(state: State, neg: ast.Neg):
     expr = cast_to_instance(state, neg.expr)
-    assert_type(expr.type, T.number, state, neg, "Negation")
+    assert_type(expr.type, T.number, neg, "Negation")
 
     return make_instance(sql.Neg(expr.code), expr.type, [expr])
 
@@ -732,7 +732,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
 def compile_to_inst(state: State, s: ast.Slice):
     obj = cast_to_instance(state, s.obj)
 
-    assert_type(obj.type, T.union[T.string, T.table], state, s, "Slice")
+    assert_type(obj.type, T.union[T.string, T.table], s, "Slice")
 
     instances = [obj]
     if s.range.start:
@@ -773,7 +773,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
                          ).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
 
-    assert_type(table.type, T.table, state, sel, "Selection")
+    assert_type(table.type, T.table, sel, "Selection")
 
     with state.use_scope({n:projected(c) for n, c in table.all_attrs().items()}):
         conds = cast_to_instance(state, sel.conds)

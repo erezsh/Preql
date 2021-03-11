@@ -3,7 +3,6 @@ from contextlib import contextmanager
 from . import settings
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .utils import classify
 from .interpreter import Interpreter
 from .sql_interface import create_engine
 from .pql_types import T

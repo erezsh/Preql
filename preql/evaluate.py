@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type, exclude_fields, call_builtin_func, is_global_scope
+from .interp_common import assert_type, exclude_fields, call_builtin_func, is_global_scope, cast_to_python_string, cast_to_python_int
 from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
@@ -56,10 +56,19 @@ def resolve(state: State, col_def: ast.ColumnDef):
     assert not query
 
     if isinstance(coltype, objects.SelectedColumnInstance):
-        x = T.t_relation[coltype.type](rel={'table': coltype.parent.type, 'column': coltype.name, 'key': False})
+        table = coltype.parent.type
+        if 'name' not in table.options:
+            # XXX better test for persistence
+            raise Signal.make(T.TypeError, col_def.type, "Tables provided as relations must be persistent.")
+
+        x = T.t_relation[coltype.type](rel={'table': table, 'column': coltype.name, 'key': False})
         return x.replace(_nullable=coltype.type._nullable)  # inherit is_nullable (TODO: use sumtypes?)
 
     elif coltype <= T.table:
+        if 'name' not in coltype.options:
+            # XXX better test for persistence
+            raise Signal.make(T.TypeError, col_def.type, "Tables provided as relations must be persistent.")
+
         x = T.t_relation[T.t_id.as_nullable()](rel={'table': coltype, 'column': 'id', 'key': True})
         return x.replace(_nullable=coltype._nullable)     # inherit is_nullable (TODO: use sumtypes?)
 
@@ -67,10 +76,12 @@ def resolve(state: State, col_def: ast.ColumnDef):
 
 @dy
 def resolve(state: State, type_: ast.Type):
-    t = evaluate(state, type_.name)
+    t = evaluate(state, type_.type_obj)
     if isinstance(t, objects.TableInstance):
         t = t.type
-        assert t <= T.table
+
+    if not isinstance(t, (Type, objects.SelectedColumnInstance)):
+        raise Signal.make(T.TypeError, type_, f"Expected type in column definition. Instead got '{t}'")
 
     if type_.nullable:
         t = t.as_nullable()
@@ -207,7 +218,7 @@ def _execute(state: State, insert_rows: ast.InsertRows):
 
     rval = evaluate(state, insert_rows.value)
 
-    assert_type(rval.type, T.table, state, insert_rows, '+=')
+    assert_type(rval.type, T.table, insert_rows, '+=')
 
     return _copy_rows(state, insert_rows.name, rval)
 
@@ -602,7 +613,7 @@ def apply_database_rw(state: State, o: ast.One):
         return new_value_instance(row)
 
     assert table.type <= T.table
-    assert_type(table.type, T.table, state, o, 'one')
+    assert_type(table.type, T.table, o, 'one')
     d = {k: new_value_instance(v, table.type.elems[k], True) for k, v in row.items()}
     return objects.RowInstance(rowtype, d)
 
@@ -691,7 +702,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
         # XXX Is it always TableInstance? Just sometimes? What's the transition here?
         obj = obj.type
 
-    assert_type(obj, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(obj, T.table, new, "'new' expected an object of type '%s', instead got '%s'")
 
     arg ,= new.args
 
@@ -795,7 +806,7 @@ def apply_database_rw(state: State, new: ast.New):
 
     table = obj
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
-    assert_type(table.type, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, T.table, new, "'new' expected an object of type '%s', instead got '%s'")
 
     cons = TableConstructor.make(table.type)
     matched = cons.match_params(state, new.args)
