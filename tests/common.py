@@ -1,7 +1,6 @@
 from unittest import TestCase, skip
-from preql import sql, settings
-
-from preql import Preql
+from preql.core import sql
+from preql import Preql, settings
 
 SQLITE_URI = 'sqlite://:memory:'
 POSTGRES_URI = 'postgres://postgres:qweqwe123@localhost/postgres'

@@ -2,21 +2,23 @@ from typing import List, Optional
 import logging
 from pathlib import Path
 
-from .utils import safezip, dataclass, SafeDict, listgen
+from preql.utils import safezip, dataclass, SafeDict, listgen
+from preql import settings
+
 from .interp_common import assert_type, exclude_fields, call_builtin_func, is_global_scope, cast_to_python_string, cast_to_python_int
 from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from . import settings
 from .parser import Str
-
 from .interp_common import State, dy, new_value_instance, cast_to_python
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr, kernel_type
 from .display import display
+
+MODULES_PATH = Path(__file__).parent.parent / 'modules' 
 
 
 @dy
@@ -302,8 +304,9 @@ def _execute(state: State, t: ast.Try):
         else:
             raise
 
+
 def import_module(state, r):
-    paths = [Path(__file__).parent / 'modules', Path.cwd()]
+    paths = [MODULES_PATH, Path.cwd()]
     for path in paths:
         module_path =  (path / r.module_path).with_suffix(".pql")
         if module_path.exists():
@@ -1016,7 +1019,7 @@ def function_localize_keys(self, state, struct):
 objects.Function._localize_keys = function_localize_keys
 
 
-from .context import context
+from preql.context import context
 def instance_repr(self):
     return pql_repr(self.type, localize(context.state, self))
 

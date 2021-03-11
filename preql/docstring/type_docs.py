@@ -1,4 +1,4 @@
-from preql.pql_types import T
+from preql.core.pql_types import T
 
 DOCS = {
 T.any: """A meta-type that can match any type.

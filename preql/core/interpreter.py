@@ -1,18 +1,18 @@
 from pathlib import Path
 from functools import wraps
 
-from .utils import classify
+from preql.utils import classify
+from preql.context import context
+
 from .exceptions import Signal, pql_SyntaxError, ReturnSignal
 from .evaluate import State, execute, eval_func_call, import_module, evaluate, localize, cast_to_python
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interp_common import new_value_instance, call_builtin_func
-from .context import context
-from .pql_functions import import_pandas
-
-from .pql_functions import internal_funcs, joins
 from .pql_types import T, Object
+from .pql_functions import import_pandas
+from .pql_functions import internal_funcs, joins
 
 
 def initial_namespace():

@@ -1,11 +1,11 @@
-from preql.sql import mysql, bigquery, sqlite
+from preql.core.sql import mysql, bigquery, sqlite
 from unittest import skip
 
 from parameterized import parameterized_class
 
-from preql.pql_objects import UserFunction
-from preql.exceptions import Signal
-from preql.pql_types import T
+from preql.core.pql_objects import UserFunction
+from preql.core.exceptions import Signal
+from preql.core.pql_types import T
 from preql.sql_interface import _drop_tables
 
 from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI, BIGQUERY_URI

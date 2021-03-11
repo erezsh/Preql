@@ -4,9 +4,10 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
-from .utils import dataclass, SafeDict, X, listgen
+from preql.utils import dataclass, SafeDict, X, listgen
+from preql import settings
+
 from .exceptions import pql_AttributeError, Signal
-from . import settings
 from . import pql_ast as ast
 from . import sql
 from . import pql_types

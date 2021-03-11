@@ -3,12 +3,13 @@ import json
 from datetime import datetime
 from typing import List, Optional, Dict
 
-from .utils import dataclass, X, listgen, field_list, safezip
+from preql.utils import dataclass, X, listgen, field_list, safezip
+from preql.context import context
+
 from . import pql_types
 from .pql_types import T, Type, dp_type, dp_inst, Id
 from .types_impl import join_names, flatten_type
 from .exceptions import Signal
-from .context import context
 
 duck = 'duck'
 sqlite = 'sqlite'

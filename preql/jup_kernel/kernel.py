@@ -1,8 +1,8 @@
 from ipykernel.kernelbase import Kernel
 
 import preql
-from preql.autocomplete import autocomplete
-from preql.pql_objects import null
+from preql.core.autocomplete import autocomplete
+from preql.core.pql_objects import null
 
 from . import __version__
 

@@ -25,18 +25,18 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.output.color_depth import ColorDepth
 
 from . import __version__
-from . import pql_objects as objects
 from . import settings
-from .pql_types import T
 from .utils import memoize
-from .display import display, table_more
-from .exceptions import Signal, ExitInterp, pql_SyntaxError
-from .pql_types import Object
-from .parser import parse_stmts
 from .loggers import repl_log
-from .autocomplete import autocomplete
 from .context import context
 
+from .core.exceptions import Signal, ExitInterp, pql_SyntaxError
+from .core.autocomplete import autocomplete
+from .core.parser import parse_stmts
+from .core import pql_objects as objects
+from .core.display import display, table_more
+from .core.pql_types import Object
+from .core.pql_types import T
 
 
 def is_name(s):

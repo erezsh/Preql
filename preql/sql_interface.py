@@ -6,10 +6,11 @@ import dsnparse
 
 from .utils import classify, dataclass
 from .loggers import sql_log
-from .sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, from_sql, bigquery, _quote
-from . import exceptions
-from .pql_types import T, Type, Object, Id
 from .context import context
+
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, from_sql, bigquery, _quote
+from .core.pql_types import T, Type, Object, Id
+from .core.exceptions import DatabaseQueryError, Signal
 
 @dataclass
 class Const(Object):
@@ -88,7 +89,7 @@ class SqlInterfaceCursor(SqlInterface):
             c = self._backend_execute_sql(sql_code)
         except Exception as e:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
-            raise exceptions.DatabaseQueryError(msg%(sql_code, e))
+            raise DatabaseQueryError(msg%(sql_code, e))
 
         return self._import_result(sql_type, c)
 
@@ -257,7 +258,7 @@ class BigQueryInterface(SqlInterface):
             res = list(self._client.query(sql_code))
         except Exception as e:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
-            raise exceptions.DatabaseQueryError(msg%(sql_code, e))
+            raise DatabaseQueryError(msg%(sql_code, e))
 
         if sql_type is not T.nulltype:
             res = [list(i.values()) for i in res]
@@ -292,7 +293,7 @@ class BigQueryInterface(SqlInterface):
         if self._default_dataset is None:
             datasets = self.list_datasets()
             if not datasets:
-                raise exceptions.Signal(T.ValueError, None, "No dataset found.")
+                raise Signal(T.ValueError, None, "No dataset found.")
             self._default_dataset = datasets[0]
         return self._default_dataset
 
@@ -399,10 +400,10 @@ class GitInterface(AbsSqliteInterface):
             res = subprocess.check_output(['askgit', '--format', 'json', sql_code])
         except FileNotFoundError:
             msg = "Could not find executable 'askgit'. Make sure it's installed, and try again."
-            raise exceptions.DatabaseQueryError(msg)
+            raise DatabaseQueryError(msg)
         except subprocess.CalledProcessError as e:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
-            raise exceptions.DatabaseQueryError(msg%(sql_code, e))
+            raise DatabaseQueryError(msg%(sql_code, e))
 
         return self._import_result(sql_type, res)
 

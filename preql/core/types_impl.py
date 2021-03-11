@@ -1,7 +1,8 @@
 from .exceptions import Signal, pql_AttributeError
 
+from preql.utils import concat_for, classify_bool
+
 from .base import Object
-from .utils import concat_for, classify_bool
 from .pql_types import ITEM_NAME, T, Type, dp_type
 
 

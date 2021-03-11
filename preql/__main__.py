@@ -4,7 +4,7 @@ from itertools import chain
 import time
 
 from . import Preql, __version__, Signal
-from .display import display
+from .core.display import display
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', default=False,

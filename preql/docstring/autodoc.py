@@ -5,8 +5,9 @@ from runtype import dataclass
 from preql.utils import safezip, dy
 
 from preql.docstring.docstring import parse, Section, Defin, Text
-from preql.pql_objects import Module, Function, T
-from preql.pql_types import Type, subtypes
+
+from preql.core.pql_objects import Module, Function, T
+from preql.core.pql_types import Type, subtypes
 
 from . import type_docs
 

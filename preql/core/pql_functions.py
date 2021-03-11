@@ -8,7 +8,9 @@ import itertools
 import rich.progress
 import runtype
 
-from .utils import safezip, listgen, re_split
+from preql.utils import safezip, listgen, re_split
+from preql.docstring.autodoc import autodoc, AutoDocError
+
 from .exceptions import Signal, ExitInterp
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -18,7 +20,6 @@ from .evaluate import evaluate, db_query, TableConstructor, new_table_from_expr,
 from .pql_types import T, Type, Id
 from .types_impl import join_names
 from .casts import cast
-from .docstring.autodoc import autodoc, AutoDocError
 from .compiler import cast_to_instance
 
 def new_str(x):

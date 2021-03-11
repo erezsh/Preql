@@ -1,15 +1,15 @@
 from contextlib import contextmanager
 from copy import copy
 from logging import getLogger
-from datetime import datetime
+
+from preql.utils import dy
+from preql.sql_interface import ConnectError, create_engine
 
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .utils import dy
 from .exceptions import Signal
 from .exceptions import InsufficientAccessLevel
 from .pql_types import Type, T
-from .sql_interface import ConnectError, create_engine
 
 logger = getLogger('interp')
 

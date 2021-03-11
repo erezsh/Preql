@@ -1,10 +1,10 @@
 import operator
 
-from .utils import safezip, listgen, find_duplicate, SafeDict, re_split
-from .exceptions import Signal
-from . import exceptions as exc
 
-from . import settings
+from preql import settings
+from preql.utils import safezip, listgen, find_duplicate, SafeDict, re_split
+
+from .exceptions import Signal, InsufficientAccessLevel, ReturnSignal, pql_AttributeError
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
@@ -27,11 +27,11 @@ def cast_to_instance(state, x):
         x = simplify(state, x)  # just compile Name?
         inst = compile_to_inst(state, x)
         # inst = evaluate(state, x)
-    except exc.ReturnSignal:
+    except ReturnSignal:
         raise Signal.make(T.CompileError, None, f"Bad compilation of {x}")
 
     if isinstance(inst, ast.ParameterizedSqlCode):
-        raise exc.InsufficientAccessLevel(inst)
+        raise InsufficientAccessLevel(inst)
 
     if not isinstance(inst, AbsInstance):
         # TODO compile error? cast error?
@@ -175,7 +175,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     for name, f in fields:
         if not f.type <= T.union[T.primitive, T.struct, T.json, T.nulltype, T.unknown]:
-            raise exc.Signal.make(T.TypeError, proj, f"Cannot project values of type: {f.type}")
+            raise Signal.make(T.TypeError, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
         d = {n[1]:c for n, c in fields}     # Remove used_defined bool
@@ -414,7 +414,7 @@ def _compare(state, op, a: T.type, b: T.type):
     if op == '<=':
         return call_builtin_func(state, "issubclass", [a, b])
     if op != '=':
-        raise exc.Signal.make(T.NotImplementedError, op, f"Cannot compare types using: {op}")
+        raise Signal.make(T.NotImplementedError, op, f"Cannot compare types using: {op}")
     return new_value_instance(a == b)
 
 @dp_inst
@@ -536,7 +536,7 @@ def _compile_arith(state, arith, a: T.string, b: T.string):
         return objects.Instance.make(code, T.bool, [a, b])
 
     if arith.op != '+':
-        raise exc.Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not supported for strings.")
+        raise Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not supported for strings.")
 
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
         # Local folding for better performance (optional, for better performance)
@@ -691,7 +691,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
             assert t[0] == '$'
             if t == '$self':
                 if self_table is None:
-                    raise exc.Signal.make(T.TypeError, rps, f"$self is only available for queries that return a table")
+                    raise Signal.make(T.TypeError, rps, f"$self is only available for queries that return a table")
                 inst = self_table
             else:
                 obj = state.get_var(t[1:])
@@ -783,7 +783,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     else:
         for i, c in enumerate(conds):
             if not c.type <= T.bool:
-                raise exc.Signal.make(T.TypeError, sel.conds[i], f"Selection expected boolean, got {c.type}")
+                raise Signal.make(T.TypeError, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
         code = sql.table_selection(table, [c.code for c in conds])
 
@@ -794,7 +794,7 @@ def compile_to_inst(state: State, param: ast.Parameter):
     if state.access_level == state.AccessLevels.COMPILE:
         if param.type <= T.struct:
             # TODO why can't I just make an instance?
-            raise exc.InsufficientAccessLevel("Structs not supported yet")
+            raise InsufficientAccessLevel("Structs not supported yet")
         return make_instance(sql.Parameter(param.type, param.name), param.type, [])
 
     return state.get_var(param.name)
@@ -815,7 +815,7 @@ def compile_to_inst(state: State, attr: ast.Attr):
     inst = evaluate(state, attr.expr)
     try:
         return evaluate(state, inst.get_attr(attr.name))
-    except exc.pql_AttributeError as e:
+    except pql_AttributeError as e:
         raise Signal.make(T.AttributeError, attr, e.message)
 
 
@@ -828,7 +828,7 @@ def _apply_type_generics(state, gen_type, type_names):
         if not isinstance(o, Type):
             if isinstance(o.code, sql.Parameter):
                 # XXX hacky test, hacky solution
-                raise exc.InsufficientAccessLevel()
+                raise InsufficientAccessLevel()
             raise Signal.make(T.TypeError, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:

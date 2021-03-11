@@ -1,13 +1,13 @@
 from contextlib import contextmanager
 
 from . import settings
-from . import pql_ast as ast
-from . import pql_objects as objects
-from .interpreter import Interpreter
+from .core import pql_ast as ast
+from .core import pql_objects as objects
+from .core.interpreter import Interpreter
+from .core.pql_types import T
 from .sql_interface import create_engine
-from .pql_types import T
 
-from . import display
+from .core import display
 display.install_reprs()
 
 

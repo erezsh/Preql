@@ -4,6 +4,8 @@ import rich.table
 import rich.text
 import rich.console
 
+from preql.context import context
+
 from .exceptions import Signal
 from .pql_types import T, ITEM_NAME
 from . import pql_objects as objects
@@ -11,7 +13,6 @@ from . import pql_ast as ast
 from .types_impl import dp_type, pql_repr
 from .interp_common import call_builtin_func, cast_to_python_int, cast_to_python
 
-from .context import context
 
 TABLE_PREVIEW_SIZE = 16
 LIST_PREVIEW_SIZE = 128

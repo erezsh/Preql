@@ -3,7 +3,8 @@ from pathlib import Path
 
 from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken
 
-from .utils import TextPos, TextRange, TextReference
+from preql.utils import TextPos, TextRange, TextReference
+
 from .exceptions import pql_SyntaxError
 from . import pql_ast as ast
 from . import pql_objects as objects

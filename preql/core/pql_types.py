@@ -8,8 +8,8 @@ from collections import defaultdict, deque
 import runtype
 from runtype.typesystem import TypeSystem
 
+from preql.utils import dataclass
 from .base import Object
-from .utils import dataclass
 
 global_methods = {}
 
