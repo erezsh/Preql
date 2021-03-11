@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from copy import copy
 from logging import getLogger
+from datetime import datetime
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -213,3 +214,21 @@ new_value_instance = objects.new_value_instance
 def is_global_scope(state):
     assert len(state.ns) != 0
     return len(state.ns) == 1
+
+
+# def cast_to_python_primitive(state, obj):
+#     res = cast_to_python(state, obj)
+#     assert isinstance(res, (int, str, float, dict, list, type(None), datetime)), (res, type(res))
+#     return res
+
+def cast_to_python_string(state, obj: objects.AbsInstance):
+    res = cast_to_python(state, obj)
+    if not isinstance(res, str):
+        raise Signal.make(T.TypeError, obj, f"Expected string, got '{res}'")
+    return res
+
+def cast_to_python_int(state, obj: objects.AbsInstance):
+    res = cast_to_python(state, obj)
+    if not isinstance(res, int):
+        raise Signal.make(T.TypeError, obj, f"Expected string, got '{res}'")
+    return res

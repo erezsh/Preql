@@ -1,8 +1,8 @@
 from pathlib import Path
-
+from functools import wraps
 
 from .exceptions import Signal, pql_SyntaxError, ReturnSignal
-from .evaluate import State, execute, eval_func_call, import_module
+from .evaluate import State, execute, eval_func_call, import_module, evaluate, localize
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -10,7 +10,7 @@ from .interp_common import new_value_instance
 from .context import context
 
 from .pql_functions import internal_funcs, joins
-from .pql_types import T, from_python, Object
+from .pql_types import T, Object
 
 
 def initial_namespace():
@@ -24,6 +24,12 @@ def initial_namespace():
     return [{name: module}]
 
 
+def entrypoint(f):
+    @wraps(f)
+    def inner(interp, *args, **kwargs):
+        with interp.setup_context():
+            return f(interp, *args, **kwargs)
+    return inner
 
 class Interpreter:
     def __init__(self, sqlengine, fmt='text', use_core=True):
@@ -40,11 +46,7 @@ class Interpreter:
     def setup_context(self):
         return context(state=self.state)
 
-    def call_func(self, fname, args):
-        with self.setup_context():
-            return eval_func_call(self.state, self.state.get_var(fname), args)
-
-    def execute_code(self, code, source_file, args=None):
+    def _execute_code(self, code, source_file, args=None):
         assert not args, "Not implemented yet: %s" % args
         try:
             stmts = parse_stmts(code, source_file)
@@ -53,24 +55,23 @@ class Interpreter:
 
 
         last = None
-        with self.setup_context():
-            if stmts:
-                if isinstance(stmts[0], ast.Const) and stmts[0].type == T.string:
-                    self.set_var('__doc__', stmts[0].value) 
+        if stmts:
+            if isinstance(stmts[0], ast.Const) and stmts[0].type == T.string:
+                self.set_var('__doc__', stmts[0].value) 
 
-            for stmt in stmts:
-                try:
-                    last = execute(self.state, stmt)
-                except ReturnSignal:
-                    raise Signal.make(T.CodeError, stmt, "'return' outside of function")
+        for stmt in stmts:
+            try:
+                last = execute(self.state, stmt)
+            except ReturnSignal:
+                raise Signal.make(T.CodeError, stmt, "'return' outside of function")
 
         return last
 
-    def include(self, fn, rel_to=None):
+    def _include(self, fn, rel_to=None):
         if rel_to:
             fn = Path(rel_to).parent / fn
         with open(fn, encoding='utf8') as f:
-            self.execute_code(f.read(), fn)
+            self._execute_code(f.read(), fn)
 
     def set_var(self, name, value):
         if not isinstance(value, Object):
@@ -88,3 +89,23 @@ class Interpreter:
             return False
         return True
 
+
+
+    #####################
+
+    execute_code = entrypoint(_execute_code)
+    include = entrypoint(_include)
+
+
+    @entrypoint
+    def evaluate_obj(self, obj):
+        return evaluate(self.state, obj)
+
+    @entrypoint
+    def localize_obj(self, obj):
+        return localize(self.state, obj)
+
+    @entrypoint
+    def call_func(self, fname, args):
+        res = eval_func_call(self.state, self.state.get_var(fname), args)
+        return evaluate(self.state, res)

@@ -13,8 +13,8 @@ from .exceptions import Signal, ExitInterp
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import State, new_value_instance, assert_type
-from .evaluate import evaluate, cast_to_python, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
+from .interp_common import State, new_value_instance, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
+from .evaluate import evaluate, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
 from .pql_types import T, Type, Id
 from .types_impl import join_names
 from .casts import cast
@@ -53,8 +53,8 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
         >> PY("sys.version", "import sys")
         "3.8.2 (tags/v3.8.2:7b3ab59, Feb 25 2020, 23:03:10)"
     """
-    py_code = cast_to_python(state, code_expr)
-    py_setup = cast_to_python(state, code_setup)
+    py_code = cast_to_python_string(state, code_expr)
+    py_setup = cast_to_python_string(state, code_setup)
 
     py_code = re.sub(r"\$\w+", lambda m: _pql_PY_callback(state, m), py_code)
 
@@ -142,7 +142,7 @@ def pql_fmt(state: State, s: T.string):
         │ c!    │
         └───────┘
     """
-    _s = cast_to_python(state, s)
+    _s = cast_to_python_string(state, s)
 
     tokens = re_split(r"\$\w+", _s)
     string_parts = []
@@ -624,7 +624,7 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string].as_
     Example:
         >> import_table("my_sql_table", ["some_column", "another_column])
     """
-    name_str = cast_to_python(state, name)
+    name_str = cast_to_python_string(state, name)
     assert isinstance(name_str, str)
     columns_whitelist = cast_to_python(state, columns)
     if columns_whitelist is not None:
@@ -651,7 +651,7 @@ def pql_connect(state: State, uri: T.string, load_all_tables: T.bool = ast.false
     Example:
         >> connect("sqlite://:memory:")     // Connect to a database in memory
     """
-    uri = cast_to_python(state, uri)
+    uri = cast_to_python_string(state, uri)
     load_all_tables = cast_to_python(state, load_all_tables)
     auto_create = cast_to_python(state, auto_create)
     state.connect(uri, auto_create=auto_create)
@@ -802,8 +802,8 @@ def pql_import_json(state: State, table_name: T.string, uri: T.string):
     Note:
         This function requires the `pandas` Python package.
     """
-    table_name = cast_to_python(state, table_name)
-    uri = cast_to_python(state, uri)
+    table_name = cast_to_python_string(state, table_name)
+    uri = cast_to_python_string(state, uri)
     print(f"Importing JSON file: '{uri}'")
 
     import pandas
@@ -823,7 +823,7 @@ def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.b
     """
     # TODO better error handling, validation
 
-    filename = cast_to_python(state, filename)
+    filename = cast_to_python_string(state, filename)
     header = cast_to_python(state, header)
     msg = f"Importing CSV file: '{filename}'"
 
@@ -924,7 +924,7 @@ def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080
     except ImportError:
         raise Signal.make(T.ImportError, None, "uvicorn not installed! Run 'pip install uvicorn'")
 
-    port_ = cast_to_python(state, port)
+    port_ = cast_to_python_int(state, port)
 
     async def root(_request):
         return JSONResponse(list(endpoints.attrs))

@@ -1,7 +1,6 @@
 from typing import List, Optional
 import logging
 from pathlib import Path
-from datetime import datetime
 
 from .utils import safezip, dataclass, SafeDict, listgen
 from .interp_common import assert_type, exclude_fields, call_pql_func, is_global_scope
@@ -235,7 +234,7 @@ def _execute(state: State, p: ast.Print):
     for inst in insts:
         # inst = evaluate(state, p.value)
         if inst.type <= T.string:
-            repr_ = cast_to_python(state, inst)
+            repr_ = cast_to_python_string(state, inst)
         else:
             repr_ = inst.repr()
 
@@ -557,7 +556,7 @@ def _call_expr(state, expr):
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
     count = call_pql_func(state, "count", [table])
-    return bool(cast_to_python(state, count))
+    return bool(cast_to_python_int(state, count))
 
 @dy
 def test_nonzero(state: State, inst: objects.Instance):
@@ -841,6 +840,8 @@ def evaluate(state, obj: list):
 
 @dy
 def evaluate(state, obj_):
+    assert context.state
+
     # - Generic, non-db related operations
     obj = simplify(state, obj_)
     assert obj, obj_
@@ -967,6 +968,8 @@ def new_table_from_expr(state, name, expr, const, temporary):
     return objects.new_table(table)
 
 
+# cast_to_python - make sure the value is a native python object, not a preql instance
+
 @dy
 def cast_to_python(state, obj):
     raise Signal.make(T.TypeError, None, f"Unexpected value: {pql_repr(obj.type, obj)}")
@@ -990,7 +993,6 @@ def cast_to_python(state, obj: objects.AbsInstance):
     elif obj.type == T.bool:
         assert res in (0, 1), res
         res = bool(res)
-    assert isinstance(res, (int, str, float, dict, list, type(None), datetime)), (res, type(res))
     return res
 
 

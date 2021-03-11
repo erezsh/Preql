@@ -9,7 +9,7 @@ from .pql_types import T, ITEM_NAME
 from . import pql_objects as objects
 from . import pql_ast as ast
 from .types_impl import dp_type, pql_repr
-from .interp_common import call_pql_func, cast_to_python
+from .interp_common import call_pql_func, cast_to_python_int, cast_to_python
 
 from .context import context
 
@@ -71,7 +71,7 @@ def table_limit(table, state, limit, offset=0):
 
 def _call_pql_func(state, name, args):
     count = call_pql_func(state, name, args)
-    return cast_to_python(state, count)
+    return cast_to_python_int(state, count)
 
 def _html_table(name, count_str, rows, offset, has_more, colors):
     assert colors

@@ -6,7 +6,7 @@ from . import pql_ast as ast
 from . import pql_objects as objects
 from .utils import classify
 from .interpreter import Interpreter
-from .evaluate import cast_to_python, localize, evaluate
+from .evaluate import cast_to_python
 from .interp_common import create_engine, call_pql_func
 from .pql_types import T
 from .pql_functions import import_pandas
@@ -76,11 +76,11 @@ class TablePromise:
         return repr(self.to_json())
 
 
-def promise(state, inst):
+def _prepare_instance_for_user(interp, inst):
     if inst.type <= T.table:
-        return TablePromise(state, inst)
+        return TablePromise(interp.state, inst)
 
-    return localize(state, inst)
+    return interp.localize_obj(inst)
 
 
 class Preql:
@@ -123,23 +123,25 @@ class Preql:
 
     def __getattr__(self, fname):
         var = self.interp.state.get_var(fname)
+
         if isinstance(var, objects.Function):
             def delegate(*args, **kw):
                 if kw:
                     raise NotImplementedError("No support for keywords yet")
+
                 pql_args = [objects.from_python(a) for a in args]
                 pql_res = self.interp.call_func(fname, pql_args)
-                pql_res = evaluate(self.interp.state, pql_res)
                 return self._wrap_result( pql_res )
             return delegate
         else:
-            return self._wrap_result( evaluate( self.interp.state, var ))
+            obj = self.interp.evaluate_obj( var )
+            return self._wrap_result(obj)
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
         if isinstance(res, ast.Ast):
             raise TypeError("Returned object cannot be converted into a Python representation")
-        return promise(self.interp.state, res)  # TODO session, not state
+        return _prepare_instance_for_user(self.interp, res)  # TODO session, not state
 
     def _run_code(self, pq: str, source_file: str, **args):
         pql_args = {name: objects.from_python(value) for name, value in args.items()}

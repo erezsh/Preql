@@ -8,7 +8,7 @@ from . import settings
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
+from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python_string, cast_to_python_int
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
@@ -668,7 +668,7 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
 
 @dy
 def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
-    sql_code = cast_to_python(state, rps.string)
+    sql_code = cast_to_python_string(state, rps.string)
     if not isinstance(sql_code, str):
         raise Signal.make(T.TypeError, rps, f"Expected string, got '{rps.string}'")
 
@@ -750,8 +750,8 @@ def compile_to_inst(state: State, s: ast.Slice):
     if obj.type <= T.string:
         code = sql.StringSlice(obj.code, sql.add_one(start.code), stop and sql.add_one(stop.code))
     else:
-        start_n = cast_to_python(state, start)
-        stop_n = stop and cast_to_python(state, stop)
+        start_n = cast_to_python_int(state, start)
+        stop_n = stop and cast_to_python_int(state, stop)
         code = sql.table_slice(obj, start_n, stop_n)
 
     return make_instance(code, obj.type, instances)
@@ -875,13 +875,13 @@ def compile_to_inst(state: State, range: ast.Range):
     # TODO move to sql.py
     # Requires subqueries to be part of 'code' instead of a separate 'subqueries'?
     # But then what's the point of an instance, other than carrying methods...
-    start = cast_to_python(state, range.start) if range.start else 0
+    start = cast_to_python_int(state, range.start) if range.start else 0
     if not isinstance(start, int):
         raise Signal.make(T.TypeError, range, "Range must be between integers")
 
     stop = None
     if range.stop:
-        stop = cast_to_python(state, range.stop)
+        stop = cast_to_python_int(state, range.stop)
         if not isinstance(stop, int):
             raise Signal.make(T.TypeError, range, "Range must be between integers")
     elif state.db.target in (sql.mysql, sql.bigquery):
