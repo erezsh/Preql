@@ -8,6 +8,7 @@ from . import __version__
 
 pql = preql.Preql()
 pql.set_output_format('html')
+display = pql._display
 
 class PreqlKernel(Kernel):
     implementation = 'Preql'
@@ -41,12 +42,14 @@ class PreqlKernel(Kernel):
                         res = res.repr()
 
                     json = {
-                        'output': str(res),
+                        'output': display.as_html() + str(res),
                         'success': True
                     }
                 except preql.Signal as e:
+                    display.print_exception(e)
+
                     json = {
-                        'output': '<pre>%s</pre>' % str(e),
+                        'output': display.as_html(),
                         'success': False
                     }
 

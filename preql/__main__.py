@@ -4,7 +4,6 @@ from itertools import chain
 import time
 
 from . import Preql, __version__, Signal
-from .core.display import display
 
 parser = argparse.ArgumentParser(description='Preql command-line interface')
 parser.add_argument('-i', '--interactive', action='store_true', default=False,
@@ -64,7 +63,7 @@ def main():
 
             interactive = True
     except Signal as e:
-        display.print_exception(e)
+        p._display.print_exception(e)
         res = -1
         if args.python_traceback:
             raise

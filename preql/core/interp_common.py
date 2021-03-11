@@ -40,10 +40,10 @@ class AccessLevels:
 class State:
     AccessLevels = AccessLevels
 
-    def __init__(self, interp, db, fmt, ns=None):
+    def __init__(self, interp, db, display, ns=None):
         self.db = db
         self.interp = interp
-        self.fmt = fmt
+        self.display = display
         # Add logger?
 
         self.ns = Namespace(ns)
@@ -55,7 +55,7 @@ class State:
 
     @classmethod
     def clone(cls, inst):
-        s = cls(inst.interp, inst.db, inst.fmt)
+        s = cls(inst.interp, inst.db, inst.display)
         s.ns = copy(inst.ns)
         s.tick = inst.tick
         s.access_level = inst.access_level

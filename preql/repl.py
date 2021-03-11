@@ -34,7 +34,7 @@ from .core.exceptions import Signal, ExitInterp, pql_SyntaxError
 from .core.autocomplete import autocomplete
 from .core.parser import parse_stmts
 from .core import pql_objects as objects
-from .core.display import display, table_more
+from .core.display import table_more
 from .core.pql_types import Object
 from .core.pql_types import T
 
@@ -170,6 +170,7 @@ def start_repl(p, prompt=' >> '):
 
     p.set_output_format('rich')
 
+    display = p._display
     console = display.console
     console.print(f"[purple]Preql {__version__} interactive prompt. Type help() for help[/purple]")
 

@@ -93,18 +93,25 @@ class Preql:
         self._db_uri = db_uri
         self._print_sql = print_sql
         self._auto_create = auto_create
+        self._display = display.RichDisplay()
         # self.engine.ping()
 
         engine = create_engine(self._db_uri, print_sql=self._print_sql, auto_create=auto_create)
         self._reset_interpreter(engine)
 
     def set_output_format(self, fmt):
-        self.interp.state.fmt = fmt  # TODO proper api
+        if fmt == 'html':
+            self._display = display.HtmlDisplay()
+        else:
+            self._display = display.RichDisplay()
+
+        self.interp.state.display = self._display  # TODO proper api
+        
 
     def _reset_interpreter(self, engine=None):
         if engine is None:
             engine = self.interp.state.db
-        self.interp = Interpreter(engine)
+        self.interp = Interpreter(engine, self._display)
         self.interp.state._py_api = self # TODO proper api
 
     def close(self):

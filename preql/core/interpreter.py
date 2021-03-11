@@ -34,8 +34,8 @@ def entrypoint(f):
     return inner
 
 class Interpreter:
-    def __init__(self, sqlengine, fmt='text', use_core=True):
-        self.state = State(self, sqlengine, fmt, initial_namespace())
+    def __init__(self, sqlengine, display, use_core=True):
+        self.state = State(self, sqlengine, display, initial_namespace())
         if use_core:
             mns = import_module(self.state, ast.Import('__builtins__', use_core=False)).namespace
             bns = self.state.get_var('__builtins__').namespace
