@@ -6,6 +6,7 @@ from parameterized import parameterized_class
 from preql.pql_objects import UserFunction
 from preql.exceptions import Signal
 from preql.pql_types import T
+from preql.sql_interface import _drop_tables
 
 from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI, BIGQUERY_URI
 
@@ -17,7 +18,7 @@ def uses_tables(*names):
                 return decorated(self)
 
             p = self.Preql()
-            tables = p.interp.state.db.list_tables()
+            tables = p.interp.list_tables()
             def _key(t):
                 try:
                     return names.index(t.lower())
@@ -26,7 +27,7 @@ def uses_tables(*names):
             tables.sort(key=_key)
             if tables:
                 print("@@ Deleting", tables, decorated)
-            p._drop_tables(*tables)
+            _drop_tables(p.interp.state, *tables)
             # assert not tables
             try:
                 return decorated(self)
@@ -34,8 +35,8 @@ def uses_tables(*names):
                 p = self.preql
                 # Table contents weren't dropped, due to autocommit
                 if p.interp.state.db.target in (mysql, bigquery):
-                    p._drop_tables(*names)
-                tables = p.interp.state.db.list_tables()
+                    _drop_tables(p.interp.state, *names)
+                tables = p.interp.list_tables()
                 assert not tables, tables
 
         return wrapper

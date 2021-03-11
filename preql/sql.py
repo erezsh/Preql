@@ -274,7 +274,7 @@ class Cast(SqlTree):
     value: Sql
 
     def _compile(self, qb):
-        t = compile_type(qb.target, self.type.as_nullable())     # XXX as-nullable here is a hack
+        t = _compile_type(qb.target, self.type.as_nullable())     # XXX as-nullable here is a hack
         return [f'CAST('] + self.value.compile_wrap(qb).code + [f' AS {t})']
 
 
@@ -809,36 +809,6 @@ class Join(TableOperation):
 
 
 
-
-
-def deletes_by_ids(table, ids):
-    for id_ in ids:
-        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
-        yield Delete(TableName(table.type, table.type.options['name']), [compare])
-
-def updates_by_ids(table, proj, ids):
-    sql_proj = {Name(value.type, name): value.code for name, value in proj.items()}
-    for id_ in ids:
-        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
-        yield Update(TableName(table.type, table.type.options['name']), sql_proj, [compare])
-
-def _sql_primitive_to_float(e):
-    if e.type == T.int:
-        return e.replace(
-            type=T.float,
-            text=str(float(e.text))
-        )
-    assert t.type == T.float
-    return
-
-def create_list(name, elems):
-    # Assumes all elems have the same type!
-    t = T.list[elems[0].type]
-    subq = TableQueryValues(t, name, elems)
-    table = TableName(t, Id(name))
-    return table, subq, t
-
-
 @dataclass
 class BigQueryValues(SqlTree):
     type: Type
@@ -878,47 +848,6 @@ class TableQueryValues(SqlTree):
         subq = Subquery(self.name, fields, values_cls(self.type, self.rows))
         return subq._compile(qb)
 
-def create_table(t, name, rows):
-    subq = TableQueryValues(t, name, rows)
-    table = TableName(t, Id(name))
-    return table, subq
-
-def table_slice(table, start, stop):
-    limit = stop - start if stop else None
-    return Select(table.type, table.code, [AllFields(table.type)], offset=start, limit=limit)
-
-def table_selection(table, conds):
-    return Select(table.type, table.code, [AllFields(table.type)], conds=conds)
-
-def table_order(table, fields):
-    return Select(table.type, table.code, [AllFields(table.type)], order=fields)
-
-def arith(target, res_type, op, args):
-    arg_codes = list(args)
-    if res_type == T.string:
-        assert op == '+'
-        op = '||'
-        if target is mysql: # doesn't support a || b
-            return FuncCall(res_type, 'concat', arg_codes)
-    elif op == '/':
-        if target != mysql:
-            # In MySQL division returns a float. All others return int
-            arg_codes[0] = Cast(T.float, arg_codes[0])
-    elif op == '/~':
-        if target == mysql:
-            op = 'DIV'
-        elif target == bigquery:
-            # safe div?
-            return FuncCall(res_type, 'div', arg_codes)
-        else:
-            op = '/'
-    elif op == '%':
-        if target is bigquery:
-            return FuncCall(res_type, 'mod', arg_codes)
-    elif op == '**':
-        return FuncCall(T.float, 'power', arg_codes)
-
-    return BinOp(op, arg_codes)
 
 
 @dataclass
@@ -973,24 +902,8 @@ def _repr(_t: T.datetime, x):
 
 @dp_type
 def _repr(_t: T.union[T.string, T.text], x):
-    if context.state.db.target == bigquery:
-        return "'%s'" % str(x).replace("'", r"\'")
-    else:
-        return "'%s'" % str(x).replace("'", "''")
-
-def make_value(x):
-    if x is None:
-        return null
-
-    try:
-        t = pql_types.from_python(type(x))
-    except KeyError:
-        raise ValueError(x)
-
-    return Primitive(t, _repr(t, x))
-
-def add_one(x):
-    return BinOp('+', [x, make_value(1)])
+    quoted_quote = r"\'" if context.state.db.target == bigquery else "''"
+    return "'%s'" % str(x).replace("'", quoted_quote)
 
 def _quote(target, name):
     assert isinstance(name, str), name
@@ -1001,62 +914,16 @@ def _quote(target, name):
     else:
         return f'"{name}"'
 
-def compile_type_def(state, table_name, table) -> Sql:
-    assert table <= T.table
 
-    target = state.db.target
-
-    posts = []
-    pks = []
-    columns = []
-
-    pks = {join_names(pk) for pk in table.options['pk']}
-    for name, c in flatten_type(table):
-        if name in pks and c <= T.t_id:
-            if target == postgres:
-                type_ = "SERIAL" # Postgres
-            elif target == mysql:
-                type_ = "INTEGER NOT NULL AUTO_INCREMENT"
-            elif target == bigquery:
-                type_ = "STRING NOT NULL"
-            else:
-                type_ = "INTEGER"   # TODO non-int idtypes
-        else:
-            type_ = compile_type(target if target != mysql else 'mysql_def', c)
-
-        columns.append( f'{_quote(target, name)} {type_}' )
-
-        if c <= T.t_relation:
-            if state.db.target != 'bigquery':
-                # TODO any column, using projection / get_attr
-                if not table.options.get('temporary', False):
-                    # In postgres, constraints on temporary tables may reference only temporary tables
-                    rel = c.options['rel']
-                    if rel['key']:          # Requires a unique constraint
-                        _tbl_name ,= rel['table'].options['name'].parts   # TODO fix for multiple parts
-                        s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, _tbl_name)}({rel['column']})"
-                        posts.append(s)
-
-    if pks and target != bigquery:
-        names = ", ".join(pks)
-        posts.append(f"PRIMARY KEY ({names})")
-
-    # Consistent among SQL databases
-    command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
-    return RawSql(T.nulltype, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
-
-def compile_drop_table(state, table_name) -> Sql:
-    target = state.db.target
-    return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
 
 @dp_type
-def compile_type(target, type_: T.t_relation):
+def _compile_type(target, type_: T.t_relation):
     # TODO might have a different type
     #return 'INTEGER'    # Foreign-key is integer
-    return compile_type(target, type_.elems['item'])
+    return _compile_type(target, type_.elems['item'])
 
 @dp_type
-def compile_type(target, type_: T.primitive):
+def _compile_type(target, type_: T.primitive):
     if target == bigquery:
         d = {
             'int': "INT64",
@@ -1090,13 +957,13 @@ def compile_type(target, type_: T.primitive):
     return s
 
 @dp_type
-def compile_type(target, _type: T.nulltype):
+def _compile_type(target, _type: T.nulltype):
     if target == bigquery:
         return 'INT64'
     return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
 
 @dp_type
-def compile_type(target, idtype: T.t_id):
+def _compile_type(target, idtype: T.t_id):
     if target == bigquery:
         s = "STRING"
     else:
@@ -1106,12 +973,12 @@ def compile_type(target, idtype: T.t_id):
     return s
 
 @dp_type
-def compile_type(target, _type: T.json):
+def _compile_type(target, _type: T.json):
     return 'JSON'
 
 
 
-def _from_datetime(state, s):
+def _from_datetime(s):
     if s is None:
         return None
 
@@ -1128,8 +995,58 @@ def _from_datetime(state, s):
         raise Signal.make(T.ValueError, None, str(e))
 
 
+@dp_type
+def _restructure_result(t, i):
+    raise Signal.make(T.TypeError, None, f"Unexpected type used: {t}")
+
+@dp_type
+def _restructure_result(t: T.table, i):
+    # return ({name: _restructure_result(state, col, i) for name, col in t.elem_dict.items()})
+    return next(i)
+
+@dp_type
+def _restructure_result(t: T.struct, i):
+    return ({name: _restructure_result(col, i) for name, col in t.elems.items()})
+
+@dp_type
+def _restructure_result(_t: T.union[T.primitive, T.nulltype], i):
+    return next(i)
+
+
+@dp_type
+def _restructure_result(t: T.json_array[T.union[T.primitive, T.nulltype]], i):
+    res = next(i)
+    if not res:
+        return res
+
+    target = context.state.db.target
+    if target == mysql:
+        res = json.loads(res)
+    elif target == sqlite:
+        assert isinstance(res, str), res
+        res = res.split(_ARRAY_SEP)
+
+    # XXX hack! TODO Use a generic form to cast types
+    if t.elem <= T.int:
+        res = [int(x) for x in res]
+    elif t.elem <= T.float:
+        res = [float(x) for x in res]
+    return res
+
+@dp_type
+def _restructure_result(_t: T.datetime, i):
+    s = next(i)
+    return _from_datetime(s)
+
+# API
+
+def compile_drop_table(state, table_name) -> Sql:
+    target = state.db.target
+    return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
+
+
 @dp_inst
-def from_sql(state, res: T.primitive):
+def from_sql(res: T.primitive):
     try:
         row ,= res.value
         item ,= row
@@ -1142,12 +1059,12 @@ def from_sql(state, res: T.primitive):
 
 
 @dp_inst
-def from_sql(state, res: T.datetime):
+def from_sql(res: T.datetime):
     # XXX doesn't belong here?
     row ,= res.value
     item ,= row
     s = item
-    return _from_datetime(state, s)
+    return _from_datetime(s)
 
 def _from_sql_primitive(p):
     if isinstance(p, decimal.Decimal):
@@ -1156,7 +1073,7 @@ def _from_sql_primitive(p):
     return p
 
 @dp_inst
-def from_sql(state, arr: T.list):
+def from_sql(arr: T.list):
     fields = flatten_type(arr.type)
     if not all(len(e)==len(fields) for e in arr.value):
         raise Signal.make(T.TypeError, None, f"Expected 1 column. Got {len(arr.value[0])}")
@@ -1168,52 +1085,135 @@ def from_sql(state, arr: T.list):
 
 @dp_inst
 @listgen
-def from_sql(state, arr: T.table):
+def from_sql(arr: T.table):
     expected_length = len(flatten_type(arr.type))   # TODO optimize?
     for row in arr.value:
         if len(row) != expected_length:
             raise Signal.make(T.TypeError, None, f"Expected {expected_length} columns, but got {len(row)}")
         i = iter(row)
-        yield {name: restructure_result(state, col, i) for name, col in arr.type.elems.items()}
-
-@dp_type
-def restructure_result(state, t, i):
-    raise Signal.make(T.TypeError, None, f"Unexpected type used: {t}")
-
-@dp_type
-def restructure_result(state, t: T.table, i):
-    # return ({name: restructure_result(state, col, i) for name, col in t.elem_dict.items()})
-    return next(i)
-
-@dp_type
-def restructure_result(state, t: T.struct, i):
-    return ({name: restructure_result(state, col, i) for name, col in t.elems.items()})
-
-@dp_type
-def restructure_result(state, _t: T.union[T.primitive, T.nulltype], i):
-    return next(i)
+        yield {name: _restructure_result(col, i) for name, col in arr.type.elems.items()}
 
 
-@dp_type
-def restructure_result(state, t: T.json_array[T.union[T.primitive, T.nulltype]], i):
-    res = next(i)
-    if not res:
-        return res
+def compile_type_def(state, table_name, table) -> Sql:
+    assert table <= T.table
 
-    if state.db.target == mysql:
-        res = json.loads(res)
-    elif state.db.target == sqlite:
-        assert isinstance(res, str), res
-        res = res.split(_ARRAY_SEP)
+    target = state.db.target
 
-    # XXX hack! TODO Use a generic form to cast types
-    if t.elem <= T.int:
-        res = [int(x) for x in res]
-    elif t.elem <= T.float:
-        res = [float(x) for x in res]
-    return res
+    posts = []
+    pks = []
+    columns = []
 
-@dp_type
-def restructure_result(state, _t: T.datetime, i):
-    s = next(i)
-    return _from_datetime(state, s)
+    pks = {join_names(pk) for pk in table.options['pk']}
+    for name, c in flatten_type(table):
+        if name in pks and c <= T.t_id:
+            if target == postgres:
+                type_ = "SERIAL" # Postgres
+            elif target == mysql:
+                type_ = "INTEGER NOT NULL AUTO_INCREMENT"
+            elif target == bigquery:
+                type_ = "STRING NOT NULL"
+            else:
+                type_ = "INTEGER"   # TODO non-int idtypes
+        else:
+            type_ = _compile_type(target if target != mysql else 'mysql_def', c)
+
+        columns.append( f'{_quote(target, name)} {type_}' )
+
+        if c <= T.t_relation:
+            if state.db.target != 'bigquery':
+                # TODO any column, using projection / get_attr
+                if not table.options.get('temporary', False):
+                    # In postgres, constraints on temporary tables may reference only temporary tables
+                    rel = c.options['rel']
+                    if rel['key']:          # Requires a unique constraint
+                        _tbl_name ,= rel['table'].options['name'].parts   # TODO fix for multiple parts
+                        s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, _tbl_name)}({rel['column']})"
+                        posts.append(s)
+
+    if pks and target != bigquery:
+        names = ", ".join(pks)
+        posts.append(f"PRIMARY KEY ({names})")
+
+    # Consistent among SQL databases
+    command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
+    return RawSql(T.nulltype, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
+
+
+
+
+def deletes_by_ids(table, ids):
+    for id_ in ids:
+        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
+        yield Delete(TableName(table.type, table.type.options['name']), [compare])
+
+def updates_by_ids(table, proj, ids):
+    sql_proj = {Name(value.type, name): value.code for name, value in proj.items()}
+    for id_ in ids:
+        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
+        yield Update(TableName(table.type, table.type.options['name']), sql_proj, [compare])
+
+def create_list(name, elems):
+    # Assumes all elems have the same type!
+    t = T.list[elems[0].type]
+    subq = TableQueryValues(t, name, elems)
+    table = TableName(t, Id(name))
+    return table, subq, t
+
+
+
+def create_table(t, name, rows):
+    subq = TableQueryValues(t, name, rows)
+    table = TableName(t, Id(name))
+    return table, subq
+
+def table_slice(table, start, stop):
+    limit = stop - start if stop else None
+    return Select(table.type, table.code, [AllFields(table.type)], offset=start, limit=limit)
+
+def table_selection(table, conds):
+    return Select(table.type, table.code, [AllFields(table.type)], conds=conds)
+
+def table_order(table, fields):
+    return Select(table.type, table.code, [AllFields(table.type)], order=fields)
+
+def arith(target, res_type, op, args):
+    arg_codes = list(args)
+    if res_type == T.string:
+        assert op == '+'
+        op = '||'
+        if target is mysql: # doesn't support a || b
+            return FuncCall(res_type, 'concat', arg_codes)
+    elif op == '/':
+        if target != mysql:
+            # In MySQL division returns a float. All others return int
+            arg_codes[0] = Cast(T.float, arg_codes[0])
+    elif op == '/~':
+        if target == mysql:
+            op = 'DIV'
+        elif target == bigquery:
+            # safe div?
+            return FuncCall(res_type, 'div', arg_codes)
+        else:
+            op = '/'
+    elif op == '%':
+        if target is bigquery:
+            return FuncCall(res_type, 'mod', arg_codes)
+    elif op == '**':
+        return FuncCall(T.float, 'power', arg_codes)
+
+    return BinOp(op, arg_codes)
+
+    
+def make_value(x):
+    if x is None:
+        return null
+
+    try:
+        t = pql_types.from_python(type(x))
+    except KeyError:
+        raise ValueError(x)
+
+    return Primitive(t, _repr(t, x))
+
+def add_one(x):
+    return BinOp('+', [x, make_value(1)])

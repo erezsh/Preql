@@ -1,26 +1,15 @@
 from contextlib import contextmanager
 
-
 from . import settings
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .utils import classify
 from .interpreter import Interpreter
-from .evaluate import cast_to_python
-from .interp_common import create_engine, call_pql_func
+from .sql_interface import create_engine
 from .pql_types import T
-from .pql_functions import import_pandas
-from .context import context
-from . import sql
 
 from . import display
 display.install_reprs()
-
-
-def _call_pql_func(state, name, args):
-    with context(state=state):
-        count = call_pql_func(state, name, args)
-        return cast_to_python(state, count)
 
 
 class TablePromise:
@@ -29,15 +18,15 @@ class TablePromise:
     Fetching values creates queries to database engine
     """
 
-    def __init__(self, state, inst):
-        self._state = state
+    def __init__(self, interp, inst):
+        self._interp = interp
         self._inst = inst
         self._rows = None
 
     def to_json(self):
         "Returns table as a list of rows, i.e. ``[{col1: value, col2: value, ...}, ...]``"
         if self._rows is None:
-            self._rows = cast_to_python(self._state, self._inst)
+            self._rows = self._interp.cast_to_python(self._inst)
         assert self._rows is not None
         return self._rows
 
@@ -55,22 +44,22 @@ class TablePromise:
 
     def __len__(self):
         "Run a count query on table"
-        return _call_pql_func(self._state, 'count', [self._inst])
+        count = self._interp.call_builtin_func('count', [self._inst])
+        return self._interp.cast_to_python(count)
 
     def __iter__(self):
         return iter(self.to_json())
 
     def __getitem__(self, index):
         "Run a slice query on table"
-        with context(state=self._state):
-            if isinstance(index, slice):
-                offset = index.start or 0
-                limit = index.stop - offset
-                return call_pql_func(self._state, 'limit_offset', [self._inst, ast.make_const(limit), ast.make_const(offset)])
+        if isinstance(index, slice):
+            offset = index.start or 0
+            limit = index.stop - offset
+            return self._interp.call_builtin_func('limit_offset', [self._inst, ast.make_const(limit), ast.make_const(offset)])
 
-            # TODO different debug log level / mode
-            res ,= cast_to_python(self._state, self[index:index+1])
-            return res
+        # TODO different debug log level / mode
+        res ,= self._interp.cast_to_python(self[index:index+1])
+        return res
 
     def __repr__(self):
         return repr(self.to_json())
@@ -78,7 +67,7 @@ class TablePromise:
 
 def _prepare_instance_for_user(interp, inst):
     if inst.type <= T.table:
-        return TablePromise(interp.state, inst)
+        return TablePromise(interp, inst)
 
     return interp.localize_obj(inst)
 
@@ -104,6 +93,7 @@ class Preql:
         """
         self._db_uri = db_uri
         self._print_sql = print_sql
+        self._auto_create = auto_create
         # self.engine.ping()
 
         engine = create_engine(self._db_uri, print_sql=self._print_sql, auto_create=auto_create)
@@ -182,12 +172,6 @@ class Preql:
     def rollback(self):
         return self.interp.state.db.rollback()
 
-    def _drop_tables(self, *tables):
-        state = self.interp.state
-        # XXX temporary. Used for testing
-        for t in tables:
-            t = sql._quote(state.db.target, state.db.qualified_name(t))
-            state.db._execute_sql(T.nulltype, f"DROP TABLE {t};", state)
 
     def import_pandas(self, **dfs):
         """Import pandas.DataFrame instances into SQL tables
@@ -195,28 +179,11 @@ class Preql:
         Example:
             >>> pql.import_pandas(a=df_a, b=df_b)
         """
-        with self.interp.setup_context():
-            return list(import_pandas(self.interp.state, dfs))
+        return self.interp.import_pandas(dfs)
 
 
     def load_all_tables(self):
-        table_types = self.interp.state.db.import_table_types(self.interp.state)
-        table_types_by_schema = classify(table_types, lambda x: x[0], lambda x: x[1:])
-
-        for schema_name, table_types in table_types_by_schema.items():
-            if schema_name:
-                schema = objects.Module(schema_name, {})
-                self.interp.set_var(schema_name, schema)
-
-            for table_name, table_type in table_types:
-                db_name = table_type.options['name']
-                inst = objects.new_table(table_type, db_name)
-
-                if schema_name:
-                    schema.namespace[table_name] = inst
-                else:
-                    if not self.interp.has_var(table_name):
-                        self.interp.set_var(table_name, inst)
+        return self.interp.load_all_tables()
 
 
 

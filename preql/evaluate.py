@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 
 from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type, exclude_fields, call_pql_func, is_global_scope
+from .interp_common import assert_type, exclude_fields, call_builtin_func, is_global_scope
 from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
@@ -85,14 +85,14 @@ def _execute(state: State, struct_def: ast.StructDef):
 
 def db_query(state: State, sql_code, subqueries=None):
     try:
-        return state.db.query(sql_code, subqueries, state=state)
+        return state.db.query(sql_code, subqueries)
     except exc.DatabaseQueryError as e:
         raise Signal.make(T.DbQueryError, None, e.args[0]) from e
 
 def drop_table(state, table_type):
     name ,= table_type.options['name'].parts
     code = sql.compile_drop_table(state, name)
-    return state.db.query(code, {}, state=state)
+    return state.db.query(code, {})
 
 
 @dy
@@ -125,7 +125,7 @@ def _execute(state: State, table_def: ast.TableDef):
     exists = state.db.table_exists(db_name.repr_name)
     if exists:
         assert not t.options['temporary']
-        cur_type = state.db.import_table_type(state, db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
+        cur_type = state.db.import_table_type(db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -555,7 +555,7 @@ def _call_expr(state, expr):
 # TODO fix these once we have proper types
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
-    count = call_pql_func(state, "count", [table])
+    count = call_builtin_func(state, "count", [table])
     return bool(cast_to_python_int(state, count))
 
 @dy

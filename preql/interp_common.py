@@ -199,7 +199,7 @@ def exclude_fields(state, table, fields):
     proj = ast.Projection(table, [ast.NamedField(None, ast.Ellipsis(None, exclude=list(fields) ), user_defined=False)])
     return evaluate(state, proj)
 
-def call_pql_func(state, name, args):
+def call_builtin_func(state, name, args):
     "Call a builtin pql function"
     builtins = state.ns.get_var('__builtins__')
     assert isinstance(builtins, objects.Module)

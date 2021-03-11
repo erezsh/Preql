@@ -9,7 +9,7 @@ from .pql_types import T, ITEM_NAME
 from . import pql_objects as objects
 from . import pql_ast as ast
 from .types_impl import dp_type, pql_repr
-from .interp_common import call_pql_func, cast_to_python_int, cast_to_python
+from .interp_common import call_builtin_func, cast_to_python_int, cast_to_python
 
 from .context import context
 
@@ -67,11 +67,8 @@ def pql_repr(t: T.nulltype, value):
 
 
 def table_limit(table, state, limit, offset=0):
-    return call_pql_func(state, 'limit_offset', [table, ast.make_const(limit), ast.make_const(offset)])
+    return call_builtin_func(state, 'limit_offset', [table, ast.make_const(limit), ast.make_const(offset)])
 
-def _call_pql_func(state, name, args):
-    count = call_pql_func(state, name, args)
-    return cast_to_python_int(state, count)
 
 def _html_table(name, count_str, rows, offset, has_more, colors):
     assert colors
@@ -164,7 +161,7 @@ def _view_table(state, table, size, offset):
 def table_repr(self, offset=0):
     state = context.state
 
-    count = _call_pql_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)])
+    count = cast_to_python_int(state, call_builtin_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)]))
     if count == MAX_AUTO_COUNT:
         count_str = f'>={count}'
     else:

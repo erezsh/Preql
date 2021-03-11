@@ -8,7 +8,7 @@ from . import settings
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python_string, cast_to_python_int
+from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_builtin_func, cast_to_python_string, cast_to_python_int
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
@@ -321,7 +321,7 @@ def _contains(state, op, a: T.string, b: T.string):
         'in': 'str_contains',
         '!in': 'str_notcontains',
     }[op]
-    return call_pql_func(state, f, [a, b])
+    return call_builtin_func(state, f, [a, b])
 
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.table):
@@ -412,7 +412,7 @@ def _compare(_state, op, a: T.primitive, b: T.primitive):
 @dp_inst
 def _compare(state, op, a: T.type, b: T.type):
     if op == '<=':
-        return call_pql_func(state, "issubclass", [a, b])
+        return call_builtin_func(state, "issubclass", [a, b])
     if op != '=':
         raise exc.Signal.make(T.NotImplementedError, op, f"Cannot compare types using: {op}")
     return new_value_instance(a == b)
@@ -491,7 +491,7 @@ def _compile_arith(state, arith, a: T.table, b: T.table):
 def _compile_arith(state, arith, a: T.string, b: T.int):
     if arith.op != '*':
         raise Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
-    return call_pql_func(state, "repeat", [a, b])
+    return call_builtin_func(state, "repeat", [a, b])
 
 
 @dp_inst

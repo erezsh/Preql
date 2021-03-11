@@ -1,13 +1,15 @@
 from pathlib import Path
 from functools import wraps
 
+from .utils import classify
 from .exceptions import Signal, pql_SyntaxError, ReturnSignal
-from .evaluate import State, execute, eval_func_call, import_module, evaluate, localize
+from .evaluate import State, execute, eval_func_call, import_module, evaluate, localize, cast_to_python
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .interp_common import new_value_instance
+from .interp_common import new_value_instance, call_builtin_func
 from .context import context
+from .pql_functions import import_pandas
 
 from .pql_functions import internal_funcs, joins
 from .pql_types import T, Object
@@ -54,11 +56,11 @@ class Interpreter:
             raise Signal(T.SyntaxError, [e.text_ref], e.message)
 
 
-        last = None
         if stmts:
             if isinstance(stmts[0], ast.Const) and stmts[0].type == T.string:
                 self.set_var('__doc__', stmts[0].value) 
 
+        last = None
         for stmt in stmts:
             try:
                 last = execute(self.state, stmt)
@@ -109,3 +111,40 @@ class Interpreter:
     def call_func(self, fname, args):
         res = eval_func_call(self.state, self.state.get_var(fname), args)
         return evaluate(self.state, res)
+
+    @entrypoint
+    def cast_to_python(self, obj):
+        return cast_to_python(self.state, obj)
+
+    @entrypoint
+    def call_builtin_func(self, name, args):
+        return call_builtin_func(self.state, name, args)
+
+    @entrypoint
+    def import_pandas(self, dfs):
+        return list(import_pandas(self.state, dfs))
+
+    @entrypoint
+    def list_tables(self):
+        return self.state.db.list_tables()
+
+
+    @entrypoint
+    def load_all_tables(self):
+        table_types = self.state.db.import_table_types()
+        table_types_by_schema = classify(table_types, lambda x: x[0], lambda x: x[1:])
+
+        for schema_name, table_types in table_types_by_schema.items():
+            if schema_name:
+                schema = objects.Module(schema_name, {})
+                self.set_var(schema_name, schema)
+
+            for table_name, table_type in table_types:
+                db_name = table_type.options['name']
+                inst = objects.new_table(table_type, db_name)
+
+                if schema_name:
+                    schema.namespace[table_name] = inst
+                else:
+                    if not self.has_var(table_name):
+                        self.set_var(table_name, inst)

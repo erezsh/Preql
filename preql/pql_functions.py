@@ -632,7 +632,7 @@ def pql_import_table(state: State, name: T.string, columns: T.list[T.string].as_
         columns_whitelist = set(columns_whitelist)
 
     # Get table type
-    t = state.db.import_table_type(state, name_str, columns_whitelist)
+    t = state.db.import_table_type(name_str, columns_whitelist)
     assert t <= T.table
 
     # Get table contents
@@ -721,7 +721,7 @@ def pql_tables(state: State):
     The resulting table has two columns: name, and type.
     """
     names = state.db.list_tables()
-    values = [(name, state.db.import_table_type(state, name, None)) for name in names]
+    values = [(name, state.db.import_table_type(name, None)) for name in names]
     tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in values]
 
     table_type = T.table(dict(name=T.string, type=T.string))
