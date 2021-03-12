@@ -614,4 +614,6 @@ def from_python(value):
     elif isinstance(value, Type):
         return value
 
-    raise TypeError(f"Cannot import into Preql a Python object of type {type}")
+    # raise TypeError(f"Cannot import into Preql a Python object of type {type}")
+
+    raise Signal.make(T.TypeError, None, f"Cannot import into Preql a Python object of type {type(value)}")

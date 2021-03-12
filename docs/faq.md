@@ -30,11 +30,13 @@ Include any information you can share. The best way is with a minimal code examp
 
 ### Where can I ask questions?
 
-You can ask any question here: https://github.com/erezsh/Preql/discussions
+You can ask any question here: [https://github.com/erezsh/Preql/discussions](https://github.com/erezsh/Preql/discussions)
 
 ### Contact Me
 
 If you want to contact me privately, you may do so through email, at erezshin at gmail.com, or through [twitter](https://twitter.com/erezsh).
+
+I am also available for paid support.
 
 ## License
 
