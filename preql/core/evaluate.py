@@ -17,7 +17,7 @@ from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr, kernel_type
 
-MODULES_PATH = Path(__file__).parent.parent / 'modules' 
+MODULES_PATH = Path(__file__).parent.parent / 'modules'
 
 
 @dy
@@ -304,21 +304,21 @@ def _execute(state: State, t: ast.Try):
             raise
 
 
-def import_module(state, r):
+def find_module(module_name):
     paths = [MODULES_PATH, Path.cwd()]
     for path in paths:
-        module_path =  (path / r.module_path).with_suffix(".pql")
+        module_path =  (path / module_name).with_suffix(".pql")
         if module_path.exists():
-            break
-    else:
-        raise Signal.make(T.ImportError, r, "Cannot find module")
+            return module_path
 
-    from .interpreter import Interpreter    # XXX state.new_interp() ?
-    i = Interpreter(state.db, state.display, use_core=r.use_core)
-    i.state.stacktrace = state.stacktrace   # XXX proper interface
+    raise Signal.make(T.ImportError, r, "Cannot find module")
 
-    # Give the module access to active database
-    i.state.db = state.db
+
+def import_module(state, r):
+    module_path = find_module(r.module_path)
+
+    assert state is state.interp.state
+    i = state.interp.clone(use_core=r.use_core)
 
     state.stacktrace.append(r.text_ref)
     try:

@@ -130,7 +130,7 @@ def autocomplete_tree(puppet):
     except ParseError:    # Could still fail
         return
 
-    assert not res, res # XXX changed in new lark versions
+    assert not res, res
 
     # Search nearest solution
     return _search_puppet(puppet.as_immutable())

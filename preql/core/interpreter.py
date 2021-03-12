@@ -58,7 +58,7 @@ class Interpreter:
 
         if stmts:
             if isinstance(stmts[0], ast.Const) and stmts[0].type == T.string:
-                self.set_var('__doc__', stmts[0].value) 
+                self.set_var('__doc__', stmts[0].value)
 
         last = None
         for stmt in stmts:
@@ -148,3 +148,10 @@ class Interpreter:
                 else:
                     if not self.has_var(table_name):
                         self.set_var(table_name, inst)
+
+
+    def clone(self, use_core):
+        state = self.state
+        i = Interpreter(state.db, state.display, use_core=use_core)
+        i.state.stacktrace = state.stacktrace   # XXX proper interface
+        return i
