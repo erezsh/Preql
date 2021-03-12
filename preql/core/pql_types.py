@@ -8,8 +8,8 @@ from collections import defaultdict, deque
 import runtype
 from runtype.typesystem import TypeSystem
 
+from preql.utils import dataclass
 from .base import Object
-from .utils import dataclass
 
 global_methods = {}
 
@@ -289,7 +289,7 @@ T.AssertError = [T.ValueError]
 T.IndexError = [T.ValueError]
 T.CastError = [T.TypeError]
 
-T.ImportError = [T.Exception]   # XXX
+T.ImportError = [T.Exception]
 
 
 def _get_subtypes():

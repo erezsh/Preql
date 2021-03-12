@@ -1,17 +1,17 @@
-from preql import settings
 from lark import Token, UnexpectedCharacters, UnexpectedToken, ParseError
 
+from preql.loggers import ac_log
+from preql.utils import bfs_all_unique, dy
+from preql.context import context
+
 from .exceptions import Signal, ReturnSignal, pql_SyntaxError
-from .loggers import ac_log
+from .compiler import AutocompleteSuggestions
+from .evaluate import evaluate, resolve
+from .interp_common import State
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .utils import bfs_all_unique
-from .interp_common import State, dy
-from .evaluate import evaluate, resolve
-from .compiler import AutocompleteSuggestions
 from .pql_types import T
 from . import sql, parser
-from .context import context
 
 
 @dy
@@ -130,7 +130,7 @@ def autocomplete_tree(puppet):
     except ParseError:    # Could still fail
         return
 
-    assert not res, res # XXX changed in new lark versions
+    assert not res, res
 
     # Search nearest solution
     return _search_puppet(puppet.as_immutable())

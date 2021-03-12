@@ -2,13 +2,14 @@ from contextlib import contextmanager
 from copy import copy
 from logging import getLogger
 
+from preql.utils import dy
+from preql.sql_interface import ConnectError, create_engine
+
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .utils import dy
 from .exceptions import Signal
 from .exceptions import InsufficientAccessLevel
 from .pql_types import Type, T
-from .sql_interface import ConnectError, create_engine
 
 logger = getLogger('interp')
 
@@ -39,10 +40,10 @@ class AccessLevels:
 class State:
     AccessLevels = AccessLevels
 
-    def __init__(self, interp, db, fmt, ns=None):
+    def __init__(self, interp, db, display, ns=None):
         self.db = db
         self.interp = interp
-        self.fmt = fmt
+        self.display = display
         # Add logger?
 
         self.ns = Namespace(ns)
@@ -54,7 +55,7 @@ class State:
 
     @classmethod
     def clone(cls, inst):
-        s = cls(inst.interp, inst.db, inst.fmt)
+        s = cls(inst.interp, inst.db, inst.display)
         s.ns = copy(inst.ns)
         s.tick = inst.tick
         s.access_level = inst.access_level
@@ -112,7 +113,7 @@ class State:
             except KeyError:
                 pass
 
-            raise Signal.make(T.NameError, name, f"Name '{name}' not found")
+            raise Signal.make(T.NameError, name, f"Name '{name}' is not defined")
 
 
     def set_var(self, name, value):
@@ -184,7 +185,7 @@ class Namespace:
 
 
 
-def assert_type(t, type_, state, ast_node, op, msg="%s expected an object of type %s, instead got '%s'"):
+def assert_type(t, type_, ast_node, op, msg="%s expected an object of type %s, instead got '%s'"):
     assert isinstance(t, Type), t
     assert isinstance(type_, Type)
     if not t <= type_:
@@ -198,7 +199,7 @@ def exclude_fields(state, table, fields):
     proj = ast.Projection(table, [ast.NamedField(None, ast.Ellipsis(None, exclude=list(fields) ), user_defined=False)])
     return evaluate(state, proj)
 
-def call_pql_func(state, name, args):
+def call_builtin_func(state, name, args):
     "Call a builtin pql function"
     builtins = state.ns.get_var('__builtins__')
     assert isinstance(builtins, objects.Module)
@@ -213,3 +214,21 @@ new_value_instance = objects.new_value_instance
 def is_global_scope(state):
     assert len(state.ns) != 0
     return len(state.ns) == 1
+
+
+# def cast_to_python_primitive(state, obj):
+#     res = cast_to_python(state, obj)
+#     assert isinstance(res, (int, str, float, dict, list, type(None), datetime)), (res, type(res))
+#     return res
+
+def cast_to_python_string(state, obj: objects.AbsInstance):
+    res = cast_to_python(state, obj)
+    if not isinstance(res, str):
+        raise Signal.make(T.TypeError, obj, f"Expected string, got '{res}'")
+    return res
+
+def cast_to_python_int(state, obj: objects.AbsInstance):
+    res = cast_to_python(state, obj)
+    if not isinstance(res, int):
+        raise Signal.make(T.TypeError, obj, f"Expected string, got '{res}'")
+    return res

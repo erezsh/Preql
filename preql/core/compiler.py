@@ -1,14 +1,14 @@
 import operator
 
-from .utils import safezip, listgen, find_duplicate, SafeDict, re_split
-from .exceptions import Signal
-from . import exceptions as exc
 
-from . import settings
+from preql import settings
+from preql.utils import safezip, listgen, find_duplicate, SafeDict, re_split
+
+from .exceptions import Signal, InsufficientAccessLevel, ReturnSignal, pql_AttributeError
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_pql_func, cast_to_python
+from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_builtin_func, cast_to_python_string, cast_to_python_int
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
@@ -27,11 +27,11 @@ def cast_to_instance(state, x):
         x = simplify(state, x)  # just compile Name?
         inst = compile_to_inst(state, x)
         # inst = evaluate(state, x)
-    except exc.ReturnSignal:
+    except ReturnSignal:
         raise Signal.make(T.CompileError, None, f"Bad compilation of {x}")
 
     if isinstance(inst, ast.ParameterizedSqlCode):
-        raise exc.InsufficientAccessLevel(inst)
+        raise InsufficientAccessLevel(inst)
 
     if not isinstance(inst, AbsInstance):
         # TODO compile error? cast error?
@@ -175,7 +175,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 
     for name, f in fields:
         if not f.type <= T.union[T.primitive, T.struct, T.json, T.nulltype, T.unknown]:
-            raise exc.Signal.make(T.TypeError, proj, f"Cannot project values of type: {f.type}")
+            raise Signal.make(T.TypeError, proj, f"Cannot project values of type: {f.type}")
 
     if isinstance(table, objects.StructInstance):
         d = {n[1]:c for n, c in fields}     # Remove used_defined bool
@@ -251,7 +251,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
 @dy
 def compile_to_inst(state: State, order: ast.Order):
     table = cast_to_instance(state, order.table)
-    assert_type(table.type, T.table, state, order, "'order'")
+    assert_type(table.type, T.table, order, "'order'")
 
     with state.use_scope(table.all_attrs()):
         fields = cast_to_instance(state, order.fields)
@@ -321,7 +321,7 @@ def _contains(state, op, a: T.string, b: T.string):
         'in': 'str_contains',
         '!in': 'str_notcontains',
     }[op]
-    return call_pql_func(state, f, [a, b])
+    return call_builtin_func(state, f, [a, b])
 
 @dp_inst
 def _contains(state, op, a: T.primitive, b: T.table):
@@ -412,9 +412,9 @@ def _compare(_state, op, a: T.primitive, b: T.primitive):
 @dp_inst
 def _compare(state, op, a: T.type, b: T.type):
     if op == '<=':
-        return call_pql_func(state, "issubclass", [a, b])
+        return call_builtin_func(state, "issubclass", [a, b])
     if op != '=':
-        raise exc.Signal.make(T.NotImplementedError, op, f"Cannot compare types using: {op}")
+        raise Signal.make(T.NotImplementedError, op, f"Cannot compare types using: {op}")
     return new_value_instance(a == b)
 
 @dp_inst
@@ -447,7 +447,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
 @dy
 def compile_to_inst(state: State, neg: ast.Neg):
     expr = cast_to_instance(state, neg.expr)
-    assert_type(expr.type, T.number, state, neg, "Negation")
+    assert_type(expr.type, T.number, neg, "Negation")
 
     return make_instance(sql.Neg(expr.code), expr.type, [expr])
 
@@ -491,7 +491,7 @@ def _compile_arith(state, arith, a: T.table, b: T.table):
 def _compile_arith(state, arith, a: T.string, b: T.int):
     if arith.op != '*':
         raise Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not supported between string and integer.")
-    return call_pql_func(state, "repeat", [a, b])
+    return call_builtin_func(state, "repeat", [a, b])
 
 
 @dp_inst
@@ -536,7 +536,7 @@ def _compile_arith(state, arith, a: T.string, b: T.string):
         return objects.Instance.make(code, T.bool, [a, b])
 
     if arith.op != '+':
-        raise exc.Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not supported for strings.")
+        raise Signal.make(T.TypeError, arith.op, f"Operator '{arith.op}' not supported for strings.")
 
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
         # Local folding for better performance (optional, for better performance)
@@ -668,7 +668,7 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
 
 @dy
 def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
-    sql_code = cast_to_python(state, rps.string)
+    sql_code = cast_to_python_string(state, rps.string)
     if not isinstance(sql_code, str):
         raise Signal.make(T.TypeError, rps, f"Expected string, got '{rps.string}'")
 
@@ -691,7 +691,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
             assert t[0] == '$'
             if t == '$self':
                 if self_table is None:
-                    raise exc.Signal.make(T.TypeError, rps, f"$self is only available for queries that return a table")
+                    raise Signal.make(T.TypeError, rps, f"$self is only available for queries that return a table")
                 inst = self_table
             else:
                 obj = state.get_var(t[1:])
@@ -732,7 +732,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
 def compile_to_inst(state: State, s: ast.Slice):
     obj = cast_to_instance(state, s.obj)
 
-    assert_type(obj.type, T.union[T.string, T.table], state, s, "Slice")
+    assert_type(obj.type, T.union[T.string, T.table], s, "Slice")
 
     instances = [obj]
     if s.range.start:
@@ -750,8 +750,8 @@ def compile_to_inst(state: State, s: ast.Slice):
     if obj.type <= T.string:
         code = sql.StringSlice(obj.code, sql.add_one(start.code), stop and sql.add_one(stop.code))
     else:
-        start_n = cast_to_python(state, start)
-        stop_n = stop and cast_to_python(state, stop)
+        start_n = cast_to_python_int(state, start)
+        stop_n = stop and cast_to_python_int(state, stop)
         code = sql.table_slice(obj, start_n, stop_n)
 
     return make_instance(code, obj.type, instances)
@@ -773,7 +773,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
                          ).set_text_ref(sel.text_ref)
         return compile_to_inst(state, slice)
 
-    assert_type(table.type, T.table, state, sel, "Selection")
+    assert_type(table.type, T.table, sel, "Selection")
 
     with state.use_scope({n:projected(c) for n, c in table.all_attrs().items()}):
         conds = cast_to_instance(state, sel.conds)
@@ -783,7 +783,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
     else:
         for i, c in enumerate(conds):
             if not c.type <= T.bool:
-                raise exc.Signal.make(T.TypeError, sel.conds[i], f"Selection expected boolean, got {c.type}")
+                raise Signal.make(T.TypeError, sel.conds[i], f"Selection expected boolean, got {c.type}")
 
         code = sql.table_selection(table, [c.code for c in conds])
 
@@ -794,7 +794,7 @@ def compile_to_inst(state: State, param: ast.Parameter):
     if state.access_level == state.AccessLevels.COMPILE:
         if param.type <= T.struct:
             # TODO why can't I just make an instance?
-            raise exc.InsufficientAccessLevel("Structs not supported yet")
+            raise InsufficientAccessLevel("Structs not supported yet")
         return make_instance(sql.Parameter(param.type, param.name), param.type, [])
 
     return state.get_var(param.name)
@@ -815,7 +815,7 @@ def compile_to_inst(state: State, attr: ast.Attr):
     inst = evaluate(state, attr.expr)
     try:
         return evaluate(state, inst.get_attr(attr.name))
-    except exc.pql_AttributeError as e:
+    except pql_AttributeError as e:
         raise Signal.make(T.AttributeError, attr, e.message)
 
 
@@ -828,7 +828,7 @@ def _apply_type_generics(state, gen_type, type_names):
         if not isinstance(o, Type):
             if isinstance(o.code, sql.Parameter):
                 # XXX hacky test, hacky solution
-                raise exc.InsufficientAccessLevel()
+                raise InsufficientAccessLevel()
             raise Signal.make(T.TypeError, None, f"Generics expression expected a type, got '{o}'.")
 
     if len(type_objs) > 1:
@@ -875,13 +875,13 @@ def compile_to_inst(state: State, range: ast.Range):
     # TODO move to sql.py
     # Requires subqueries to be part of 'code' instead of a separate 'subqueries'?
     # But then what's the point of an instance, other than carrying methods...
-    start = cast_to_python(state, range.start) if range.start else 0
+    start = cast_to_python_int(state, range.start) if range.start else 0
     if not isinstance(start, int):
         raise Signal.make(T.TypeError, range, "Range must be between integers")
 
     stop = None
     if range.stop:
-        stop = cast_to_python(state, range.stop)
+        stop = cast_to_python_int(state, range.stop)
         if not isinstance(stop, int):
             raise Signal.make(T.TypeError, range, "Range must be between integers")
     elif state.db.target in (sql.mysql, sql.bigquery):
@@ -907,4 +907,3 @@ def compile_to_inst(state: State, range: ast.Range):
     return objects.TableInstance(code, type_, SafeDict({name: subq}))
 
 
-    

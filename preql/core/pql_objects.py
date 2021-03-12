@@ -4,9 +4,10 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
-from .utils import dataclass, SafeDict, X, listgen
+from preql.utils import dataclass, SafeDict, X, listgen
+from preql import settings
+
 from .exceptions import pql_AttributeError, Signal
-from . import settings
 from . import pql_ast as ast
 from . import sql
 from . import pql_types
@@ -608,4 +609,9 @@ def from_python(value):
     elif isinstance(value, dict):
         elems = {k:from_python(v) for k,v in value.items()}
         return ast.Dict_(elems)
-    assert False, value
+    elif isinstance(value, type):
+        return pql_types.from_python(value)
+    elif isinstance(value, Type):
+        return value
+
+    raise TypeError(f"Cannot import into Preql a Python object of type {type}")

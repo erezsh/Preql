@@ -1,26 +1,14 @@
 from contextlib import contextmanager
 
-
 from . import settings
-from . import pql_ast as ast
-from . import pql_objects as objects
-from .utils import classify
-from .interpreter import Interpreter
-from .evaluate import cast_to_python, localize, evaluate
-from .interp_common import create_engine, call_pql_func
-from .pql_types import T
-from .pql_functions import import_pandas
-from .context import context
-from . import sql
+from .core.pql_ast import pyvalue, Ast
+from .core import pql_objects as objects
+from .core.interpreter import Interpreter
+from .core.pql_types import T
+from .sql_interface import create_engine
 
-from . import display
+from .core import display
 display.install_reprs()
-
-
-def _call_pql_func(state, name, args):
-    with context(state=state):
-        count = call_pql_func(state, name, args)
-        return cast_to_python(state, count)
 
 
 class TablePromise:
@@ -29,15 +17,15 @@ class TablePromise:
     Fetching values creates queries to database engine
     """
 
-    def __init__(self, state, inst):
-        self._state = state
+    def __init__(self, interp, inst):
+        self._interp = interp
         self._inst = inst
         self._rows = None
 
     def to_json(self):
         "Returns table as a list of rows, i.e. ``[{col1: value, col2: value, ...}, ...]``"
         if self._rows is None:
-            self._rows = cast_to_python(self._state, self._inst)
+            self._rows = self._interp.cast_to_python(self._inst)
         assert self._rows is not None
         return self._rows
 
@@ -55,32 +43,32 @@ class TablePromise:
 
     def __len__(self):
         "Run a count query on table"
-        return _call_pql_func(self._state, 'count', [self._inst])
+        count = self._interp.call_builtin_func('count', [self._inst])
+        return self._interp.cast_to_python(count)
 
     def __iter__(self):
         return iter(self.to_json())
 
     def __getitem__(self, index):
         "Run a slice query on table"
-        with context(state=self._state):
-            if isinstance(index, slice):
-                offset = index.start or 0
-                limit = index.stop - offset
-                return call_pql_func(self._state, 'limit_offset', [self._inst, ast.make_const(limit), ast.make_const(offset)])
+        if isinstance(index, slice):
+            offset = index.start or 0
+            limit = index.stop - offset
+            return self._interp.call_builtin_func('limit_offset', [self._inst, pyvalue(limit), pyvalue(offset)])
 
-            # TODO different debug log level / mode
-            res ,= cast_to_python(self._state, self[index:index+1])
-            return res
+        # TODO different debug log level / mode
+        res ,= self._interp.cast_to_python(self[index:index+1])
+        return res
 
     def __repr__(self):
         return repr(self.to_json())
 
 
-def promise(state, inst):
+def _prepare_instance_for_user(interp, inst):
     if inst.type <= T.table:
-        return TablePromise(state, inst)
+        return TablePromise(interp, inst)
 
-    return localize(state, inst)
+    return interp.localize_obj(inst)
 
 
 class Preql:
@@ -104,18 +92,26 @@ class Preql:
         """
         self._db_uri = db_uri
         self._print_sql = print_sql
+        self._auto_create = auto_create
+        self._display = display.RichDisplay()
         # self.engine.ping()
 
         engine = create_engine(self._db_uri, print_sql=self._print_sql, auto_create=auto_create)
         self._reset_interpreter(engine)
 
     def set_output_format(self, fmt):
-        self.interp.state.fmt = fmt  # TODO proper api
+        if fmt == 'html':
+            self._display = display.HtmlDisplay()
+        else:
+            self._display = display.RichDisplay()
+
+        self.interp.state.display = self._display  # TODO proper api
+
 
     def _reset_interpreter(self, engine=None):
         if engine is None:
             engine = self.interp.state.db
-        self.interp = Interpreter(engine)
+        self.interp = Interpreter(engine, self._display)
         self.interp.state._py_api = self # TODO proper api
 
     def close(self):
@@ -123,20 +119,25 @@ class Preql:
 
     def __getattr__(self, fname):
         var = self.interp.state.get_var(fname)
+
         if isinstance(var, objects.Function):
             def delegate(*args, **kw):
-                assert not kw
+                if kw:
+                    raise NotImplementedError("No support for keywords yet")
+
                 pql_args = [objects.from_python(a) for a in args]
                 pql_res = self.interp.call_func(fname, pql_args)
                 return self._wrap_result( pql_res )
             return delegate
         else:
-            return self._wrap_result( evaluate( self.interp.state, var ))
+            obj = self.interp.evaluate_obj( var )
+            return self._wrap_result(obj)
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
-        assert not isinstance(res, ast.Ast), res
-        return promise(self.interp.state, res)  # TODO session, not state
+        if isinstance(res, Ast):
+            raise TypeError("Returned object cannot be converted into a Python representation")
+        return _prepare_instance_for_user(self.interp, res)  # TODO session, not state
 
     def _run_code(self, pq: str, source_file: str, **args):
         pql_args = {name: objects.from_python(value) for name, value in args.items()}
@@ -177,12 +178,6 @@ class Preql:
     def rollback(self):
         return self.interp.state.db.rollback()
 
-    def _drop_tables(self, *tables):
-        state = self.interp.state
-        # XXX temporary. Used for testing
-        for t in tables:
-            t = sql._quote(state.db.target, state.db.qualified_name(t))
-            state.db._execute_sql(T.nulltype, f"DROP TABLE {t};", state)
 
     def import_pandas(self, **dfs):
         """Import pandas.DataFrame instances into SQL tables
@@ -190,28 +185,11 @@ class Preql:
         Example:
             >>> pql.import_pandas(a=df_a, b=df_b)
         """
-        with self.interp.setup_context():
-            return list(import_pandas(self.interp.state, dfs))
+        return self.interp.import_pandas(dfs)
 
 
     def load_all_tables(self):
-        table_types = self.interp.state.db.import_table_types(self.interp.state)
-        table_types_by_schema = classify(table_types, lambda x: x[0], lambda x: x[1:])
-
-        for schema_name, table_types in table_types_by_schema.items():
-            if schema_name:
-                schema = objects.Module(schema_name, {})
-                self.interp.set_var(schema_name, schema)
-
-            for table_name, table_type in table_types:
-                db_name = table_type.options['name']
-                inst = objects.new_table(table_type, db_name)
-
-                if schema_name:
-                    schema.namespace[table_name] = inst
-                else:
-                    if not self.interp.has_var(table_name):
-                        self.interp.set_var(table_name, inst)
+        return self.interp.load_all_tables()
 
 
 

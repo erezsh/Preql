@@ -1,7 +1,7 @@
 import re
 import time
 
-from preql.autocomplete import autocomplete
+from preql.core.autocomplete import autocomplete
 from preql.loggers import test_log
 
 from .common import PreqlTests, SQLITE_URI, POSTGRES_URI

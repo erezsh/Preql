@@ -1,12 +1,11 @@
-import rich
-
 from runtype import dataclass
 
 from preql.utils import safezip, dy
 
 from preql.docstring.docstring import parse, Section, Defin, Text
-from preql.pql_objects import Module, Function, T
-from preql.pql_types import Type, subtypes
+
+from preql.core.pql_objects import Module, Function, T
+from preql.core.pql_types import Type, subtypes
 
 from . import type_docs
 
@@ -110,13 +109,13 @@ def doc_module(m):
     return ModuleDoc(m, list(map(doc_func, m.public_functions())))
 
 
-def test_func():
-    p = Preql()
-    rich.print(doc_func(p('bfs')).print_text())
+# def test_func():
+#     p = Preql()
+#     rich.print(doc_func(p('bfs')).print_text())
 
-def test_module():
-    p = Preql()
-    rich.print(doc_module(p('__builtins__')).print_text())
+# def test_module():
+#     p = Preql()
+#     rich.print(doc_module(p('__builtins__')).print_text())
 
 def generate_rst(modules_fn, types_fn):
     from preql import Preql

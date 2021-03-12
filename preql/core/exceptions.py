@@ -2,10 +2,11 @@ from typing import Optional, List
 
 from lark.exceptions import GrammarError
 
-from .utils import dataclass, TextReference
+from preql.utils import dataclass, TextReference
+from preql.context import context
+
 from .base import Object
 
-from .context import context
 
 @dataclass
 class Signal(Object, Exception):

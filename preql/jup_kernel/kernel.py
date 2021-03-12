@@ -1,13 +1,14 @@
 from ipykernel.kernelbase import Kernel
 
 import preql
-from preql.autocomplete import autocomplete
-from preql.pql_objects import null
+from preql.core.autocomplete import autocomplete
+from preql.core.pql_objects import null
 
 from . import __version__
 
 pql = preql.Preql()
 pql.set_output_format('html')
+display = pql._display
 
 class PreqlKernel(Kernel):
     implementation = 'Preql'
@@ -41,20 +42,22 @@ class PreqlKernel(Kernel):
                         res = res.repr()
 
                     json = {
-                        'output': str(res),
+                        'output': display.as_html() + str(res),
                         'success': True
                     }
                 except preql.Signal as e:
+                    display.print_exception(e)
+
                     json = {
-                        'output': '<pre>%s</pre>' % str(e),
+                        'output': display.as_html(),
                         'success': False
                     }
 
 
-            if json['success']:
-                stream_content = {'name': 'stdout', 'text': json['output']}
-            else:
-                stream_content = {'name': 'stderr', 'text': json['output']}
+            # if json['success']:
+            #     stream_content = {'name': 'stdout', 'text': json['output']}
+            # else:
+            #     stream_content = {'name': 'stderr', 'text': json['output']}
             # self.send_response(self.iopub_socket, 'stream', stream_content)
 
             html = json['output']

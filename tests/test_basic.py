@@ -1,11 +1,12 @@
-from preql.sql import mysql, bigquery, sqlite
+from preql.core.sql import mysql, bigquery, sqlite
 from unittest import skip
 
 from parameterized import parameterized_class
 
-from preql.pql_objects import UserFunction
-from preql.exceptions import Signal
-from preql.pql_types import T
+from preql.core.pql_objects import UserFunction
+from preql.core.exceptions import Signal
+from preql.core.pql_types import T
+from preql.sql_interface import _drop_tables
 
 from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI, BIGQUERY_URI
 
@@ -17,7 +18,7 @@ def uses_tables(*names):
                 return decorated(self)
 
             p = self.Preql()
-            tables = p.interp.state.db.list_tables()
+            tables = p.interp.list_tables()
             def _key(t):
                 try:
                     return names.index(t.lower())
@@ -26,7 +27,7 @@ def uses_tables(*names):
             tables.sort(key=_key)
             if tables:
                 print("@@ Deleting", tables, decorated)
-            p._drop_tables(*tables)
+            _drop_tables(p.interp.state, *tables)
             # assert not tables
             try:
                 return decorated(self)
@@ -34,8 +35,8 @@ def uses_tables(*names):
                 p = self.preql
                 # Table contents weren't dropped, due to autocommit
                 if p.interp.state.db.target in (mysql, bigquery):
-                    p._drop_tables(*names)
-                tables = p.interp.state.db.list_tables()
+                    _drop_tables(p.interp.state, *names)
+                tables = p.interp.list_tables()
                 assert not tables, tables
 
         return wrapper
@@ -231,6 +232,9 @@ class BasicTests(PreqlTests):
         assert preql('1 and 2 or 3') == 2
         assert preql('1 or 2 and 3') == 1
 
+        self.assertEqual( preql('[1] or [2]'), [1])
+        self.assertEqual( preql('[1] and [2]'), [2])
+
     def test_basic2(self):
         # More basic tests
         preql = self.Preql()
@@ -260,13 +264,20 @@ class BasicTests(PreqlTests):
 
 
     def test_from_python(self):
-        preql = self.Preql()
+        p = self.Preql()
 
-        preql('func f(x) = count(x)')
-        assert preql.f([1,2,3]) == 3
+        p('func f(x) = count(x)')
+        assert p.f([1,2,3]) == 3
 
         # TODO
-        # assert preql.f([(1,2), (2,3), (3,4)]) == 3
+        # assert p.f([(1,2), (2,3), (3,4)]) == 3
+        assert p.count([1,2,3]) == 3
+        assert p.enum([1]) == [{'index': 0, 'item': 1}]
+
+        assert p.SQL(int, "SELECT 2") == 2
+        assert p.SQL(p.int, "SELECT 2") == 2
+        assert p.SQL(p.list[p.int], "SELECT 1 UNION ALL SELECT 2") == [1,2]
+        assert p.SQL(p('list[int]'), "SELECT 1 UNION ALL SELECT 2") == [1,2]
 
 
     def test_vectorized_logic2(self):

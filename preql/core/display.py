@@ -4,14 +4,15 @@ import rich.table
 import rich.text
 import rich.console
 
+from preql.context import context
+
 from .exceptions import Signal
 from .pql_types import T, ITEM_NAME
 from . import pql_objects as objects
-from . import pql_ast as ast
+from .pql_ast import pyvalue
 from .types_impl import dp_type, pql_repr
-from .interp_common import call_pql_func, cast_to_python
+from .interp_common import call_builtin_func, cast_to_python_int, cast_to_python
 
-from .context import context
 
 TABLE_PREVIEW_SIZE = 16
 LIST_PREVIEW_SIZE = 128
@@ -37,7 +38,7 @@ def pql_repr(t: T.string, value):
     assert isinstance(value, str), value
     value = value.replace('"', r'\"')
     res = f'"{value}"'
-    if context.state.fmt == 'html':
+    if context.state.display.format == 'html':
         res = html.escape(res)
     return res
 
@@ -49,10 +50,8 @@ def pql_repr(t: T.text, value):
 @dp_type
 def pql_repr(t: T._rich, value):
     r = rich.text.Text.from_markup(str(value))
-    if context.state.fmt == 'html':
-        console = rich.console.Console(record=True)
-        console.print(r)
-        return console.export_html(code_format='<style>{stylesheet}</style><pre>{code}</pre>').replace('━', '-')
+    if context.state.display.format == 'html':
+        return _rich_to_html(r)
     return r
 
 @dp_type
@@ -64,14 +63,15 @@ def pql_repr(t: T.nulltype, value):
     return 'null'
 
 
+def _rich_to_html(r):
+    console = rich.console.Console(record=True)
+    console.print(r)
+    return console.export_html(code_format='<style>{stylesheet}</style><pre>{code}</pre>').replace('━', '-')
 
 
 def table_limit(table, state, limit, offset=0):
-    return call_pql_func(state, 'limit_offset', [table, ast.make_const(limit), ast.make_const(offset)])
+    return call_builtin_func(state, 'limit_offset', [table, pyvalue(limit), pyvalue(offset)])
 
-def _call_pql_func(state, name, args):
-    count = call_pql_func(state, name, args)
-    return cast_to_python(state, count)
 
 def _html_table(name, count_str, rows, offset, has_more, colors):
     assert colors
@@ -164,7 +164,7 @@ def _view_table(state, table, size, offset):
 def table_repr(self, offset=0):
     state = context.state
 
-    count = _call_pql_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)])
+    count = cast_to_python_int(state, call_builtin_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)]))
     if count == MAX_AUTO_COUNT:
         count_str = f'>={count}'
     else:
@@ -181,19 +181,18 @@ def table_repr(self, offset=0):
     preview = TABLE_PREVIEW_SIZE
     colors = True
 
-    if state.fmt == 'html':
+    if state.display.format == 'html':
         preview = TABLE_PREVIEW_SIZE * 10
         table_f = _html_table
-    elif state.fmt == 'text':
+    elif state.display.format == 'text':
         colors = False
     else:
-        assert state.fmt == 'rich'
+        assert state.display.format == 'rich'
 
     table_name, rows, = _view_table(state, self, preview, offset)
     has_more = offset + len(rows) < count
     return table_f(table_name, count_str, rows, offset, has_more, colors=colors)
 
-    # raise NotImplementedError(f"Unknown format: {state.fmt}")
 
 def table_more():
     if not _g_last_table:
@@ -204,13 +203,13 @@ def table_more():
 
 def module_repr(module):
     res = f'<Module {module.name} | {len(module.namespace)} members>'
-    if context.state.fmt == 'html':
+    if context.state.display.format == 'html':
         res = html.escape(res)
     return res
 
 def function_repr(func):
     res = '<%s>' % func.help_str()
-    if context.state.fmt == 'html':
+    if context.state.display.format == 'html':
         res = html.escape(res)
     return res
 
@@ -219,7 +218,17 @@ class Display:
     def print(self, repr_):
         print(repr_)
 
+def _print_rich_exception(console, e):
+    console.print('[bold]Exception traceback:[/bold]')
+    for ref in e.text_refs:
+        for line in (ref.get_pinpoint_text(rich=True) if ref else ['???']):
+            console.print(line)
+        console.print()
+    console.print(rich.text.Text('%s: %s' % (e.type, e.message)))
+
 class RichDisplay(Display):
+    format = "rich"
+
     def __init__(self):
         self.console = rich.console.Console()
 
@@ -232,24 +241,35 @@ class RichDisplay(Display):
 
     def print_exception(self, e):
         "Yields colorful styled lines to print by the ``rich`` library"
-        self.console.print('[bold]Exception traceback:[/bold]')
-        for ref in e.text_refs:
-            for line in (ref.get_pinpoint_text(rich=True) if ref else ['???']):
-                self.console.print(line)
-            self.console.print()
-        self.console.print(rich.text.Text('%s: %s' % (e.type, e.message)))
+        _print_rich_exception(self.console, e)
 
 class HtmlDisplay(Display):
-    def __init__(self):
-        self.console = rich.console.Console(record=True)
+    format = "html"
 
-    print = RichDisplay.print
-    print_exception = RichDisplay.print_exception
+    def __init__(self):
+        # self.console = rich.console.Console(record=True)
+        self.buffer = []
+
+    def print(self, repr_, end="<br/>"):
+        self.buffer.append(str(repr_) + end)
+
+    # print = RichDisplay.print
+    def print_exception(self, e):
+        console = rich.console.Console(record=True)
+        _print_rich_exception(console, e)
+        res = console.export_html(code_format='<style>{stylesheet}</style><pre>{code}</pre>').replace('━', '-')
+        self.buffer.append(res)
+
+    def as_html(self):
+        # return '\n'.join(self.buffer) + "%%"
+        # return self.console.export_html(code_format='<style>{stylesheet}</style><pre>{code}</pre>').replace('━', '-')
+        res = '\n'.join(self.buffer)
+        self.buffer.clear()
+        return res
+
 
 
 def install_reprs():
     objects.CollectionInstance.repr = table_repr
     objects.Module.repr = module_repr
     objects.Function.repr = function_repr
-
-display = HtmlDisplay()

@@ -1,7 +1,8 @@
 from typing import List, Any, Optional, Dict, Union
 from dataclasses import field
 
-from .utils import dataclass, TextReference, field_list
+from preql.utils import dataclass, TextReference, field_list
+
 from . import pql_types as types
 from .pql_types import T, Object
 from .types_impl import pql_repr
@@ -207,7 +208,7 @@ class One(Expr):
 
 @dataclass
 class Type(Ast):
-    name: Object
+    type_obj: Object
     nullable: bool = False
 
 class Definition:
@@ -323,7 +324,7 @@ class Dict_(Expr):
 
 
 
-def make_const(value):
+def pyvalue(value):
     t = types.from_python(type(value))
     return Const(t, value)
 

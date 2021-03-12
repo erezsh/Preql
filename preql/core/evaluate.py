@@ -1,23 +1,23 @@
 from typing import List, Optional
 import logging
 from pathlib import Path
-from datetime import datetime
 
-from .utils import safezip, dataclass, SafeDict, listgen
-from .interp_common import assert_type, exclude_fields, call_pql_func, is_global_scope
+from preql.utils import safezip, dataclass, SafeDict, listgen
+from preql import settings
+
+from .interp_common import assert_type, exclude_fields, call_builtin_func, is_global_scope, cast_to_python_string, cast_to_python_int
 from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from . import settings
 from .parser import Str
-
 from .interp_common import State, dy, new_value_instance, cast_to_python
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr, kernel_type
-from .display import display
+
+MODULES_PATH = Path(__file__).parent.parent / 'modules'
 
 
 @dy
@@ -57,10 +57,19 @@ def resolve(state: State, col_def: ast.ColumnDef):
     assert not query
 
     if isinstance(coltype, objects.SelectedColumnInstance):
-        x = T.t_relation[coltype.type](rel={'table': coltype.parent.type, 'column': coltype.name, 'key': False})
+        table = coltype.parent.type
+        if 'name' not in table.options:
+            # XXX better test for persistence
+            raise Signal.make(T.TypeError, col_def.type, "Tables provided as relations must be persistent.")
+
+        x = T.t_relation[coltype.type](rel={'table': table, 'column': coltype.name, 'key': False})
         return x.replace(_nullable=coltype.type._nullable)  # inherit is_nullable (TODO: use sumtypes?)
 
     elif coltype <= T.table:
+        if 'name' not in coltype.options:
+            # XXX better test for persistence
+            raise Signal.make(T.TypeError, col_def.type, "Tables provided as relations must be persistent.")
+
         x = T.t_relation[T.t_id.as_nullable()](rel={'table': coltype, 'column': 'id', 'key': True})
         return x.replace(_nullable=coltype._nullable)     # inherit is_nullable (TODO: use sumtypes?)
 
@@ -68,10 +77,12 @@ def resolve(state: State, col_def: ast.ColumnDef):
 
 @dy
 def resolve(state: State, type_: ast.Type):
-    t = evaluate(state, type_.name)
+    t = evaluate(state, type_.type_obj)
     if isinstance(t, objects.TableInstance):
         t = t.type
-        assert t <= T.table
+
+    if not isinstance(t, (Type, objects.SelectedColumnInstance)):
+        raise Signal.make(T.TypeError, type_, f"Expected type in column definition. Instead got '{t}'")
 
     if type_.nullable:
         t = t.as_nullable()
@@ -86,14 +97,14 @@ def _execute(state: State, struct_def: ast.StructDef):
 
 def db_query(state: State, sql_code, subqueries=None):
     try:
-        return state.db.query(sql_code, subqueries, state=state)
+        return state.db.query(sql_code, subqueries)
     except exc.DatabaseQueryError as e:
         raise Signal.make(T.DbQueryError, None, e.args[0]) from e
 
 def drop_table(state, table_type):
     name ,= table_type.options['name'].parts
     code = sql.compile_drop_table(state, name)
-    return state.db.query(code, {}, state=state)
+    return state.db.query(code, {})
 
 
 @dy
@@ -126,7 +137,7 @@ def _execute(state: State, table_def: ast.TableDef):
     exists = state.db.table_exists(db_name.repr_name)
     if exists:
         assert not t.options['temporary']
-        cur_type = state.db.import_table_type(state, db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
+        cur_type = state.db.import_table_type(db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -208,7 +219,7 @@ def _execute(state: State, insert_rows: ast.InsertRows):
 
     rval = evaluate(state, insert_rows.value)
 
-    assert_type(rval.type, T.table, state, insert_rows, '+=')
+    assert_type(rval.type, T.table, insert_rows, '+=')
 
     return _copy_rows(state, insert_rows.name, rval)
 
@@ -235,12 +246,12 @@ def _execute(state: State, p: ast.Print):
     for inst in insts:
         # inst = evaluate(state, p.value)
         if inst.type <= T.string:
-            repr_ = cast_to_python(state, inst)
+            repr_ = cast_to_python_string(state, inst)
         else:
             repr_ = inst.repr()
 
-        display.print(repr_, end=" ")
-    display.print("")
+        state.display.print(repr_, end=" ")
+    state.display.print("")
 
 @dy
 def _execute(state: State, p: ast.Assert):
@@ -292,21 +303,22 @@ def _execute(state: State, t: ast.Try):
         else:
             raise
 
-def import_module(state, r):
-    paths = [Path(__file__).parent / 'modules', Path.cwd()]
+
+def find_module(module_name):
+    paths = [MODULES_PATH, Path.cwd()]
     for path in paths:
-        module_path =  (path / r.module_path).with_suffix(".pql")
+        module_path =  (path / module_name).with_suffix(".pql")
         if module_path.exists():
-            break
-    else:
-        raise Signal.make(T.ImportError, r, "Cannot find module")
+            return module_path
 
-    from .interpreter import Interpreter    # XXX state.new_interp() ?
-    i = Interpreter(state.db, state.fmt, use_core=r.use_core)
-    i.state.stacktrace = state.stacktrace   # XXX proper interface
+    raise Signal.make(T.ImportError, r, "Cannot find module")
 
-    # Give the module access to active database
-    i.state.db = state.db
+
+def import_module(state, r):
+    module_path = find_module(r.module_path)
+
+    assert state is state.interp.state
+    i = state.interp.clone(use_core=r.use_core)
 
     state.stacktrace.append(r.text_ref)
     try:
@@ -556,8 +568,8 @@ def _call_expr(state, expr):
 # TODO fix these once we have proper types
 @dy
 def test_nonzero(state: State, table: objects.TableInstance):
-    count = call_pql_func(state, "count", [table])
-    return bool(cast_to_python(state, count))
+    count = call_builtin_func(state, "count", [table])
+    return bool(cast_to_python_int(state, count))
 
 @dy
 def test_nonzero(state: State, inst: objects.Instance):
@@ -603,7 +615,7 @@ def apply_database_rw(state: State, o: ast.One):
         return new_value_instance(row)
 
     assert table.type <= T.table
-    assert_type(table.type, T.table, state, o, 'one')
+    assert_type(table.type, T.table, o, 'one')
     d = {k: new_value_instance(v, table.type.elems[k], True) for k, v in row.items()}
     return objects.RowInstance(rowtype, d)
 
@@ -692,7 +704,7 @@ def apply_database_rw(state: State, new: ast.NewRows):
         # XXX Is it always TableInstance? Just sometimes? What's the transition here?
         obj = obj.type
 
-    assert_type(obj, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(obj, T.table, new, "'new' expected an object of type '%s', instead got '%s'")
 
     arg ,= new.args
 
@@ -796,7 +808,7 @@ def apply_database_rw(state: State, new: ast.New):
 
     table = obj
     # TODO assert tabletype is a real table and not a query (not transient), otherwise new is meaningless
-    assert_type(table.type, T.table, state, new, "'new' expected an object of type '%s', instead got '%s'")
+    assert_type(table.type, T.table, new, "'new' expected an object of type '%s', instead got '%s'")
 
     cons = TableConstructor.make(table.type)
     matched = cons.match_params(state, new.args)
@@ -841,6 +853,8 @@ def evaluate(state, obj: list):
 
 @dy
 def evaluate(state, obj_):
+    assert context.state
+
     # - Generic, non-db related operations
     obj = simplify(state, obj_)
     assert obj, obj_
@@ -967,6 +981,8 @@ def new_table_from_expr(state, name, expr, const, temporary):
     return objects.new_table(table)
 
 
+# cast_to_python - make sure the value is a native python object, not a preql instance
+
 @dy
 def cast_to_python(state, obj):
     raise Signal.make(T.TypeError, None, f"Unexpected value: {pql_repr(obj.type, obj)}")
@@ -990,7 +1006,6 @@ def cast_to_python(state, obj: objects.AbsInstance):
     elif obj.type == T.bool:
         assert res in (0, 1), res
         res = bool(res)
-    assert isinstance(res, (int, str, float, dict, list, type(None), datetime)), (res, type(res))
     return res
 
 
@@ -1003,7 +1018,7 @@ def function_localize_keys(self, state, struct):
 objects.Function._localize_keys = function_localize_keys
 
 
-from .context import context
+from preql.context import context
 def instance_repr(self):
     return pql_repr(self.type, localize(context.state, self))
 
