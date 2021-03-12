@@ -9,6 +9,7 @@
 //
 //		preql -m bigquery_covid19 bigquery:///<your_project_id>
 //
+//  Note: Requires an installed BigQuery client for Python and an active project id.
 //
 
 covid19 = import_table("bigquery-public-data.covid19_open_data.covid19_open_data")
