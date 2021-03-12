@@ -1,6 +1,6 @@
 from runtype import dataclass
 
-from preql.utils import safezip, dy
+from preql.utils import safezip, dsp
 
 from preql.docstring.docstring import parse, Section, Defin, Text
 
@@ -137,15 +137,15 @@ def generate_rst(modules_fn, types_fn):
         p('import graph')
         print(doc_module(p('graph')).print_rst(), file=f)
 
-@dy
+@dsp
 def autodoc(m: Module):
     return doc_module(m)
 
-@dy
+@dsp
 def autodoc(f: Function):
     return doc_func(f)
 
-@dy
+@dsp
 def autodoc(t: Type):
     try:
         docstr = type_docs.DOCS[t]

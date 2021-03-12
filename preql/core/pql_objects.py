@@ -140,7 +140,7 @@ class Function(Object):
                 if not isinstance(d, dict):
                     raise Signal.make(T.TypeError, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
-                    inline_args.append(ast.NamedField(k, new_value_instance(v)))
+                    inline_args.append(ast.NamedField(k, pyvalue_inst(v)))
             else:
                 inline_args.append(ast.NamedField(None, a, user_defined=False))
 
@@ -271,7 +271,7 @@ class Instance(AbsInstance):
 
 
 
-def new_value_instance(value, type_=None, force_type=False):
+def pyvalue_inst(value, type_=None, force_type=False):
 
     r = sql.make_value(value)
 

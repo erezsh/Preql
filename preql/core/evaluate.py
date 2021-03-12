@@ -12,7 +12,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .parser import Str
-from .interp_common import State, dy, new_value_instance, cast_to_python
+from .interp_common import State, dsp, pyvalue_inst, cast_to_python
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr, kernel_type
@@ -20,14 +20,14 @@ from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_r
 MODULES_PATH = Path(__file__).parent.parent / 'modules'
 
 
-@dy
+@dsp
 def resolve(state: State, struct_def: ast.StructDef):
     members = {str(k):resolve(state, v) for k, v in struct_def.members}
     struct = T.struct(members)
     state.set_var(struct_def.name, struct)
     return struct
 
-@dy
+@dsp
 def resolve(state: State, table_def: ast.TableDef):
     name = table_def.name
     if is_global_scope(state):
@@ -49,7 +49,7 @@ def resolve(state: State, table_def: ast.TableDef):
 
     return t
 
-@dy
+@dsp
 def resolve(state: State, col_def: ast.ColumnDef):
     coltype = resolve(state, col_def.type)
 
@@ -75,7 +75,7 @@ def resolve(state: State, col_def: ast.ColumnDef):
 
     return coltype(default=col_def.default)
 
-@dy
+@dsp
 def resolve(state: State, type_: ast.Type):
     t = evaluate(state, type_.type_obj)
     if isinstance(t, objects.TableInstance):
@@ -90,7 +90,7 @@ def resolve(state: State, type_: ast.Type):
     return t
 
 
-@dy
+@dsp
 def _execute(state: State, struct_def: ast.StructDef):
     resolve(state, struct_def)
 
@@ -107,7 +107,7 @@ def drop_table(state, table_type):
     return state.db.query(code, {})
 
 
-@dy
+@dsp
 def _execute(state: State, table_def: ast.TableDefFromExpr):
     expr = cast_to_instance(state, table_def.expr)
     name = table_def.name
@@ -119,7 +119,7 @@ def _execute(state: State, table_def: ast.TableDefFromExpr):
     t = new_table_from_expr(state, name, expr, table_def.const, temporary)
     state.set_var(table_def.name, t)
 
-@dy
+@dsp
 def _execute(state: State, table_def: ast.TableDef):
     if table_def.columns and isinstance(table_def.columns[-1], ast.Ellipsis):
         ellipsis = table_def.columns.pop()
@@ -175,15 +175,15 @@ def _execute(state: State, table_def: ast.TableDef):
         sql_code = sql.compile_type_def(state, db_name.repr_name, t)
         db_query(state, sql_code)
 
-@dy
+@dsp
 def _set_value(state: State, name: ast.Name, value):
     state.set_var(name.name, value)
 
-@dy
+@dsp
 def _set_value(state: State, attr: ast.Attr, value):
     raise Signal.make(T.NotImplementedError, attr, f"Cannot set attribute for {attr.expr.repr()}")
 
-@dy
+@dsp
 def _execute(state: State, var_def: ast.SetValue):
     res = evaluate(state, var_def.value)
     # res = apply_database_rw(state, res)
@@ -211,7 +211,7 @@ def _copy_rows(state: State, target_name: ast.Name, source: objects.TableInstanc
     db_query(state, code, source.subqueries)
     return objects.null
 
-@dy
+@dsp
 def _execute(state: State, insert_rows: ast.InsertRows):
     if not isinstance(insert_rows.name, ast.Name):
         # TODO support Attr
@@ -223,7 +223,7 @@ def _execute(state: State, insert_rows: ast.InsertRows):
 
     return _copy_rows(state, insert_rows.name, rval)
 
-@dy
+@dsp
 def _execute(state: State, func_def: ast.FuncDef):
     func = func_def.userfunc
     assert isinstance(func, objects.UserFunction)
@@ -237,7 +237,7 @@ def _execute(state: State, func_def: ast.FuncDef):
 
     state.set_var(func.name, func.replace(params=new_params))
 
-@dy
+@dsp
 def _execute(state: State, p: ast.Print):
     # TODO Can be done better. Maybe cast to ReprText?
     insts = evaluate(state, p.value)
@@ -253,7 +253,7 @@ def _execute(state: State, p: ast.Print):
         state.display.print(repr_, end=" ")
     state.display.print("")
 
-@dy
+@dsp
 def _execute(state: State, p: ast.Assert):
     res = cast_to_python(state, p.cond)
     if not res:
@@ -264,14 +264,14 @@ def _execute(state: State, p: ast.Assert):
             s = p.cond.repr()
         raise Signal.make(T.AssertError, p.cond, f"Assertion failed: {s}")
 
-@dy
+@dsp
 def _execute(state: State, cb: ast.CodeBlock):
     for stmt in cb.statements:
         execute(state, stmt)
     return objects.null
 
 
-@dy
+@dsp
 def _execute(state: State, i: ast.If):
     cond = cast_to_python(state, i.cond)
 
@@ -280,19 +280,19 @@ def _execute(state: State, i: ast.If):
     elif i.else_:
         execute(state, i.else_)
 
-@dy
+@dsp
 def _execute(state: State, w: ast.While):
     while cast_to_python(state, w.cond):
         execute(state, w.do)
 
-@dy
+@dsp
 def _execute(state: State, f: ast.For):
     expr = cast_to_python(state, f.iterable)
     for i in expr:
         with state.use_scope({f.var: objects.from_python(i)}):
             execute(state, f.do)
 
-@dy
+@dsp
 def _execute(state: State, t: ast.Try):
     try:
         execute(state, t.try_)
@@ -335,18 +335,18 @@ def import_module(state, r):
     return objects.Module(r.module_path, ns._ns[0])
 
 
-@dy
+@dsp
 def _execute(state: State, r: ast.Import):
     module = import_module(state, r)
     state.set_var(r.as_name or r.module_path, module)
     return module
 
-@dy
+@dsp
 def _execute(state: State, r: ast.Return):
     value = evaluate(state, r.value)
     raise ReturnSignal(value)
 
-@dy
+@dsp
 def _execute(state: State, t: ast.Throw):
     e = evaluate(state, t.value)
     if isinstance(e, ast.Ast):
@@ -365,7 +365,7 @@ def execute(state, stmt):
 # Simplify performs local operations before any db-specific compilation occurs
 # Technically not super useful at the moment, but makes conceptual sense.
 
-@dy
+@dsp
 def simplify(state: State, cb: ast.CodeBlock):
     # if len(cb.statements) == 1:
     #     s ,= cb.statements
@@ -384,24 +384,24 @@ def simplify(state: State, cb: ast.CodeBlock):
     except InsufficientAccessLevel:
         return cb
 
-@dy
+@dsp
 def simplify(state: State, n: ast.Name):
     # XXX what happens to caching if this is a global variable?
     return state.get_var(n.name)
 
-@dy
+@dsp
 def simplify(state: State, x):
     return x
 
-# @dy
+# @dsp
 # def simplify(state: State, ls: list):
 #     return [simplify(state, i) for i in ls]
 
-# @dy
+# @dsp
 # def simplify(state: State, d: objects.ParamDict):
 #     return d.replace(params={name: evaluate(state, v) for name, v in d.params.items()})
 
-# @dy
+# @dsp
 # def simplify(state: State, node: ast.Ast):
 #     # return _simplify_ast(state, node)
 #     return node
@@ -412,7 +412,7 @@ def simplify(state: State, x):
 #     return node.replace(**resolved)
 
 # TODO isn't this needed somewhere??
-# @dy
+# @dsp
 # def simplify(state: State, if_: ast.If):
 #     if_ = _simplify_ast(state, if_)
 #     if isinstance(if_.cond, objects.ValueInstance): # XXX a more general test?
@@ -424,7 +424,7 @@ def simplify(state: State, x):
 
 
 # TODO Optimize these, right now failure to evaluate will lose all work
-@dy
+@dsp
 def simplify(state: State, obj: ast.Or):
     a, b = evaluate(state, obj.args)
     ta = kernel_type(a.type)
@@ -439,7 +439,7 @@ def simplify(state: State, obj: ast.Or):
     return b
 
 
-@dy
+@dsp
 def simplify(state: State, obj: ast.And):
     a, b = evaluate(state, obj.args)
     ta = kernel_type(a.type)
@@ -454,18 +454,18 @@ def simplify(state: State, obj: ast.And):
     return b
 
 
-@dy
+@dsp
 def simplify(state: State, obj: ast.Not):
     inst = evaluate(state, obj.expr)
     try:
         nz = test_nonzero(state, inst)
     except InsufficientAccessLevel:
         return obj
-    return objects.new_value_instance(not nz)
+    return objects.pyvalue_inst(not nz)
 
 
 
-@dy
+@dsp
 def simplify(state: State, funccall: ast.FuncCall):
     func = evaluate(state, funccall.func)
 
@@ -566,16 +566,16 @@ def _call_expr(state, expr):
         return r.value
 
 # TODO fix these once we have proper types
-@dy
+@dsp
 def test_nonzero(state: State, table: objects.TableInstance):
     count = call_builtin_func(state, "count", [table])
     return bool(cast_to_python_int(state, count))
 
-@dy
+@dsp
 def test_nonzero(state: State, inst: objects.Instance):
     return bool(cast_to_python(state, inst))
 
-@dy
+@dsp
 def test_nonzero(state: State, inst: Type):
     return True
 
@@ -586,7 +586,7 @@ def test_nonzero(state: State, inst: Type):
 
 
 
-@dy
+@dsp
 def apply_database_rw(state: State, o: ast.One):
     # TODO move these to the core/base module
     obj = evaluate(state, o.expr)
@@ -612,15 +612,15 @@ def apply_database_rw(state: State, o: ast.One):
     rowtype = T.row[table.type]
 
     if table.type <= T.list:
-        return new_value_instance(row)
+        return pyvalue_inst(row)
 
     assert table.type <= T.table
     assert_type(table.type, T.table, o, 'one')
-    d = {k: new_value_instance(v, table.type.elems[k], True) for k, v in row.items()}
+    d = {k: pyvalue_inst(v, table.type.elems[k], True) for k, v in row.items()}
     return objects.RowInstance(rowtype, d)
 
 
-@dy
+@dsp
 def apply_database_rw(state: State, d: ast.Delete):
     state.catch_access(state.AccessLevels.WRITE_DB)
     # TODO Optimize: Delete on condition, not id, when possible
@@ -646,7 +646,7 @@ def apply_database_rw(state: State, d: ast.Delete):
 
     return evaluate(state, d.table)
 
-@dy
+@dsp
 def apply_database_rw(state: State, u: ast.Update):
     state.catch_access(state.AccessLevels.WRITE_DB)
 
@@ -685,7 +685,7 @@ def apply_database_rw(state: State, u: ast.Update):
     return table
 
 
-@dy
+@dsp
 def apply_database_rw(state: State, new: ast.NewRows):
     state.catch_access(state.AccessLevels.WRITE_DB)
 
@@ -750,13 +750,13 @@ def _destructure_param_match(state, ast_node, param_match):
 def _new_value(state, v, type_):
     if isinstance(v, list):
         return evaluate(state, objects.PythonList(v))
-    return objects.new_value_instance(v, type_=type_)
+    return objects.pyvalue_inst(v, type_=type_)
 
-@dy
+@dsp
 def freeze(state, i: objects.Instance):
     return _new_value(state, cast_to_python(state, i), type_=i.type )
 
-@dy
+@dsp
 def freeze(state, i: objects.RowInstance):
     return i.replace(attrs={k: freeze(state, v) for k, v in i.attrs.items()})
 
@@ -781,13 +781,13 @@ def _new_row(state, new_ast, table, matched):
         db_query(state, q)
         rowid = db_query(state, sql.LastRowId())
 
-    d = SafeDict({'id': objects.new_value_instance(rowid)})
+    d = SafeDict({'id': objects.pyvalue_inst(rowid)})
     d.update({p.name:v for p, v in matched})
     return objects.RowInstance(T.row[table], d)
 
 
 
-@dy
+@dsp
 def apply_database_rw(state: State, new: ast.New):
     state.catch_access(state.AccessLevels.WRITE_DB)
 
@@ -838,20 +838,20 @@ def add_as_subquery(state: State, inst: objects.Instance):
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
 
-@dy
+@dsp
 def resolve_parameters(state: State, x):
     return x
 
-@dy
+@dsp
 def resolve_parameters(state: State, p: ast.Parameter):
     return state.get_var(p.name)
 
 
-@dy
+@dsp
 def evaluate(state, obj: list):
     return [evaluate(state, item) for item in obj]
 
-@dy
+@dsp
 def evaluate(state, obj_):
     assert context.state
 
@@ -886,7 +886,7 @@ def evaluate(state, obj_):
     return obj
 
 
-@dy
+@dsp
 def apply_database_rw(state, x):
     return x
 
@@ -897,15 +897,15 @@ def apply_database_rw(state, x):
 # Return the local value of the expression. Only requires computation if the value is an instance.
 #
 
-@dy
+@dsp
 def localize(state, inst: objects.AbsInstance):
     raise NotImplementedError(inst)
 
-@dy
+@dsp
 def localize(state, inst: objects.AbsStructInstance):
     return {k: localize(state, evaluate(state, v)) for k, v in inst.attrs.items()}
 
-@dy
+@dsp
 def localize(state, inst: objects.Instance):
     # TODO This protection doesn't work for unoptimized code
     # Cancel unoptimized mode? Or leave this unprotected?
@@ -916,17 +916,17 @@ def localize(state, inst: objects.Instance):
 
     return db_query(state, inst.code, inst.subqueries)
 
-@dy
+@dsp
 def localize(state, inst: objects.ValueInstance):
     return inst.local_value
 
-@dy
+@dsp
 def localize(state, inst: objects.SelectedColumnInstance):
     # XXX is this right?
     p = evaluate(state, inst.parent)
     return p.get_attr(inst.name)
 
-@dy
+@dsp
 def localize(state, x):
     return x
 
@@ -983,16 +983,16 @@ def new_table_from_expr(state, name, expr, const, temporary):
 
 # cast_to_python - make sure the value is a native python object, not a preql instance
 
-@dy
+@dsp
 def cast_to_python(state, obj):
     raise Signal.make(T.TypeError, None, f"Unexpected value: {pql_repr(obj.type, obj)}")
 
-@dy
+@dsp
 def cast_to_python(state, obj: ast.Ast):
     inst = cast_to_instance(state, obj)
     return cast_to_python(state, inst)
 
-@dy
+@dsp
 def cast_to_python(state, obj: objects.AbsInstance):
     # if state.access_level <= state.AccessLevels.QUERY:
     if obj.type <= T.projected | T.aggregated:

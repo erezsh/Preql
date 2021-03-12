@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from copy import copy
 from logging import getLogger
 
-from preql.utils import dy
+from preql.utils import dsp
 from preql.sql_interface import ConnectError, create_engine
 
 from . import pql_ast as ast
@@ -14,15 +14,15 @@ from .pql_types import Type, T
 logger = getLogger('interp')
 
 # Define common dispatch functions
-@dy
+@dsp
 def simplify(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError()
 
-@dy
+@dsp
 def evaluate(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError()
 
-@dy
+@dsp
 def cast_to_python(state, obj: type(NotImplemented)) -> object:
     raise NotImplementedError(obj)
 
@@ -208,8 +208,6 @@ def call_builtin_func(state, name, args):
     return evaluate(state, expr)
 
 
-new_value_instance = objects.new_value_instance
-
 
 def is_global_scope(state):
     assert len(state.ns) != 0
@@ -232,3 +230,7 @@ def cast_to_python_int(state, obj: objects.AbsInstance):
     if not isinstance(res, int):
         raise Signal.make(T.TypeError, obj, f"Expected string, got '{res}'")
     return res
+
+    
+pyvalue_inst = objects.pyvalue_inst
+

@@ -1,7 +1,7 @@
 from lark import Token, UnexpectedCharacters, UnexpectedToken, ParseError
 
 from preql.loggers import ac_log
-from preql.utils import bfs_all_unique, dy
+from preql.utils import bfs_all_unique, dsp
 from preql.context import context
 
 from .exceptions import Signal, ReturnSignal, pql_SyntaxError
@@ -14,39 +14,39 @@ from .pql_types import T
 from . import sql, parser
 
 
-@dy
+@dsp
 def eval_autocomplete(state, x, go_inside):
     _res = evaluate(state, x)
     # assert isinstance(res, objects.Instance)
 
-@dy
+@dsp
 def eval_autocomplete(state, cb: ast.Statement, go_inside):
     raise NotImplementedError(cb)
 
 
-@dy
+@dsp
 def eval_autocomplete(state, a: ast.InsertRows, go_inside):
     eval_autocomplete(state, a.value, go_inside)
-@dy
+@dsp
 def eval_autocomplete(state, a: ast.Assert, go_inside):
     eval_autocomplete(state, a.cond, go_inside)
-@dy
+@dsp
 def eval_autocomplete(state, a: ast.Print, go_inside):
     eval_autocomplete(state, a.value, go_inside)
 
-@dy
+@dsp
 def eval_autocomplete(state, x: ast.If, go_inside):
     eval_autocomplete(state, x.then, go_inside)
     if x.else_:
         eval_autocomplete(state, x.else_, go_inside)
 
-@dy
+@dsp
 def eval_autocomplete(state, x: ast.SetValue, go_inside):
     value = evaluate(state, x.value)
     if isinstance(x.name, ast.Name):
         state.set_var(x.name.name, value)
 
-@dy
+@dsp
 def eval_autocomplete(state, cb: ast.CodeBlock, go_inside):
     for s in cb.statements[:-1]:
         eval_autocomplete(state, s, False)
@@ -54,19 +54,19 @@ def eval_autocomplete(state, cb: ast.CodeBlock, go_inside):
     for s in cb.statements[-1:]:
         eval_autocomplete(state, s, go_inside)
 
-@dy
+@dsp
 def eval_autocomplete(state, td: ast.TableDefFromExpr, go_inside):
     expr = evaluate(state, td.expr)
     assert isinstance(td.name, str)
     state.set_var(td.name, expr)
 
-@dy
+@dsp
 def eval_autocomplete(state, td: ast.TableDef, go_inside):
     t = resolve(state, td)
     n ,= t.options['name'].parts
     state.set_var(n, objects.TableInstance.make(sql.unknown, t, []))
 
-@dy
+@dsp
 def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
     f = fd.userfunc
     assert isinstance(f, objects.UserFunction)
@@ -83,7 +83,7 @@ def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
         cb = ast.CodeBlock([ast.Return(objects.unknown)])
         state.set_var(f.name, f.replace(expr=cb))
 
-@dy
+@dsp
 def eval_autocomplete(state: State, r: ast.Return, go_inside):
     # Same as _execute
     value = evaluate(state, r.value)

@@ -9,7 +9,7 @@ from .evaluate import State, execute, eval_func_call, import_module, evaluate, l
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .interp_common import new_value_instance, call_builtin_func
+from .interp_common import pyvalue_inst, call_builtin_func
 from .pql_types import T, Object
 from .pql_functions import import_pandas
 from .pql_functions import internal_funcs, joins
@@ -80,7 +80,7 @@ class Interpreter:
             try:
                 value = value._to_pql()
             except AttributeError:
-                value = new_value_instance(value)
+                value = pyvalue_inst(value)
 
         self.state.set_var(name, value)
 

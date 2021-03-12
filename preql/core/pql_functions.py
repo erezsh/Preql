@@ -15,7 +15,7 @@ from .exceptions import Signal, ExitInterp
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import State, new_value_instance, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
+from .interp_common import State, pyvalue_inst, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
 from .evaluate import evaluate, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
 from .pql_types import T, Type, Id
 from .types_impl import join_names
@@ -23,9 +23,7 @@ from .casts import cast
 from .compiler import cast_to_instance
 
 def new_str(x):
-    return new_value_instance(str(x), T.string)
-def new_int(x):
-    return new_value_instance(int(x), T.int)
+    return pyvalue_inst(str(x), T.string)
 
 def _pql_PY_callback(state: State, var: str):
     var = var.group()
@@ -71,7 +69,7 @@ def pql_PY(state: State, code_expr: T.string, code_setup: T.string.as_nullable()
         raise Signal.make(T.EvalError, code_expr, f"Python code provided returned an error: {e}")
 
     return objects.from_python(res)
-    # return new_value_instance(res)
+    # return pyvalue_inst(res)
 
 def pql_inspect_sql(state: State, obj: T.object):
     """Returns the SQL code that would be executed to evaluate the given object
@@ -127,7 +125,7 @@ def pql_force_eval(state: State, expr: T.object):
 
     Executes any db queries necessary.
     """
-    return objects.new_value_instance( cast_to_python(state, expr) )
+    return objects.pyvalue_inst( cast_to_python(state, expr) )
 
 def pql_fmt(state: State, s: T.string):
     """Format the given string using interpolation on variables marked as `$var`
@@ -155,10 +153,10 @@ def pql_fmt(state: State, s: T.string):
             as_str = cast(inst, T.string)
             string_parts.append(as_str)
         elif t:
-            string_parts.append(objects.new_value_instance(t))
+            string_parts.append(objects.pyvalue_inst(t))
 
     if not string_parts:
-        return objects.new_value_instance('')
+        return objects.pyvalue_inst('')
     elif len(string_parts) == 1:
         return string_parts[0]
 
@@ -224,7 +222,7 @@ def pql_issubclass(state: State, a: T.type, b: T.type):
     assert_type(b.type, T.type, b, 'issubclass')
     assert isinstance(a, Type)
     assert isinstance(b, Type)
-    return new_value_instance(a <= b, T.bool)
+    return pyvalue_inst(a <= b, T.bool)
 
 def pql_isa(state: State, obj: T.any, type: T.type):
     """Checks if the give object is an instance of the given type
@@ -241,7 +239,7 @@ def pql_isa(state: State, obj: T.any, type: T.type):
     """
     assert_type(type.type, T.type, obj, 'isa')
     res = obj.isa(type)
-    return new_value_instance(res, T.bool)
+    return pyvalue_inst(res, T.bool)
 
 def _count(state, obj, table_func, name='count'):
     if obj is objects.null:
@@ -250,7 +248,7 @@ def _count(state, obj, table_func, name='count'):
         code = table_func(obj.code)
     elif isinstance(obj, objects.StructInstance) and not obj.type <= T.aggregated:
         # XXX is count() even the right method for this?
-        return new_value_instance(len(obj.attrs))
+        return pyvalue_inst(len(obj.attrs))
 
     elif obj.type <= T.projected[T.json_array]:
         code = sql.JsonLength(obj.code)
@@ -321,7 +319,7 @@ def pql_get_db_type(state: State):
         "sqlite"
     """
     assert state.access_level >= state.AccessLevels.EVALUATE
-    return new_value_instance(state.db.target, T.string)
+    return pyvalue_inst(state.db.target, T.string)
 
 
 
@@ -574,10 +572,10 @@ def pql_repr(state: State, obj: T.any):
         raise Signal.make(T.CompileError, obj, "repr() cannot run in projected/aggregated mode")
 
     try:
-        return new_value_instance(obj.repr())
+        return pyvalue_inst(obj.repr())
     except ValueError:
         value = repr(cast_to_python(state, obj))
-        return new_value_instance(value)
+        return pyvalue_inst(value)
 
 def pql_columns(_state: State, obj: T.container):
     """Returns a dictionary `{column_name: column_type}` for the given table
@@ -672,7 +670,7 @@ def pql_help(_state: State, inst: T.any = objects.null):
             "For example:\n"
             "    >> help(help)\n"
         )
-        return new_value_instance(text, T.string).replace(type=T._rich)
+        return pyvalue_inst(text, T.string).replace(type=T._rich)
 
 
     lines = []
@@ -689,7 +687,7 @@ def pql_help(_state: State, inst: T.any = objects.null):
 
 
     text = '\n'.join(lines) + '\n'
-    return new_value_instance(text).replace(type=T._rich)
+    return pyvalue_inst(text).replace(type=T._rich)
 
 def _get_doc(v):
     s = ''
@@ -872,7 +870,7 @@ def pql_import_csv(state: State, table: T.table, filename: T.string, header: T.b
 def _rest_func_endpoint(state, func):
     from starlette.responses import JSONResponse
     async def callback(request):
-        params = [objects.new_value_instance(v) for k, v in request.path_params.items()]
+        params = [objects.pyvalue_inst(v) for k, v in request.path_params.items()]
         expr = ast.FuncCall(func, params)
         res = evaluate(state, expr)
         res = cast_to_python(state, res)
@@ -885,7 +883,7 @@ def _rest_table_endpoint(state, table):
         tbl = table
         params = dict(request.query_params)
         if params:
-            conds = [ast.Compare('=', [ast.Name(k), objects.new_value_instance(v)])
+            conds = [ast.Compare('=', [ast.Name(k), objects.pyvalue_inst(v)])
                      for k, v in params.items()]
             expr = ast.Selection(tbl, conds)
             tbl = evaluate(state, expr)
@@ -894,7 +892,7 @@ def _rest_table_endpoint(state, table):
     return callback
 
 
-def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = new_int(8080)):
+def pql_serve_rest(state: State, endpoints: T.struct, port: T.int = pyvalue_inst(8080)):
     """Start a starlette server (HTTP) that exposes the current namespace as REST API
 
     Parameters:

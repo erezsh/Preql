@@ -8,7 +8,7 @@ from .exceptions import Signal, InsufficientAccessLevel, ReturnSignal, pql_Attri
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dy, State, assert_type, new_value_instance, evaluate, simplify, call_builtin_func, cast_to_python_string, cast_to_python_int
+from .interp_common import dsp, State, assert_type, pyvalue_inst, evaluate, simplify, call_builtin_func, cast_to_python_string, cast_to_python_int
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
@@ -17,11 +17,11 @@ from .pql_objects import AbsInstance, projected, make_instance, remove_phantom_t
 class AutocompleteSuggestions(Exception):
     pass
 
-@dy
+@dsp
 def cast_to_instance(state, x: list):
     return [cast_to_instance(state, i) for i in x]
 
-@dy
+@dsp
 def cast_to_instance(state, x):
     try:
         x = simplify(state, x)  # just compile Name?
@@ -122,22 +122,22 @@ def _expand_ellipsis(state, obj, fields):
             yield f
 
 
-@dy
+@dsp
 def compile_to_inst(_state: State, x):
     return x
-@dy
+@dsp
 def compile_to_inst(_state: State, node: ast.Ast):
     return node
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, cb: ast.CodeBlock):
     if len(cb.statements) == 1:
         return compile_to_inst(state, cb.statements[0])
 
     # TODO some statements can be evaluated at compile time
     raise Signal.make(T.CompileError, cb, "Cannot compile this code block")
-@dy
+@dsp
 def compile_to_inst(state: State, i: ast.If):
     cond = cast(cast_to_instance(state, i.cond), T.bool)
     then = cast_to_instance(state, i.then)
@@ -150,7 +150,7 @@ def compile_to_inst(state: State, i: ast.If):
 
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, proj: ast.Projection):
     table = cast_to_instance(state, proj.table)
 
@@ -248,7 +248,7 @@ def compile_to_inst(state: State, proj: ast.Projection):
     # Make Instance
     return new_table.replace(code=code)
 
-@dy
+@dsp
 def compile_to_inst(state: State, order: ast.Order):
     table = cast_to_instance(state, order.table)
     assert_type(table.type, T.table, order, "'order'")
@@ -266,19 +266,19 @@ def compile_to_inst(state: State, order: ast.Order):
 
     return objects.TableInstance.make(code, table.type, [table] + fields)
 
-@dy
+@dsp
 def compile_to_inst(state: State, expr: ast.DescOrder):
     obj = cast_to_instance(state, expr.value)
     return obj.replace(code=sql.Desc(obj.code))
 
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, lst: list):
     return [evaluate(state, e) for e in lst]
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, o: ast.Or):
     args = cast_to_instance(state, o.args)
     a, b = args
@@ -289,7 +289,7 @@ def compile_to_inst(state: State, o: ast.Or):
     code = sql.Case(cond.code, a.code, b.code)
     return objects.make_instance(code, a.type, args)
 
-@dy
+@dsp
 def compile_to_inst(state: State, o: ast.And):
     args = cast_to_instance(state, o.args)
     a, b = args
@@ -300,7 +300,7 @@ def compile_to_inst(state: State, o: ast.And):
     code = sql.Case(cond.code, b.code, a.code)
     return objects.make_instance(code, a.type, args)
 
-@dy
+@dsp
 def compile_to_inst(state: State, o: ast.Not):
     expr = cast_to_instance(state, o.expr)
     expr_bool = cast(expr, T.bool)
@@ -352,12 +352,12 @@ def _compare(state, op, a: T.any, b: T.any):
 
 @dp_inst
 def _compare(_state, op, _a: T.nulltype, _b: T.nulltype):
-    return new_value_instance(op in ('=', '<=', '>='))
+    return pyvalue_inst(op in ('=', '<=', '>='))
 
 @dp_inst
 def _compare(state, _op, a: T.type, _b: T.nulltype):
     assert not a.type.maybe_null()
-    return new_value_instance(False)
+    return pyvalue_inst(False)
 @dp_inst
 def _compare(state, op, a: T.nulltype, b: T.type):
     return _compare(state, op, b, a)
@@ -369,7 +369,7 @@ primitive_or_struct = T.union[T.primitive, T.struct]
 def _compare(_state, op, a: T.nulltype, b: primitive_or_struct):
     # TODO Enable this type-based optimization:
     # if not b.type.nullable:
-    #     return objects.new_value_instance(False)
+    #     return objects.pyvalue_inst(False)
     if b.type <= T.struct:
         b = b.primary_key()
     code = sql.Compare(op, [a.code, b.code])
@@ -402,7 +402,7 @@ def _compare(_state, op, a: T.primitive, b: T.primitive):
             '>=': operator.ge,
             '<=': operator.le,
         }[op]
-        return new_value_instance(f(a.local_value, b.local_value))
+        return pyvalue_inst(f(a.local_value, b.local_value))
 
     # TODO regular equality for primitives? (not 'is')
     code = sql.Compare(op, [a.code, b.code])
@@ -415,7 +415,7 @@ def _compare(state, op, a: T.type, b: T.type):
         return call_builtin_func(state, "issubclass", [a, b])
     if op != '=':
         raise Signal.make(T.NotImplementedError, op, f"Cannot compare types using: {op}")
-    return new_value_instance(a == b)
+    return pyvalue_inst(a == b)
 
 @dp_inst
 def _compare(state, op, a: T.primitive, b: T.row):
@@ -431,7 +431,7 @@ def _compare(state, op, a: T.row, b: T.row):
 
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, cmp: ast.Compare):
     insts = evaluate(state, cmp.args)
 
@@ -444,7 +444,7 @@ def compile_to_inst(state: State, cmp: ast.Compare):
     }.get(cmp.op, cmp.op)
     return compare(state, op, insts[0], insts[1])
 
-@dy
+@dsp
 def compile_to_inst(state: State, neg: ast.Neg):
     expr = cast_to_instance(state, neg.expr)
     assert_type(expr.type, T.number, neg, "Negation")
@@ -452,7 +452,7 @@ def compile_to_inst(state: State, neg: ast.Neg):
     return make_instance(sql.Neg(expr.code), expr.type, [expr])
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, arith: ast.BinOp):
     args = cast_to_instance(state, arith.args)
     return compile_arith(state, arith, *args)
@@ -524,7 +524,7 @@ def _compile_arith(state, arith, a: T.number, b: T.number):
             raise Signal.make(T.ValueError, arith.args[-1], str(e))
         if arith.op == '**':
             value = float(value)
-        return new_value_instance(value, res_type)
+        return pyvalue_inst(value, res_type)
 
     code = sql.arith(state.db.target, res_type, arith.op, [a.code, b.code])
     return make_instance(code, res_type, [a, b])
@@ -540,26 +540,26 @@ def _compile_arith(state, arith, a: T.string, b: T.string):
 
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
         # Local folding for better performance (optional, for better performance)
-        return new_value_instance(a.local_value + b.local_value, T.string)
+        return pyvalue_inst(a.local_value + b.local_value, T.string)
 
     code = sql.arith(state.db.target, T.string, arith.op, [a.code, b.code])
     return make_instance(code, T.string, [a, b])
 
 
 
-@dy
+@dsp
 def compile_to_inst(_state: State, x: ast.Ellipsis):
     raise Signal.make(T.SyntaxError, x, "Ellipsis not allowed here")
 
 
-@dy
+@dsp
 def compile_to_inst(_state: State, c: ast.Const):
     if c.type == T.nulltype:
         assert c.value is None
         return objects.null
-    return new_value_instance(c.value, c.type)
+    return pyvalue_inst(c.value, c.type)
 
-@dy
+@dsp
 def compile_to_inst(state: State, d: ast.Dict_):
     # TODO handle duplicate key names
     elems = {k or guess_field_name(v): evaluate(state, v) for k, v in d.elems.items()}
@@ -567,7 +567,7 @@ def compile_to_inst(state: State, d: ast.Dict_):
     return objects.StructInstance(t, elems)
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, lst: objects.PythonList):
     t = lst.type.elem
     x = [sql.Primitive(t, sql._repr(t,i)) for i in lst.items]
@@ -578,7 +578,7 @@ def compile_to_inst(state: State, lst: objects.PythonList):
     return inst
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, lst: ast.List_):
     if not lst.elems and tuple(lst.type.elems.values()) == (T.any,):
         # XXX a little awkward
@@ -613,7 +613,7 @@ def compile_to_inst(state: State, lst: ast.List_):
 
 
 # def resolve_parameters(state: State, res: ast.ResolveParameters):
-@dy
+@dsp
 def compile_to_inst(state: State, res: ast.ResolveParameters):
 
     # XXX use a different mechanism??
@@ -666,7 +666,7 @@ def _resolve_sql_parameters(state, compiled_sql, wrap=False, subqueries=None):
 
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
     sql_code = cast_to_python_string(state, rps.string)
     if not isinstance(sql_code, str):
@@ -728,7 +728,7 @@ def compile_to_inst(state: State, rps: ast.ParameterizedSqlCode):
     code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
     return make_instance(code, type_, instances)
 
-@dy
+@dsp
 def compile_to_inst(state: State, s: ast.Slice):
     obj = cast_to_instance(state, s.obj)
 
@@ -739,7 +739,7 @@ def compile_to_inst(state: State, s: ast.Slice):
         start = cast_to_instance(state, s.range.start)
         instances += [start]
     else:
-        start = new_value_instance(0)
+        start = pyvalue_inst(0)
 
     if s.range.stop:
         stop = cast_to_instance(state, s.range.stop)
@@ -756,7 +756,7 @@ def compile_to_inst(state: State, s: ast.Slice):
 
     return make_instance(code, obj.type, instances)
 
-@dy
+@dsp
 def compile_to_inst(state: State, sel: ast.Selection):
     obj = simplify(state, sel.table)
     if isinstance(obj, Type):
@@ -789,7 +789,7 @@ def compile_to_inst(state: State, sel: ast.Selection):
 
     return type(table).make(code, table.type, [table] + conds)
 
-@dy
+@dsp
 def compile_to_inst(state: State, param: ast.Parameter):
     if state.access_level == state.AccessLevels.COMPILE:
         if param.type <= T.struct:
@@ -799,7 +799,7 @@ def compile_to_inst(state: State, param: ast.Parameter):
 
     return state.get_var(param.name)
 
-@dy
+@dsp
 def compile_to_inst(state: State, attr: ast.Attr):
     if isinstance(attr.name, ast.Marker):
         if attr.expr:
@@ -845,32 +845,32 @@ def _apply_type_generics(state, gen_type, type_names):
 
 
 
-@dy
+@dsp
 def guess_field_name(_f):
     return '_'
-@dy
+@dsp
 def guess_field_name(f: ast.Attr):
     name = f.name
     if isinstance(name, ast.Marker):
         name = '<marker>'
     return guess_field_name(f.expr) + "." + name
-@dy
+@dsp
 def guess_field_name(f: ast.Name):
     return str(f.name)
-@dy
+@dsp
 def guess_field_name(f: ast.Projection):
     return guess_field_name(f.table)
-@dy
+@dsp
 def guess_field_name(f: ast.FuncCall):
     return guess_field_name(f.func)
 
 
-@dy
+@dsp
 def compile_to_inst(state: State, marker: ast.Marker):
     all_vars = state.get_all_vars_with_rank()   # Uses overridden version of AcState
     raise AutocompleteSuggestions(all_vars)
 
-@dy
+@dsp
 def compile_to_inst(state: State, range: ast.Range):
     # TODO move to sql.py
     # Requires subqueries to be part of 'code' instead of a separate 'subqueries'?

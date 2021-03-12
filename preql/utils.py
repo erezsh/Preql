@@ -16,7 +16,7 @@ from . import settings
 
 mut_dataclass = runtype.dataclass(check_types=settings.typecheck, frozen=False)
 dataclass = runtype.dataclass(check_types=settings.typecheck)
-dy = runtype.Dispatch()
+dsp = runtype.Dispatch()
 
 def field_list():
     return dataclasses.field(default_factory=list)
