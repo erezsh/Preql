@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 from . import settings
-from .core import pql_ast as ast
+from .core.pql_ast import pyvalue, Ast
 from .core import pql_objects as objects
 from .core.interpreter import Interpreter
 from .core.pql_types import T
@@ -54,7 +54,7 @@ class TablePromise:
         if isinstance(index, slice):
             offset = index.start or 0
             limit = index.stop - offset
-            return self._interp.call_builtin_func('limit_offset', [self._inst, ast.make_const(limit), ast.make_const(offset)])
+            return self._interp.call_builtin_func('limit_offset', [self._inst, pyvalue(limit), pyvalue(offset)])
 
         # TODO different debug log level / mode
         res ,= self._interp.cast_to_python(self[index:index+1])
@@ -106,7 +106,7 @@ class Preql:
             self._display = display.RichDisplay()
 
         self.interp.state.display = self._display  # TODO proper api
-        
+
 
     def _reset_interpreter(self, engine=None):
         if engine is None:
@@ -135,7 +135,7 @@ class Preql:
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
-        if isinstance(res, ast.Ast):
+        if isinstance(res, Ast):
             raise TypeError("Returned object cannot be converted into a Python representation")
         return _prepare_instance_for_user(self.interp, res)  # TODO session, not state
 

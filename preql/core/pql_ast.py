@@ -324,7 +324,7 @@ class Dict_(Expr):
 
 
 
-def make_const(value):
+def pyvalue(value):
     t = types.from_python(type(value))
     return Const(t, value)
 

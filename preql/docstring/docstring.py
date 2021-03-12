@@ -177,36 +177,6 @@ class DocIndenter(Indenter):
     tab_len = 1
 
 
-from lark import Token
-import re
-class _Lexer:
-    def lex(s):
-        base_indent = None
-        for i, line in s.splitlines():
-            is_blank = bool(line.strip())
-            line_indent = re.match('\s*', line).end()
-
-            if base_indent is None and i and not is_blank:
-                # Base indent is only set once
-                base_indent = line_indent
-
-            if base_indent:
-                if base_indent < line_indent:
-                    yield Token('_INDENT', '')
-                elif base_indent > line_indent:
-                    yield Token('_DEDENT', '')
-
-            line = line[line_indent:]
-            type_ = ''
-            if re.match('', line):
-                type_ = 'section'
-
-            print(line)
-
-
-        return []
-
-
 parser = Lark.open('docstring.lark', rel_to=__file__,
                     parser='lalr', #lexer=_Lexer,
                     postlex=DocIndenter(),
@@ -222,31 +192,31 @@ def parse(s):
     return DocTransformer().transform(tree)
 
 
-def test_parser():
-    s ="""
-    Ok
+# def test_parser():
+#     s ="""
+#     Ok
 
-    Parameters:
-        Test1: bla
-    """
+#     Parameters:
+#         Test1: bla
+#     """
 
-    """
-    Parameters:
-        Test_1: whatever
-        Param2(int, optional): LALALA
-                            BLA BLA BLA
-                            YESYES
-                                WHAT NOW???
+#     """
+#     Parameters:
+#         Test_1: whatever
+#         Param2(int, optional): LALALA
+#                             BLA BLA BLA
+#                             YESYES
+#                                 WHAT NOW???
 
-    See Also:
-        Whatever
-            OK
-        This counts too
+#     See Also:
+#         Whatever
+#             OK
+#         This counts too
 
-    """
-    res = parse(s)
-    # print(res)
-    # print(res.print_html())
+#     """
+#     res = parse(s)
+#     # print(res)
+#     # print(res.print_html())
 
 
 if __name__ == "__main__":

@@ -907,4 +907,3 @@ def compile_to_inst(state: State, range: ast.Range):
     return objects.TableInstance(code, type_, SafeDict({name: subq}))
 
 
-    

@@ -105,4 +105,3 @@ def _cast(inst_type: T.t_relation, target_type: T.int, inst):
 def cast(obj, t):
     res = _cast(kernel_type(obj.type), t, obj)
     return objects.inherit_phantom_type(res, [obj])
-    

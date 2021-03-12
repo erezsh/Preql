@@ -38,7 +38,6 @@ def flatten_path(path, t: T.list):
 
 
 def flatten_type(tp, path = []):
-    # return [(join_names(path), t.col_type) for path, t in flatten_path([name], tp)]
     return [(join_names(path), t) for path, t in flatten_path(path, tp)]
 
 
@@ -49,10 +48,6 @@ def table_params(t):
 
 
 def table_flat_for_insert(table):
-    # auto_count = join_names(self.primary_keys)
-    # if 'pk' not in table.options:
-    #     raise Signal.pql_TypeError(T.TypeError, [], f"Cannot add to table. Primary key not defined")
-
     pks = {join_names(pk) for pk in table.options.get('pk', [])}
     names = [name for name, t in flatten_type(table)]
     return classify_bool(names, lambda name: name in pks)
@@ -72,3 +67,4 @@ def kernel_type(t):
     if t <= T.projected: # or t <= T.aggregated:
         return kernel_type(t.elems['item'])
     return t
+

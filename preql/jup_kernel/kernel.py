@@ -54,10 +54,10 @@ class PreqlKernel(Kernel):
                     }
 
 
-            if json['success']:
-                stream_content = {'name': 'stdout', 'text': json['output']}
-            else:
-                stream_content = {'name': 'stderr', 'text': json['output']}
+            # if json['success']:
+            #     stream_content = {'name': 'stdout', 'text': json['output']}
+            # else:
+            #     stream_content = {'name': 'stderr', 'text': json['output']}
             # self.send_response(self.iopub_socket, 'stream', stream_content)
 
             html = json['output']

@@ -1,5 +1,3 @@
-import rich
-
 from runtype import dataclass
 
 from preql.utils import safezip, dy
@@ -111,13 +109,13 @@ def doc_module(m):
     return ModuleDoc(m, list(map(doc_func, m.public_functions())))
 
 
-def test_func():
-    p = Preql()
-    rich.print(doc_func(p('bfs')).print_text())
+# def test_func():
+#     p = Preql()
+#     rich.print(doc_func(p('bfs')).print_text())
 
-def test_module():
-    p = Preql()
-    rich.print(doc_module(p('__builtins__')).print_text())
+# def test_module():
+#     p = Preql()
+#     rich.print(doc_module(p('__builtins__')).print_text())
 
 def generate_rst(modules_fn, types_fn):
     from preql import Preql

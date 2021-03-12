@@ -9,7 +9,7 @@ from preql.context import context
 from .exceptions import Signal
 from .pql_types import T, ITEM_NAME
 from . import pql_objects as objects
-from . import pql_ast as ast
+from .pql_ast import pyvalue
 from .types_impl import dp_type, pql_repr
 from .interp_common import call_builtin_func, cast_to_python_int, cast_to_python
 
@@ -70,7 +70,7 @@ def _rich_to_html(r):
 
 
 def table_limit(table, state, limit, offset=0):
-    return call_builtin_func(state, 'limit_offset', [table, ast.make_const(limit), ast.make_const(offset)])
+    return call_builtin_func(state, 'limit_offset', [table, pyvalue(limit), pyvalue(offset)])
 
 
 def _html_table(name, count_str, rows, offset, has_more, colors):
