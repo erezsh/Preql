@@ -30,7 +30,7 @@ For features that are database-specific, or aren't implemented in Preql, there i
 * Runs on Jupyter Notebook
 
 
-**Note: Preql is still work in progress, and isn't ready for production use, or any serious use quite yet.**
+**Note: Preql is still work in progress, and isn't yet recommended for use in production.**
 
 [![tests](https://github.com/erezsh/preql/actions/workflows/tests.yml/badge.svg)](https://github.com/erezsh/Preql/actions/workflows/tests.yml)
 

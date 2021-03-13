@@ -35,7 +35,9 @@ def pql_repr(t: T.decimal, value):
 
 @dp_type
 def pql_repr(t: T.string, value):
-    assert isinstance(value, str), value
+    if not isinstance(value, str):
+        raise Signal.make(T.TypeError, None, f"Expected value of type 'string', instead got {type(value)}")
+
     value = value.replace('"', r'\"')
     res = f'"{value}"'
     if context.state.display.format == 'html':

@@ -325,6 +325,7 @@ if (db_type == "postgres") {
     func _count_true(field) = SQL(int, "sum(cast($field!=0 as unsigned))")
 
 } else if (db_type == "bigquery") {
+    func _now() = SQL(datetime, "current_datetime()")
     func _random() = SQL(float, "RAND()")
     
     func _str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
@@ -333,6 +334,10 @@ if (db_type == "postgres") {
 
     func _count_false(field) = SQL(int, "sum(cast($field=0 as int64))")
     func _count_true(field) = SQL(int, "sum(cast($field!=0 as int64))")
+
+    func day_of_week(x) = SQL(int, "EXTRACT (DAYOFWEEK FROM $x)")
+    func hour(x) = SQL(int, "EXTRACT (HOUR FROM $x)")
+    func year(x) = SQL(int, "EXTRACT (YEAR FROM $x)")
 } else {
     throw new TypeError("Unexpected")
 }

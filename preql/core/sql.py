@@ -988,12 +988,13 @@ def _from_datetime(s):
         return s
 
     # Sqlite
-    if not isinstance(s, str):
-        raise Signal.make(T.TypeError, None, f"datetime expected a string. Instead got: {s}")
-    try:
-        return datetime.fromisoformat(s)
-    except ValueError as e:
-        raise Signal.make(T.ValueError, None, str(e))
+    if isinstance(s, str):
+        try:
+            return datetime.fromisoformat(s)
+        except ValueError as e:
+            raise Signal.make(T.ValueError, None, str(e))
+
+    raise Signal.make(T.TypeError, None, f"Unexpected type for datetime: {type(s)}")
 
 
 @dp_type
