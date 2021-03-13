@@ -383,6 +383,7 @@ We can chain table operations:
 We can also filter the rows by index (zero-based), by providing it with a `range` instead.
 
 ```javascript
+ >> Country[1..]
       table Country =2
 ┏━━━━┳━━━━━━━━┳━━━━━━━━━━━━┓
 ┃ id ┃ name   ┃ population ┃
