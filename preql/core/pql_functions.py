@@ -489,9 +489,10 @@ def pql_join(state, on, tables):
     Connections are made according to the relationships in the declaration of the table.
 
     Parameters:
-        tables: Each keyword argument must be either a column, or a table.
         $on: Optional special keyword argument for specifying join condition.
              When specified, auto-join will be skipped.
+        tables: Provided as keyword arguments, in the form of <name>: <table>.
+                Each keyword argument must be either a column, or a table.
 
     Returns:
         A new table, where each column is a struct representing one of

@@ -17,7 +17,7 @@ _NL: ( /\r?\n[\t ]*/ | COMMENT )+
 
 SECTION_TYPE: LINE /:\s*(?=\n)/  // Line, if followed immediately by :\n
 LINE.-10: /.+/
-DEFIN: NAME ":" /(?!\n)/
+DEFIN: "$"? NAME ":" /(?!\n)/
 
 %import python (NAME, COMMENT)
 %import common.WS_INLINE -> _WS
