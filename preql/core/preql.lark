@@ -152,7 +152,7 @@ ellipsis: "..." [expr] exclude*
 ?exclude: "!" (name | marker)
 
 getattr: [molecule] "." (name | marker)
-name: NAME | QUOTED_NAME
+name: NAME | QUOTED_NAME | SPECIAL_NAME
 var: name
 
 PK: "pk"
@@ -180,6 +180,8 @@ _ml_sep: "," | "," _NL | _NL
 _separated{item, sep}: (item sep)* item
 _cs_list{item}: (item ",")* item ","?
 
+
+SPECIAL_NAME: "$" NAME
 
 %import common.CNAME -> NAME
 

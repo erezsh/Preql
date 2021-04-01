@@ -406,10 +406,13 @@ def _auto_join(ta, tb):
     return src, dst
 
 
-def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=None):
-
+def _join(state: State, join: str, on, exprs_dict: dict, joinall=False, nullable=None):
     names = list(exprs_dict)
     exprs = [evaluate(state, value) for value in exprs_dict.values()]
+
+    if len(exprs_dict.attrs) < 2:
+        raise Signal.make(T.ValueError, None, f"Need at least two tables to join. Got {len(exprs_dict.attrs)}")
+
 
     # Validation and edge cases
     for x in exprs:
@@ -448,6 +451,11 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
         for e in exprs:
             if not isinstance(e, objects.CollectionInstance):
                 raise Signal.make(T.TypeError, None, f"joinall() expected tables. Got {e}")
+    elif on is not objects.null:
+        attrs = {n: objects.make_instance_from_name(table_type.elems[n], n) for n in names}
+        with state.use_scope({n: objects.projected(c) for n, c in attrs.items()}):
+            on = cast_to_instance(state, on)
+        conds.append(on.code)
     else:
         if len(exprs) < 2:
             raise Signal.make(T.TypeError, None, "join expected at least 2 arguments")
@@ -472,7 +480,7 @@ def _join(state: State, join: str, exprs_dict: dict, joinall=False, nullable=Non
     return objects.TableInstance.make(code, table_type, exprs)
 
 
-def pql_join(state, tables):
+def pql_join(state, on, tables):
     """Inner-join any number of tables.
 
     Each argument is expected to be one of -
@@ -481,7 +489,9 @@ def pql_join(state, tables):
     Connections are made according to the relationships in the declaration of the table.
 
     Parameters:
-        tables: Each argument must be either a column, or a table.
+        tables: Each keyword argument must be either a column, or a table.
+        $on: Optional special keyword argument for specifying join condition.
+             When specified, auto-join will be skipped.
 
     Returns:
         A new table, where each column is a struct representing one of
@@ -505,22 +515,35 @@ def pql_join(state, tables):
         │     4 │
         └───────┘
 
+         >> leftjoin(a: [1,3], b: [1,2], $on: a.item > b.item)
+        table join78 =3
+        ┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
+        ┃ a           ┃ b              ┃
+        ┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
+        │ {'item': 1} │ {'item': None} │
+        │ {'item': 3} │ {'item': 1}    │
+        │ {'item': 3} │ {'item': 2}    │
+        └─────────────┴────────────────┘
+
         >> join(c: Country, l: Language) {...c, language: l.name}
     """
-    return _join(state, "JOIN", tables)
-def pql_leftjoin(state, tables):
+    return _join(state, "JOIN", on, tables)
+
+def pql_leftjoin(state, on, tables):
     """Left-join any number of tables
 
     See `join`
     """
-    return _join(state, "LEFT JOIN", tables, nullable=[False, True])
-def pql_outerjoin(state, tables):
+    return _join(state, "LEFT JOIN", on, tables, nullable=[False, True])
+
+def pql_outerjoin(state, on, tables):
     """Outer-join any number of tables
 
     See `join`
     """
-    return _join(state, "FULL OUTER JOIN", tables, nullable=[False, True])
-def pql_joinall(state: State, tables):
+    return _join(state, "FULL OUTER JOIN", on, tables, nullable=[False, True])
+
+def pql_joinall(state: State, on, tables):
     """Cartesian product of any number of tables
 
     See `join`
@@ -537,7 +560,7 @@ def pql_joinall(state: State, tables):
         │ {'item': 1} │ {'item': 'b'} │
         └─────────────┴───────────────┘
     """
-    return _join(state, "JOIN", tables, True)
+    return _join(state, "JOIN", on, tables, True)
 
 class NoAutoJoinFound(Exception):
     pass
@@ -984,9 +1007,14 @@ internal_funcs = create_internal_funcs({
     'fmt': pql_fmt,
 })
 
+_joins = {
+    'join': pql_join,
+    'joinall': pql_joinall,
+    'leftjoin': pql_leftjoin,
+    'outerjoin': pql_outerjoin,
+}
+
 joins = {
-    'join': objects.InternalFunction('join', [], pql_join, objects.Param('tables')),
-    'joinall': objects.InternalFunction('joinall', [], pql_joinall, objects.Param('tables')),
-    'leftjoin': objects.InternalFunction('leftjoin', [], pql_leftjoin, objects.Param('tables')),
-    'outerjoin': objects.InternalFunction('outerjoin', [], pql_outerjoin, objects.Param('tables')),
+    k: objects.InternalFunction(k, [objects.Param('$on', default=objects.null)], v, objects.Param('tables'))
+    for k, v in _joins.items()
 }

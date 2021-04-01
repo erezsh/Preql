@@ -1451,6 +1451,21 @@ class BasicTests(PreqlTests):
         assert res == [{'c': 3}, {'c': 30}]
 
 
+    def test_join_on(self):
+        p = self.Preql()
+        p("""
+            A = [1, 3]
+            B = [1, 2]
+            res = leftjoin(a: A, b: B, $on: a.item > b.item)
+        """)
+
+        assert p.res == [
+            {'a': {'item': 1}, 'b': {'item': None}},
+            {'a': {'item': 3}, 'b': {'item': 1}},
+            {'a': {'item': 3}, 'b': {'item': 2}}
+        ]
+
+
 
 
 class TestFlow(PreqlTests):
@@ -1507,7 +1522,6 @@ class TestFunctions(PreqlTests):
          assert p.f3 == 'a b c hello'
          assert p.f4 == 'a b c hello world!'
          assert p.f5 == 'hello my world!'
-
 
 
 class TestPandas(PreqlTests):

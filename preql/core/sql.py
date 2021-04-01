@@ -1025,14 +1025,19 @@ def _restructure_result(t: T.json_array[T.union[T.primitive, T.nulltype]], i):
     if target == mysql:
         res = json.loads(res)
     elif target == sqlite:
-        assert isinstance(res, str), res
+        if not isinstance(res, str):
+            raise Signal.make(T.TypeError, None, f"json_array type expected a string separated by {_ARRAY_SEP}. Got: '{res}'")
         res = res.split(_ARRAY_SEP)
 
     # XXX hack! TODO Use a generic form to cast types
-    if t.elem <= T.int:
-        res = [int(x) for x in res]
-    elif t.elem <= T.float:
-        res = [float(x) for x in res]
+    try:
+        if t.elem <= T.int:
+            res = [int(x) for x in res]
+        elif t.elem <= T.float:
+            res = [float(x) for x in res]
+    except ValueError:
+        raise Signal.make(T.TypeError, None, f"Error trying to convert values to type {t.elem}")
+
     return res
 
 @dp_type

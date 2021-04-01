@@ -509,7 +509,8 @@ def eval_func_call(state, func, args):
     # Don't I need an instance to ensure I have type?
 
     for i, (p, a) in enumerate(matched_args):
-        a = evaluate(state, a)
+        if not p.name.startswith('$'):      # $param means don't evaluate expression, leave it to the function
+            a = evaluate(state, a)
         # TODO cast?
         if p.type and not a.type <= p.type:
             raise Signal.make(T.TypeError, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")

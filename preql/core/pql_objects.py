@@ -114,6 +114,9 @@ class Function(Object):
 
             yield p, v
 
+        if self.param_collector:
+            yield self.param_collector, ast.Dict_({})
+
 
     def _localize_keys(self, _state, struct):
         raise NotImplementedError()
@@ -189,8 +192,8 @@ class Function(Object):
 
         matched = [(p, values.pop(p.name)) for p in self.params]
         assert not values, values
-        if collected:
-            matched.append((self.param_collector, MapInstance(collected)))
+        if self.param_collector:
+            matched.append((self.param_collector, ast.Dict_(collected)))
         return matched
 
 
@@ -234,6 +237,7 @@ class MethodInstance(AbsInstance, Function):
 
     params = property(X.func.params)
     expr = property(X.func.expr)
+    param_collector = property(X.func.param_collector)
 
     name = property(X.func.name)
 
@@ -393,38 +397,44 @@ class StructInstance(AbsStructInstance):
         attrs = [f'{k}: {v.repr()}' for k, v in self.attrs.items()]
         return '{%s}' % ', '.join(attrs)
 
-
-# TODO simplify with mixin
-@dataclass
-class MapInstance(AbsStructInstance):
-    attrs: Dict[str, Object]
-
-    type = T.struct
-
-    def __len__(self):
-        return len(self.attrs)
-
-    def items(self):
-        return self.attrs.items()
+    def values(self):
+        return self.attrs.values()
 
     def __iter__(self):
         return iter(self.attrs)
 
-    def keys(self):
-        return self.attrs.keys()
 
-    def values(self):
-        return self.attrs.values()
+# TODO simplify with mixin
+# @dataclass
+# class MapInstance(AbsStructInstance):
+#     attrs: Dict[str, Object]
 
-    def all_attrs(self):
-        return dict(self.attrs)
+#     type = T.struct
 
-    def primary_key(self):
-        return self
+#     def __len__(self):
+#         return len(self.attrs)
 
-    def repr(self):
-        inner = [f'{name}: {v.repr()}' for name, v in self.attrs.items()]
-        return 'Map{%s}' % ', '.join(inner)
+#     def items(self):
+#         return self.attrs.items()
+
+#     def __iter__(self):
+#         return iter(self.attrs)
+
+#     def keys(self):
+#         return self.attrs.keys()
+
+#     def values(self):
+#         return self.attrs.values()
+
+#     def all_attrs(self):
+#         return dict(self.attrs)
+
+#     def primary_key(self):
+#         return self
+
+#     def repr(self):
+#         inner = [f'{name}: {v.repr()}' for name, v in self.attrs.items()]
+#         return 'Map{%s}' % ', '.join(inner)
 
 
 class RowInstance(StructInstance):
