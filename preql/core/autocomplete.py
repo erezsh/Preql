@@ -25,6 +25,14 @@ def eval_autocomplete(state, cb: ast.Statement, go_inside):
 
 
 @dsp
+def eval_autocomplete(state, t: ast.Try, go_inside):
+    eval_autocomplete(state, t.try_, go_inside)
+    catch_type = evaluate(state, t.catch_expr)
+    scope = {t.catch_name: Signal(catch_type, [], '<unknown exception>')} if t.catch_name else {}
+    with state.use_scope(scope):
+        eval_autocomplete(state, t.catch_block, go_inside)
+
+@dsp
 def eval_autocomplete(state, a: ast.InsertRows, go_inside):
     eval_autocomplete(state, a.value, go_inside)
 @dsp

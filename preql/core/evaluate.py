@@ -297,9 +297,13 @@ def _execute(state: State, t: ast.Try):
     try:
         execute(state, t.try_)
     except Signal as e:
-        exc_type = localize(state, evaluate(state, t.catch_expr))
-        if isinstance(e, exc_type):
-            execute(state, t.catch_block)
+        catch_type = localize(state, evaluate(state, t.catch_expr))
+        if not isinstance(catch_type, Type):
+            raise Signal.make(T.TypeError, t.catch_expr, f"Catch expected type, got {t.catch_expr.type}")
+        if e.type <= catch_type:
+            scope = {t.catch_name: e} if t.catch_name else {}
+            with state.use_scope(scope):
+                execute(state, t.catch_block)
         else:
             raise
 

@@ -74,6 +74,19 @@ class AutocompleteTests(PreqlTests):
         progressive_test(state, s1*2)
         progressive_test(state, s1, True)
 
+    def test_progressive3(self):
+        p = self.Preql()
+        state = p.interp.state
+        s = """
+        try {
+            SQL(<<<int>>>, "SELECT 2; SELECT 1;")
+        }
+        catch(e: Exception) {
+            <<<print>>> <<<e>>>
+        } 
+        """
+        progressive_test(state, s, True)
+
     def test_params(self):
         p = self.Preql()
         state = p.interp.state

@@ -284,6 +284,7 @@ class CodeBlock(Statement):
 @dataclass
 class Try(Statement):
     try_: CodeBlock
+    catch_name: Optional[str]
     catch_expr: Expr
     catch_block: CodeBlock
 

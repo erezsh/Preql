@@ -49,7 +49,7 @@ typemod: PK | NULLABLE
 func_def: "func" name func_params "=" expr [_NL string_raw] _NL -> func_def_short
         | "func" name func_params codeblock _NL
 
-try_catch: "try" codeblock _NL? "catch" "(" expr ")" codeblock _NL
+try_catch: "try" codeblock _NL? "catch" "(" [name ":"] expr ")" codeblock _NL
 if_stmt: "if" "(" expr ")" codeblock (_NL? "else" (codeblock _NL|if_stmt) | _NL)
 for_stmt: "for" "(" name "in" expr ")" codeblock _NL
 while_stmt: "while" "(" expr ")" codeblock _NL
