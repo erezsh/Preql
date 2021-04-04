@@ -80,7 +80,7 @@ def doc_func(f):
     try:
         doc_tree = parse(f.docstring or '')
     except LarkError as e:
-        raise AutoDocError(f"Error in docstring of function {f.name}")
+        raise AutoDocError(f"Error in docstring of function {f.name}: {e}")
 
 
     assert {s.name for s in doc_tree.sections} <= {'Parameters', 'Example', 'Examples', 'Note', 'Returns', 'See Also'}, [s.name for s in doc_tree.sections]

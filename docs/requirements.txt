@@ -9,3 +9,4 @@ tqdm
 prompt-toolkit
 pygments
 rich
+arrow

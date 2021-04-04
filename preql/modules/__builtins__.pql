@@ -52,8 +52,8 @@ func product(col: _table_or_agg(number)) = _sql_agg_func("_pql_PRODUCT", col)
     Note:
         This function is only available in sqlite3 by default.
         To make it available in postgres, users must call the `install_polyfills()` function.
-
-    For databases that don't support product, see `approx_product()`.
+        
+        For databases that don't support product, see `approx_product()`.
     """
 
 func mean(col: _table_or_agg(number)) = _sql_agg_func("AVG", col, float)
