@@ -3,6 +3,8 @@ import json
 from datetime import datetime
 from typing import List, Optional, Dict
 
+import arrow
+
 from preql.utils import dataclass, X, listgen, field_list, safezip
 from preql.context import context
 
@@ -275,7 +277,11 @@ class Cast(SqlTree):
     value: Sql
 
     def _compile(self, qb):
-        t = _compile_type(qb.target, self.type.as_nullable())     # XXX as-nullable here is a hack
+        if qb.target == mysql and self.type <= T.string:
+            # XXX distinguish between these cases properly, not as a hack
+            t = 'char'
+        else:
+            t = _compile_type(qb.target, self.type.as_nullable())     # XXX as-nullable here is a hack
         return [f'CAST('] + self.value.compile_wrap(qb).code + [f' AS {t})']
 
 
@@ -990,7 +996,8 @@ def _from_datetime(s):
     # Sqlite
     if isinstance(s, str):
         try:
-            return datetime.fromisoformat(s)
+            # return datetime.fromisoformat(s)
+            return arrow.get(s)
         except ValueError as e:
             raise Signal.make(T.ValueError, None, str(e))
 
@@ -1217,8 +1224,8 @@ def make_value(x):
 
     try:
         t = pql_types.from_python(type(x))
-    except KeyError:
-        raise ValueError(x)
+    except KeyError as e:
+        raise ValueError(x) from e
 
     return Primitive(t, _repr(t, x))
 

@@ -44,6 +44,18 @@ func sum(col: _table_or_agg(number)) {
     return _sql_agg_func("SUM", col)
 }
 
+func product(col: _table_or_agg(number)) = _sql_agg_func("_pql_PRODUCT", col)
+    """Returns the product of a column or a list
+
+    See Also `sum`.
+
+    Note:
+        This function is only available in sqlite3 by default.
+        To make it available in postgres, users must call the `install_polyfills()` function.
+
+    For databases that don't support product, see `approx_product()`.
+    """
+
 func mean(col: _table_or_agg(number)) = _sql_agg_func("AVG", col, float)
     """Returns the mean average of a column or a list
 
@@ -267,7 +279,7 @@ db_type = get_db_type()
 
 if (db_type == 'sqlite' and PY("sqlite3.sqlite_version_info < (3, 25)", "import sqlite3")) {
     func enum(tbl: table) {
-        throw new NotImplementedError("Sqlite doesn't support windows functions before version 3.25")
+        throw new NotImplementedError("Sqlite doesn't support window functions before version 3.25")
     }
 } else {
     func enum(tbl: table) = tbl{index: SQL(int, "(row_number() over ())-1"), ...}
@@ -288,7 +300,27 @@ if (db_type == 'sqlite' and PY("sqlite3.sqlite_version_info < (3, 25)", "import 
         """
 }
 
+if (db_type == 'sqlite') {
+    _approx_product = product   // For sqlite we can always use the polyfill version
+} else {
+    func _approx_product(col: aggregated[number]) = SQL(float, "exp(sum(ln($col)))")
+}
+
+func approx_product(col: aggregated[number]) = _approx_product(col)
+    """Returns the approximate product of an aggregated column
+
+    It does so using logarithmic math.
+
+    See `product` for an accurate version of this function.
+    """
+
+
 if (db_type == "postgres") {
+    func install_polyfills() {
+        force_eval( SQL(nulltype, "CREATE OR REPLACE AGGREGATE _pql_PRODUCT(numeric) (sfunc = numeric_mul, stype = numeric);") )
+    }
+
+    func _cast_string_to_int(s: string) = SQL(int, "cast($s as int)")
     func _random() = SQL(float, "RANDOM()")
 
     func _str_index(a: string, b: string) = SQL(int, "POSITION($a in $b)-1")
@@ -296,6 +328,7 @@ if (db_type == "postgres") {
     func _char(n: int) = SQL(string, "chr($n)")
     func _char_ord(n: string) = SQL(int, "ascii($n)")
 } else if (db_type == "sqlite" or db_type == "duck") {
+    func _cast_string_to_int(s: string) = SQL(int, "case when cast($s as int)||''=$s then cast($s as int) else _pql_throw('Error trying to cast string to int') end")
     func _repeat(s: string, num: int) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
     func _now() = SQL(datetime, "datetime('now')")
     func _random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
@@ -314,6 +347,8 @@ if (db_type == "postgres") {
     func _char(n: int) = SQL(string, "char($n)")
     func _char_ord(n: string) = SQL(int, "unicode($n)")
 } else if (db_type == "mysql") {
+    // XXX Mysql can't throw errors.. so we're going to make it error on unrelated subquery
+    func _cast_string_to_int(s: string) = SQL(int, "case when cast(cast($s as signed) as char)=$s then cast($s as signed) else (select 0 union select 1) end")
     func _random() = SQL(float, "RAND()")
 
     func _str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
@@ -325,6 +360,7 @@ if (db_type == "postgres") {
     func _count_true(field) = SQL(int, "sum(cast($field!=0 as unsigned))")
 
 } else if (db_type == "bigquery") {
+    func _cast_string_to_int(s: string) = SQL(int, "cast($s as int64)")
     func _now() = SQL(datetime, "current_datetime()")
     func _random() = SQL(float, "RAND()")
     

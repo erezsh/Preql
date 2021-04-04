@@ -1,3 +1,4 @@
+import operator
 from pathlib import Path
 import subprocess
 import json
@@ -46,7 +47,12 @@ class SqlInterface:
 
     def _import_result(self, sql_type, c):
         if sql_type is not T.nulltype:
-            res = c.fetchall()
+            try:
+                res = c.fetchall()
+            except Exception as e:
+                msg = "Exception when trying to fetch SQL result. Got error: %s"
+                raise DatabaseQueryError(msg%(e))
+
             return from_sql(Const(sql_type, res))
 
 
@@ -345,19 +351,32 @@ class AbsSqliteInterface:
         return T.table(cols, name=Id(name), pk=pk)
 
 
+class _SqliteProduct:
+    def __init__(self):
+        self.product = 1
+
+    def step(self, value):
+        self.product *= value
+
+    def finalize(self):
+        return self.product
+
 class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
     target = sqlite
 
     def __init__(self, filename=None, print_sql=False):
         import sqlite3
+        # sqlite3.enable_callback_tracebacks(True)
         try:
             self._conn = sqlite3.connect(filename or ':memory:')
         except sqlite3.OperationalError as e:
             raise ConnectError(*e.args) from e
 
-        def sqlite_power(x,n):
-            return x**n
-        self._conn.create_function("power", 2, sqlite_power)
+        def sqlite_throw(x):
+            raise Exception(x)
+        self._conn.create_function("power", 2, operator.pow)
+        self._conn.create_function("_pql_throw", 1, sqlite_throw)
+        self._conn.create_aggregate("_pql_product", 1, _SqliteProduct)
 
         self._print_sql = print_sql
 

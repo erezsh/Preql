@@ -391,6 +391,21 @@ def _compare(_state, _op, _a: T.unknown, _b: T.unknown):
 
 
 @dp_inst
+def _prepare_to_compare(op, a, b):
+    if op == '=':
+        return pyvalue_inst(False)
+    elif op == '!=':
+        return pyvalue_inst(True)
+    raise Signal.make(T.TypeError, op, f"Operator '{op}' not implemented for {a.type} and {b.type}")
+
+@dp_inst
+def _prepare_to_compare(op, a: T.number | T.bool | T.t_id, b: T.number | T.bool | T.t_id):
+    pass
+@dp_inst
+def _prepare_to_compare(op, a: T.string, b: T.string):
+    pass
+
+@dp_inst
 def _compare(_state, op, a: T.primitive, b: T.primitive):
     if settings.optimize and isinstance(a, objects.ValueInstance) and isinstance(b, objects.ValueInstance):
         f = {
@@ -402,9 +417,16 @@ def _compare(_state, op, a: T.primitive, b: T.primitive):
             '>=': operator.ge,
             '<=': operator.le,
         }[op]
-        return pyvalue_inst(f(a.local_value, b.local_value))
+        try:
+            return pyvalue_inst(f(a.local_value, b.local_value))
+        except TypeError as e:
+            raise Signal.make(T.TypeError, op, f"Operator '{op}' not implemented for {a.type} and {b.type}")
 
     # TODO regular equality for primitives? (not 'is')
+    res = _prepare_to_compare(op, a, b)
+    if res is not None:
+        return res
+
     code = sql.Compare(op, [a.code, b.code])
     return objects.Instance.make(code, T.bool, [a, b])
 

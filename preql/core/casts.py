@@ -3,6 +3,8 @@ from . import sql
 from .pql_types import T, dp_type, ITEM_NAME
 from .types_impl import kernel_type
 from .exceptions import Signal
+from .interp_common import call_builtin_func
+from ..context import context
 
 @dp_type
 def _cast(inst_type, target_type, inst):
@@ -80,11 +82,15 @@ def _cast(_inst_type: T.union[T.int, T.bool], _target_type: T.float, inst):
     code = sql.Cast(T.float, inst.code)
     return objects.Instance.make(code, T.float, [inst])
 
+@dp_type
+def _cast(_inst_type: T.string, _target_type: T.int, inst):
+    return call_builtin_func(context.state, "_cast_string_to_int", [inst])
+
+
 # @dp_type
-# def _cast(state, inst_type: T.string, target_type: T.int, inst):
-#     # TODO error on bad string?
-#     code = sql.Cast(T.int, "int", inst.code)
-#     return objects.Instance.make(code, T.int, [inst])
+# def _cast(_inst_type: T.string, _target_type: T.datetime, inst):
+#     # XXX unsafe cast, bad strings won't throw an error
+#     return objects.Instance.make(inst.code, T.datetime, [inst])
 
 @dp_type
 def _cast(_inst_type: T.primitive, _target_type: T.string, inst):

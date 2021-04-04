@@ -589,6 +589,16 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql('type(list(list([1,2]{item+1}){item+1}))'), T.list[T.int])
         self.assertEqual( preql('list(list([1,2]{item+1}){item+1})'), [3,4])
 
+        self.assertEqual( preql('list(["1", "2"]{int(item)})'), [1,2])
+
+        try:
+            self.assertEqual( preql('list(["1", "2f"]{int(item)})'), [1,2])
+        except Signal:
+            pass
+        else:
+            assert False
+
+
     def test_lists2(self):
         preql = self.Preql()
         preql('''
@@ -754,6 +764,7 @@ class BasicTests(PreqlTests):
 
     def test_compare(self):
         preql = self.Preql()
+        assert preql('3 != "3"')
         self.assertEqual( preql("""null != 1"""), True )
 
         self.assertEqual( preql("""1 == 1"""), True )
@@ -772,13 +783,22 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql("""1 !in [1,2,3]"""), False )
         self.assertEqual( preql("""4 in [1,2,3]"""), False )
 
+        # Auto-casts. Might be disabled in the future
+        # XXX yet "1" != 1  (TODO)
+        self.assertEqual( preql("""'4' in [1,2,3]"""), False )
+        self.assertEqual( preql("""'3' in [1,2,3]"""), True )
+        self.assertEqual( preql("""4 in ['1','2','3']"""), False )
+        self.assertEqual( preql("""3 in ['1','2','3']"""), True )
+
         # TODO
-        # self.assertRaises( pql_TypeError, preql, """2 > "a" """)
-        # self.assertRaises( pql_TypeError, preql, """2 == "a" """)
-        # self.assertRaises( pql_TypeError, preql, """ 1 == [2] """)
+        self._assertSignal( T.TypeError, preql, """2 > "a" """)
+        self._assertSignal( T.TypeError, preql, """ 1 == [2] """)
+        assert preql('3 != "3"')
+
         self._assertSignal(T.TypeError, preql, """ [1] in [2] """)
-        self._assertSignal(T.TypeError, preql, """ "a" in [2] """)
-        # self.assertRaises( pql_TypeError, preql, """ 4 in ["a", "B"] """) # TODO good or bad?
+        self._assertSignal(T.DbQueryError, preql, """ "a" in [2] """)
+        self._assertSignal(T.DbQueryError, preql, """ 4 in ["a", "B"] """)
+        preql.rollback()
 
         self.assertEqual( preql("""null == null"""), True )
         self.assertEqual( preql("""null != null"""), False )
@@ -1465,6 +1485,20 @@ class BasicTests(PreqlTests):
             {'a': {'item': 3}, 'b': {'item': 2}}
         ]
 
+    def test_dates(self):
+        p = self.Preql()
+        p("""
+            table A {
+                dt: datetime = now()
+            }
+
+            x = new A()
+            y = new A(x.dt)
+            z = new A("2021-04-02 22:28:41")
+
+        """)
+
+        assert p.x['dt'] == p.y['dt'] != p.z['dt']
 
 
 

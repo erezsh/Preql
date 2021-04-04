@@ -5,6 +5,7 @@ from dataclasses import field
 from decimal import Decimal
 from collections import defaultdict, deque
 
+import arrow
 import runtype
 from runtype.typesystem import TypeSystem
 
@@ -69,7 +70,7 @@ class Type(Object):
         return elem
 
     def as_nullable(self):
-        assert not self.maybe_null()
+        # assert not self.maybe_null()
         return self.replace(_nullable=True)
 
     def maybe_null(self):
@@ -311,6 +312,7 @@ _t = {
     str: T.string,
     datetime: T.datetime,
     Decimal: T.decimal,
+    arrow.Arrow: T.datetime,
 }
 def from_python(t):
     # TODO throw proper exception if this fails
