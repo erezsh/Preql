@@ -52,7 +52,7 @@ func product(col: _table_or_agg(number)) = _sql_agg_func("_pql_PRODUCT", col)
     Note:
         This function is only available in sqlite3 by default.
         To make it available in postgres, users must call the `install_polyfills()` function.
-        
+
         For databases that don't support product, see `approx_product()`.
     """
 
@@ -301,13 +301,13 @@ if (db_type == 'sqlite' and PY("sqlite3.sqlite_version_info < (3, 25)", "import 
 }
 
 if (db_type == 'sqlite') {
-    _approx_product = product   // For sqlite we can always use the polyfill version
+    func _approx_product(c) = product(c)   // For sqlite we can always use the polyfill version
 } else {
     func _approx_product(col: aggregated[number]) = SQL(float, "exp(sum(ln($col)))")
 }
 
 func approx_product(col: aggregated[number]) = _approx_product(col)
-    """Returns the approximate product of an aggregated column
+    """Returns the approximate product of an aggregated column.
 
     It does so using logarithmic math.
 
