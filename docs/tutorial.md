@@ -353,7 +353,7 @@ Notice that every table automatically gets an `id` column. It's a useful practic
 
 ### Table operations
 
-There are many operations that you can perform on a table. Here we'll javascript through the main ones.
+There are many operations that you can perform on a table. Here we'll run through the main ones.
 
 **Selection** lets us filter tables using the selection operator:
 
