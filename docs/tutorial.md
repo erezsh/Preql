@@ -661,7 +661,7 @@ It is possible to omit the attributes when there is a predefined relationship be
 
 Preql does not, and cannot, implement every SQL function and feature.
 
-There are too many dialects of SQL, and too little Preql programmers (for now).
+There are too many dialects of SQL, and too few Preql programmers (for now).
 
 Luckily, there is an escape hatch, through the `SQL()` function.
 
