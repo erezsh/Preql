@@ -2,7 +2,7 @@
 
 (This document is incomplete, and needs more work)
 
-Preql's syntax is a mix between Go and Javscript.
+Preql's syntax is a mix between Go and Javascript.
 
 - Comments start with `//`
 
