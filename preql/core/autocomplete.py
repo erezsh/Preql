@@ -75,6 +75,11 @@ def eval_autocomplete(state, td: ast.TableDef, go_inside):
     state.set_var(n, objects.TableInstance.make(sql.unknown, t, []))
 
 @dsp
+def eval_autocomplete(state, td: ast.StructDef, go_inside):
+    t = resolve(state, td)
+    state.set_var(t.name, t)
+
+@dsp
 def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
     f = fd.userfunc
     assert isinstance(f, objects.UserFunction)

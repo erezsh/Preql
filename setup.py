@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 __version__ ,= re.findall('__version__ = "(.*)"', open('preql/__init__.py').read())
 
 setup(
-    name = "preql",
+    name = "preql-lang",
     version = __version__,
     packages = ['preql'],
 

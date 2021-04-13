@@ -343,6 +343,9 @@ def make_instance_from_name(t, cn):
     return make_instance(sql.Name(t, cn), t, [])
 
 def make_instance(code, t, insts):
+    if t.issubtype(T.struct):
+        raise Signal.make(T.TypeError, t, "Cannot instanciate structs directly")
+
     assert not t.issubtype(T.struct), t
     if t <= T.table:
         return TableInstance.make(code, t, insts)
@@ -368,7 +371,7 @@ class AbsStructInstance(AbsInstance):
     def code(self):
         # XXX this shouldn't even be allowed to happen in the first place
         msg = "structs are abstract objects and cannot be sent to target. Choose one of its members instead."
-        raise Signal(T.TypeError, None, msg)
+        raise Signal.make(T.TypeError, None, msg)
 
 
 @dataclass
@@ -483,7 +486,7 @@ class SelectedColumnInstance(AbsInstance):
 
     @property
     def code(self):
-        raise Signal(T.TypeError, [], f"Operation not supported for {self}")
+        raise Signal.make(T.TypeError, [], f"Operation not supported for {self}")
     #     return self._resolve_attr().code
 
     def flatten_code(self):
