@@ -5,15 +5,15 @@ import time
 
 from . import Preql, __version__, Signal
 
-parser = argparse.ArgumentParser(description='Preql command-line interface')
+parser = argparse.ArgumentParser(description='Preql command-line interface (aka REPL)')
 parser.add_argument('-i', '--interactive', action='store_true', default=False,
-                    help="Enter interactive mode after running the script")
-parser.add_argument('-v', '--version', action='store_true', help="Print version")
-parser.add_argument('--install-jupyter', action='store_true', help="Installs the Preql plugin for Jupyter notebook")
-parser.add_argument('--print-sql', action='store_true', help="Print the SQL code that's being executed")
-parser.add_argument('-f', '--file', type=str, help='Path to a Preql script to run')
-parser.add_argument('-m', '--module', type=str, help='Name of a Preql module to run')
-parser.add_argument('--time', action='store_true', help='Displays how long the script ran')
+                    help="enter interactive mode after running the script")
+parser.add_argument('-v', '--version', action='store_true', help="print version")
+parser.add_argument('--install-jupyter', action='store_true', help="installs the Preql plugin for Jupyter notebook")
+parser.add_argument('--print-sql', action='store_true', help="print the SQL code that's being executed")
+parser.add_argument('-f', '--file', type=str, help='path to a Preql script to run')
+parser.add_argument('-m', '--module', type=str, help='name of a Preql module to run')
+parser.add_argument('--time', action='store_true', help='displays how long the script ran')
 parser.add_argument('database', type=str, nargs='?', default=None,
                     help="database url (postgres://user:password@host:port/db_name")
 parser.add_argument('--python-traceback', action='store_true',

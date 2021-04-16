@@ -2,9 +2,11 @@
 
 ## Install
 
-Important: Ensure you have Python 3.6, or above, installed on your system.
+1. Ensure you have [Python 3.6](https://www.python.org/downloads/), or above, installed on your system.
 
-Install using pip:
+2. Ensure you have [pip](https://pip.pypa.io/en/stable/installing/) for Python (you probably already do).
+
+3. Run the following command:
 
 ```sh
     pip install -U preql-lang
@@ -20,9 +22,14 @@ To start the interpreter, run the following in your shell:
 
 Preql will use Sqlite's memory database by default.
 
+To see the running options, type:
+```sh
+    preql --help
+```
+
 ### Explore an existing database
 
-When you start the interpreter, you can specify which database to connect to.
+When you start the interpreter, you can specify which database to connect to, using a URL.
 
 ```sh
     # Postgresql
@@ -35,7 +42,7 @@ When you start the interpreter, you can specify which database to connect to.
     preql sqlite:///path/to/file
 ```
 
-When already inside the Preql interactive prompt, or in a Jupyter Notebook, use the `connect()` method.:
+When already inside the Preql interactive prompt, a Jupyter Notebook, or a running script, use the `connect()` method:
 
 ```go
     connect("sqlite:///path/to/file")
@@ -58,9 +65,9 @@ Use introspective methods to see a list of the tables, and of the available func
         ...
 ```
 
-## Run in Jupyter Notebook
+## Run in a Jupyter Notebook
 
-1. Install the Preql kernel into the jupyter:
+1. Install the Preql kernel into jupyter:
 
 ```sh
     preql --install-jupyter
