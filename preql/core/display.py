@@ -245,6 +245,14 @@ class RichDisplay(Display):
         "Yields colorful styled lines to print by the ``rich`` library"
         _print_rich_exception(self.console, e)
 
+
+def print_to_string(x, format):
+    console = rich.console.Console(color_system=None)
+    with console.capture() as capture: 
+        console.print(x)
+    return capture.get()
+
+
 class HtmlDisplay(Display):
     format = "html"
 

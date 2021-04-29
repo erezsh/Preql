@@ -22,6 +22,10 @@ class TablePromise:
         self._inst = inst
         self._rows = None
 
+    @property
+    def type(self):
+        return self._inst.type
+
     def to_json(self):
         "Returns table as a list of rows, i.e. ``[{col1: value, col2: value, ...}, ...]``"
         if self._rows is None:
@@ -53,15 +57,18 @@ class TablePromise:
         "Run a slice query on table"
         if isinstance(index, slice):
             offset = index.start or 0
-            limit = index.stop - offset
-            return self._interp.call_builtin_func('limit_offset', [self._inst, pyvalue(limit), pyvalue(offset)])
+            limit = (index.stop or len(self)) - offset
+            new_inst = self._interp.call_builtin_func('limit_offset', [self._inst, pyvalue(limit), pyvalue(offset)])
+            return TablePromise(self._interp, new_inst)
 
         # TODO different debug log level / mode
-        res ,= self._interp.cast_to_python(self[index:index+1])
+        res ,= self._interp.cast_to_python(self[index:index+1]._inst)
         return res
 
     def __repr__(self):
-        return repr(self.to_json())
+        with self._interp.setup_context():
+            return display.print_to_string(display.table_repr(self._inst), 'text')
+
 
 
 def _prepare_instance_for_user(interp, inst):
@@ -98,6 +105,9 @@ class Preql:
 
         engine = create_engine(self._db_uri, print_sql=self._print_sql, auto_create=auto_create)
         self._reset_interpreter(engine)
+
+    def __repr__(self):
+        return f'Preql({self._db_uri!r}, ...)'
 
     def set_output_format(self, fmt):
         if fmt == 'html':

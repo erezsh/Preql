@@ -1060,7 +1060,7 @@ def compile_drop_table(state, table_name) -> Sql:
 
 
 @dp_inst
-def from_sql(res: T.primitive):
+def sql_result_to_python(res: T.primitive):
     try:
         row ,= res.value
         item ,= row
@@ -1073,7 +1073,7 @@ def from_sql(res: T.primitive):
 
 
 @dp_inst
-def from_sql(res: T.datetime):
+def sql_result_to_python(res: T.datetime):
     # XXX doesn't belong here?
     row ,= res.value
     item ,= row
@@ -1087,7 +1087,7 @@ def _from_sql_primitive(p):
     return p
 
 @dp_inst
-def from_sql(arr: T.list):
+def sql_result_to_python(arr: T.list):
     fields = flatten_type(arr.type)
     if not all(len(e)==len(fields) for e in arr.value):
         raise Signal.make(T.TypeError, None, f"Expected 1 column. Got {len(arr.value[0])}")
@@ -1099,7 +1099,7 @@ def from_sql(arr: T.list):
 
 @dp_inst
 @listgen
-def from_sql(arr: T.table):
+def sql_result_to_python(arr: T.table):
     expected_length = len(flatten_type(arr.type))   # TODO optimize?
     for row in arr.value:
         if len(row) != expected_length:

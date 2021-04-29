@@ -9,7 +9,7 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, from_sql, bigquery, _quote
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, sql_result_to_python, bigquery, _quote
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
 
@@ -46,15 +46,16 @@ class SqlInterface:
         # return self._import_result(sql.type, cur, state)
 
     def _import_result(self, sql_type, c):
-        if sql_type is not T.nulltype:
-            try:
-                res = c.fetchall()
-            except Exception as e:
-                msg = "Exception when trying to fetch SQL result. Got error: %s"
-                raise DatabaseQueryError(msg%(e))
+        if sql_type is T.nulltype:
+            return None
 
-            return from_sql(Const(sql_type, res))
+        try:
+            res = c.fetchall()
+        except Exception as e:
+            msg = "Exception when trying to fetch SQL result. Got error: %s"
+            raise DatabaseQueryError(msg%(e))
 
+        return sql_result_to_python(Const(sql_type, res))
 
 
     def compile_sql(self, sql, subqueries=None, qargs=()):
@@ -268,7 +269,7 @@ class BigQueryInterface(SqlInterface):
 
         if sql_type is not T.nulltype:
             res = [list(i.values()) for i in res]
-            return from_sql(Const(sql_type, res))
+            return sql_result_to_python(Const(sql_type, res))
 
 
 
@@ -442,7 +443,7 @@ class GitInterface(AbsSqliteInterface):
             else:
                 res = [list(json.loads(x).values()) for x in c.split(b'\n') if x.strip()]
 
-            return from_sql(Const(sql_type, res))
+            return sql_result_to_python(Const(sql_type, res))
 
     def import_table_type(self, name, columns_whitelist=None):
         # TODO merge with superclass

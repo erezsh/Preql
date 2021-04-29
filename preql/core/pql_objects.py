@@ -595,6 +595,13 @@ class PythonList(ast.Ast):
     # TODO just a regular const?
     def __init__(self, items):
         types = set(type(i) for i in items)
+        if not types:
+            assert not items
+            # self.type = T.list[T.any]
+            # self.items = []
+            # return
+            raise NotImplementedError("Cannot import an empty list (no type deduced)")
+
         if len(types) > 1:
             raise ValueError("Expecting all items of the list to be of the same type")
         # TODO if not one type, raise typeerror
