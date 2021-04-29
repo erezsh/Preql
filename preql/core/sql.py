@@ -1,17 +1,11 @@
-import decimal
-import json
-from datetime import datetime
 from typing import List, Optional, Dict
-
-import arrow
 
 from preql.utils import dataclass, X, listgen, field_list, safezip
 from preql.context import context
 
 from . import pql_types
-from .pql_types import T, Type, dp_type, dp_inst, Id
+from .pql_types import T, Type, dp_type, Id
 from .types_impl import join_names, flatten_type
-from .exceptions import Signal
 
 duck = 'duck'
 sqlite = 'sqlite'
@@ -985,72 +979,7 @@ def _compile_type(target, _type: T.json):
 
 
 
-def _from_datetime(s):
-    if s is None:
-        return None
 
-    # Postgres
-    if isinstance(s, datetime):
-        return s
-
-    # Sqlite
-    if isinstance(s, str):
-        try:
-            # return datetime.fromisoformat(s)
-            return arrow.get(s)
-        except ValueError as e:
-            raise Signal.make(T.ValueError, None, str(e))
-
-    raise Signal.make(T.TypeError, None, f"Unexpected type for datetime: {type(s)}")
-
-
-@dp_type
-def _restructure_result(t, i):
-    raise Signal.make(T.TypeError, None, f"Unexpected type used: {t}")
-
-@dp_type
-def _restructure_result(t: T.table, i):
-    # return ({name: _restructure_result(state, col, i) for name, col in t.elem_dict.items()})
-    return next(i)
-
-@dp_type
-def _restructure_result(t: T.struct, i):
-    return ({name: _restructure_result(col, i) for name, col in t.elems.items()})
-
-@dp_type
-def _restructure_result(_t: T.union[T.primitive, T.nulltype], i):
-    return next(i)
-
-
-@dp_type
-def _restructure_result(t: T.json_array[T.union[T.primitive, T.nulltype]], i):
-    res = next(i)
-    if not res:
-        return res
-
-    target = context.state.db.target
-    if target == mysql:
-        res = json.loads(res)
-    elif target == sqlite:
-        if not isinstance(res, str):
-            raise Signal.make(T.TypeError, None, f"json_array type expected a string separated by {_ARRAY_SEP}. Got: '{res}'")
-        res = res.split(_ARRAY_SEP)
-
-    # XXX hack! TODO Use a generic form to cast types
-    try:
-        if t.elem <= T.int:
-            res = [int(x) for x in res]
-        elif t.elem <= T.float:
-            res = [float(x) for x in res]
-    except ValueError:
-        raise Signal.make(T.TypeError, None, f"Error trying to convert values to type {t.elem}")
-
-    return res
-
-@dp_type
-def _restructure_result(_t: T.datetime, i):
-    s = next(i)
-    return _from_datetime(s)
 
 # API
 
@@ -1059,53 +988,6 @@ def compile_drop_table(state, table_name) -> Sql:
     return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
 
 
-@dp_inst
-def sql_result_to_python(res: T.primitive):
-    try:
-        row ,= res.value
-        item ,= row
-    except ValueError:
-        raise Signal.make(T.TypeError, None, "Expected primitive. Got: '%s'" % res.value)
-    # t = from_python(type(item))
-    # if not (t <= res.type):
-    #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
-    return item
-
-
-@dp_inst
-def sql_result_to_python(res: T.datetime):
-    # XXX doesn't belong here?
-    row ,= res.value
-    item ,= row
-    s = item
-    return _from_datetime(s)
-
-def _from_sql_primitive(p):
-    if isinstance(p, decimal.Decimal):
-        # TODO Needs different handling when we expect a decimal
-        return float(p)
-    return p
-
-@dp_inst
-def sql_result_to_python(arr: T.list):
-    fields = flatten_type(arr.type)
-    if not all(len(e)==len(fields) for e in arr.value):
-        raise Signal.make(T.TypeError, None, f"Expected 1 column. Got {len(arr.value[0])}")
-
-    if arr.type.elem <= T.struct:
-        return [{n: _from_sql_primitive(e) for (n, _t), e in safezip(fields, tpl)} for tpl in arr.value]
-    else:
-        return [_from_sql_primitive(e[0]) for e in arr.value]
-
-@dp_inst
-@listgen
-def sql_result_to_python(arr: T.table):
-    expected_length = len(flatten_type(arr.type))   # TODO optimize?
-    for row in arr.value:
-        if len(row) != expected_length:
-            raise Signal.make(T.TypeError, None, f"Expected {expected_length} columns, but got {len(row)}")
-        i = iter(row)
-        yield {name: _restructure_result(col, i) for name, col in arr.type.elems.items()}
 
 
 def compile_type_def(state, table_name, table) -> Sql:
