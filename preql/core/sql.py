@@ -983,17 +983,17 @@ def _compile_type(target, _type: T.json):
 
 # API
 
-def compile_drop_table(state, table_name) -> Sql:
-    target = state.db.target
+def compile_drop_table(table_name) -> Sql:
+    target = context.state.db.target
     return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
 
 
 
 
-def compile_type_def(state, table_name, table) -> Sql:
+def compile_type_def(table_name, table) -> Sql:
     assert table <= T.table
 
-    target = state.db.target
+    target = context.state.db.target
 
     posts = []
     pks = []
@@ -1016,7 +1016,7 @@ def compile_type_def(state, table_name, table) -> Sql:
         columns.append( f'{_quote(target, name)} {type_}' )
 
         if c <= T.t_relation:
-            if state.db.target != 'bigquery':
+            if target != 'bigquery':
                 # TODO any column, using projection / get_attr
                 if not table.options.get('temporary', False):
                     # In postgres, constraints on temporary tables may reference only temporary tables

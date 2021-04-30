@@ -72,7 +72,7 @@ def _rich_to_html(r):
 
 
 def table_limit(table, state, limit, offset=0):
-    return call_builtin_func(state, 'limit_offset', [table, pyvalue(limit), pyvalue(offset)])
+    return call_builtin_func('limit_offset', [table, pyvalue(limit), pyvalue(offset)])
 
 
 def _html_table(name, count_str, rows, offset, has_more, colors):
@@ -147,9 +147,9 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
 _g_last_table = None
 _g_last_offset = 0
 
-def _view_table(state, table, size, offset):
+def _view_table(table, size, offset):
     global _g_last_table, _g_last_offset
-    rows = cast_to_python(state, table_limit(table, state, size, offset))
+    rows = cast_to_python(table_limit(table, size, offset))
     _g_last_table = table
     _g_last_offset = offset + len(rows)
     if table.type <= T.list:
@@ -166,14 +166,14 @@ def _view_table(state, table, size, offset):
 def table_repr(self, offset=0):
     state = context.state
 
-    count = cast_to_python_int(state, call_builtin_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)]))
+    count = cast_to_python_int(call_builtin_func('count', [table_limit(self, state, MAX_AUTO_COUNT)]))
     if count == MAX_AUTO_COUNT:
         count_str = f'>={count}'
     else:
         count_str = f'={count}'
 
     # if len(self.type.elems) == 1:
-    #     rows = cast_to_python(state, table_limit(self, state, LIST_PREVIEW_SIZE))
+    #     rows = cast_to_python(table_limit(self, state, LIST_PREVIEW_SIZE))
     #     post = f', ... ({count_str})' if len(rows) < count else ''
     #     elems = ', '.join(repr_value(ast.Const(None, self.type.elem, r)) for r in rows)
     #     return f'[{elems}{post}]'
@@ -191,7 +191,7 @@ def table_repr(self, offset=0):
     else:
         assert state.display.format == 'rich'
 
-    table_name, rows, = _view_table(state, self, preview, offset)
+    table_name, rows, = _view_table(self, preview, offset)
     has_more = offset + len(rows) < count
     return table_f(table_name, count_str, rows, offset, has_more, colors=colors)
 

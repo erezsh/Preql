@@ -5,11 +5,11 @@ from preql.utils import classify
 from preql.context import context
 
 from .exceptions import Signal, pql_SyntaxError, ReturnSignal
-from .evaluate import State, execute, eval_func_call, import_module, evaluate, localize, cast_to_python
+from .evaluate import execute, eval_func_call, import_module, evaluate, localize, cast_to_python
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .interp_common import pyvalue_inst, call_builtin_func
+from .interp_common import pyvalue_inst, call_builtin_func, State
 from .pql_types import T, Object
 from .pql_functions import import_pandas
 from .pql_functions import internal_funcs, joins
@@ -63,7 +63,7 @@ class Interpreter:
         last = None
         for stmt in stmts:
             try:
-                last = execute(self.state, stmt)
+                last = execute(stmt)
             except ReturnSignal:
                 raise Signal.make(T.CodeError, stmt, "'return' outside of function")
 
@@ -101,28 +101,28 @@ class Interpreter:
 
     @entrypoint
     def evaluate_obj(self, obj):
-        return evaluate(self.state, obj)
+        return evaluate(obj)
 
     @entrypoint
     def localize_obj(self, obj):
-        return localize(self.state, obj)
+        return localize(obj)
 
     @entrypoint
     def call_func(self, fname, args):
-        res = eval_func_call(self.state, self.state.get_var(fname), args)
-        return evaluate(self.state, res)
+        res = eval_func_call(self.state.get_var(fname), args)
+        return evaluate(res)
 
     @entrypoint
     def cast_to_python(self, obj):
-        return cast_to_python(self.state, obj)
+        return cast_to_python(obj)
 
     @entrypoint
     def call_builtin_func(self, name, args):
-        return call_builtin_func(self.state, name, args)
+        return call_builtin_func(name, args)
 
     @entrypoint
     def import_pandas(self, dfs):
-        return list(import_pandas(self.state, dfs))
+        return list(import_pandas(dfs))
 
     @entrypoint
     def list_tables(self):

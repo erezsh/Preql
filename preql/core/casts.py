@@ -4,7 +4,6 @@ from .pql_types import T, dp_type, ITEM_NAME
 from .types_impl import kernel_type
 from .exceptions import Signal
 from .interp_common import call_builtin_func
-from ..context import context
 
 @dp_type
 def _cast(inst_type, target_type, inst):
@@ -84,7 +83,7 @@ def _cast(_inst_type: T.union[T.int, T.bool], _target_type: T.float, inst):
 
 @dp_type
 def _cast(_inst_type: T.string, _target_type: T.int, inst):
-    return call_builtin_func(context.state, "_cast_string_to_int", [inst])
+    return call_builtin_func("_cast_string_to_int", [inst])
 
 
 # @dp_type

@@ -4,6 +4,7 @@ from logging import getLogger
 
 from preql.utils import dsp
 from preql.sql_interface import ConnectError, create_engine
+from preql.context import context
 
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -15,15 +16,15 @@ logger = getLogger('interp')
 
 # Define common dispatch functions
 @dsp
-def simplify(state, obj: type(NotImplemented)) -> object:
+def simplify(obj: type(NotImplemented)) -> object:
     raise NotImplementedError()
 
 @dsp
-def evaluate(state, obj: type(NotImplemented)) -> object:
+def evaluate( obj: type(NotImplemented)) -> object:
     raise NotImplementedError()
 
 @dsp
-def cast_to_python(state, obj: type(NotImplemented)) -> object:
+def cast_to_python(obj: type(NotImplemented)) -> object:
     raise NotImplementedError(obj)
 
 
@@ -195,17 +196,17 @@ def assert_type(t, type_, ast_node, op, msg="%s expected an object of type %s, i
             type_str = "'%s'" % type_
         raise Signal.make(T.TypeError, ast_node, msg % (op, type_str, t))
 
-def exclude_fields(state, table, fields):
+def exclude_fields(table, fields):
     proj = ast.Projection(table, [ast.NamedField(None, ast.Ellipsis(None, exclude=list(fields) ), user_defined=False)])
-    return evaluate(state, proj)
+    return evaluate(proj)
 
-def call_builtin_func(state, name, args):
+def call_builtin_func(name, args):
     "Call a builtin pql function"
-    builtins = state.ns.get_var('__builtins__')
+    builtins = context.state.ns.get_var('__builtins__')
     assert isinstance(builtins, objects.Module)
 
     expr = ast.FuncCall(builtins.namespace[name], args)
-    return evaluate(state, expr)
+    return evaluate( expr)
 
 
 
@@ -215,18 +216,18 @@ def is_global_scope(state):
 
 
 # def cast_to_python_primitive(state, obj):
-#     res = cast_to_python(state, obj)
+#     res = cast_to_python(obj)
 #     assert isinstance(res, (int, str, float, dict, list, type(None), datetime)), (res, type(res))
 #     return res
 
-def cast_to_python_string(state, obj: objects.AbsInstance):
-    res = cast_to_python(state, obj)
+def cast_to_python_string(obj: objects.AbsInstance):
+    res = cast_to_python(obj)
     if not isinstance(res, str):
         raise Signal.make(T.TypeError, obj, f"Expected string, got '{res}'")
     return res
 
-def cast_to_python_int(state, obj: objects.AbsInstance):
-    res = cast_to_python(state, obj)
+def cast_to_python_int(obj: objects.AbsInstance):
+    res = cast_to_python(obj)
     if not isinstance(res, int):
         raise Signal.make(T.TypeError, obj, f"Expected string, got '{res}'")
     return res

@@ -6,6 +6,7 @@ from typing import List, Optional, Callable, Any, Dict
 
 from preql.utils import dataclass, SafeDict, X, listgen
 from preql import settings
+from preql.context import context
 
 from .exceptions import pql_AttributeError, Signal
 from . import pql_ast as ast
@@ -118,10 +119,10 @@ class Function(Object):
             yield self.param_collector, ast.Dict_({})
 
 
-    def _localize_keys(self, _state, struct):
+    def _localize_keys(self, struct):
         raise NotImplementedError()
 
-    def match_params(self, state, args):
+    def match_params(self, args):
 
         # If no keyword arguments, matching is much simpler and faster
         if all(not isinstance(a, (ast.NamedField, ast.Ellipsis)) for a in args):
@@ -139,7 +140,7 @@ class Function(Object):
 
                 # XXX we only want to localize the keys, not the values
                 # TODO remove this?
-                d = self._localize_keys(state, a.from_struct)
+                d = self._localize_keys(a.from_struct)
                 if not isinstance(d, dict):
                     raise Signal.make(T.TypeError, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
@@ -581,8 +582,8 @@ def new_table(type_, name=None, instances=None, select_fields=False):
 
     return inst
 
-def new_const_table(state, table_type, tuples):
-    name = state.unique_name("table_")
+def new_const_table(table_type, tuples):
+    name = context.state.unique_name("table_")
     table_code, subq = sql.create_table(table_type, name, tuples)
 
     inst = TableInstance.make(table_code, table_type, [])

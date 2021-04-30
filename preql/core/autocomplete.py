@@ -15,72 +15,73 @@ from . import sql, parser
 
 
 @dsp
-def eval_autocomplete(state, x, go_inside):
-    _res = evaluate(state, x)
+def eval_autocomplete(x, go_inside):
+    _res = evaluate(x)
     # assert isinstance(res, objects.Instance)
 
 @dsp
-def eval_autocomplete(state, cb: ast.Statement, go_inside):
+def eval_autocomplete(cb: ast.Statement, go_inside):
     raise NotImplementedError(cb)
 
 
 @dsp
-def eval_autocomplete(state, t: ast.Try, go_inside):
-    eval_autocomplete(state, t.try_, go_inside)
-    catch_type = evaluate(state, t.catch_expr)
+def eval_autocomplete(t: ast.Try, go_inside):
+    eval_autocomplete(t.try_, go_inside)
+    catch_type = evaluate(t.catch_expr)
     scope = {t.catch_name: Signal(catch_type, [], '<unknown exception>')} if t.catch_name else {}
-    with state.use_scope(scope):
-        eval_autocomplete(state, t.catch_block, go_inside)
+    with context.state.use_scope(scope):
+        eval_autocomplete(t.catch_block, go_inside)
 
 @dsp
-def eval_autocomplete(state, a: ast.InsertRows, go_inside):
-    eval_autocomplete(state, a.value, go_inside)
+def eval_autocomplete(a: ast.InsertRows, go_inside):
+    eval_autocomplete(a.value, go_inside)
 @dsp
-def eval_autocomplete(state, a: ast.Assert, go_inside):
-    eval_autocomplete(state, a.cond, go_inside)
+def eval_autocomplete(a: ast.Assert, go_inside):
+    eval_autocomplete(a.cond, go_inside)
 @dsp
-def eval_autocomplete(state, a: ast.Print, go_inside):
-    eval_autocomplete(state, a.value, go_inside)
+def eval_autocomplete(a: ast.Print, go_inside):
+    eval_autocomplete(a.value, go_inside)
 
 @dsp
-def eval_autocomplete(state, x: ast.If, go_inside):
-    eval_autocomplete(state, x.then, go_inside)
+def eval_autocomplete(x: ast.If, go_inside):
+    eval_autocomplete(x.then, go_inside)
     if x.else_:
-        eval_autocomplete(state, x.else_, go_inside)
+        eval_autocomplete(x.else_, go_inside)
 
 @dsp
-def eval_autocomplete(state, x: ast.SetValue, go_inside):
-    value = evaluate(state, x.value)
+def eval_autocomplete(x: ast.SetValue, go_inside):
+    value = evaluate( x.value)
     if isinstance(x.name, ast.Name):
-        state.set_var(x.name.name, value)
+        context.state.set_var(x.name.name, value)
 
 @dsp
-def eval_autocomplete(state, cb: ast.CodeBlock, go_inside):
+def eval_autocomplete(cb: ast.CodeBlock, go_inside):
     for s in cb.statements[:-1]:
-        eval_autocomplete(state, s, False)
+        eval_autocomplete(s, False)
 
     for s in cb.statements[-1:]:
-        eval_autocomplete(state, s, go_inside)
+        eval_autocomplete(s, go_inside)
 
 @dsp
-def eval_autocomplete(state, td: ast.TableDefFromExpr, go_inside):
-    expr = evaluate(state, td.expr)
+def eval_autocomplete(td: ast.TableDefFromExpr, go_inside):
+    expr = evaluate(td.expr)
     assert isinstance(td.name, str)
-    state.set_var(td.name, expr)
+    context.state.set_var(td.name, expr)
 
 @dsp
-def eval_autocomplete(state, td: ast.TableDef, go_inside):
-    t = resolve(state, td)
+def eval_autocomplete(td: ast.TableDef, go_inside):
+    t = resolve(td)
     n ,= t.options['name'].parts
-    state.set_var(n, objects.TableInstance.make(sql.unknown, t, []))
+    context.state.set_var(n, objects.TableInstance.make(sql.unknown, t, []))
 
 @dsp
-def eval_autocomplete(state, td: ast.StructDef, go_inside):
-    t = resolve(state, td)
-    state.set_var(t.name, t)
+def eval_autocomplete(td: ast.StructDef, go_inside):
+    t = resolve(td)
+    context.state.set_var(t.name, t)
 
 @dsp
-def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
+def eval_autocomplete(fd: ast.FuncDef, go_inside):
+    state = context.state
     f = fd.userfunc
     assert isinstance(f, objects.UserFunction)
 
@@ -88,7 +89,7 @@ def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
         if go_inside:
             with state.use_scope({p.name:objects.unknown for p in f.params}):
                 try:
-                    eval_autocomplete(state, f.expr, go_inside)
+                    eval_autocomplete(f.expr, go_inside)
                 except ReturnSignal:
                     pass
 
@@ -97,9 +98,9 @@ def eval_autocomplete(state, fd: ast.FuncDef, go_inside):
         state.set_var(f.name, f.replace(expr=cb))
 
 @dsp
-def eval_autocomplete(state: State, r: ast.Return, go_inside):
+def eval_autocomplete(r: ast.Return, go_inside):
     # Same as _execute
-    value = evaluate(state, r.value)
+    value = evaluate( r.value)
     raise ReturnSignal(value)
 
 
@@ -112,7 +113,7 @@ _closing_tokens = {
     '_NL': '\n',
 }
 
-def _search_puppet(puppet):
+def _search_parser(parser):
     def expand(p):
         for choice in p.choices():
             if choice in _closing_tokens:
@@ -124,29 +125,29 @@ def _search_puppet(puppet):
                 else:
                     yield new_p
 
-    for p in bfs_all_unique([puppet], expand):
+    for p in bfs_all_unique([parser], expand):
         if p.result:
             return p.result
 
-def autocomplete_tree(puppet):
-    if not puppet:
+def autocomplete_tree(parser):
+    if not parser:
         return
 
     # No marker, no autocomplete
-    if 'MARKER' not in puppet.choices():
+    if 'MARKER' not in parser.choices():
         return
 
     # Feed marker
     t = Token('MARKER', '<MARKER>', 1, 1, 1, 1, 2, 2)
     try:
-        res = puppet.feed_token(t)
+        res = parser.feed_token(t)
     except ParseError:    # Could still fail
         return
 
     assert not res, res
 
     # Search nearest solution
-    return _search_puppet(puppet.as_immutable())
+    return _search_parser(parser.as_immutable())
 
 
 KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true return !in'.split()
@@ -177,7 +178,7 @@ class AcState(State):
 def _eval_autocomplete(ac_state, stmts):
     for stmt in stmts:
         try:
-            eval_autocomplete(ac_state, stmt, False)
+            eval_autocomplete(stmt, False)
         except Signal as e:
             ac_log.exception(e)
 
@@ -189,7 +190,7 @@ def autocomplete(state, code, source='<autocomplete>'):
         except UnexpectedCharacters as e:
             return {}
         except UnexpectedToken as e:
-            tree = autocomplete_tree(e.puppet)
+            tree = autocomplete_tree(e.interactive_parser)
             if tree:
                 try:
                     stmts = parser.TreeToAst(code_ref=(code, source)).transform(tree)
@@ -199,7 +200,7 @@ def autocomplete(state, code, source='<autocomplete>'):
                 _eval_autocomplete(ac_state, stmts[:-1])
 
                 try:
-                    eval_autocomplete(ac_state, stmts[-1], True)
+                    eval_autocomplete(stmts[-1], True)
                 except AutocompleteSuggestions as e:
                     ns ,= e.args
                     return ns
