@@ -6,12 +6,12 @@ from typing import List, Optional, Callable, Any, Dict
 
 from preql.utils import dataclass, SafeDict, X, listgen
 from preql import settings
-from preql.context import context
 
 from .exceptions import pql_AttributeError, Signal
 from . import pql_ast as ast
 from . import sql
 from . import pql_types
+from .state import unique_name
 
 from .pql_types import T, Type, Object
 from .types_impl import flatten_type, join_names, pql_repr
@@ -583,7 +583,7 @@ def new_table(type_, name=None, instances=None, select_fields=False):
     return inst
 
 def new_const_table(table_type, tuples):
-    name = context.state.unique_name("table_")
+    name = unique_name("table_")
     table_code, subq = sql.create_table(table_type, name, tuples)
 
     inst = TableInstance.make(table_code, table_type, [])

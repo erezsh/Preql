@@ -7,7 +7,7 @@ from preql.context import context
 from .exceptions import Signal, ReturnSignal, pql_SyntaxError
 from .compiler import AutocompleteSuggestions
 from .evaluate import evaluate, resolve
-from .interp_common import State
+from .state import State, set_var, use_scope
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .pql_types import T
@@ -29,7 +29,7 @@ def eval_autocomplete(t: ast.Try, go_inside):
     eval_autocomplete(t.try_, go_inside)
     catch_type = evaluate(t.catch_expr)
     scope = {t.catch_name: Signal(catch_type, [], '<unknown exception>')} if t.catch_name else {}
-    with context.state.use_scope(scope):
+    with use_scope(scope):
         eval_autocomplete(t.catch_block, go_inside)
 
 @dsp
@@ -52,7 +52,7 @@ def eval_autocomplete(x: ast.If, go_inside):
 def eval_autocomplete(x: ast.SetValue, go_inside):
     value = evaluate( x.value)
     if isinstance(x.name, ast.Name):
-        context.state.set_var(x.name.name, value)
+        set_var(x.name.name, value)
 
 @dsp
 def eval_autocomplete(cb: ast.CodeBlock, go_inside):
@@ -66,28 +66,27 @@ def eval_autocomplete(cb: ast.CodeBlock, go_inside):
 def eval_autocomplete(td: ast.TableDefFromExpr, go_inside):
     expr = evaluate(td.expr)
     assert isinstance(td.name, str)
-    context.state.set_var(td.name, expr)
+    set_var(td.name, expr)
 
 @dsp
 def eval_autocomplete(td: ast.TableDef, go_inside):
     t = resolve(td)
     n ,= t.options['name'].parts
-    context.state.set_var(n, objects.TableInstance.make(sql.unknown, t, []))
+    set_var(n, objects.TableInstance.make(sql.unknown, t, []))
 
 @dsp
 def eval_autocomplete(td: ast.StructDef, go_inside):
     t = resolve(td)
-    context.state.set_var(t.name, t)
+    set_var(t.name, t)
 
 @dsp
 def eval_autocomplete(fd: ast.FuncDef, go_inside):
-    state = context.state
     f = fd.userfunc
     assert isinstance(f, objects.UserFunction)
 
     try:
         if go_inside:
-            with state.use_scope({p.name:objects.unknown for p in f.params}):
+            with use_scope({p.name:objects.unknown for p in f.params}):
                 try:
                     eval_autocomplete(f.expr, go_inside)
                 except ReturnSignal:
@@ -95,7 +94,7 @@ def eval_autocomplete(fd: ast.FuncDef, go_inside):
 
     finally:
         cb = ast.CodeBlock([ast.Return(objects.unknown)])
-        state.set_var(f.name, f.replace(expr=cb))
+        set_var(f.name, f.replace(expr=cb))
 
 @dsp
 def eval_autocomplete(r: ast.Return, go_inside):

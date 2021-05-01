@@ -1,11 +1,11 @@
 from typing import List, Optional, Dict
 
 from preql.utils import dataclass, X, listgen, field_list, safezip
-from preql.context import context
 
 from . import pql_types
 from .pql_types import T, Type, dp_type, Id
 from .types_impl import join_names, flatten_type
+from .state import get_db_target
 
 duck = 'duck'
 sqlite = 'sqlite'
@@ -903,7 +903,7 @@ def _repr(_t: T.datetime, x):
 
 @dp_type
 def _repr(_t: T.union[T.string, T.text], x):
-    quoted_quote = r"\'" if context.state.db.target == bigquery else "''"
+    quoted_quote = r"\'" if get_db_target() == bigquery else "''"
     return "'%s'" % str(x).replace("'", quoted_quote)
 
 def _quote(target, name):
@@ -984,7 +984,7 @@ def _compile_type(target, _type: T.json):
 # API
 
 def compile_drop_table(table_name) -> Sql:
-    target = context.state.db.target
+    target = get_db_target()
     return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
 
 
@@ -993,7 +993,7 @@ def compile_drop_table(table_name) -> Sql:
 def compile_type_def(table_name, table) -> Sql:
     assert table <= T.table
 
-    target = context.state.db.target
+    target = get_db_target()
 
     posts = []
     pks = []

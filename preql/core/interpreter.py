@@ -9,7 +9,8 @@ from .evaluate import execute, eval_func_call, import_module, evaluate, localize
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .interp_common import pyvalue_inst, call_builtin_func, State
+from .interp_common import pyvalue_inst, call_builtin_func
+from .state import State
 from .pql_types import T, Object
 from .pql_functions import import_pandas
 from .pql_functions import internal_funcs, joins

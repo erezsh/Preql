@@ -7,7 +7,7 @@ from preql import settings
 from preql.context import context
 
 from .interp_common import assert_type, exclude_fields, call_builtin_func, is_global_scope, cast_to_python_string, cast_to_python_int
-from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
+from .state import set_var, use_scope, get_var, unique_name, get_db, get_db_target, catch_access, AccessLevels, get_access_level, reduce_access
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -17,6 +17,8 @@ from .interp_common import dsp, pyvalue_inst, cast_to_python
 from .compiler import compile_to_inst, cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr, kernel_type
+from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
+
 
 MODULES_PATH = Path(__file__).parent.parent / 'modules'
 
@@ -25,23 +27,22 @@ MODULES_PATH = Path(__file__).parent.parent / 'modules'
 def resolve(struct_def: ast.StructDef):
     members = {str(k):resolve(v) for k, v in struct_def.members}
     struct = T.struct(members)
-    context.state.set_var(struct_def.name, struct)
+    set_var(struct_def.name, struct)
     return struct
 
 @dsp
 def resolve(table_def: ast.TableDef):
     name = table_def.name
-    state = context.state
-    if is_global_scope(state):
-        name = state.db.qualified_name(name)
+    if is_global_scope(context.state):
+        name = get_db().qualified_name(name)
         temporary = False
     else:
-        name = '__local_' + state.unique_name(name)
+        name = '__local_' + unique_name(name)
         temporary = True
 
     t = T.table({}, name=Id(name), temporary=temporary)
 
-    with state.use_scope({table_def.name: t}):  # For self-reference
+    with use_scope({table_def.name: t}):  # For self-reference
         elems = {c.name: resolve(c) for c in table_def.columns}
         t = t(elems)
 
@@ -99,13 +100,13 @@ def _execute(struct_def: ast.StructDef):
 
 def db_query(sql_code, subqueries=None):
     try:
-        return context.state.db.query(sql_code, subqueries)
+        return get_db().query(sql_code, subqueries)
     except exc.DatabaseQueryError as e:
         raise Signal.make(T.DbQueryError, None, e.args[0]) from e
 
 def drop_table(state, table_type):
     name ,= table_type.options['name'].parts
-    code = sql.compile_drop_table(state, name)
+    code = sql.compile_drop_table(name)
     return state.db.query(code, {})
 
 
@@ -117,14 +118,13 @@ def _execute(table_def: ast.TableDefFromExpr):
     if is_global_scope(state):
         temporary = False
     else:
-        name = '__local_' + state.unique_name(name)
+        name = '__local_' + unique_name(name)
         temporary = True
     t = new_table_from_expr(name, expr, table_def.const, temporary)
-    state.set_var(table_def.name, t)
+    set_var(table_def.name, t)
 
 @dsp
 def _execute(table_def: ast.TableDef):
-    state = context.state
     if table_def.columns and isinstance(table_def.columns[-1], ast.Ellipsis):
         ellipsis = table_def.columns.pop()
     else:
@@ -138,10 +138,10 @@ def _execute(table_def: ast.TableDef):
     t = resolve(table_def)
     db_name = t.options['name']
 
-    exists = state.db.table_exists(db_name.repr_name)
+    exists = get_db().table_exists(db_name.repr_name)
     if exists:
         assert not t.options['temporary']
-        cur_type = state.db.import_table_type(db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
+        cur_type = get_db().import_table_type(db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -173,7 +173,7 @@ def _execute(table_def: ast.TableDef):
         t = t(elems, pk=[['id']])
         inst = objects.new_table(t, db_name)
 
-    state.set_var(table_def.name, inst)
+    set_var(table_def.name, inst)
 
     if not exists:
         sql_code = sql.compile_type_def(db_name.repr_name, t)
@@ -181,7 +181,7 @@ def _execute(table_def: ast.TableDef):
 
 @dsp
 def _set_value(name: ast.Name, value):
-    context.state.set_var(name.name, value)
+    set_var(name.name, value)
 
 @dsp
 def _set_value(attr: ast.Attr, value):
@@ -239,11 +239,11 @@ def _execute(func_def: ast.FuncDef):
             p = p.replace(type=t)
         new_params.append(p)
 
-    context.state.set_var(func.name, func.replace(params=new_params))
+    set_var(func.name, func.replace(params=new_params))
 
 @dsp
 def _execute(p: ast.Print):
-    state = context.state
+    display = context.state.display
     # TODO Can be done better. Maybe cast to ReprText?
     insts = evaluate( p.value)
     assert isinstance(insts, list)
@@ -255,8 +255,8 @@ def _execute(p: ast.Print):
         else:
             repr_ = inst.repr()
 
-        state.display.print(repr_, end=" ")
-    state.display.print("")
+        display.print(repr_, end=" ")
+    display.print("")
 
 @dsp
 def _execute(p: ast.Assert):
@@ -294,7 +294,7 @@ def _execute(w: ast.While):
 def _execute(f: ast.For):
     expr = cast_to_python(f.iterable)
     for i in expr:
-        with context.state.use_scope({f.var: objects.from_python(i)}):
+        with use_scope({f.var: objects.from_python(i)}):
             execute(f.do)
 
 @dsp
@@ -307,7 +307,7 @@ def _execute(t: ast.Try):
             raise Signal.make(T.TypeError, t.catch_expr, f"Catch expected type, got {t.catch_expr.type}")
         if e.type <= catch_type:
             scope = {t.catch_name: e} if t.catch_name else {}
-            with context.state.use_scope(scope):
+            with use_scope(scope):
                 execute(t.catch_block)
         else:
             raise
@@ -347,7 +347,7 @@ def import_module(state, r):
 @dsp
 def _execute(r: ast.Import):
     module = import_module(r)
-    context.state.set_var(r.as_name or r.module_path, module)
+    set_var(r.as_name or r.module_path, module)
     return module
 
 @dsp
@@ -396,7 +396,7 @@ def simplify(cb: ast.CodeBlock):
 @dsp
 def simplify(n: ast.Name):
     # XXX what happens to caching if this is a global variable?
-    return context.state.get_var(n.name)
+    return get_var(n.name)
 
 @dsp
 def simplify(x):
@@ -477,7 +477,7 @@ def simplify(obj: ast.Not):
 @dsp
 def simplify(funccall: ast.FuncCall):
     state = context.state
-    func = evaluate( funccall.func)
+    func = evaluate(funccall.func)
 
     if isinstance(func, objects.UnknownInstance):
         # evaluate( [a.value for a in funccall.args])
@@ -487,7 +487,7 @@ def simplify(funccall: ast.FuncCall):
     if isinstance(func, Type):
         # Cast to type
         args = args + [func]
-        func = state.get_var('cast')
+        func = get_var('cast')
 
     if not isinstance(func, objects.Function):
         raise Signal.make(T.TypeError, funccall.func, f"Error: Object of type '{func.type}' is not callable")
@@ -541,17 +541,17 @@ def eval_func_call(func, args):
         sig = (func.name,) + tuple(a.type for a in args.values())
 
         try:
-            with state.use_scope(params):
+            with use_scope(params):
                 if sig in state._cache:
                     compiled_expr = state._cache[sig]
                 else:
                     logging.info(f"Compiling.. {func}")
-                    with context(state=state.reduce_access(state.AccessLevels.COMPILE)):
+                    with context(state=reduce_access(AccessLevels.COMPILE)):
                         compiled_expr = _call_expr(func.expr)
                     logging.info("Compiled successfully")
                     if isinstance(compiled_expr, objects.Instance):
                         # XXX a little ugly
-                        qb = sql.QueryBuilder(state.db.target, True)
+                        qb = sql.QueryBuilder(get_db_target(), True)
                         x = compiled_expr.code.compile(qb)
                         x = x.optimize()
                         compiled_expr = compiled_expr.replace(code=x)
@@ -563,7 +563,7 @@ def eval_func_call(func, args):
             # Don't cache
             pass
 
-    with state.use_scope(args):
+    with use_scope(args):
         res = _call_expr(expr)
 
     if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
@@ -635,8 +635,7 @@ def apply_database_rw(o: ast.One):
 
 @dsp
 def apply_database_rw(d: ast.Delete):
-    state = context.state
-    state.catch_access(state.AccessLevels.WRITE_DB)
+    catch_access(AccessLevels.WRITE_DB)
     # TODO Optimize: Delete on condition, not id, when possible
 
     cond_table = ast.Selection(d.table, d.conds).set_text_ref(d.text_ref)
@@ -662,8 +661,7 @@ def apply_database_rw(d: ast.Delete):
 
 @dsp
 def apply_database_rw(u: ast.Update):
-    state = context.state
-    state.catch_access(state.AccessLevels.WRITE_DB)
+    catch_access(AccessLevels.WRITE_DB)
 
     # TODO Optimize: Update on condition, not id, when possible
     table = evaluate( u.table)
@@ -681,7 +679,7 @@ def apply_database_rw(u: ast.Update):
     # TODO verify table is concrete (i.e. lvalue, not a transitory expression)
 
     update_scope = {n:c for n, c in table.all_attrs().items()}
-    with state.use_scope(update_scope):
+    with use_scope(update_scope):
         proj = {f.name:evaluate( f.value) for f in u.fields}
 
     rows = list(localize(table))
@@ -702,10 +700,9 @@ def apply_database_rw(u: ast.Update):
 
 @dsp
 def apply_database_rw(new: ast.NewRows):
-    state = context.state
-    state.catch_access(state.AccessLevels.WRITE_DB)
+    catch_access(AccessLevels.WRITE_DB)
 
-    obj = state.get_var(new.type)
+    obj = get_var(new.type)
 
     if len(new.args) > 1:
         raise Signal.make(T.NotImplementedError, new, "Not yet implemented") #. Requires column-wise table concat (use join and enum)")
@@ -736,7 +733,7 @@ def apply_database_rw(new: ast.NewRows):
     ids = []
     for row in rows:
         matched = cons.match_params([objects.from_python(v) for v in row.values()])
-        ids += [_new_row(state, new, obj, matched).primary_key()]   # XXX return everything, not just pk?
+        ids += [_new_row(new, obj, matched).primary_key()]   # XXX return everything, not just pk?
 
     # XXX find a nicer way - requires a better typesystem, where id(t) < int
     return ast.List_(T.list[T.int], ids).set_text_ref(new.text_ref)
@@ -785,7 +782,7 @@ def _new_row(new_ast, table, matched):
     assert keys and values
     # XXX use regular insert?
 
-    if context.state.db.target == sql.bigquery:
+    if get_db_target() == sql.bigquery:
         rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []))
         keys += ['id']
         values += [sql.make_value(rowid)]
@@ -805,10 +802,9 @@ def _new_row(new_ast, table, matched):
 
 @dsp
 def apply_database_rw(new: ast.New):
-    state = context.state
-    state.catch_access(state.AccessLevels.WRITE_DB)
+    catch_access(AccessLevels.WRITE_DB)
 
-    obj = state.get_var(new.type)
+    obj = get_var(new.type)
 
     # XXX Assimilate this special case
     if isinstance(obj, Type) and obj <= T.Exception:
@@ -851,7 +847,7 @@ class TableConstructor(objects.Function):
 
 def add_as_subquery(inst: objects.Instance):
     code_cls = sql.TableName if (inst.type <= T.table) else sql.Name
-    name = context.state.unique_name(inst)
+    name = unique_name(inst)
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
 
@@ -861,7 +857,7 @@ def resolve_parameters(x):
 
 @dsp
 def resolve_parameters(p: ast.Parameter):
-    return context.state.get_var(p.name)
+    return get_var(p.name)
 
 
 @dsp
@@ -870,13 +866,13 @@ def evaluate( obj: list):
 
 @dsp
 def evaluate( obj_):
-    state = context.state
+    access_level = get_access_level()
 
     # - Generic, non-db related operations
     obj = simplify(obj_)
     assert obj, obj_
 
-    if state.access_level < state.AccessLevels.COMPILE:
+    if access_level < AccessLevels.COMPILE:
         return obj
 
     # - Compile to instances with db-specific code (sql)
@@ -885,14 +881,14 @@ def evaluate( obj_):
     # obj = compile_to_inst(state.reduce_access(state.AccessLevels.COMPILE), obj)
     obj = compile_to_inst(obj)
 
-    if state.access_level < state.AccessLevels.EVALUATE:
+    if access_level < AccessLevels.EVALUATE:
         return obj
 
     # - Resolve parameters to "instantiate" the cached code
     # TODO necessary?
     obj = resolve_parameters(obj)
 
-    if state.access_level < state.AccessLevels.READ_DB:
+    if access_level < AccessLevels.READ_DB:
         return obj
 
     # - Apply operations that read or write the database (delete, insert, update, one, etc.)
@@ -970,7 +966,7 @@ def new_table_from_rows(name, columns, rows):
     db_query(code)
 
     x = objects.new_table(table)
-    context.state.set_var(name, x)
+    set_var(name, x)
     return x
 
 
@@ -1013,7 +1009,7 @@ def cast_to_python(obj: ast.Ast):
 def cast_to_python(obj: objects.AbsInstance):
     # if state.access_level <= state.AccessLevels.QUERY:
     if obj.type <= T.projected | T.aggregated:
-        raise exc.InsufficientAccessLevel(context.state.access_level)
+        raise exc.InsufficientAccessLevel(get_access_level())
         # raise Signal.make(T.CastError, None, f"Internal error. Cannot cast projected obj: {obj}")
     res = localize(obj)
     if obj.type == T.float:

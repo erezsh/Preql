@@ -9,7 +9,8 @@ from .exceptions import Signal, InsufficientAccessLevel, ReturnSignal, pql_Attri
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dsp, State, assert_type, pyvalue_inst, evaluate, simplify, call_builtin_func, cast_to_python_string, cast_to_python_int
+from .interp_common import dsp, assert_type, pyvalue_inst, evaluate, simplify, call_builtin_func, cast_to_python_string, cast_to_python_int
+from .state import use_scope, get_var, get_db_target, unique_name, require_access, AccessLevels, get_access_level
 from .pql_types import T, Type, Id, ITEM_NAME, dp_inst
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
@@ -101,7 +102,7 @@ def _expand_ellipsis(obj, fields):
 
             if f.value.from_struct:
                 # Inline struct
-                with context.state.use_scope(obj.all_attrs()):
+                with use_scope(obj.all_attrs()):
                     s = evaluate( f.value.from_struct)
                     items = s.attrs
             else:
@@ -153,7 +154,6 @@ def compile_to_inst(i: ast.If):
 
 @dsp
 def compile_to_inst(proj: ast.Projection):
-    state = context.state
     table = cast_to_instance(proj.table)
 
     if table is objects.EmptyList:
@@ -172,7 +172,7 @@ def compile_to_inst(proj: ast.Projection):
 
     attrs = table.all_attrs()
 
-    with state.use_scope({n: projected(c) for n, c in attrs.items()}):
+    with use_scope({n: projected(c) for n, c in attrs.items()}):
         fields = _process_fields(fields)
 
     for name, f in fields:
@@ -186,7 +186,7 @@ def compile_to_inst(proj: ast.Projection):
 
     agg_fields = []
     if proj.agg_fields:
-        with state.use_scope({n:objects.aggregate(c) for n, c in attrs.items()}):
+        with use_scope({n:objects.aggregate(c) for n, c in attrs.items()}):
             agg_fields = _process_fields(proj.agg_fields)
 
     all_fields = fields + agg_fields
@@ -255,7 +255,7 @@ def compile_to_inst(order: ast.Order):
     table = cast_to_instance(order.table)
     assert_type(table.type, T.table, order, "'order'")
 
-    with context.state.use_scope(table.all_attrs()):
+    with use_scope(table.all_attrs()):
         fields = cast_to_instance(order.fields)
 
     for f in fields:
@@ -507,7 +507,7 @@ def _compile_arith(arith, a: T.table, b: T.table):
     except KeyError:
         raise Signal.make(T.TypeError, arith.op, f"Operation '{arith.op}' not supported for tables ({a.type}, {b.type})")
 
-    return context.state.get_var(op).func(a, b)
+    return get_var(op).func(a, b)
 
 
 
@@ -550,7 +550,7 @@ def _compile_arith(arith, a: T.number, b: T.number):
             value = float(value)
         return pyvalue_inst(value, res_type)
 
-    code = sql.arith(context.state.db.target, res_type, arith.op, [a.code, b.code])
+    code = sql.arith(get_db_target(), res_type, arith.op, [a.code, b.code])
     return make_instance(code, res_type, [a, b])
 
 @dp_inst
@@ -566,7 +566,7 @@ def _compile_arith(arith, a: T.string, b: T.string):
         # Local folding for better performance (optional, for better performance)
         return pyvalue_inst(a.local_value + b.local_value, T.string)
 
-    code = sql.arith(context.state.db.target, T.string, arith.op, [a.code, b.code])
+    code = sql.arith(get_db_target(), T.string, arith.op, [a.code, b.code])
     return make_instance(code, T.string, [a, b])
 
 
@@ -595,7 +595,7 @@ def compile_to_inst(d: ast.Dict_):
 def compile_to_inst(lst: objects.PythonList):
     t = lst.type.elem
     x = [sql.Primitive(t, sql._repr(t,i)) for i in lst.items]
-    name = context.state.unique_name("list_")
+    name = unique_name("list_")
     table_code, subq, list_type = sql.create_list(name, x)
     inst = objects.TableInstance.make(table_code, list_type, [])
     inst.subqueries[name] = subq
@@ -620,7 +620,7 @@ def compile_to_inst(lst: ast.List_):
     if elem_type <= T.struct:
         rows = [sql.ValuesTuple(obj.type, obj.flatten_code()) for obj in elems]
         list_type = T.table(elems=elem_type.elems)
-        name = context.state.unique_name("table_")
+        name = unique_name("table_")
         table_code, subq = sql.create_table(list_type, name, rows)
     else:
         if not (elem_type <= T.union[T.primitive, T.nulltype]):
@@ -628,7 +628,7 @@ def compile_to_inst(lst: ast.List_):
 
         assert elem_type <= lst.type.elems[ITEM_NAME], (elem_type, lst.type)
 
-        name = context.state.unique_name("list_")
+        name = unique_name("list_")
         table_code, subq, list_type = sql.create_list(name, [e.code for e in elems])
 
     inst = objects.TableInstance.make(table_code, list_type, elems)
@@ -639,16 +639,14 @@ def compile_to_inst(lst: ast.List_):
 # def resolve_parameters(state: State, res: ast.ResolveParameters):
 @dsp
 def compile_to_inst(res: ast.ResolveParameters):
-    state = context.state
-
     # XXX use a different mechanism??
 
     # basically cast_to_instance(). Ideally should be an instance whenever possible
     if isinstance(res.obj, objects.Instance):
         obj = res.obj
     else:
-        with state.use_scope(res.values):
-            obj = evaluate( res.obj)
+        with use_scope(res.values):
+            obj = evaluate(res.obj)
 
         # handle non-compilable entities (meta, etc.)
         if not isinstance(obj, objects.Instance):
@@ -656,7 +654,7 @@ def compile_to_inst(res: ast.ResolveParameters):
                 return obj
             return res.replace(obj=obj)
 
-    state.require_access(state.AccessLevels.WRITE_DB)
+    require_access(AccessLevels.WRITE_DB)
 
     sq2 = SafeDict()
     code = _resolve_sql_parameters(obj.code, subqueries=sq2)
@@ -666,8 +664,7 @@ def compile_to_inst(res: ast.ResolveParameters):
 
 
 def _resolve_sql_parameters(compiled_sql, wrap=False, subqueries=None):
-    state = context.state
-    qb = sql.QueryBuilder(state.db.target, False)
+    qb = sql.QueryBuilder(get_db_target(), False)
 
     # Ensure <= CompiledSQL
     compiled_sql = compiled_sql.compile(qb)
@@ -675,7 +672,7 @@ def _resolve_sql_parameters(compiled_sql, wrap=False, subqueries=None):
     new_code = []
     for c in compiled_sql.code:
         if isinstance(c, sql.Parameter):
-            inst = evaluate( state.get_var(c.name))
+            inst = evaluate( get_var(c.name))
             if inst.type != c.type:
                 msg = f"Internal error: Parameter is of wrong type ({c.type} != {inst.type})"
                 raise Signal.make(T.CastError, None, msg)
@@ -694,8 +691,6 @@ def _resolve_sql_parameters(compiled_sql, wrap=False, subqueries=None):
 
 @dsp
 def compile_to_inst(rps: ast.ParameterizedSqlCode):
-    state = context.state 
-
     sql_code = cast_to_python_string(rps.string)
     if not isinstance(sql_code, str):
         raise Signal.make(T.TypeError, rps, f"Expected string, got '{rps.string}'")
@@ -704,7 +699,7 @@ def compile_to_inst(rps: ast.ParameterizedSqlCode):
     if isinstance(type_, objects.Instance):
         type_ = type_.type
     assert isinstance(type_, Type), type_
-    name = state.unique_name("subq_")
+    name = unique_name("subq_")
     if type_ <= T.table:
         self_table = objects.new_table(type_, Id(name))
     else:
@@ -722,7 +717,7 @@ def compile_to_inst(rps: ast.ParameterizedSqlCode):
                     raise Signal.make(T.TypeError, rps, f"$self is only available for queries that return a table")
                 inst = self_table
             else:
-                obj = state.get_var(t[1:])
+                obj = get_var(t[1:])
                 if isinstance(obj, Type) and obj <= T.table:
                     # This branch isn't strictly necessary
                     # It exists to create nicer SQL code output
@@ -803,7 +798,7 @@ def compile_to_inst(sel: ast.Selection):
 
     assert_type(table.type, T.table, sel, "Selection")
 
-    with context.state.use_scope({n:projected(c) for n, c in table.all_attrs().items()}):
+    with use_scope({n:projected(c) for n, c in table.all_attrs().items()}):
         conds = cast_to_instance(sel.conds)
 
     if any(t <= T.unknown for t in table.type.elem_types):
@@ -819,14 +814,13 @@ def compile_to_inst(sel: ast.Selection):
 
 @dsp
 def compile_to_inst(param: ast.Parameter):
-    state = context.state
-    if state.access_level == state.AccessLevels.COMPILE:
+    if get_access_level() == AccessLevels.COMPILE:
         if param.type <= T.struct:
             # TODO why can't I just make an instance?
             raise InsufficientAccessLevel("Structs not supported yet")
         return make_instance(sql.Parameter(param.type, param.name), param.type, [])
 
-    return state.get_var(param.name)
+    return get_var(param.name)
 
 @dsp
 def compile_to_inst(attr: ast.Attr):
@@ -901,7 +895,7 @@ def compile_to_inst(marker: ast.Marker):
 
 @dsp
 def compile_to_inst(range: ast.Range):
-    state = context.state
+    target = get_db_target()
     # TODO move to sql.py
     # Requires subqueries to be part of 'code' instead of a separate 'subqueries'?
     # But then what's the point of an instance, other than carrying methods...
@@ -914,12 +908,12 @@ def compile_to_inst(range: ast.Range):
         stop = cast_to_python_int(range.stop)
         if not isinstance(stop, int):
             raise Signal.make(T.TypeError, range, "Range must be between integers")
-    elif state.db.target in (sql.mysql, sql.bigquery):
-            raise Signal.make(T.NotImplementedError, range, f"{state.db.target} doesn't support infinite series!")
+    elif target in (sql.mysql, sql.bigquery):
+            raise Signal.make(T.NotImplementedError, range, f"{target} doesn't support infinite series!")
 
     type_ = T.list[T.int]
 
-    if state.db.target == sql.bigquery:
+    if target == sql.bigquery:
         code = sql.RawSql(type_, f'UNNEST(GENERATE_ARRAY({start}, {stop-1})) as item')
         return objects.TableInstance.make(code, type_, [])
 
@@ -929,7 +923,7 @@ def compile_to_inst(range: ast.Range):
         stop_str = f" WHERE item+1<{stop}"
 
 
-    name = state.unique_name("range")
+    name = unique_name("range")
     skip = 1
     code = f"SELECT {start} AS item UNION ALL SELECT item+{skip} FROM {name}{stop_str}"
     subq = sql.Subquery(name, [], sql.RawSql(type_, code))

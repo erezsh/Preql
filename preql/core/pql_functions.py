@@ -16,7 +16,8 @@ from .exceptions import Signal, ExitInterp
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import State, pyvalue_inst, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
+from .interp_common import pyvalue_inst, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
+from .state import get_var, get_db, use_scope, unique_name, get_db_target, require_access, AccessLevels
 from .evaluate import evaluate, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
 from .pql_types import T, Type, Id
 from .types_impl import join_names
@@ -30,7 +31,7 @@ def _pql_PY_callback(var: str):
     var = var.group()
     assert var[0] == '$'
     var_name = var[1:]
-    obj = context.state.get_var(var_name)
+    obj = get_var(var_name)
     inst = evaluate( obj)
 
     if not isinstance(inst, objects.ValueInstance):
@@ -78,7 +79,7 @@ def pql_inspect_sql(obj: T.object):
     """
     if not isinstance(obj, objects.Instance):
         raise Signal.make(T.TypeError, None, f"inspect_sql() expects a concrete object. Instead got: {obj.type}")
-    s = context.state.db.compile_sql(obj.code, obj.subqueries)
+    s = get_db().compile_sql(obj.code, obj.subqueries)
     return objects.ValueInstance.make(sql.make_value(s), T.text, [], s)
 
 
@@ -149,7 +150,7 @@ def pql_fmt(s: T.string):
     for m, t in tokens:
         if m:
             assert t[0] == '$'
-            obj = context.state.get_var(t[1:])
+            obj = get_var(t[1:])
             inst = cast_to_instance(obj)
             as_str = cast(inst, T.string)
             string_parts.append(as_str)
@@ -203,7 +204,7 @@ def pql_debug():
     state = context.state
     py_api = state._py_api
 
-    with state.use_scope(breakpoint_funcs):
+    with use_scope(breakpoint_funcs):
         py_api.start_repl('debug> ')
     return objects.null
 
@@ -305,12 +306,10 @@ def pql_temptable(expr: T.table, const: T.bool.as_nullable() = objects.null):
     """
     # 'temptable' creates its own counting 'id' field. Copying existing 'id' fields will cause a collision
     # 'const table' doesn't
-    state = context.state
-
     const = cast_to_python(const)
     assert_type(expr.type, T.table, expr, 'temptable')
 
-    name = state.unique_name("temp")    # TODO get name from table options
+    name = unique_name("temp")    # TODO get name from table options
 
     return new_table_from_expr(name, expr, const, True)
 
@@ -322,9 +321,8 @@ def pql_get_db_type():
         >> get_db_type()
         "sqlite"
     """
-    state = context.state
-    assert state.access_level >= state.AccessLevels.EVALUATE
-    return pyvalue_inst(state.db.target, T.string)
+    require_access(AccessLevels.EVALUATE)
+    return pyvalue_inst(get_db_target(), T.string)
 
 
 
@@ -356,7 +354,7 @@ def pql_table_intersect(t1: T.table, t2: T.table):
 
 def pql_table_substract(t1: T.table, t2: T.table):
     "Substract two tables (except). Used for `t1 - t2`"
-    if context.state.db.target is sql.mysql:
+    if get_db_target() is sql.mysql:
         raise Signal.make(T.NotImplementedError, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
     return sql_bin_op("EXCEPT", t1, t2, "subtract")
 
@@ -412,7 +410,6 @@ def _auto_join(ta, tb):
 
 
 def _join(join: str, on, exprs_dict: dict, joinall=False, nullable=None):
-    state = context.state
     names = list(exprs_dict)
     exprs = [evaluate( value) for value in exprs_dict.values()]
 
@@ -450,7 +447,7 @@ def _join(join: str, on, exprs_dict: dict, joinall=False, nullable=None):
                     for name, t in safezip(names, tables)
                     for pk in t.type.options.get('pk', [])
                    ]
-    table_type = T.table(structs, name=Id(state.unique_name("joinall" if joinall else "join")), pk=primary_keys)
+    table_type = T.table(structs, name=Id(unique_name("joinall" if joinall else "join")), pk=primary_keys)
 
     conds = []
     if joinall:
@@ -459,7 +456,7 @@ def _join(join: str, on, exprs_dict: dict, joinall=False, nullable=None):
                 raise Signal.make(T.TypeError, None, f"joinall() expected tables. Got {e}")
     elif on is not objects.null:
         attrs = {n: objects.make_instance_from_name(table_type.elems[n], n) for n in names}
-        with state.use_scope({n: objects.projected(c) for n, c in attrs.items()}):
+        with use_scope({n: objects.projected(c) for n, c in attrs.items()}):
             on = cast_to_instance(on)
         conds.append(on.code)
     else:
@@ -661,7 +658,7 @@ def pql_import_table(name: T.string, columns: T.list[T.string].as_nullable() = o
         columns_whitelist = set(columns_whitelist)
 
     # Get table type
-    t = context.state.db.import_table_type(name_str, columns_whitelist)
+    t = get_db().import_table_type(name_str, columns_whitelist)
     assert t <= T.table
 
     # Get table contents
@@ -751,9 +748,9 @@ def pql_tables():
 
     The resulting table has two columns: name, and type.
     """
-    state = context.state
-    names = state.db.list_tables()
-    values = [(name, state.db.import_table_type(name, None)) for name in names]
+    db = get_db()
+    names = db.list_tables()
+    values = [(name, db.import_table_type(name, None)) for name in names]
     tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in values]
 
     table_type = T.table(dict(name=T.string, type=T.string))
