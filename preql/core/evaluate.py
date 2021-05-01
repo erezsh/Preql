@@ -14,7 +14,7 @@ from . import pql_ast as ast
 from . import sql
 from .parser import Str
 from .interp_common import dsp, pyvalue_inst, cast_to_python
-from .compiler import compile_to_inst, cast_to_instance
+from .compiler import cast_to_instance
 from .pql_types import T, Type, Object, Id
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr, kernel_type
 from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
@@ -388,7 +388,7 @@ def simplify(cb: ast.CodeBlock):
         # Failed to run it, so try to cast as instance
         # XXX order should be other way around!
         if e.type <= T.CastError:
-            return compile_to_inst(cb)
+            return cb.compile_to_inst()
         raise
     except InsufficientAccessLevel:
         return cb
@@ -879,7 +879,7 @@ def evaluate( obj_):
     # . Compilation may fail (e.g. due to lack of DB access)
     # . Resulting code generic within the same database, and can be cached
     # obj = compile_to_inst(state.reduce_access(state.AccessLevels.COMPILE), obj)
-    obj = compile_to_inst(obj)
+    obj = obj.compile_to_inst()
 
     if access_level < AccessLevels.EVALUATE:
         return obj

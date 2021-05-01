@@ -1,5 +1,5 @@
 
-from preql.utils import safezip, listgen, find_duplicate, SafeDict, re_split
+from preql.utils import safezip, listgen, find_duplicate, SafeDict, re_split, method
 from preql.context import context
 
 from .exceptions import Signal, InsufficientAccessLevel, ReturnSignal, pql_AttributeError
@@ -25,7 +25,7 @@ def cast_to_instance(x: list):
 def cast_to_instance(x):
     try:
         x = simplify(x)  # just compile Name?
-        inst = compile_to_inst(x)
+        inst = x.compile_to_inst()
         # inst = evaluate( x)
     except ReturnSignal:
         raise Signal.make(T.CompileError, None, f"Bad compilation of {x}")
@@ -148,22 +148,22 @@ def guess_field_name(f: ast.FuncCall):
 #
 
 
-@dsp
+@method
 def compile_to_inst(x: objects.Object):
     return x
-@dsp
+@method
 def compile_to_inst(node: ast.Ast):
     return node
 
 
-@dsp
+@method
 def compile_to_inst(cb: ast.CodeBlock):
     if len(cb.statements) == 1:
-        return compile_to_inst(cb.statements[0])
+        return cb.statements[0].compile_to_inst()
 
     # TODO some statements can be evaluated at compile time
     raise Signal.make(T.CompileError, cb, "Cannot compile this code block")
-@dsp
+@method
 def compile_to_inst(i: ast.If):
     cond = cast(cast_to_instance(i.cond), T.bool)
     then = cast_to_instance(i.then)
@@ -176,7 +176,7 @@ def compile_to_inst(i: ast.If):
 
 
 
-@dsp
+@method
 def compile_to_inst(proj: ast.Projection):
     table = cast_to_instance(proj.table)
 
@@ -274,7 +274,7 @@ def compile_to_inst(proj: ast.Projection):
     # Make Instance
     return new_table.replace(code=code)
 
-@dsp
+@method
 def compile_to_inst(order: ast.Order):
     table = cast_to_instance(order.table)
     assert_type(table.type, T.table, order, "'order'")
@@ -292,19 +292,19 @@ def compile_to_inst(order: ast.Order):
 
     return objects.TableInstance.make(code, table.type, [table] + fields)
 
-@dsp
+@method
 def compile_to_inst(expr: ast.DescOrder):
     obj = cast_to_instance(expr.value)
     return obj.replace(code=sql.Desc(obj.code))
 
 
 
-@dsp
-def compile_to_inst(lst: list):
-    return [evaluate( e) for e in lst]
+# @method
+# def compile_to_inst(lst: list):
+#     return [evaluate( e) for e in lst]
 
 
-@dsp
+@method
 def compile_to_inst(o: ast.Or):
     args = cast_to_instance(o.args)
     a, b = args
@@ -315,7 +315,7 @@ def compile_to_inst(o: ast.Or):
     code = sql.Case(cond.code, a.code, b.code)
     return objects.make_instance(code, a.type, args)
 
-@dsp
+@method
 def compile_to_inst(o: ast.And):
     args = cast_to_instance(o.args)
     a, b = args
@@ -326,7 +326,7 @@ def compile_to_inst(o: ast.And):
     code = sql.Case(cond.code, b.code, a.code)
     return objects.make_instance(code, a.type, args)
 
-@dsp
+@method
 def compile_to_inst(o: ast.Not):
     expr = cast_to_instance(o.expr)
     expr_bool = cast(expr, T.bool)
@@ -337,7 +337,7 @@ def compile_to_inst(o: ast.Not):
 
 
 
-@dsp
+@method
 def compile_to_inst(cmp: ast.Compare):
     insts = evaluate( cmp.args)
 
@@ -350,7 +350,7 @@ def compile_to_inst(cmp: ast.Compare):
     }.get(cmp.op, cmp.op)
     return compare(op, insts[0], insts[1])
 
-@dsp
+@method
 def compile_to_inst(neg: ast.Neg):
     expr = cast_to_instance(neg.expr)
     assert_type(expr.type, T.number, neg, "Negation")
@@ -358,26 +358,26 @@ def compile_to_inst(neg: ast.Neg):
     return make_instance(sql.Neg(expr.code), expr.type, [expr])
 
 
-@dsp
+@method
 def compile_to_inst(arith: ast.BinOp):
     args = cast_to_instance(arith.args)
     return compile_arith(arith, *args)
 
 
 
-@dsp
+@method
 def compile_to_inst(x: ast.Ellipsis):
     raise Signal.make(T.SyntaxError, x, "Ellipsis not allowed here")
 
 
-@dsp
+@method
 def compile_to_inst(c: ast.Const):
     if c.type == T.nulltype:
         assert c.value is None
         return objects.null
     return pyvalue_inst(c.value, c.type)
 
-@dsp
+@method
 def compile_to_inst(d: ast.Dict_):
     # TODO handle duplicate key names
     elems = {k or guess_field_name(v): evaluate( v) for k, v in d.elems.items()}
@@ -385,7 +385,7 @@ def compile_to_inst(d: ast.Dict_):
     return objects.StructInstance(t, elems)
 
 
-@dsp
+@method
 def compile_to_inst(lst: objects.PythonList):
     t = lst.type.elem
     x = [sql.Primitive(t, sql._repr(t,i)) for i in lst.items]
@@ -396,7 +396,7 @@ def compile_to_inst(lst: objects.PythonList):
     return inst
 
 
-@dsp
+@method
 def compile_to_inst(lst: ast.List_):
     if not lst.elems and tuple(lst.type.elems.values()) == (T.any,):
         # XXX a little awkward
@@ -431,7 +431,7 @@ def compile_to_inst(lst: ast.List_):
 
 
 # def resolve_parameters(state: State, res: ast.ResolveParameters):
-@dsp
+@method
 def compile_to_inst(res: ast.ResolveParameters):
     # XXX use a different mechanism??
 
@@ -483,7 +483,7 @@ def _resolve_sql_parameters(compiled_sql, wrap=False, subqueries=None):
 
 
 
-@dsp
+@method
 def compile_to_inst(rps: ast.ParameterizedSqlCode):
     sql_code = cast_to_python_string(rps.string)
     if not isinstance(sql_code, str):
@@ -545,7 +545,7 @@ def compile_to_inst(rps: ast.ParameterizedSqlCode):
     code = sql.CompiledSQL(type_, new_code, None, False, False)     # XXX is False correct?
     return make_instance(code, type_, instances)
 
-@dsp
+@method
 def compile_to_inst(s: ast.Slice):
     obj = cast_to_instance(s.obj)
 
@@ -573,7 +573,7 @@ def compile_to_inst(s: ast.Slice):
 
     return make_instance(code, obj.type, instances)
 
-@dsp
+@method
 def compile_to_inst(sel: ast.Selection):
     obj = simplify(sel.table)
     if isinstance(obj, Type):
@@ -588,7 +588,7 @@ def compile_to_inst(sel: ast.Selection):
         slice = ast.Slice(table,
                           ast.Range(index, ast.BinOp('+', [index, ast.Const(T.int, 1)]))
                          ).set_text_ref(sel.text_ref)
-        return compile_to_inst(slice)
+        return slice.compile_to_inst()
 
     assert_type(table.type, T.table, sel, "Selection")
 
@@ -606,7 +606,7 @@ def compile_to_inst(sel: ast.Selection):
 
     return type(table).make(code, table.type, [table] + conds)
 
-@dsp
+@method
 def compile_to_inst(param: ast.Parameter):
     if get_access_level() == AccessLevels.COMPILE:
         if param.type <= T.struct:
@@ -616,7 +616,7 @@ def compile_to_inst(param: ast.Parameter):
 
     return get_var(param.name)
 
-@dsp
+@method
 def compile_to_inst(attr: ast.Attr):
     if isinstance(attr.name, ast.Marker):
         if attr.expr:
@@ -662,12 +662,12 @@ def _apply_type_generics(gen_type, type_names):
 
 
 
-@dsp
+@method
 def compile_to_inst(marker: ast.Marker):
     all_vars = context.state.get_all_vars_with_rank()   # Uses overridden version of AcState
     raise AutocompleteSuggestions(all_vars)
 
-@dsp
+@method
 def compile_to_inst(range: ast.Range):
     target = get_db_target()
     # TODO move to sql.py
