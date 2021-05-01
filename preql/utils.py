@@ -269,3 +269,10 @@ def re_split(r, s):
         offset = m.end()
     yield None, s[offset:]
 
+
+
+def method(f):
+    assert len(f.__annotations__) == 1
+    cls ,= f.__annotations__.values()
+    setattr(cls, f.__name__, f)
+
