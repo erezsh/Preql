@@ -44,6 +44,21 @@ def _cast(inst_type: T.table, target_type: T.list, inst):
     return objects.TableInstance.make(code, T.list[elem_type], [inst])
 
 @dp_type
+def _cast(inst_type: T.table, target_type: T.primitive, inst):
+    t = inst.type
+    if len(t.elems) != 1:
+        raise Signal.make(T.TypeError, None, f"Cannot cast {inst_type} to {target_type}. Expected exactly 1 column, instead got {len(t.elems)}")
+    if not inst_type.elem <= target_type:
+        raise Signal.make(T.TypeError, None, f"Cannot cast {inst_type} to {target_type}. Elements type doesn't match")
+
+    res = inst.localize()
+    if len(res) != 1:
+        raise Signal.make(T.TypeError, None, f"Cannot cast {inst_type} to {target_type}. Expected exactly 1 row, instead got {len(res)}")
+    item ,= res
+    return objects.pyvalue_inst(item, inst_type.elem)
+ 
+
+@dp_type
 def _cast(_inst_type: T.t_id, _target_type: T.int, inst):
     return inst.replace(type=T.int)
 

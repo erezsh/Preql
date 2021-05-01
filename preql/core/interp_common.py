@@ -12,9 +12,6 @@ from .pql_types import Type, T
 logger = getLogger('interp')
 
 # Define common dispatch functions
-@dsp
-def simplify(obj: type(NotImplemented)) -> object:
-    raise NotImplementedError()
 
 @dsp
 def evaluate( obj: type(NotImplemented)) -> object:
