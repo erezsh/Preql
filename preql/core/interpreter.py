@@ -5,7 +5,7 @@ from preql.utils import classify
 from preql.context import context
 
 from .exceptions import Signal, pql_SyntaxError, ReturnSignal
-from .evaluate import execute, eval_func_call, import_module, evaluate, localize, cast_to_python
+from .evaluate import execute, eval_func_call, import_module, evaluate, cast_to_python
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
@@ -106,7 +106,7 @@ class Interpreter:
 
     @entrypoint
     def localize_obj(self, obj):
-        return localize(obj)
+        return obj.localize()
 
     @entrypoint
     def call_func(self, fname, args):

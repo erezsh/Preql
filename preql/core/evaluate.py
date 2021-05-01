@@ -2,7 +2,7 @@ from typing import List, Optional
 import logging
 from pathlib import Path
 
-from preql.utils import safezip, dataclass, SafeDict, listgen
+from preql.utils import safezip, dataclass, SafeDict, listgen, method
 from preql import settings
 from preql.context import context
 
@@ -93,10 +93,6 @@ def resolve(type_: ast.Type):
     return t
 
 
-@dsp
-def _execute(struct_def: ast.StructDef):
-    resolve(struct_def)
-
 
 def db_query(sql_code, subqueries=None):
     try:
@@ -110,7 +106,41 @@ def drop_table(state, table_type):
     return state.db.query(code, {})
 
 
+
 @dsp
+def _set_value(name: ast.Name, value):
+    set_var(name.name, value)
+
+@dsp
+def _set_value(attr: ast.Attr, value):
+    raise Signal.make(T.NotImplementedError, attr, f"Cannot set attribute for {attr.expr.repr()}")
+
+def _copy_rows(target_name: ast.Name, source: objects.TableInstance):
+
+    if source is objects.EmptyList: # Nothing to add
+        return objects.null
+
+    target = evaluate( target_name)
+
+    params = dict(table_params(target.type))
+    for p in params:
+        if p not in source.type.elems:
+            raise Signal.make(T.TypeError, source, f"Missing column '{p}' in {source.type}")
+
+    primary_keys, columns = table_flat_for_insert(target.type)
+
+    source = exclude_fields(source, set(primary_keys) & set(source.type.elems))
+
+    code = sql.Insert(target.type.options['name'], columns, source.code)
+    db_query(code, source.subqueries)
+    return objects.null
+
+
+@method
+def _execute(struct_def: ast.StructDef):
+    resolve(struct_def)
+
+@method
 def _execute(table_def: ast.TableDefFromExpr):
     state = context.state
     expr = cast_to_instance(table_def.expr)
@@ -122,8 +152,17 @@ def _execute(table_def: ast.TableDefFromExpr):
         temporary = True
     t = new_table_from_expr(name, expr, table_def.const, temporary)
     set_var(table_def.name, t)
+    
+@method
+def _execute(var_def: ast.SetValue):
+    res = evaluate( var_def.value)
+    # res = apply_database_rw(res)
+    _set_value(var_def.name, res)
+    return res
 
-@dsp
+
+
+@method
 def _execute(table_def: ast.TableDef):
     if table_def.columns and isinstance(table_def.columns[-1], ast.Ellipsis):
         ellipsis = table_def.columns.pop()
@@ -178,44 +217,7 @@ def _execute(table_def: ast.TableDef):
     if not exists:
         sql_code = sql.compile_type_def(db_name.repr_name, t)
         db_query(sql_code)
-
-@dsp
-def _set_value(name: ast.Name, value):
-    set_var(name.name, value)
-
-@dsp
-def _set_value(attr: ast.Attr, value):
-    raise Signal.make(T.NotImplementedError, attr, f"Cannot set attribute for {attr.expr.repr()}")
-
-@dsp
-def _execute(var_def: ast.SetValue):
-    res = evaluate( var_def.value)
-    # res = apply_database_rw(res)
-    _set_value(var_def.name, res)
-    return res
-
-
-def _copy_rows(target_name: ast.Name, source: objects.TableInstance):
-
-    if source is objects.EmptyList: # Nothing to add
-        return objects.null
-
-    target = evaluate( target_name)
-
-    params = dict(table_params(target.type))
-    for p in params:
-        if p not in source.type.elems:
-            raise Signal.make(T.TypeError, source, f"Missing column '{p}' in {source.type}")
-
-    primary_keys, columns = table_flat_for_insert(target.type)
-
-    source = exclude_fields(source, set(primary_keys) & set(source.type.elems))
-
-    code = sql.Insert(target.type.options['name'], columns, source.code)
-    db_query(code, source.subqueries)
-    return objects.null
-
-@dsp
+@method
 def _execute(insert_rows: ast.InsertRows):
     if not isinstance(insert_rows.name, ast.Name):
         # TODO support Attr
@@ -227,7 +229,7 @@ def _execute(insert_rows: ast.InsertRows):
 
     return _copy_rows(insert_rows.name, rval)
 
-@dsp
+@method
 def _execute(func_def: ast.FuncDef):
     func = func_def.userfunc
     assert isinstance(func, objects.UserFunction)
@@ -241,7 +243,7 @@ def _execute(func_def: ast.FuncDef):
 
     set_var(func.name, func.replace(params=new_params))
 
-@dsp
+@method
 def _execute(p: ast.Print):
     display = context.state.display
     # TODO Can be done better. Maybe cast to ReprText?
@@ -258,7 +260,7 @@ def _execute(p: ast.Print):
         display.print(repr_, end=" ")
     display.print("")
 
-@dsp
+@method
 def _execute(p: ast.Assert):
     res = cast_to_python(p.cond)
     if not res:
@@ -269,14 +271,14 @@ def _execute(p: ast.Assert):
             s = p.cond.repr()
         raise Signal.make(T.AssertError, p.cond, f"Assertion failed: {s}")
 
-@dsp
+@method
 def _execute(cb: ast.CodeBlock):
     for stmt in cb.statements:
         execute(stmt)
     return objects.null
 
 
-@dsp
+@method
 def _execute(i: ast.If):
     cond = cast_to_python(i.cond)
 
@@ -285,24 +287,24 @@ def _execute(i: ast.If):
     elif i.else_:
         execute(i.else_)
 
-@dsp
+@method
 def _execute(w: ast.While):
     while cast_to_python(w.cond):
         execute(w.do)
 
-@dsp
+@method
 def _execute(f: ast.For):
     expr = cast_to_python(f.iterable)
     for i in expr:
         with use_scope({f.var: objects.from_python(i)}):
             execute(f.do)
 
-@dsp
+@method
 def _execute(t: ast.Try):
     try:
         execute(t.try_)
     except Signal as e:
-        catch_type = localize(evaluate( t.catch_expr))
+        catch_type = evaluate( t.catch_expr).localize()
         if not isinstance(catch_type, Type):
             raise Signal.make(T.TypeError, t.catch_expr, f"Catch expected type, got {t.catch_expr.type}")
         if e.type <= catch_type:
@@ -344,18 +346,18 @@ def import_module(state, r):
     return objects.Module(r.module_path, ns._ns[0])
 
 
-@dsp
+@method
 def _execute(r: ast.Import):
     module = import_module(r)
     set_var(r.as_name or r.module_path, module)
     return module
 
-@dsp
+@method
 def _execute(r: ast.Return):
     value = evaluate( r.value)
     raise ReturnSignal(value)
 
-@dsp
+@method
 def _execute(t: ast.Throw):
     e = evaluate( t.value)
     if isinstance(e, ast.Ast):
@@ -365,7 +367,7 @@ def _execute(t: ast.Throw):
 
 def execute(stmt):
     if isinstance(stmt, ast.Statement):
-        return _execute(stmt) or objects.null
+        return stmt._execute() or objects.null
     return evaluate(stmt)
 
 
@@ -380,7 +382,7 @@ def simplify(cb: ast.CodeBlock):
     #     s ,= cb.statements
     #     return simplify(s)
     try:
-        return _execute(cb)
+        return cb._execute()
     except ReturnSignal as r:
         # XXX is this correct?
         return r.value
@@ -599,7 +601,7 @@ def test_nonzero(inst: Type):
 
 
 
-@dsp
+@method
 def apply_database_rw(o: ast.One):
     # TODO move these to the core/base module
     obj = evaluate( o.expr)
@@ -613,7 +615,7 @@ def apply_database_rw(o: ast.One):
     table = evaluate( slice_ast)
 
     assert (table.type <= T.table), table
-    rows = localize(table) # Must be 1 row
+    rows = table.localize() # Must be 1 row
     if len(rows) == 0:
         if not o.nullable:
             raise Signal.make(T.ValueError, o, "'one' expected a single result, got an empty expression")
@@ -633,7 +635,7 @@ def apply_database_rw(o: ast.One):
     return objects.RowInstance(rowtype, d)
 
 
-@dsp
+@method
 def apply_database_rw(d: ast.Delete):
     catch_access(AccessLevels.WRITE_DB)
     # TODO Optimize: Delete on condition, not id, when possible
@@ -647,7 +649,7 @@ def apply_database_rw(d: ast.Delete):
     if not 'name' in table.type.options:
         raise Signal.make(T.ValueError, d.table, "Cannot delete. Table is not persistent")
 
-    rows = list(localize(table))
+    rows = list(table.localize())
     if rows:
         if 'id' not in rows[0]:
             raise Signal.make(T.TypeError, d, "Delete error: Table does not contain id")
@@ -659,7 +661,7 @@ def apply_database_rw(d: ast.Delete):
 
     return evaluate( d.table)
 
-@dsp
+@method
 def apply_database_rw(u: ast.Update):
     catch_access(AccessLevels.WRITE_DB)
 
@@ -682,7 +684,7 @@ def apply_database_rw(u: ast.Update):
     with use_scope(update_scope):
         proj = {f.name:evaluate( f.value) for f in u.fields}
 
-    rows = list(localize(table))
+    rows = list(table.localize())
     if rows:
         if 'id' not in rows[0]:
             raise Signal.make(T.TypeError, u, "Update error: Table does not contain id")
@@ -698,7 +700,7 @@ def apply_database_rw(u: ast.Update):
     return table
 
 
-@dsp
+@method
 def apply_database_rw(new: ast.NewRows):
     catch_access(AccessLevels.WRITE_DB)
 
@@ -723,7 +725,7 @@ def apply_database_rw(new: ast.NewRows):
 
     # TODO postgres can do it better!
     table = evaluate( arg.value)
-    rows = localize(table)
+    rows = table.localize()
 
     # TODO ensure rows are the right type
 
@@ -745,7 +747,7 @@ def _destructure_param_match(ast_node, param_match):
     for k, v in param_match:
         if isinstance(v, objects.RowInstance):
             v = v.primary_key()
-        v = localize(v)
+        v = v.localize()
 
         if k.type <= T.struct:
             names = [name for name, t in flatten_type(k.orig, [k.name])]
@@ -800,7 +802,7 @@ def _new_row(new_ast, table, matched):
 
 
 
-@dsp
+@method
 def apply_database_rw(new: ast.New):
     catch_access(AccessLevels.WRITE_DB)
 
@@ -827,6 +829,10 @@ def apply_database_rw(new: ast.New):
     matched = cons.match_params(new.args)
 
     return _new_row(new, table.type, matched)
+
+@method
+def apply_database_rw(x: Object):
+    return x
 
 
 @dataclass
@@ -892,16 +898,13 @@ def evaluate( obj_):
         return obj
 
     # - Apply operations that read or write the database (delete, insert, update, one, etc.)
-    obj = apply_database_rw(obj)
+    obj = obj.apply_database_rw()
 
     assert not isinstance(obj, (ast.ResolveParameters, ast.ParameterizedSqlCode)), obj
 
     return obj
 
 
-@dsp
-def apply_database_rw(x):
-    return x
 
 #
 #    localize()
@@ -910,15 +913,15 @@ def apply_database_rw(x):
 # Return the local value of the expression. Only requires computation if the value is an instance.
 #
 
-@dsp
+@method
 def localize(inst: objects.AbsInstance):
     raise NotImplementedError(inst)
 
-@dsp
+@method
 def localize(inst: objects.AbsStructInstance):
-    return {k: localize(evaluate( v)) for k, v in inst.attrs.items()}
+    return {k: evaluate(v).localize() for k, v in inst.attrs.items()}
 
-@dsp
+@method
 def localize(inst: objects.Instance):
     # TODO This protection doesn't work for unoptimized code
     # Cancel unoptimized mode? Or leave this unprotected?
@@ -929,18 +932,18 @@ def localize(inst: objects.Instance):
 
     return db_query(inst.code, inst.subqueries)
 
-@dsp
+@method
 def localize(inst: objects.ValueInstance):
     return inst.local_value
 
-@dsp
+@method
 def localize(inst: objects.SelectedColumnInstance):
     # XXX is this right?
     p = evaluate( inst.parent)
     return p.get_attr(inst.name)
 
-@dsp
-def localize(x):
+@method
+def localize(x: Object):
     return x
 
 
@@ -1011,7 +1014,7 @@ def cast_to_python(obj: objects.AbsInstance):
     if obj.type <= T.projected | T.aggregated:
         raise exc.InsufficientAccessLevel(get_access_level())
         # raise Signal.make(T.CastError, None, f"Internal error. Cannot cast projected obj: {obj}")
-    res = localize(obj)
+    res = obj.localize()
     if obj.type == T.float:
         res = float(res)
     elif obj.type == T.int:
@@ -1032,7 +1035,7 @@ objects.Function._localize_keys = function_localize_keys
 
 
 def instance_repr(self):
-    return pql_repr(self.type, localize(self))
+    return pql_repr(self.type, self.localize())
 
 objects.Instance.repr = instance_repr
 
