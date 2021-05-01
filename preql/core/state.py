@@ -199,3 +199,6 @@ def get_access_level():
 
 def reduce_access(new_level):
 	return context.state.reduce_access(new_level)
+
+def get_display():
+	return context.state.display
