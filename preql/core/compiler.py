@@ -6,7 +6,7 @@ from .exceptions import Signal, InsufficientAccessLevel, ReturnSignal, pql_Attri
 from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
-from .interp_common import dsp, assert_type, pyvalue_inst, evaluate, simplify, cast_to_python_string, cast_to_python_int
+from .interp_common import dsp, assert_type, pyvalue_inst, evaluate, cast_to_python_string, cast_to_python_int
 from .state import use_scope, get_var, get_db_target, unique_name, require_access, AccessLevels, get_access_level
 from .pql_types import T, Type, Id, ITEM_NAME
 from .types_impl import flatten_type, pql_repr, kernel_type
@@ -24,7 +24,7 @@ def cast_to_instance(x: list):
 @dsp
 def cast_to_instance(x):
     try:
-        x = simplify(x)  # just compile Name?
+        x = x.simplify()  # just compile Name?
         inst = x.compile_to_inst()
         # inst = evaluate( x)
     except ReturnSignal:
@@ -575,7 +575,7 @@ def compile_to_inst(s: ast.Slice):
 
 @method
 def compile_to_inst(sel: ast.Selection):
-    obj = simplify(sel.table)
+    obj = sel.table.simplify()
     if isinstance(obj, Type):
         return _apply_type_generics(obj, sel.conds)
 

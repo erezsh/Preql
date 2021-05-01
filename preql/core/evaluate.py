@@ -47,7 +47,7 @@ def resolve(table_def: ast.TableDef):
         t = t(elems)
 
     if table_def.methods:
-        methods = evaluate( table_def.methods)
+        methods = evaluate(table_def.methods)
         t.methods.update({m.userfunc.name:m.userfunc for m in methods})
 
     return t
@@ -120,7 +120,7 @@ def _copy_rows(target_name: ast.Name, source: objects.TableInstance):
     if source is objects.EmptyList: # Nothing to add
         return objects.null
 
-    target = evaluate( target_name)
+    target = evaluate(target_name)
 
     params = dict(table_params(target.type))
     for p in params:
@@ -155,7 +155,7 @@ def _execute(table_def: ast.TableDefFromExpr):
     
 @method
 def _execute(var_def: ast.SetValue):
-    res = evaluate( var_def.value)
+    res = evaluate(var_def.value)
     # res = apply_database_rw(res)
     _set_value(var_def.name, res)
     return res
@@ -223,7 +223,7 @@ def _execute(insert_rows: ast.InsertRows):
         # TODO support Attr
         raise Signal.make(T.SyntaxError, insert_rows, "L-value must be table name")
 
-    rval = evaluate( insert_rows.value)
+    rval = evaluate(insert_rows.value)
 
     assert_type(rval.type, T.table, insert_rows, '+=')
 
@@ -237,7 +237,7 @@ def _execute(func_def: ast.FuncDef):
     new_params = []
     for p in func.params:
         if p.type:
-            t = evaluate( p.type)
+            t = evaluate(p.type)
             p = p.replace(type=t)
         new_params.append(p)
 
@@ -247,11 +247,10 @@ def _execute(func_def: ast.FuncDef):
 def _execute(p: ast.Print):
     display = context.state.display
     # TODO Can be done better. Maybe cast to ReprText?
-    insts = evaluate( p.value)
+    insts = evaluate(p.value)
     assert isinstance(insts, list)
 
     for inst in insts:
-        # inst = evaluate( p.value)
         if inst.type <= T.string:
             repr_ = cast_to_python_string(inst)
         else:
@@ -266,7 +265,7 @@ def _execute(p: ast.Assert):
     if not res:
         # TODO pretty print values
         if isinstance(p.cond, ast.Compare):
-            s = (' %s '%p.cond.op).join(str(evaluate( a).repr()) for a in p.cond.args)
+            s = (' %s '%p.cond.op).join(str(evaluate(a).repr()) for a in p.cond.args)
         else:
             s = p.cond.repr()
         raise Signal.make(T.AssertError, p.cond, f"Assertion failed: {s}")
@@ -304,7 +303,7 @@ def _execute(t: ast.Try):
     try:
         execute(t.try_)
     except Signal as e:
-        catch_type = evaluate( t.catch_expr).localize()
+        catch_type = evaluate(t.catch_expr).localize()
         if not isinstance(catch_type, Type):
             raise Signal.make(T.TypeError, t.catch_expr, f"Catch expected type, got {t.catch_expr.type}")
         if e.type <= catch_type:
@@ -354,12 +353,12 @@ def _execute(r: ast.Import):
 
 @method
 def _execute(r: ast.Return):
-    value = evaluate( r.value)
+    value = evaluate(r.value)
     raise ReturnSignal(value)
 
 @method
 def _execute(t: ast.Throw):
-    e = evaluate( t.value)
+    e = evaluate(t.value)
     if isinstance(e, ast.Ast):
         raise exc.InsufficientAccessLevel()
     assert isinstance(e, Exception), e
@@ -376,7 +375,7 @@ def execute(stmt):
 # Simplify performs local operations before any db-specific compilation occurs
 # Technically not super useful at the moment, but makes conceptual sense.
 
-@dsp
+@method
 def simplify(cb: ast.CodeBlock):
     # if len(cb.statements) == 1:
     #     s ,= cb.statements
@@ -395,13 +394,13 @@ def simplify(cb: ast.CodeBlock):
     except InsufficientAccessLevel:
         return cb
 
-@dsp
+@method
 def simplify(n: ast.Name):
     # XXX what happens to caching if this is a global variable?
     return get_var(n.name)
 
-@dsp
-def simplify(x):
+@method
+def simplify(x: Object):
     return x
 
 # @dsp
@@ -435,7 +434,7 @@ def simplify(x):
 
 
 # TODO Optimize these, right now failure to evaluate will lose all work
-@dsp
+@method
 def simplify(obj: ast.Or):
     a, b = evaluate( obj.args)
     ta = kernel_type(a.type)
@@ -443,14 +442,14 @@ def simplify(obj: ast.Or):
     if ta != tb:
         raise Signal.make(T.TypeError, obj, f"'or' operator requires both arguments to be of the same type, but got '{ta}' and '{tb}'.")
     try:
-        if test_nonzero(a):
+        if a.test_nonzero():
             return a
     except InsufficientAccessLevel:
         return obj
     return b
 
 
-@dsp
+@method
 def simplify(obj: ast.And):
     a, b = evaluate( obj.args)
     ta = kernel_type(a.type)
@@ -458,25 +457,25 @@ def simplify(obj: ast.And):
     if ta != tb:
         raise Signal.make(T.TypeError, obj, f"'and' operator requires both arguments to be of the same type, but got '{ta}' and '{tb}'.")
     try:
-        if not test_nonzero(a):
+        if not a.test_nonzero():
             return a
     except InsufficientAccessLevel:
         return obj
     return b
 
 
-@dsp
+@method
 def simplify(obj: ast.Not):
     inst = evaluate( obj.expr)
     try:
-        nz = test_nonzero(inst)
+        nz = inst.test_nonzero()
     except InsufficientAccessLevel:
         return obj
     return objects.pyvalue_inst(not nz)
 
 
 
-@dsp
+@method
 def simplify(funccall: ast.FuncCall):
     state = context.state
     func = evaluate(funccall.func)
@@ -581,16 +580,16 @@ def _call_expr(expr):
         return r.value
 
 # TODO fix these once we have proper types
-@dsp
+@method
 def test_nonzero(table: objects.TableInstance):
     count = call_builtin_func("count", [table])
     return bool(cast_to_python_int(count))
 
-@dsp
+@method
 def test_nonzero(inst: objects.Instance):
     return bool(cast_to_python(inst))
 
-@dsp
+@method
 def test_nonzero(inst: Type):
     return True
 
@@ -857,25 +856,25 @@ def add_as_subquery(inst: objects.Instance):
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
 
-@dsp
-def resolve_parameters(x):
+@method
+def resolve_parameters(x: Object):
     return x
 
-@dsp
+@method
 def resolve_parameters(p: ast.Parameter):
     return get_var(p.name)
 
 
 @dsp
-def evaluate( obj: list):
+def evaluate(obj: list):
     return [evaluate( item) for item in obj]
 
 @dsp
-def evaluate( obj_):
+def evaluate(obj_):
     access_level = get_access_level()
 
     # - Generic, non-db related operations
-    obj = simplify(obj_)
+    obj = obj_.simplify()
     assert obj, obj_
 
     if access_level < AccessLevels.COMPILE:
@@ -892,7 +891,7 @@ def evaluate( obj_):
 
     # - Resolve parameters to "instantiate" the cached code
     # TODO necessary?
-    obj = resolve_parameters(obj)
+    obj = obj.resolve_parameters()
 
     if access_level < AccessLevels.READ_DB:
         return obj
@@ -939,7 +938,7 @@ def localize(inst: objects.ValueInstance):
 @method
 def localize(inst: objects.SelectedColumnInstance):
     # XXX is this right?
-    p = evaluate( inst.parent)
+    p = evaluate(inst.parent)
     return p.get_attr(inst.name)
 
 @method
