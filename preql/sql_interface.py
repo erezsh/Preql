@@ -361,6 +361,28 @@ class _SqliteProduct:
     def finalize(self):
         return self.product
 
+import math
+class StdevFunc:
+    def __init__(self):
+        self.M = 0.0
+        self.S = 0.0
+        self.k = 1
+
+    def step(self, value):
+        if value is None:
+            return
+        tM = self.M
+        self.M += (value - tM) / self.k
+        self.S += (value - tM) * (value - self.M)
+        self.k += 1
+
+    def finalize(self):
+        if self.k < 3:
+            return None
+        return math.sqrt(self.S / (self.k-2))
+
+
+
 class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
     target = sqlite
 
@@ -377,6 +399,7 @@ class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
         self._conn.create_function("power", 2, operator.pow)
         self._conn.create_function("_pql_throw", 1, sqlite_throw)
         self._conn.create_aggregate("_pql_product", 1, _SqliteProduct)
+        self._conn.create_aggregate("stddev", 1, StdevFunc)
 
         self._print_sql = print_sql
 

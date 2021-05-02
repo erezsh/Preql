@@ -56,6 +56,12 @@ func product(col: _table_or_agg(number)) = _sql_agg_func("_pql_PRODUCT", col)
         For databases that don't support product, see `approx_product()`.
     """
 
+func stddev(col: _table_or_agg(number)) = _sql_agg_func("stddev", col)
+    """Finds the standard deviation of a column or a list
+
+    See Also `sum`.
+    """
+
 func mean(col: _table_or_agg(number)) = _sql_agg_func("AVG", col, float)
     """Returns the mean average of a column or a list
 
@@ -607,7 +613,7 @@ func describe(tbl) {
         =>
         count()
         mean(item)
-        // stddev(item)
+        stddev(item)
         // median(item)
         min(item)
         // percentile_cont(array[0.25, 0.5, 0.75]) WITHIN GROUP (ORDER BY n),
