@@ -10,7 +10,7 @@ from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interp_common import pyvalue_inst, call_builtin_func
-from .state import State
+from .state import State, use_scope
 from .pql_types import T, Object
 from .pql_functions import import_pandas
 from .pql_functions import internal_funcs, joins
@@ -50,7 +50,7 @@ class Interpreter:
         return context(state=self.state)
 
     def _execute_code(self, code, source_file, args=None):
-        assert not args, "Not implemented yet: %s" % args
+        # assert not args, "Not implemented yet: %s" % args
         try:
             stmts = parse_stmts(code, source_file)
         except pql_SyntaxError as e:
@@ -62,11 +62,13 @@ class Interpreter:
                 self.set_var('__doc__', stmts[0].value)
 
         last = None
-        for stmt in stmts:
-            try:
-                last = execute(stmt)
-            except ReturnSignal:
-                raise Signal.make(T.CodeError, stmt, "'return' outside of function")
+
+        with self.state.ns.use_parameters(args or {}):
+            for stmt in stmts:
+                try:
+                    last = execute(stmt)
+                except ReturnSignal:
+                    raise Signal.make(T.CodeError, stmt, "'return' outside of function")
 
         return last
 

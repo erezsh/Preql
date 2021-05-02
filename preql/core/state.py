@@ -18,11 +18,15 @@ logger = getLogger('state')
 class Namespace:
     def __init__(self, ns=None):
         self._ns = ns or [{}]
+        self._parameters = None
 
     def __copy__(self):
         return Namespace([dict(n) for n in self._ns])
 
     def get_var(self, name):
+        if self._parameters and name in self._parameters:
+            return self._parameters[name]
+
         for scope in reversed(self._ns):
             if name in scope:
                 return scope[name]
@@ -43,6 +47,18 @@ class Namespace:
         finally:
             _discarded_scope = self._ns.pop()
             assert x == len(self._ns)
+
+    @contextmanager
+    def use_parameters(self, params: dict):
+        assert self._parameters is None
+        self._parameters = params
+        x = len(params)
+        try:
+            yield
+        finally:
+            assert self._parameters is params
+            assert x == len(params)
+            self._parameters = None
 
 
     # def push_scope(self):

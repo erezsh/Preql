@@ -809,7 +809,8 @@ def apply_database_rw(new: ast.New):
 
     # XXX Assimilate this special case
     if isinstance(obj, Type) and obj <= T.Exception:
-        def create_exception(state, msg):
+        def create_exception(msg):
+            state = context.state
             msg = cast_to_python(msg)
             assert new.text_ref is state.stacktrace[-1]
             return Signal(obj, list(state.stacktrace), msg)    # TODO move this to `throw`?

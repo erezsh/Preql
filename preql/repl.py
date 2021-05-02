@@ -178,7 +178,7 @@ def start_repl(p, prompt=' >> '):
         session = PromptSession(
             style=style_from_pygments_cls(PreqlStyle),
             lexer=PygmentsLexer(GoLexer),
-            completer=Autocompleter(p.interp.state),
+            completer=Autocompleter(p._interp.state),
             # key_bindings=kb
             validator=MyValidator(),
             history=FileHistory(str(Path.home() / '.preql_history')),
@@ -202,7 +202,7 @@ def start_repl(p, prompt=' >> '):
                 start_time = time()
                 try:
                     if code == '.':
-                        with context(state=p.interp.state):
+                        with context(state=p._interp.state):
                             console.print(table_more(), overflow='ellipsis')
                         continue
 
@@ -214,9 +214,9 @@ def start_repl(p, prompt=' >> '):
                         assert isinstance(res, Object), (res, type(res))
 
                         if save_last:
-                            p.interp.set_var(save_last, res)
+                            p._interp.set_var(save_last, res)
 
-                        with context(state=p.interp.state):
+                        with context(state=p._interp.state):
                             res_repr = res.repr()
 
                         # repl_log.info(res)

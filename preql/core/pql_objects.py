@@ -612,29 +612,52 @@ class PythonList(ast.Ast):
         # allow to compile it straight to SQL, no AST in the middle
         self.items = items
 
-def from_python(value):
-    if value is None:
-        return null
-    elif isinstance(value, str):
-        return ast.Const(T.string, value)
-    elif isinstance(value, bytes):
-        return ast.Const(T.string, value.decode())
-    elif isinstance(value, bool):
-        return ast.Const(T.bool, value)
-    elif isinstance(value, int):
-        return ast.Const(T.int, value)
-    elif isinstance(value, float):
-        return ast.Const(T.float, value)
-    elif isinstance(value, list):
-        return PythonList(value)
-    elif isinstance(value, dict):
-        elems = {k:from_python(v) for k,v in value.items()}
-        return ast.Dict_(elems)
-    elif isinstance(value, type):
-        return pql_types.from_python(value)
-    elif isinstance(value, Type):
+
+from preql.utils import dsp
+
+
+@dsp
+def from_python(value: type(None)):
+    assert value is None
+    return null
+
+@dsp
+def from_python(value: str):
+    return ast.Const(T.string, value)
+
+@dsp
+def from_python(value: bytes):
+    return ast.Const(T.string, value.decode())
+
+@dsp
+def from_python(value: bool):
+    return ast.Const(T.bool, value)
+
+@dsp
+def from_python(value: int):
+    return ast.Const(T.int, value)
+
+@dsp
+def from_python(value: float):
+    return ast.Const(T.float, value)
+
+@dsp
+def from_python(value: list):
+    return PythonList(value)
+
+@dsp
+def from_python(value: dict):
+    elems = {k:from_python(v) for k,v in value.items()}
+    return ast.Dict_(elems)
+
+@dsp
+def from_python(value: type):
+    return pql_types.from_python(value)
+
+@dsp
+def from_python(value: Object):
         return value
 
-    # raise TypeError(f"Cannot import into Preql a Python object of type {type}")
-
+@dsp
+def from_python(value):
     raise Signal.make(T.TypeError, None, f"Cannot import into Preql a Python object of type {type(value)}")

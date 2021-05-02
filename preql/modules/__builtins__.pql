@@ -599,3 +599,18 @@ func map_range(tbl: table, start: union[int, function], end: union[int, function
 }
 
 pi = _pi()
+
+
+
+func describe(tbl) {
+    return list(tbl) {
+        =>
+        count()
+        mean(item)
+        // stddev(item)
+        // median(item)
+        min(item)
+        // percentile_cont(array[0.25, 0.5, 0.75]) WITHIN GROUP (ORDER BY n),
+        max(item)
+    }
+}

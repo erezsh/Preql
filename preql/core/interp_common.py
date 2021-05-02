@@ -66,7 +66,7 @@ def cast_to_python_string(obj: objects.AbsInstance):
 def cast_to_python_int(obj: objects.AbsInstance):
     res = cast_to_python(obj)
     if not isinstance(res, int):
-        raise Signal.make(T.TypeError, obj, f"Expected string, got '{res}'")
+        raise Signal.make(T.TypeError, obj, f"Expected int, got '{res}'")
     return res
 
     
