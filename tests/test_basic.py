@@ -1500,6 +1500,16 @@ class BasicTests(PreqlTests):
 
         assert p.x['dt'] == p.y['dt'] != p.z['dt']
 
+    def test_keywords(self):
+        # TODO only need to run this once
+        p = self.Preql()
+        p('func f(a, b=4) = a + b')
+
+        assert p.f(b=2, a=3) == 5
+        assert p.f(3, b=10) == 13
+        self.assertRaises(Signal, p, 'f(3, a:10)')
+        self.assertRaises(Signal, p.f, p.f, 3, a=10)
+
 
 
 class TestFlow(PreqlTests):
