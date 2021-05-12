@@ -501,20 +501,27 @@ def _drop_tables(state, *tables):
             db._execute_sql(T.nulltype, f"DROP TABLE {t};")
 
 
+_SQLITE_SCHEME = 'sqlite://'
+
 def create_engine(db_uri, print_sql, auto_create):
-    dsn = dsnparse.parse(db_uri)
-    if len(dsn.paths) != 1:
-        raise ValueError("Bad value for uri: %s" % db_uri)
-    path ,= dsn.paths
-    if len(dsn.schemes) > 1:
-        raise NotImplementedError("Preql doesn't support multiple schemes")
-    scheme ,= dsn.schemes
-    if scheme == 'sqlite':
+    if db_uri.startswith(_SQLITE_SCHEME):
+        # Parse sqlite:// ourselves, to allow for sqlite://c:/path/to/db
+        path = db_uri[len(_SQLITE_SCHEME):]
         if not auto_create and path != ':memory:':
             if not Path(path).exists():
                 raise ConnectError("File %r doesn't exist. To create it, set auto_create to True" % path)
         return SqliteInterface(path, print_sql=print_sql)
-    elif scheme == 'postgres':
+
+    dsn = dsnparse.parse(db_uri)
+    if len(dsn.schemes) > 1:
+        raise NotImplementedError("Preql doesn't support multiple schemes")
+    scheme ,= dsn.schemes
+
+    if len(dsn.paths) != 1:
+        raise ValueError("Bad value for uri: %s" % db_uri)
+    path ,= dsn.paths
+
+    if scheme == 'postgres':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'mysql':
         return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)

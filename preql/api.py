@@ -166,10 +166,13 @@ class Preql:
             raise TypeError("Returned object cannot be converted into a Python representation")
         return _prepare_instance_for_user(self._interp, res)  # TODO session, not state
 
+    def _run_code(self, code, source_name='<api>', args=None):
+        pql_args = {name: objects.from_python(value) for name, value in (args or {}).items()}
+        return self._interp.execute_code(code + "\n", source_name, pql_args)
+
     @clean_signal
-    def __call__(self, pq, **args):
-        pql_args = {name: objects.from_python(value) for name, value in args.items()}
-        res = self._interp.execute_code(pq + "\n", '<inline>', pql_args)
+    def __call__(self, code, **args):
+        res = self._run_code(code, '<inline>', args)
         if res:
             return self._wrap_result(res)
 
