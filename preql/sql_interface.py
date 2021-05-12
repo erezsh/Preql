@@ -362,7 +362,7 @@ class _SqliteProduct:
         return self.product
 
 import math
-class StdevFunc:
+class _SqliteStddev:
     def __init__(self):
         self.M = 0.0
         self.S = 0.0
@@ -399,7 +399,7 @@ class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
         self._conn.create_function("power", 2, operator.pow)
         self._conn.create_function("_pql_throw", 1, sqlite_throw)
         self._conn.create_aggregate("_pql_product", 1, _SqliteProduct)
-        self._conn.create_aggregate("stddev", 1, StdevFunc)
+        self._conn.create_aggregate("stddev", 1, _SqliteStddev)
 
         self._print_sql = print_sql
 

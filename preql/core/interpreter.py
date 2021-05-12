@@ -111,7 +111,9 @@ class Interpreter:
         return obj.localize()
 
     @entrypoint
-    def call_func(self, fname, args):
+    def call_func(self, fname, args, kw=None):
+        if kw:
+            args = args + [ast.NamedField(k, v, False) for k,v in kw.items()]
         res = eval_func_call(self.state.get_var(fname), args)
         return evaluate(res)
 

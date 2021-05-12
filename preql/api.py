@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from functools import wraps
 
 from . import settings
 from .core.pql_ast import pyvalue, Ast
@@ -7,9 +8,21 @@ from .core.interpreter import Interpreter
 from .core.pql_types import T
 from .sql_interface import create_engine
 from .utils import dsp
+from .core.exceptions import Signal
 
 from .core import display
 display.install_reprs()
+
+
+
+def clean_signal(f):
+    @wraps(f)
+    def inner(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Signal as e:
+            raise e.clean_copy() from None  # Error from Preql
+    return inner
 
 
 class TablePromise:
@@ -136,12 +149,11 @@ class Preql:
         var = self._interp.state.get_var(fname)
 
         if isinstance(var, objects.Function):
+            @clean_signal
             def delegate(*args, **kw):
-                if kw:
-                    raise NotImplementedError("No support for keywords yet")
-
                 pql_args = [objects.from_python(a) for a in args]
-                pql_res = self._interp.call_func(fname, pql_args)
+                pql_kwargs = {k:objects.from_python(v) for k,v in kw.items()}
+                pql_res = self._interp.call_func(fname, pql_args, pql_kwargs)
                 return self._wrap_result( pql_res )
             return delegate
         else:
@@ -154,15 +166,14 @@ class Preql:
             raise TypeError("Returned object cannot be converted into a Python representation")
         return _prepare_instance_for_user(self._interp, res)  # TODO session, not state
 
-    def _run_code(self, pq: str, source_file: str, **args):
-        pql_args = {name: objects.from_python(value) for name, value in args.items()}
-        return self._interp.execute_code(pq + "\n", source_file, pql_args)
-
+    @clean_signal
     def __call__(self, pq, **args):
-        res = self._run_code(pq, '<inline>', **args)
+        pql_args = {name: objects.from_python(value) for name, value in args.items()}
+        res = self._interp.execute_code(pq + "\n", '<inline>', pql_args)
         if res:
             return self._wrap_result(res)
 
+    @clean_signal
     def load(self, filename, rel_to=None):
         """Load a Preql script
 
@@ -205,6 +216,11 @@ class Preql:
 
     def load_all_tables(self):
         return self._interp.load_all_tables()
+
+    @property
+    def interp(self):
+        raise Exception("Reserved")
+    
 
 
 

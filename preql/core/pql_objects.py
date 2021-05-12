@@ -123,6 +123,8 @@ class Function(Object):
         raise NotImplementedError()
 
     def match_params(self, args):
+        # if not self.name.startswith('_') and self.name not in ('PY', 'SQL', 'get_db_type'):
+        #     breakpoint()
 
         # If no keyword arguments, matching is much simpler and faster
         if all(not isinstance(a, (ast.NamedField, ast.Ellipsis)) for a in args):
@@ -167,15 +169,21 @@ class Function(Object):
 
         values = {p.name: p.default for p in self.params}
 
+        names_set = set()
         for pos_arg, name in zip(args[:first_named], values):
             assert pos_arg.name is None
             values[name] = pos_arg.value
+            names_set.add(name)
 
         collected = {}
         if first_named is not None:
             for named_arg in args[first_named:]:
                 arg_name = named_arg.name
                 if arg_name in values:
+                    if arg_name in names_set:
+                        raise Signal.make(T.SyntaxError, None, f"Function '{self.name}' recieved argument '{arg_name}' both as keyword and as positional.")
+
+                    names_set.add(arg_name)
                     values[arg_name] = named_arg.value
                 elif self.param_collector:
                     assert arg_name not in collected

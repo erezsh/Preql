@@ -12,7 +12,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_basic(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         assert "item" in autocomplete(state, "func d(){ [1]{")
         assert "item" in autocomplete(state, "func d(){ [1][")
@@ -43,7 +43,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_progressive1(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         s0 = """
         func hello() = 0
@@ -55,7 +55,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_progressive2(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         s1 = """
         func get_users(logins) {
@@ -76,7 +76,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_progressive3(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
         s = """
         try {
             SQL(<<<int>>>, "SELECT 2; SELECT 1;")
@@ -89,7 +89,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_params(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         s = """
         func enum2(tbl, whatever) = <<<tbl>>> + <<<whatever>>>
@@ -99,7 +99,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_expr(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         s = """
         table x {
@@ -114,7 +114,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_exclude_columns(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         s = """
         table x {
@@ -128,7 +128,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_assert(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         s = """
         hello = 10
@@ -139,7 +139,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_attr(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         s = """
         table Country {name: string}
@@ -156,7 +156,7 @@ class AutocompleteTests(PreqlTests):
 
     def test_range(self):
         p = self.Preql()
-        state = p.interp.state
+        state = p._interp.state
 
         s = """
         x=[1,2,3,3,10]
