@@ -39,13 +39,13 @@ When you start the interpreter, you can specify which database to connect to, us
     preql mysql://user:pass@host/dbname
 
     # Sqlite (use existing or create new)
-    preql sqlite:///path/to/file
+    preql sqlite://path/to/file
 ```
 
 When already inside the Preql interactive prompt, a Jupyter Notebook, or a running script, use the `connect()` method:
 
 ```go
-    connect("sqlite:///path/to/file")
+    connect("sqlite://path/to/file")
 ```
 
 Use introspective methods to see a list of the tables, and of the available functions:
@@ -89,7 +89,7 @@ For an example, view the following Jupyter notebook: [Tutorial: Exploring a data
 ```python
 from preql import Preql
 p1 = Preql()                             # Use memory database
-p2 = Preql("sqlite:///path/to/file")     # Use existing or new file
+p2 = Preql("sqlite://path/to/file")     # Use existing or new file
 
 assert p1('sum([1..10])') == 45
 ```

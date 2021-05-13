@@ -32,7 +32,7 @@ ITERS = 100
 def _measure_sql(sql, iters=ITERS):
     start = time.time()
     for i in range(iters):
-        l = p.interp.state.db._backend_execute_sql(sql).fetchall()
+        l = p._interp.state.db._backend_execute_sql(sql).fetchall()
     elapsed = time.time() - start
     return l, elapsed / iters
 

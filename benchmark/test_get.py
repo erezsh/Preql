@@ -33,7 +33,7 @@ Session = sessionmaker(bind=engine)
 session = Session()
 pql = Preql()
 conn = engine.raw_connection().connection
-pql.interp.state.db._conn = conn
+pql._interp.state.db._conn = conn
 cur = conn.cursor()
 pql('''
     table Vector {

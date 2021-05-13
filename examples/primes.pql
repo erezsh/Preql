@@ -7,7 +7,7 @@
 //
 //  For example, run this from the examples folder:
 //
-//      preql -m primes sqlite:///primes.sqlite
+//      preql -m primes sqlite://primes.sqlite
 //
 //  Then stop it (using Ctrl+C, or any other method), and run it again.
 //
