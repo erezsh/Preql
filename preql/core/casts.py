@@ -4,7 +4,6 @@ from .pql_types import T, dp_type, ITEM_NAME
 from .types_impl import kernel_type
 from .exceptions import Signal
 from .interp_common import call_builtin_func
-from ..context import context
 
 @dp_type
 def _cast(inst_type, target_type, inst):
@@ -43,6 +42,21 @@ def _cast(inst_type: T.table, target_type: T.list, inst):
     code = sql.Select(T.list[elem_type], inst.code, [sql.ColumnAlias(sql.Name(elem_type, elem_name), ITEM_NAME)])
 
     return objects.TableInstance.make(code, T.list[elem_type], [inst])
+
+@dp_type
+def _cast(inst_type: T.table, target_type: T.primitive, inst):
+    t = inst.type
+    if len(t.elems) != 1:
+        raise Signal.make(T.TypeError, None, f"Cannot cast {inst_type} to {target_type}. Expected exactly 1 column, instead got {len(t.elems)}")
+    if not inst_type.elem <= target_type:
+        raise Signal.make(T.TypeError, None, f"Cannot cast {inst_type} to {target_type}. Elements type doesn't match")
+
+    res = inst.localize()
+    if len(res) != 1:
+        raise Signal.make(T.TypeError, None, f"Cannot cast {inst_type} to {target_type}. Expected exactly 1 row, instead got {len(res)}")
+    item ,= res
+    return objects.pyvalue_inst(item, inst_type.elem)
+ 
 
 @dp_type
 def _cast(_inst_type: T.t_id, _target_type: T.int, inst):
@@ -84,7 +98,7 @@ def _cast(_inst_type: T.union[T.int, T.bool], _target_type: T.float, inst):
 
 @dp_type
 def _cast(_inst_type: T.string, _target_type: T.int, inst):
-    return call_builtin_func(context.state, "_cast_string_to_int", [inst])
+    return call_builtin_func("_cast_string_to_int", [inst])
 
 
 # @dp_type

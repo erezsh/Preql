@@ -18,7 +18,7 @@ def uses_tables(*names):
                 return decorated(self)
 
             p = self.Preql()
-            tables = p.interp.list_tables()
+            tables = p._interp.list_tables()
             def _key(t):
                 try:
                     return names.index(t.lower())
@@ -27,16 +27,16 @@ def uses_tables(*names):
             tables.sort(key=_key)
             if tables:
                 print("@@ Deleting", tables, decorated)
-            _drop_tables(p.interp.state, *tables)
+            _drop_tables(p._interp.state, *tables)
             # assert not tables
             try:
                 return decorated(self)
             finally:
                 p = self.preql
                 # Table contents weren't dropped, due to autocommit
-                if p.interp.state.db.target in (mysql, bigquery):
-                    _drop_tables(p.interp.state, *names)
-                tables = p.interp.list_tables()
+                if p._interp.state.db.target in (mysql, bigquery):
+                    _drop_tables(p._interp.state, *names)
+                tables = p._interp.list_tables()
                 assert not tables, tables
 
         return wrapper
@@ -622,7 +622,7 @@ class BasicTests(PreqlTests):
             assert preql('adult()[..10]') == list(range(18, 28))
         except Signal as e:
             assert e.type <= T.NotImplementedError
-            assert preql.interp.state.db.target == mysql   # Not supported
+            assert preql._interp.state.db.target == mysql   # Not supported
             return
 
         assert preql('adult()[..10]') == list(range(18, 28))
@@ -646,7 +646,7 @@ class BasicTests(PreqlTests):
 
         ''')
 
-        if preql.interp.state.db.target is not bigquery:
+        if preql._interp.state.db.target is not bigquery:
             # bigquery's id work differently
             self.assertEqual(preql.a, {'id': 1, 'x': 4})
         self.assertEqual(preql('a.x'), 4)
@@ -825,7 +825,7 @@ class BasicTests(PreqlTests):
             assert res == [1,2]
         except Signal as e:
             assert e.type <= T.NotImplementedError
-            assert preql.interp.state.db.target is mysql
+            assert preql._interp.state.db.target is mysql
 
         res = preql("""[1,2,3]{v:item*2}[v < 5]""")
         assert res == [{'v': 2}, {'v': 4}], res
@@ -840,7 +840,7 @@ class BasicTests(PreqlTests):
             res = preql("""enum([1,8,4,4])[index+1==item]{item}""")
         except Signal as e:
             assert e.type <= T.NotImplementedError
-            assert preql.interp.state.db.target is sqlite
+            assert preql._interp.state.db.target is sqlite
             import sqlite3
             assert sqlite3.sqlite_version_info < (3, 25)    # Only excute
         else:
@@ -1499,6 +1499,16 @@ class BasicTests(PreqlTests):
         """)
 
         assert p.x['dt'] == p.y['dt'] != p.z['dt']
+
+    def test_keywords(self):
+        # TODO only need to run this once
+        p = self.Preql()
+        p('func f(a, b=4) = a + b')
+
+        assert p.f(b=2, a=3) == 5
+        assert p.f(3, b=10) == 13
+        self.assertRaises(Signal, p, 'f(3, a:10)')
+        self.assertRaises(Signal, p.f, p.f, 3, a=10)
 
 
 

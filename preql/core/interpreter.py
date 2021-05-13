@@ -5,11 +5,12 @@ from preql.utils import classify
 from preql.context import context
 
 from .exceptions import Signal, pql_SyntaxError, ReturnSignal
-from .evaluate import State, execute, eval_func_call, import_module, evaluate, localize, cast_to_python
+from .evaluate import execute, eval_func_call, import_module, evaluate, cast_to_python
 from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interp_common import pyvalue_inst, call_builtin_func
+from .state import State, use_scope
 from .pql_types import T, Object
 from .pql_functions import import_pandas
 from .pql_functions import internal_funcs, joins
@@ -49,7 +50,7 @@ class Interpreter:
         return context(state=self.state)
 
     def _execute_code(self, code, source_file, args=None):
-        assert not args, "Not implemented yet: %s" % args
+        # assert not args, "Not implemented yet: %s" % args
         try:
             stmts = parse_stmts(code, source_file)
         except pql_SyntaxError as e:
@@ -61,11 +62,13 @@ class Interpreter:
                 self.set_var('__doc__', stmts[0].value)
 
         last = None
-        for stmt in stmts:
-            try:
-                last = execute(self.state, stmt)
-            except ReturnSignal:
-                raise Signal.make(T.CodeError, stmt, "'return' outside of function")
+
+        with self.state.ns.use_parameters(args or {}):
+            for stmt in stmts:
+                try:
+                    last = execute(stmt)
+                except ReturnSignal:
+                    raise Signal.make(T.CodeError, stmt, "'return' outside of function")
 
         return last
 
@@ -101,28 +104,30 @@ class Interpreter:
 
     @entrypoint
     def evaluate_obj(self, obj):
-        return evaluate(self.state, obj)
+        return evaluate(obj)
 
     @entrypoint
     def localize_obj(self, obj):
-        return localize(self.state, obj)
+        return obj.localize()
 
     @entrypoint
-    def call_func(self, fname, args):
-        res = eval_func_call(self.state, self.state.get_var(fname), args)
-        return evaluate(self.state, res)
+    def call_func(self, fname, args, kw=None):
+        if kw:
+            args = args + [ast.NamedField(k, v, False) for k,v in kw.items()]
+        res = eval_func_call(self.state.get_var(fname), args)
+        return evaluate(res)
 
     @entrypoint
     def cast_to_python(self, obj):
-        return cast_to_python(self.state, obj)
+        return cast_to_python(obj)
 
     @entrypoint
     def call_builtin_func(self, name, args):
-        return call_builtin_func(self.state, name, args)
+        return call_builtin_func(name, args)
 
     @entrypoint
     def import_pandas(self, dfs):
-        return list(import_pandas(self.state, dfs))
+        return list(import_pandas(dfs))
 
     @entrypoint
     def list_tables(self):

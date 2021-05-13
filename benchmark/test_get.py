@@ -33,7 +33,7 @@ Session = sessionmaker(bind=engine)
 session = Session()
 pql = Preql()
 conn = engine.raw_connection().connection
-pql.interp.state.db._conn = conn
+pql._interp.state.db._conn = conn
 cur = conn.cursor()
 pql('''
     table Vector {
@@ -46,23 +46,27 @@ pql('''
 
 def pql_get(id_):
     res = pql.get(id_).to_json()
-    assert len(res) == 1
+    if len(res) != 1:
+        raise ValueError()
 
 
 def raw_get(id_):
     cur.execute('SELECT v FROM Vector WHERE id=%s' % id_)
     res = cur.fetchall()
-    assert len(res) == 1, (res, id_)
+    if len(res) != 1:
+        raise ValueError()
 
 
 def sqlalchemy_get_2(id_):
     res = session.query(Vector).filter_by(id=id_).options(load_only('v'))
-    assert res.count() == 1
+    if res.count() != 1:
+        raise ValueError()
 
 
 def sqlalchemy_get(id_):
     res = session.query(Vector).filter_by(id=id_)
-    assert res.count() == 1
+    if res.count() != 1:
+        raise ValueError()
 
 
 def run_benchmark(fs, count):

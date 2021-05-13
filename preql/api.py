@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from functools import wraps
 
 from . import settings
 from .core.pql_ast import pyvalue, Ast
@@ -6,9 +7,22 @@ from .core import pql_objects as objects
 from .core.interpreter import Interpreter
 from .core.pql_types import T
 from .sql_interface import create_engine
+from .utils import dsp
+from .core.exceptions import Signal
 
 from .core import display
 display.install_reprs()
+
+
+
+def clean_signal(f):
+    @wraps(f)
+    def inner(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Signal as e:
+            raise e.clean_copy() from None  # Error from Preql
+    return inner
 
 
 class TablePromise:
@@ -21,6 +35,10 @@ class TablePromise:
         self._interp = interp
         self._inst = inst
         self._rows = None
+
+    @property
+    def type(self):
+        return self._inst.type
 
     def to_json(self):
         "Returns table as a list of rows, i.e. ``[{col1: value, col2: value, ...}, ...]``"
@@ -53,15 +71,22 @@ class TablePromise:
         "Run a slice query on table"
         if isinstance(index, slice):
             offset = index.start or 0
-            limit = index.stop - offset
-            return self._interp.call_builtin_func('limit_offset', [self._inst, pyvalue(limit), pyvalue(offset)])
+            limit = (index.stop or len(self)) - offset
+            new_inst = self._interp.call_builtin_func('limit_offset', [self._inst, pyvalue(limit), pyvalue(offset)])
+            return TablePromise(self._interp, new_inst)
 
         # TODO different debug log level / mode
-        res ,= self._interp.cast_to_python(self[index:index+1])
+        res ,= self._interp.cast_to_python(self[index:index+1]._inst)
         return res
 
     def __repr__(self):
-        return repr(self.to_json())
+        with self._interp.setup_context():
+            return display.print_to_string(display.table_repr(self._inst), 'text')
+
+
+@dsp
+def from_python(value: TablePromise):
+    return value._inst
 
 
 def _prepare_instance_for_user(interp, inst):
@@ -99,55 +124,59 @@ class Preql:
         engine = create_engine(self._db_uri, print_sql=self._print_sql, auto_create=auto_create)
         self._reset_interpreter(engine)
 
+    def __repr__(self):
+        return f'Preql({self._db_uri!r}, ...)'
+
     def set_output_format(self, fmt):
         if fmt == 'html':
             self._display = display.HtmlDisplay()
         else:
             self._display = display.RichDisplay()
 
-        self.interp.state.display = self._display  # TODO proper api
+        self._interp.state.display = self._display  # TODO proper api
 
 
     def _reset_interpreter(self, engine=None):
         if engine is None:
-            engine = self.interp.state.db
-        self.interp = Interpreter(engine, self._display)
-        self.interp.state._py_api = self # TODO proper api
+            engine = self._interp.state.db
+        self._interp = Interpreter(engine, self._display)
+        self._interp.state._py_api = self # TODO proper api
 
     def close(self):
-        self.interp.state.db.close()
+        self._interp.state.db.close()
 
     def __getattr__(self, fname):
-        var = self.interp.state.get_var(fname)
+        var = self._interp.state.get_var(fname)
 
         if isinstance(var, objects.Function):
+            @clean_signal
             def delegate(*args, **kw):
-                if kw:
-                    raise NotImplementedError("No support for keywords yet")
-
                 pql_args = [objects.from_python(a) for a in args]
-                pql_res = self.interp.call_func(fname, pql_args)
+                pql_kwargs = {k:objects.from_python(v) for k,v in kw.items()}
+                pql_res = self._interp.call_func(fname, pql_args, pql_kwargs)
                 return self._wrap_result( pql_res )
             return delegate
         else:
-            obj = self.interp.evaluate_obj( var )
+            obj = self._interp.evaluate_obj( var )
             return self._wrap_result(obj)
 
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
         if isinstance(res, Ast):
             raise TypeError("Returned object cannot be converted into a Python representation")
-        return _prepare_instance_for_user(self.interp, res)  # TODO session, not state
+        return _prepare_instance_for_user(self._interp, res)  # TODO session, not state
 
-    def _run_code(self, pq: str, source_file: str, **args):
-        pql_args = {name: objects.from_python(value) for name, value in args.items()}
-        return self.interp.execute_code(pq + "\n", source_file, pql_args)
+    def _run_code(self, code, source_name='<api>', args=None):
+        pql_args = {name: objects.from_python(value) for name, value in (args or {}).items()}
+        return self._interp.execute_code(code + "\n", source_name, pql_args)
 
-    def __call__(self, pq, **args):
-        res = self._run_code(pq, '<inline>', **args)
+    @clean_signal
+    def __call__(self, code, **args):
+        res = self._run_code(code, '<inline>', args)
         if res:
             return self._wrap_result(res)
 
+    @clean_signal
     def load(self, filename, rel_to=None):
         """Load a Preql script
 
@@ -155,7 +184,7 @@ class Preql:
             filename (str): Name of script to run
             rel_to (Optional[str]): Path to which ``filename`` is relative.
         """
-        self.interp.include(filename, rel_to)
+        self._interp.include(filename, rel_to)
 
     @contextmanager
     def transaction(self):
@@ -173,10 +202,10 @@ class Preql:
         start_repl(self, *args)
 
     def commit(self):
-        return self.interp.state.db.commit()
+        return self._interp.state.db.commit()
 
     def rollback(self):
-        return self.interp.state.db.rollback()
+        return self._interp.state.db.rollback()
 
 
     def import_pandas(self, **dfs):
@@ -185,22 +214,27 @@ class Preql:
         Example:
             >>> pql.import_pandas(a=df_a, b=df_b)
         """
-        return self.interp.import_pandas(dfs)
+        return self._interp.import_pandas(dfs)
 
 
     def load_all_tables(self):
-        return self.interp.load_all_tables()
+        return self._interp.load_all_tables()
+
+    @property
+    def interp(self):
+        raise Exception("Reserved")
+    
 
 
 
 
 #     def _functions(self):
-#         return {name:f for name,f in self.interp.state.namespace.items()
+#         return {name:f for name,f in self._interp.state.namespace.items()
 #                 if isinstance(f, ast.FunctionDef)}
 
 #     def add_many(self, table, values):
 #         cols = [c.name
-#                 for c in self.interp.state.namespace[table].columns.values()
+#                 for c in self._interp.state.namespace[table].columns.values()
 #                 if not isinstance(c.type, (ast.BackRefType, ast.IdType))]
 #         return self.engine.addmany(table, cols, values)
 

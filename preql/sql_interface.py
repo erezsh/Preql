@@ -9,7 +9,8 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, from_sql, bigquery, _quote
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, _quote
+from .core.sql_import_result import sql_result_to_python, type_from_sql
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
 
@@ -43,18 +44,18 @@ class SqlInterface:
             log_sql(sql_code)
 
         return self._execute_sql(sql.type, sql_code)
-        # return self._import_result(sql.type, cur, state)
 
     def _import_result(self, sql_type, c):
-        if sql_type is not T.nulltype:
-            try:
-                res = c.fetchall()
-            except Exception as e:
-                msg = "Exception when trying to fetch SQL result. Got error: %s"
-                raise DatabaseQueryError(msg%(e))
+        if sql_type is T.nulltype:
+            return None
 
-            return from_sql(Const(sql_type, res))
+        try:
+            res = c.fetchall()
+        except Exception as e:
+            msg = "Exception when trying to fetch SQL result. Got error: %s"
+            raise DatabaseQueryError(msg%(e))
 
+        return sql_result_to_python(Const(sql_type, res))
 
 
     def compile_sql(self, sql, subqueries=None, qargs=()):
@@ -118,7 +119,6 @@ class MysqlInterface(SqlInterfaceCursor):
         args = {k:v for k, v in args.items() if v is not None}
 
         try:
-            # TODO utf8??
             self._conn = mysql.connector.connect(charset='utf8', use_unicode=True, **args)
         except mysql.connector.Error as e:
             if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
@@ -154,7 +154,7 @@ class MysqlInterface(SqlInterfaceCursor):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = {c['name']: _type_from_sql(c['type'].decode(), c['nullable']) for c in sql_columns}
+        cols = {c['name']: type_from_sql(c['type'].decode(), c['nullable']) for c in sql_columns}
 
         return T.table(cols, name=Id(name))
 
@@ -205,7 +205,7 @@ class PostgresInterface(SqlInterfaceCursor):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
+        cols = [(c['pos'], c['name'], type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
@@ -220,7 +220,7 @@ class PostgresInterface(SqlInterfaceCursor):
         columns_by_table = classify(sql_columns, lambda c: (c['schema'], c['table']))
 
         for (schema, table_name), columns in columns_by_table.items():
-            cols = [(c['pos'], c['name'], _type_from_sql(c['type'], c['nullable'])) for c in columns]
+            cols = [(c['pos'], c['name'], type_from_sql(c['type'], c['nullable'])) for c in columns]
             cols.sort()
             cols = dict(c[1:] for c in cols)
 
@@ -268,7 +268,7 @@ class BigQueryInterface(SqlInterface):
 
         if sql_type is not T.nulltype:
             res = [list(i.values()) for i in res]
-            return from_sql(Const(sql_type, res))
+            return sql_result_to_python(Const(sql_type, res))
 
 
 
@@ -285,7 +285,7 @@ class BigQueryInterface(SqlInterface):
         cols = {}
         for f in self._client.get_table(name).schema:
             if columns_whitelist is None or f.name in columns_whitelist:
-                cols[f.name] = _type_from_sql(f.field_type, f.is_nullable)
+                cols[f.name] = type_from_sql(f.field_type, f.is_nullable)
 
         return T.table(cols, name=Id(name))
 
@@ -342,7 +342,7 @@ class AbsSqliteInterface:
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = [(c['pos'], c['name'], _type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
+        cols = [(c['pos'], c['name'], type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
@@ -361,6 +361,28 @@ class _SqliteProduct:
     def finalize(self):
         return self.product
 
+import math
+class _SqliteStddev:
+    def __init__(self):
+        self.M = 0.0
+        self.S = 0.0
+        self.k = 1
+
+    def step(self, value):
+        if value is None:
+            return
+        tM = self.M
+        self.M += (value - tM) / self.k
+        self.S += (value - tM) * (value - self.M)
+        self.k += 1
+
+    def finalize(self):
+        if self.k < 3:
+            return None
+        return math.sqrt(self.S / (self.k-2))
+
+
+
 class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
     target = sqlite
 
@@ -377,6 +399,7 @@ class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
         self._conn.create_function("power", 2, operator.pow)
         self._conn.create_function("_pql_throw", 1, sqlite_throw)
         self._conn.create_aggregate("_pql_product", 1, _SqliteProduct)
+        self._conn.create_aggregate("stddev", 1, _SqliteStddev)
 
         self._print_sql = print_sql
 
@@ -442,7 +465,7 @@ class GitInterface(AbsSqliteInterface):
             else:
                 res = [list(json.loads(x).values()) for x in c.split(b'\n') if x.strip()]
 
-            return from_sql(Const(sql_type, res))
+            return sql_result_to_python(Const(sql_type, res))
 
     def import_table_type(self, name, columns_whitelist=None):
         # TODO merge with superclass
@@ -454,7 +477,7 @@ class GitInterface(AbsSqliteInterface):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = [(c['cid'], c['name'], _type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
+        cols = [(c['cid'], c['name'], type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
@@ -468,50 +491,6 @@ class GitInterface(AbsSqliteInterface):
 
 
 
-def _bool_from_sql(n):
-    if n == 'NO':
-        n = False
-    if n == 'YES':
-        n = True
-    assert isinstance(n, bool), n
-    return n
-
-def _type_from_sql(type, nullable):
-    type = type.lower()
-    d = {
-        'integer': T.int,
-        'int': T.int,           # mysql
-        'tinyint(1)': T.bool,   # mysql
-        'serial': T.t_id,
-        'bigserial': T.t_id,
-        'smallint': T.int,  # TODO smallint / bigint?
-        'bigint': T.int,
-        'character varying': T.string,
-        'character': T.string,  # TODO char?
-        'real': T.float,
-        'float': T.float,
-        'double precision': T.float,    # double on 32-bit?
-        'boolean': T.bool,
-        'timestamp': T.datetime,
-        'timestamp without time zone': T.datetime,
-        'text': T.text,
-    }
-    try:
-        v = d[type]
-    except KeyError:
-        if type.startswith('int('): # TODO actually parse it
-            return T.int
-        elif type.startswith('tinyint('): # TODO actually parse it
-            return T.int
-        elif type.startswith('varchar('): # TODO actually parse it
-            return T.string
-
-        return T.string.as_nullable()
-
-    nullable = _bool_from_sql(nullable)
-
-    return v.replace(_nullable=nullable)
-
 
 def _drop_tables(state, *tables):
     # XXX temporary. Used for testing
@@ -522,20 +501,27 @@ def _drop_tables(state, *tables):
             db._execute_sql(T.nulltype, f"DROP TABLE {t};")
 
 
+_SQLITE_SCHEME = 'sqlite://'
+
 def create_engine(db_uri, print_sql, auto_create):
-    dsn = dsnparse.parse(db_uri)
-    if len(dsn.paths) != 1:
-        raise ValueError("Bad value for uri: %s" % db_uri)
-    path ,= dsn.paths
-    if len(dsn.schemes) > 1:
-        raise NotImplementedError("Preql doesn't support multiple schemes")
-    scheme ,= dsn.schemes
-    if scheme == 'sqlite':
+    if db_uri.startswith(_SQLITE_SCHEME):
+        # Parse sqlite:// ourselves, to allow for sqlite://c:/path/to/db
+        path = db_uri[len(_SQLITE_SCHEME):]
         if not auto_create and path != ':memory:':
             if not Path(path).exists():
                 raise ConnectError("File %r doesn't exist. To create it, set auto_create to True" % path)
         return SqliteInterface(path, print_sql=print_sql)
-    elif scheme == 'postgres':
+
+    dsn = dsnparse.parse(db_uri)
+    if len(dsn.schemes) > 1:
+        raise NotImplementedError("Preql doesn't support multiple schemes")
+    scheme ,= dsn.schemes
+
+    if len(dsn.paths) != 1:
+        raise ValueError("Bad value for uri: %s" % db_uri)
+    path ,= dsn.paths
+
+    if scheme == 'postgres':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'mysql':
         return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)

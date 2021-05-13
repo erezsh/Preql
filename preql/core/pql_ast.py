@@ -326,6 +326,7 @@ class Dict_(Expr):
 
 
 def pyvalue(value):
+    "Create an AST node from a Python primitive. For internal use."
     t = types.from_python(type(value))
     return Const(t, value)
 

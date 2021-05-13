@@ -13,6 +13,7 @@ class Signal(Object, Exception):
     type: object    # Type
     text_refs: List[Optional[TextReference]]    # XXX must it be optional?
     message: Optional[str]
+    orig_exc: Optional[Exception] = None
 
     @classmethod
     def make(cls, type, ast, message):
@@ -34,6 +35,14 @@ class Signal(Object, Exception):
 
     def repr(self):
         return f'{self.type}("{self.message}")'
+
+    def __str__(self):
+        return self.repr()
+
+    def clean_copy(self):
+        "Creates a copy of the object, without the attached stacktrace"
+        s = Signal(self.type, self.text_refs, self.message, orig_exc=self)
+        return s
 
 
 @dataclass

@@ -9,7 +9,7 @@
 // Sample database taken from: https://www.sqlitetutorial.net/sqlite-sample-database/
 //
 
-connect("sqlite:///chinook.db", true)
+connect("sqlite://chinook.db", true)
 
 table genres {...}
 

@@ -31,7 +31,7 @@ class PreqlKernel(Kernel):
             # res = pql(code)
 
             # Evaluate (Really just compile)
-            with pql.interp.setup_context():
+            with pql._interp.setup_context():
                 try:
                     res = pql._run_code(code, '<jupyter>')
 
@@ -86,7 +86,7 @@ class PreqlKernel(Kernel):
     def do_complete(self, code, cursor_pos):
         context, fragment = last_word(code[:cursor_pos])
 
-        all_vars = autocomplete(pql.interp.state, context)
+        all_vars = autocomplete(pql._interp.state, context)
         matches = [f'{k}' for k in all_vars if k.startswith(fragment)]
 
         return {

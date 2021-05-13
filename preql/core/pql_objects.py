@@ -11,6 +11,7 @@ from .exceptions import pql_AttributeError, Signal
 from . import pql_ast as ast
 from . import sql
 from . import pql_types
+from .state import unique_name
 
 from .pql_types import T, Type, Object
 from .types_impl import flatten_type, join_names, pql_repr
@@ -118,10 +119,12 @@ class Function(Object):
             yield self.param_collector, ast.Dict_({})
 
 
-    def _localize_keys(self, _state, struct):
+    def _localize_keys(self, struct):
         raise NotImplementedError()
 
-    def match_params(self, state, args):
+    def match_params(self, args):
+        # if not self.name.startswith('_') and self.name not in ('PY', 'SQL', 'get_db_type'):
+        #     breakpoint()
 
         # If no keyword arguments, matching is much simpler and faster
         if all(not isinstance(a, (ast.NamedField, ast.Ellipsis)) for a in args):
@@ -139,7 +142,7 @@ class Function(Object):
 
                 # XXX we only want to localize the keys, not the values
                 # TODO remove this?
-                d = self._localize_keys(state, a.from_struct)
+                d = self._localize_keys(a.from_struct)
                 if not isinstance(d, dict):
                     raise Signal.make(T.TypeError, None, f"Expression to inline is not a map: {d}")
                 for k, v in d.items():
@@ -166,15 +169,21 @@ class Function(Object):
 
         values = {p.name: p.default for p in self.params}
 
+        names_set = set()
         for pos_arg, name in zip(args[:first_named], values):
             assert pos_arg.name is None
             values[name] = pos_arg.value
+            names_set.add(name)
 
         collected = {}
         if first_named is not None:
             for named_arg in args[first_named:]:
                 arg_name = named_arg.name
                 if arg_name in values:
+                    if arg_name in names_set:
+                        raise Signal.make(T.SyntaxError, None, f"Function '{self.name}' recieved argument '{arg_name}' both as keyword and as positional.")
+
+                    names_set.add(arg_name)
                     values[arg_name] = named_arg.value
                 elif self.param_collector:
                     assert arg_name not in collected
@@ -581,8 +590,8 @@ def new_table(type_, name=None, instances=None, select_fields=False):
 
     return inst
 
-def new_const_table(state, table_type, tuples):
-    name = state.unique_name("table_")
+def new_const_table(table_type, tuples):
+    name = unique_name("table_")
     table_code, subq = sql.create_table(table_type, name, tuples)
 
     inst = TableInstance.make(table_code, table_type, [])
@@ -595,6 +604,13 @@ class PythonList(ast.Ast):
     # TODO just a regular const?
     def __init__(self, items):
         types = set(type(i) for i in items)
+        if not types:
+            assert not items
+            # self.type = T.list[T.any]
+            # self.items = []
+            # return
+            raise NotImplementedError("Cannot import an empty list (no type deduced)")
+
         if len(types) > 1:
             raise ValueError("Expecting all items of the list to be of the same type")
         # TODO if not one type, raise typeerror
@@ -604,29 +620,52 @@ class PythonList(ast.Ast):
         # allow to compile it straight to SQL, no AST in the middle
         self.items = items
 
-def from_python(value):
-    if value is None:
-        return null
-    elif isinstance(value, str):
-        return ast.Const(T.string, value)
-    elif isinstance(value, bytes):
-        return ast.Const(T.string, value.decode())
-    elif isinstance(value, bool):
-        return ast.Const(T.bool, value)
-    elif isinstance(value, int):
-        return ast.Const(T.int, value)
-    elif isinstance(value, float):
-        return ast.Const(T.float, value)
-    elif isinstance(value, list):
-        return PythonList(value)
-    elif isinstance(value, dict):
-        elems = {k:from_python(v) for k,v in value.items()}
-        return ast.Dict_(elems)
-    elif isinstance(value, type):
-        return pql_types.from_python(value)
-    elif isinstance(value, Type):
+
+from preql.utils import dsp
+
+
+@dsp
+def from_python(value: type(None)):
+    assert value is None
+    return null
+
+@dsp
+def from_python(value: str):
+    return ast.Const(T.string, value)
+
+@dsp
+def from_python(value: bytes):
+    return ast.Const(T.string, value.decode())
+
+@dsp
+def from_python(value: bool):
+    return ast.Const(T.bool, value)
+
+@dsp
+def from_python(value: int):
+    return ast.Const(T.int, value)
+
+@dsp
+def from_python(value: float):
+    return ast.Const(T.float, value)
+
+@dsp
+def from_python(value: list):
+    return PythonList(value)
+
+@dsp
+def from_python(value: dict):
+    elems = {k:from_python(v) for k,v in value.items()}
+    return ast.Dict_(elems)
+
+@dsp
+def from_python(value: type):
+    return pql_types.from_python(value)
+
+@dsp
+def from_python(value: Object):
         return value
 
-    # raise TypeError(f"Cannot import into Preql a Python object of type {type}")
-
+@dsp
+def from_python(value):
     raise Signal.make(T.TypeError, None, f"Cannot import into Preql a Python object of type {type(value)}")

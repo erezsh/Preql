@@ -4,14 +4,13 @@ import rich.table
 import rich.text
 import rich.console
 
-from preql.context import context
-
 from .exceptions import Signal
 from .pql_types import T, ITEM_NAME
 from . import pql_objects as objects
 from .pql_ast import pyvalue
 from .types_impl import dp_type, pql_repr
 from .interp_common import call_builtin_func, cast_to_python_int, cast_to_python
+from .state import get_display
 
 
 TABLE_PREVIEW_SIZE = 16
@@ -40,7 +39,7 @@ def pql_repr(t: T.string, value):
 
     value = value.replace('"', r'\"')
     res = f'"{value}"'
-    if context.state.display.format == 'html':
+    if get_display().format == 'html':
         res = html.escape(res)
     return res
 
@@ -52,7 +51,7 @@ def pql_repr(t: T.text, value):
 @dp_type
 def pql_repr(t: T._rich, value):
     r = rich.text.Text.from_markup(str(value))
-    if context.state.display.format == 'html':
+    if get_display().format == 'html':
         return _rich_to_html(r)
     return r
 
@@ -71,8 +70,10 @@ def _rich_to_html(r):
     return console.export_html(code_format='<style>{stylesheet}</style><pre>{code}</pre>').replace('━', '-')
 
 
-def table_limit(table, state, limit, offset=0):
-    return call_builtin_func(state, 'limit_offset', [table, pyvalue(limit), pyvalue(offset)])
+def table_limit(table, limit, offset=0):
+    assert isinstance(limit, int)
+    assert isinstance(offset, int)
+    return call_builtin_func('limit_offset', [table, pyvalue(limit), pyvalue(offset)])
 
 
 def _html_table(name, count_str, rows, offset, has_more, colors):
@@ -147,9 +148,9 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
 _g_last_table = None
 _g_last_offset = 0
 
-def _view_table(state, table, size, offset):
+def _view_table(table, size, offset):
     global _g_last_table, _g_last_offset
-    rows = cast_to_python(state, table_limit(table, state, size, offset))
+    rows = cast_to_python(table_limit(table, size, offset))
     _g_last_table = table
     _g_last_offset = offset + len(rows)
     if table.type <= T.list:
@@ -164,16 +165,15 @@ def _view_table(state, table, size, offset):
 
 
 def table_repr(self, offset=0):
-    state = context.state
 
-    count = cast_to_python_int(state, call_builtin_func(state, 'count', [table_limit(self, state, MAX_AUTO_COUNT)]))
+    count = cast_to_python_int(call_builtin_func('count', [table_limit(self, MAX_AUTO_COUNT)]))
     if count == MAX_AUTO_COUNT:
         count_str = f'>={count}'
     else:
         count_str = f'={count}'
 
     # if len(self.type.elems) == 1:
-    #     rows = cast_to_python(state, table_limit(self, state, LIST_PREVIEW_SIZE))
+    #     rows = cast_to_python(table_limit(self, LIST_PREVIEW_SIZE))
     #     post = f', ... ({count_str})' if len(rows) < count else ''
     #     elems = ', '.join(repr_value(ast.Const(None, self.type.elem, r)) for r in rows)
     #     return f'[{elems}{post}]'
@@ -182,16 +182,17 @@ def table_repr(self, offset=0):
     table_f = _rich_table
     preview = TABLE_PREVIEW_SIZE
     colors = True
+    display = get_display()
 
-    if state.display.format == 'html':
+    if display.format == 'html':
         preview = TABLE_PREVIEW_SIZE * 10
         table_f = _html_table
-    elif state.display.format == 'text':
+    elif display.format == 'text':
         colors = False
     else:
-        assert state.display.format == 'rich'
+        assert display.format == 'rich'
 
-    table_name, rows, = _view_table(state, self, preview, offset)
+    table_name, rows, = _view_table(self, preview, offset)
     has_more = offset + len(rows) < count
     return table_f(table_name, count_str, rows, offset, has_more, colors=colors)
 
@@ -205,13 +206,13 @@ def table_more():
 
 def module_repr(module):
     res = f'<Module {module.name} | {len(module.namespace)} members>'
-    if context.state.display.format == 'html':
+    if get_display().format == 'html':
         res = html.escape(res)
     return res
 
 def function_repr(func):
     res = '<%s>' % func.help_str()
-    if context.state.display.format == 'html':
+    if get_display().format == 'html':
         res = html.escape(res)
     return res
 
@@ -244,6 +245,14 @@ class RichDisplay(Display):
     def print_exception(self, e):
         "Yields colorful styled lines to print by the ``rich`` library"
         _print_rich_exception(self.console, e)
+
+
+def print_to_string(x, format):
+    console = rich.console.Console(color_system=None)
+    with console.capture() as capture: 
+        console.print(x)
+    return capture.get()
+
 
 class HtmlDisplay(Display):
     format = "html"
