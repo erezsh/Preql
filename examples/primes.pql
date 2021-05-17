@@ -18,23 +18,24 @@ table primes {
 
 
 func find_primes() {
-    // Get the last prime, i.e. where the program last stopped
-    last_prime = first_or_null(primes{num} order {^num})
-
     // Init primes if empty
-    if (last_prime == null) {
+    if (not primes) {
         new primes(2)
-        last_prime = 2
+        new primes(3)
     }
 
+    // Get the last prime, i.e. where the program last stopped
+    n = max(primes{num})
+
     // Search for primes, starting with the last one found
-    n = last_prime
     while (true) {
-        n = n + 1
+        n = n + 2   // We only need to check odd numbers
+
         // Can 'n' be divided by any other prime?
         if (is_empty(primes[n % num == 0])) {
             new primes(n)
             commit()
+
             cnt = count(primes)
             print fmt("Found prime: $n, total of $cnt known primes")
         }
