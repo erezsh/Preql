@@ -18,6 +18,9 @@ display.install_reprs()
 def clean_signal(f):
     @wraps(f)
     def inner(*args, **kwargs):
+        if settings.debug:
+            return f(*args, **kwargs)
+
         try:
             return f(*args, **kwargs)
         except Signal as e:
@@ -84,6 +87,7 @@ class TablePromise:
             return display.print_to_string(display.table_repr(self._inst), 'text')
 
 
+
 @dsp
 def from_python(value: TablePromise):
     return value._inst
@@ -94,6 +98,20 @@ def _prepare_instance_for_user(interp, inst):
         return TablePromise(interp, inst)
 
     return interp.localize_obj(inst)
+
+
+class _Delegate:
+
+    def __init__(self, pql, fname):
+        self.fname = fname
+        self.pql = pql
+
+    @clean_signal
+    def __call__(self, *args, **kw):
+        pql_args = [objects.from_python(a) for a in args]
+        pql_kwargs = {k:objects.from_python(v) for k,v in kw.items()}
+        pql_res = self.pql._interp.call_func(self.fname, pql_args, pql_kwargs)
+        return self.pql._wrap_result( pql_res )
 
 
 class Preql:
@@ -127,20 +145,23 @@ class Preql:
     def __repr__(self):
         return f'Preql({self._db_uri!r}, ...)'
 
+    def __getstate__(self):
+        return self._db_uri, self._print_sql, self._display, self._interp
+
     def set_output_format(self, fmt):
         if fmt == 'html':
             self._display = display.HtmlDisplay()
         else:
             self._display = display.RichDisplay()
 
-        self._interp.state.display = self._display  # TODO proper api
+        self._interp.state.state.display = self._display  # TODO proper api
 
 
     def _reset_interpreter(self, engine=None):
         if engine is None:
             engine = self._interp.state.db
         self._interp = Interpreter(engine, self._display)
-        self._interp.state._py_api = self # TODO proper api
+        self._interp._py_api = self # TODO proper api
 
     def close(self):
         self._interp.state.db.close()
@@ -149,13 +170,14 @@ class Preql:
         var = self._interp.state.get_var(fname)
 
         if isinstance(var, objects.Function):
-            @clean_signal
-            def delegate(*args, **kw):
-                pql_args = [objects.from_python(a) for a in args]
-                pql_kwargs = {k:objects.from_python(v) for k,v in kw.items()}
-                pql_res = self._interp.call_func(fname, pql_args, pql_kwargs)
-                return self._wrap_result( pql_res )
-            return delegate
+            return _Delegate(self, fname)
+            # @clean_signal
+            # def delegate(*args, **kw):
+            #     pql_args = [objects.from_python(a) for a in args]
+            #     pql_kwargs = {k:objects.from_python(v) for k,v in kw.items()}
+            #     pql_res = self._interp.call_func(fname, pql_args, pql_kwargs)
+            #     return self._wrap_result( pql_res )
+            # return delegate
         else:
             obj = self._interp.evaluate_obj( var )
             return self._wrap_result(obj)

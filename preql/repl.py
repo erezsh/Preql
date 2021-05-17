@@ -171,6 +171,7 @@ def start_repl(p, prompt=' >> '):
     p.set_output_format('rich')
 
     display = p._display
+    interp = p._interp
     console = display.console
     console.print(f"[purple]Preql {__version__} interactive prompt. Type help() for help[/purple]")
 
@@ -178,7 +179,7 @@ def start_repl(p, prompt=' >> '):
         session = PromptSession(
             style=style_from_pygments_cls(PreqlStyle),
             lexer=PygmentsLexer(GoLexer),
-            completer=Autocompleter(p._interp.state),
+            completer=Autocompleter(interp.state),
             # key_bindings=kb
             validator=MyValidator(),
             history=FileHistory(str(Path.home() / '.preql_history')),

@@ -327,7 +327,7 @@ def find_module(module_name):
 def import_module(state, r):
     module_path = find_module(r.module_path)
 
-    assert state is state.interp.state
+    # assert state is state.interp.state    # Fix for threaded
     i = state.interp.clone(use_core=r.use_core)
 
     state.stacktrace.append(r.text_ref)
@@ -338,7 +338,7 @@ def import_module(state, r):
         state.stacktrace.pop()
 
     # Inherit module db (in case it called connect())
-    state.db = i.state.db
+    assert state.db is i.state.db
 
     ns = i.state.ns
     assert len(ns) == 1
@@ -347,7 +347,7 @@ def import_module(state, r):
 
 @method
 def _execute(r: ast.Import):
-    module = import_module(r)
+    module = import_module(context.state, r)
     set_var(r.as_name or r.module_path, module)
     return module
 
@@ -782,6 +782,9 @@ def _new_row(new_ast, table, matched):
     values = [sql.make_value(v) for (_,v) in destructured_pairs]
     assert keys and values
     # XXX use regular insert?
+
+    if 'name' not in table.options:
+        raise Signal.make(T.TypeError, new_ast, f"'new' expects a persistent table. Instead got a table expression.")
 
     if get_db_target() == sql.bigquery:
         rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []))

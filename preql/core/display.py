@@ -164,6 +164,13 @@ def _view_table(table, size, offset):
     return table_name, rows
 
 
+def table_inline_repr(self):
+    offset = 0
+    table_name, rows, = _view_table(self, TABLE_PREVIEW_SIZE, offset)
+    return '[%s]' % ', '.join(repr(r) for r in rows)
+
+
+
 def table_repr(self, offset=0):
 
     count = cast_to_python_int(call_builtin_func('count', [table_limit(self, MAX_AUTO_COUNT)]))
@@ -282,5 +289,6 @@ class HtmlDisplay(Display):
 
 def install_reprs():
     objects.CollectionInstance.repr = table_repr
+    objects.CollectionInstance.inline_repr = table_inline_repr
     objects.Module.repr = module_repr
     objects.Function.repr = function_repr

@@ -7,7 +7,7 @@ from preql.context import context
 from .exceptions import Signal, ReturnSignal, pql_SyntaxError
 from .compiler import AutocompleteSuggestions
 from .evaluate import evaluate, resolve
-from .state import State, set_var, use_scope
+from .state import ThreadState, set_var, use_scope
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .pql_types import T
@@ -152,7 +152,7 @@ def autocomplete_tree(parser):
 KEYWORDS = 'table update delete new func try if else for throw catch print assert const in or and not one null false true return !in'.split()
 KEYWORDS = {k:(100000, None) for k in KEYWORDS}
 
-class AcState(State):
+class AcState(ThreadState):
     def get_var(self, name):
         try:
             return super().get_var(name)

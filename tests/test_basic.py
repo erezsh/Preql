@@ -1,3 +1,5 @@
+from multiprocessing.pool import ThreadPool
+
 from preql.core.sql import mysql, bigquery, sqlite
 from unittest import skip
 
@@ -1509,6 +1511,21 @@ class BasicTests(PreqlTests):
         assert p.f(3, b=10) == 13
         self.assertRaises(Signal, p, 'f(3, a:10)')
         self.assertRaises(Signal, p.f, p.f, 3, a=10)
+
+    def test_threading(self):
+        p = self.Preql()
+        p('''
+        table a = [0]
+
+        func add_n(n) = new a(n)
+        ''')
+
+        with ThreadPool(processes=10) as pool:
+            pool.map(p.add_n, range(100))
+
+        assert len(p.a) == 101, len(p.a)
+        if p._interp.state.db.target != mysql:   # Not supported
+            assert p('a{item} - [..100]') == []
 
 
 

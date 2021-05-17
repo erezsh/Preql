@@ -346,6 +346,7 @@ class TableInstance(CollectionInstance):
 
 
 
+
 def make_instance_from_name(t, cn):
     if t <= T.struct:
         return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elems.items()})
@@ -406,7 +407,7 @@ class StructInstance(AbsStructInstance):
         return self.attrs
 
     def repr(self):
-        attrs = [f'{k}: {v.repr()}' for k, v in self.attrs.items()]
+        attrs = [f'{k}: {v.inline_repr()}' for k, v in self.attrs.items()]
         return '{%s}' % ', '.join(attrs)
 
     def values(self):
