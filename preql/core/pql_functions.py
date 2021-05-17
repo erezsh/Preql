@@ -202,7 +202,7 @@ def pql_debug():
     Use `c()` to continue the execution.
     """
     state = context.state
-    py_api = state._py_api
+    py_api = state.interp._py_api
 
     with use_scope(breakpoint_funcs):
         py_api.start_repl('debug> ')
@@ -683,7 +683,7 @@ def pql_connect(uri: T.string, load_all_tables: T.bool = ast.false, auto_create:
     auto_create = cast_to_python(auto_create)
     state.connect(uri, auto_create=auto_create)
     if load_all_tables:
-        state._py_api.load_all_tables()     # XXX
+        state.interp.load_all_tables()     # XXX
     return objects.null
 
 def pql_help(inst: T.any = objects.null):

@@ -145,20 +145,23 @@ class Preql:
     def __repr__(self):
         return f'Preql({self._db_uri!r}, ...)'
 
+    def __getstate__(self):
+        return self._db_uri, self._print_sql, self._display, self._interp
+
     def set_output_format(self, fmt):
         if fmt == 'html':
             self._display = display.HtmlDisplay()
         else:
             self._display = display.RichDisplay()
 
-        self._interp.state.display = self._display  # TODO proper api
+        self._interp.state.state.display = self._display  # TODO proper api
 
 
     def _reset_interpreter(self, engine=None):
         if engine is None:
             engine = self._interp.state.db
         self._interp = Interpreter(engine, self._display)
-        self._interp.state._py_api = self # TODO proper api
+        self._interp._py_api = self # TODO proper api
 
     def close(self):
         self._interp.state.db.close()

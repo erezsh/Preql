@@ -12,7 +12,7 @@ from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interp_common import pyvalue_inst, call_builtin_func
-from .state import State
+from .state import ThreadState
 from .pql_types import T, Object
 from .pql_functions import import_pandas
 from .pql_functions import internal_funcs, joins
@@ -50,7 +50,7 @@ class LocalCopy(threading.local):
 
 class Interpreter:
     def __init__(self, sqlengine, display, use_core=True):
-        self.state = State(self, sqlengine, display, initial_namespace())
+        self.state = ThreadState.from_components(self, sqlengine, display, initial_namespace())
         if use_core:
             mns = import_module(self.state, ast.Import('__builtins__', use_core=False)).namespace
             bns = self.state.get_var('__builtins__').namespace
@@ -79,7 +79,8 @@ class Interpreter:
 
         last = None
 
-        with self.state.ns.use_parameters(args or {}):
+        # with self.state.ns.use_parameters(args or {}):
+        with context(parameters=args or {}):    # Set parameters for Namespace.get_var()
             for stmt in stmts:
                 try:
                     last = execute(stmt)

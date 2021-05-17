@@ -60,6 +60,7 @@ class SqlInterface:
         self._conn.close()
 
     def import_table_types(self):
+        # Inefficient implementation but generic
         tables = self.list_tables()
         for table_name in tables:
             table_type = self.import_table_type(table_name)
