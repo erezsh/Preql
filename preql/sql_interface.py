@@ -207,7 +207,7 @@ class MysqlInterface(SqlInterfaceCursor):
 
         args = dict(host=host, port=port, database=database, user=user, password=password)
         self._args = {k:v for k, v in args.items() if v is not None}
-        super().__init__()
+        super().__init__(print_sql)
 
     def _create_connection(self):
         import mysql.connector
@@ -256,9 +256,8 @@ class PostgresInterface(SqlInterfaceCursor):
     target = postgres
 
     def __init__(self, host, port, database, user, password, print_sql=False):
-        self._print_sql = print_sql
         self.args = dict(host=host, port=port, database=database, user=user, password=password)
-        super().__init__()
+        super().__init__(print_sql)
 
     def _create_connection(self):
         import psycopg2
@@ -486,8 +485,7 @@ class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
 
     def __init__(self, filename=None, print_sql=False):
         self._filename = filename
-        self._print_sql = print_sql
-        super().__init__()
+        super().__init__(print_sql)
 
 
     def _create_connection(self):
