@@ -45,19 +45,6 @@ class SqlInterface:
 
         return self._execute_sql(sql.type, sql_code)
 
-    def _import_result(self, sql_type, c):
-        if sql_type is T.nulltype:
-            return None
-
-        try:
-            res = c.fetchall()
-        except Exception as e:
-            msg = "Exception when trying to fetch SQL result. Got error: %s"
-            raise DatabaseQueryError(msg%(e))
-
-        return sql_result_to_python(Const(sql_type, res))
-
-
     def compile_sql(self, sql, subqueries=None, qargs=()):
         qb = QueryBuilder(self.target)
 
@@ -82,23 +69,125 @@ class SqlInterface:
         return name
 
 
-class SqlInterfaceCursor(SqlInterface):
-    "An interface that uses the standard SQL cursor interface"
+# from multiprocessing import Queue
+import queue
+import threading
+from time import sleep
+
+class TaskQueue:
+    def __init__(self):
+        self._queue = queue.Queue()
+        self._task_results = {}
+        self._closed = False
+        self._start_worker()
+
+    def _add_task(self, task, *args, **kwargs):
+        args = args or ()
+        kwargs = kwargs or {}
+        task_id = object()
+        self._queue.put((task_id, task, args, kwargs))
+        return task_id
+
+    def _start_worker(self):
+        self.worker = t = threading.Thread(target=self._worker)
+        t.daemon = True
+        t.start()
+
+    def _worker(self):
+        while not self._closed:
+            try:
+                task_id, item, args, kwargs = self._queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                res = item(*args, **kwargs)  
+            except Exception as e:
+                res = e
+            self._task_results[task_id] = res
+            self._queue.task_done()
+
+
+    def _get_result(self, task_id):
+        while task_id not in self._task_results:
+            sleep(0.001)
+        res = self._task_results.pop(task_id)
+        if isinstance(res, Exception):
+            raise res
+        return res
+
+    def run_task(self, task, *args, **kwargs):
+        task_id = self._add_task(task, *args, **kwargs)
+        return self._get_result(task_id)
+
+    def close(self):
+        self._closed = True
+
+
+
+class BaseConnection:
+    pass
+
+class ThreadedConnection(BaseConnection):
+    def __init__(self, create_connection):
+        self._queue = TaskQueue()
+        self._conn = self._queue.run_task(create_connection)
 
     def _backend_execute_sql(self, sql_code):
         c = self._conn.cursor()
         c.execute(sql_code)
         return c
 
-    def _execute_sql(self, sql_type, sql_code):
-        assert context.state
-        try:
-            c = self._backend_execute_sql(sql_code)
-        except Exception as e:
-            msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
-            raise DatabaseQueryError(msg%(sql_code, e))
+    def _import_result(self, sql_type, c):
+        if sql_type is T.nulltype:
+            return None
 
-        return self._import_result(sql_type, c)
+        try:
+            res = c.fetchall()
+        except Exception as e:
+            msg = "Exception when trying to fetch SQL result. Got error: %s"
+            raise DatabaseQueryError(msg%(e))
+
+        return sql_result_to_python(Const(sql_type, res))
+
+    def _execute_sql(self, state, sql_type, sql_code):
+        assert state
+        with context(state=state):
+            try:
+                c = self._backend_execute_sql(sql_code)
+            except Exception as e:
+                msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
+                raise DatabaseQueryError(msg%(sql_code, e))
+
+            return self._import_result(sql_type, c)
+
+    def execute_sql(self, sql_type, sql_code):
+        return self._queue.run_task(self._execute_sql, context.state, sql_type, sql_code)
+
+
+    def commit(self):
+        self._queue.run_task(self._conn.commit)
+
+    def rollback(self):
+        self._queue.run_task(self._conn.rollback)
+
+    def close(self):
+        self._queue.run_task(self._conn.close)
+        self._queue.close()
+
+
+
+
+class SqlInterfaceCursor(SqlInterface):
+    "An interface that uses the standard SQL cursor interface"
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+
+        self._conn = ThreadedConnection(self._create_connection)
+
+
+    def _execute_sql(self, sql_type, sql_code):
+        return self._conn.execute_sql(sql_type, sql_code)
 
     def ping(self):
         c = self._conn.cursor()
@@ -108,18 +197,23 @@ class SqlInterfaceCursor(SqlInterface):
         assert n == 1
 
 
+
 class MysqlInterface(SqlInterfaceCursor):
     target = mysql
 
     def __init__(self, host, port, database, user, password, print_sql=False):
+        self._print_sql = print_sql
+
+        args = dict(host=host, port=port, database=database, user=user, password=password)
+        self._args = {k:v for k, v in args.items() if v is not None}
+        super().__init__()
+
+    def _create_connection(self):
         import mysql.connector
         from mysql.connector import errorcode
 
-        args = dict(host=host, port=port, database=database, user=user, password=password)
-        args = {k:v for k, v in args.items() if v is not None}
-
         try:
-            self._conn = mysql.connector.connect(charset='utf8', use_unicode=True, **args)
+            return mysql.connector.connect(charset='utf8', use_unicode=True, **self._args)
         except mysql.connector.Error as e:
             if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
                 raise ConnectError("Bad user name or password") from e
@@ -127,8 +221,6 @@ class MysqlInterface(SqlInterfaceCursor):
                 raise ConnectError("Database does not exist") from e
             else:
                 raise ConnectError(*e.args) from e
-
-        self._print_sql = print_sql
 
     def table_exists(self, name):
         tables = [t.lower() for t in self.list_tables()]
@@ -163,15 +255,20 @@ class PostgresInterface(SqlInterfaceCursor):
     target = postgres
 
     def __init__(self, host, port, database, user, password, print_sql=False):
+        self._print_sql = print_sql
+        self.args = dict(host=host, port=port, database=database, user=user, password=password)
+        super().__init__()
+
+    def _create_connection(self):
         import psycopg2
         import psycopg2.extras
         psycopg2.extensions.set_wait_callback(psycopg2.extras.wait_select)
         try:
-            self._conn = psycopg2.connect(host=host, port=port, database=database, user=user, password=password)
+            return psycopg2.connect(**self.args)
         except psycopg2.OperationalError as e:
             raise ConnectError(*e.args) from e
 
-        self._print_sql = print_sql
+
 
 
     def table_exists(self, name):
@@ -387,22 +484,27 @@ class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
     target = sqlite
 
     def __init__(self, filename=None, print_sql=False):
+        self._filename = filename
+        self._print_sql = print_sql
+        super().__init__()
+
+
+    def _create_connection(self):
         import sqlite3
         # sqlite3.enable_callback_tracebacks(True)
         try:
-            self._conn = sqlite3.connect(filename or ':memory:')
+            conn = sqlite3.connect(self._filename or ':memory:')
         except sqlite3.OperationalError as e:
             raise ConnectError(*e.args) from e
 
         def sqlite_throw(x):
             raise Exception(x)
-        self._conn.create_function("power", 2, operator.pow)
-        self._conn.create_function("_pql_throw", 1, sqlite_throw)
-        self._conn.create_aggregate("_pql_product", 1, _SqliteProduct)
-        self._conn.create_aggregate("stddev", 1, _SqliteStddev)
 
-        self._print_sql = print_sql
-
+        conn.create_function("power", 2, operator.pow)
+        conn.create_function("_pql_throw", 1, sqlite_throw)
+        conn.create_aggregate("_pql_product", 1, _SqliteProduct)
+        conn.create_aggregate("stddev", 1, _SqliteStddev)
+        return conn
 
 
 class DuckInterface(AbsSqliteInterface):

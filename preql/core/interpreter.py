@@ -1,3 +1,5 @@
+from copy import copy
+import threading
 from pathlib import Path
 from functools import wraps
 
@@ -10,7 +12,7 @@ from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .interp_common import pyvalue_inst, call_builtin_func
-from .state import State, use_scope
+from .state import State
 from .pql_types import T, Object
 from .pql_functions import import_pandas
 from .pql_functions import internal_funcs, joins
@@ -34,6 +36,18 @@ def entrypoint(f):
             return f(interp, *args, **kwargs)
     return inner
 
+
+class LocalCopy(threading.local):
+    def __init__(self, **kw):
+        self._items = kw
+
+    def __getattr__(self, attr):
+        # Only runs the first time, due to setattr
+        value = copy(self._items[attr])
+        setattr(self, attr, value)
+        return value
+
+
 class Interpreter:
     def __init__(self, sqlengine, display, use_core=True):
         self.state = State(self, sqlengine, display, initial_namespace())
@@ -46,8 +60,10 @@ class Interpreter:
                     assert k not in bns
                     bns[k] = v
 
+        self._local_copies = LocalCopy(state=self.state)
+
     def setup_context(self):
-        return context(state=self.state)
+        return context(state=self._local_copies.state)
 
     def _execute_code(self, code, source_file, args=None):
         # assert not args, "Not implemented yet: %s" % args
@@ -114,7 +130,7 @@ class Interpreter:
     def call_func(self, fname, args, kw=None):
         if kw:
             args = args + [ast.NamedField(k, v, False) for k,v in kw.items()]
-        res = eval_func_call(self.state.get_var(fname), args)
+        res = eval_func_call(context.state.get_var(fname), args)
         return evaluate(res)
 
     @entrypoint

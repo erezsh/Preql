@@ -783,6 +783,9 @@ def _new_row(new_ast, table, matched):
     assert keys and values
     # XXX use regular insert?
 
+    if 'name' not in table.options:
+        raise Signal.make(T.TypeError, new_ast, f"'new' expects a persistent table. Instead got a table expression.")
+
     if get_db_target() == sql.bigquery:
         rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []))
         keys += ['id']

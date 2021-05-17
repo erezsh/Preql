@@ -21,7 +21,7 @@ class Namespace:
         self._parameters = None
 
     def __copy__(self):
-        return Namespace([dict(n) for n in self._ns])
+        return Namespace([self._ns[0]] + [dict(n) for n in self._ns[1:]])     # Shared global namespace
 
     def get_var(self, name):
         if self._parameters and name in self._parameters:
