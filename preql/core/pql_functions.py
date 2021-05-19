@@ -181,6 +181,18 @@ def create_internal_func(fname, f):
         for pname, type_ in list(f.__annotations__.items())
     ], f)
 
+def create_internal_funcs(d):
+    new_d = {}
+    for names, f in d.items():
+        if isinstance(names, str):
+            names = (names,)
+        for name in names:
+            new_d[name] = create_internal_func(name, f)
+    return new_d
+
+def create_internal_properties(d):
+    return {k: objects.Property(v) for k, v in create_internal_funcs(d).items()}
+
 
 def pql_brk_continue():
     "Continue the execution of the code (exit debug interpreter)"
@@ -782,16 +794,6 @@ def pql_env_vars():
     return objects.new_const_table(table_type, tuples)
 
 
-
-def create_internal_funcs(d):
-    new_d = {}
-    for names, f in d.items():
-        if isinstance(names, str):
-            names = (names,)
-        for name in names:
-            new_d[name] = create_internal_func(name, f)
-    return new_d
-
 breakpoint_funcs = create_internal_funcs({
     ('c', 'continue'): pql_brk_continue
 })
@@ -1025,10 +1027,22 @@ def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false
 
     return objects.null
 
-
-T.table.methods.update(create_internal_funcs({
+T.table.proto_attrs.update(create_internal_funcs({
     'add_index': pql_table_add_index
 }))
+
+
+def _make_datetime_method(func_name):
+    def f(datetime):
+        return context.state.interp.call_func(func_name, [datetime])
+    return f
+
+_datetime_methods = 'hour', 'minute', 'day', 'month', 'year', 'day_of_week', 'week_of_year'
+
+T.datetime.proto_attrs.update(create_internal_properties({
+    n: _make_datetime_method(n) for n in _datetime_methods
+}))
+
 
 internal_funcs = create_internal_funcs({
     'exit': pql_exit,

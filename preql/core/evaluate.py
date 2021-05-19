@@ -15,7 +15,7 @@ from . import sql
 from .parser import Str
 from .interp_common import dsp, pyvalue_inst, cast_to_python
 from .compiler import cast_to_instance
-from .pql_types import T, Type, Object, Id
+from .pql_types import T, Type, Object, Id, dp_inst
 from .types_impl import table_params, table_flat_for_insert, flatten_type, pql_repr, kernel_type
 from .exceptions import InsufficientAccessLevel, ReturnSignal, Signal
 
@@ -48,7 +48,7 @@ def resolve(table_def: ast.TableDef):
 
     if table_def.methods:
         methods = evaluate(table_def.methods)
-        t.methods.update({m.userfunc.name:m.userfunc for m in methods})
+        t.proto_attrs.update({m.userfunc.name:m.userfunc for m in methods})
 
     return t
 
@@ -1043,3 +1043,7 @@ def instance_repr(self):
 
 objects.Instance.repr = instance_repr
 
+
+@dp_inst
+def post_instance_getattr(inst, p: T.property):
+    return eval_func_call(objects.MethodInstance(inst, p.func), [])

@@ -680,7 +680,7 @@ class BasicTests(PreqlTests):
     @uses_tables('Node', 'Square', 'a')
     def test_methods(self):
         preql = self.Preql()
-        base_methods = dict(T.table.methods)
+        base_attrs = dict(T.table.proto_attrs)
         preql('''
             table Square {
                 size: float
@@ -697,7 +697,7 @@ class BasicTests(PreqlTests):
             }
         ''')
 
-        assert base_methods == T.table.methods
+        assert base_attrs == T.table.proto_attrs
         self.assertRaises(Signal, preql, 'a{area()}')
 
         # self.assertEqual( preql('s.area()'), 16 ) # TODO

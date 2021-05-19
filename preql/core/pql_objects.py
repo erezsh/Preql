@@ -13,7 +13,7 @@ from . import sql
 from . import pql_types
 from .state import unique_name
 
-from .pql_types import T, Type, Object
+from .pql_types import T, Type, Object, dp_inst
 from .types_impl import flatten_type, join_names, pql_repr
 
 
@@ -229,15 +229,32 @@ class InternalFunction(Function):
     def docstring(self):
         return self.func.__doc__
 
+@dataclass
+class Property(Object):
+    func: Function
+
+    type = T.property
+    name = property(X.func.name)
+
+
+# post_instance_getattr. Property handling is specified in evaluate
+
+@dp_inst
+def post_instance_getattr(inst, obj):
+    return obj
+
+@dp_inst
+def post_instance_getattr(inst, f: T.function):
+    return MethodInstance(inst, f)
+
+
+
 # Instances
 
 class AbsInstance(Object):
     def get_attr(self, name):
         v = self.type.get_attr(name)
-        if v <= T.function:
-            return MethodInstance(self, v)
-
-        raise pql_AttributeError(name)
+        return post_instance_getattr(self, v)
 
 @dataclass
 class MethodInstance(AbsInstance, Function):
@@ -249,6 +266,14 @@ class MethodInstance(AbsInstance, Function):
     param_collector = property(X.func.param_collector)
 
     name = property(X.func.name)
+
+@dataclass
+class PropertyInstance(AbsInstance):
+    parent: AbsInstance
+    func: Function
+
+    name = property(X.func.name)
+    type = T.any
 
 @dataclass
 class ExceptionInstance(AbsInstance):
@@ -331,7 +356,7 @@ class TableInstance(CollectionInstance):
         return make_instance_from_name(t[name], name) #t.column_codename(name))
 
     def all_attrs(self):
-        attrs = SafeDict(self.type.methods)
+        attrs = SafeDict(self.type.proto_attrs)
         return attrs.update(self.__columns)
 
     def get_attr(self, name):
@@ -339,10 +364,7 @@ class TableInstance(CollectionInstance):
             v = self.type.elems[name]
             return SelectedColumnInstance(self, v, name)
         except KeyError:
-            try:
-                return MethodInstance(self, self.type.methods[name])
-            except KeyError:
-                raise pql_AttributeError(name)
+            return super().get_attr(name)
 
 
 

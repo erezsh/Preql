@@ -53,7 +53,7 @@ class Type(Object):
     supertypes: frozenset
     elems: Union[tuple, dict] = field(hash=False, default_factory=dict)
     options: dict = field(hash=False, compare=False, default_factory=dict)
-    methods: dict = field(hash=False, compare=False, default_factory=lambda: dict(global_methods))
+    proto_attrs: dict = field(hash=False, compare=False, default_factory=lambda: dict(global_methods))
     _nullable: bool = field(default_factory=bool)
 
     @property
@@ -144,7 +144,7 @@ class Type(Object):
         return self.replace(elems=elems)
 
     def __call__(self, elems=None, **options):
-        return self.replace(elems=elems or self.elems, methods=dict(self.methods), options={**self.options, **options})
+        return self.replace(elems=elems or self.elems, proto_attrs=dict(self.proto_attrs), options={**self.options, **options})
 
     def __repr__(self):
         # TODO Move to dp_inst?
@@ -157,6 +157,9 @@ class Type(Object):
         if isinstance(self.elems, dict):
             with suppress(KeyError):
                 return self.elems[attr]
+
+        with suppress(KeyError):
+            return self.proto_attrs[attr]
 
         return super().get_attr(attr)
 
@@ -258,6 +261,7 @@ T.json = [T.container], (T.any,)
 T.json_array = [T.json]
 
 T._register('function', [T.object], type_class=TupleType)
+T.property = [T.object]
 
 T.module = [T.object]
 
