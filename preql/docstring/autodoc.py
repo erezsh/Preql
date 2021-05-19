@@ -38,10 +38,13 @@ class ModuleDoc:
 class FuncDoc:
     func: object
     doc: object
-    parent_type: Optional[str]
+    parent_type: Optional[Type]
 
     def _print_text(self, indent):
         return self.print_text(indent)
+
+    def _print_rst(self):
+        return self.print_rst()
 
     def print_text(self, indent=0):
         params = [str(p.name) for p in self.func.params]
@@ -49,17 +52,24 @@ class FuncDoc:
             params.append('...' + self.func.param_collector.name)
         params = ', '.join(params)
         indent_str = ' ' * indent
-        parent = (self.parent_type + '.') if self.parent_type else ''
+        parent = (self.parent_type.repr() + '.') if self.parent_type else ''
         s = f'{indent_str}[dodger_blue2]func[/dodger_blue2] {parent}[bold white]{self.func.name}[/bold white]({params}) = ...\n\n'
         return s + self.doc.print_text(indent+4)
 
     def print_rst(self):
+        is_method = bool(self.parent_type)
+
         params = [str(p.name) for p in self.func.params]
         if self.func.param_collector:
             params.append('...' + self.func.param_collector.name)
         params = ', '.join(params)
-        s = f".. function:: {self.func.name}({params})\n\n"
-        return s + self.doc.print_rst()
+        # parent = (self.parent_type.repr() + '.') if is_method else ''
+        func_or_method = 'method' if is_method else 'function'
+        s = f".. {func_or_method}:: {self.func.name}({params})\n\n"
+        s = s + self.doc.print_rst()
+        if is_method:
+            s = '  ' + s.replace('\n', '\n  ')  # XXX hack to indent methods
+        return s
 
 @dataclass
 class TypeDoc:
@@ -76,23 +86,24 @@ class TypeDoc:
         return s + self.doc.print_text(indent+4)
 
     def print_rst(self):
-        s = f".. class:: {str(self.type)}⁣\n\n"     # includes an invisible unicode separator to trick sphinx
+        type_name = str(self.type)
+        # s = type_name + '\n'
+        # s += '^' * len(type_name) + '\n'
+
+        s = f".. class:: {type_name}⁣\n\n"     # includes an invisible unicode separator to trick sphinx
         return s + self.doc.print_rst()
 
 
 
 from lark import LarkError
 
-def doc_func(f):
-    parent_type = None
+def doc_func(f, parent_type=None):
     if isinstance(f, MethodInstance):
-        parent_type = f.parent.type.typename    # XXX What if a method only applies to a subtype?
         f = f.func
     try:
         doc_tree = parse(f.docstring or '')
     except LarkError as e:
         raise AutoDocError(f"Error in docstring of function {f.name}: {e}")
-
 
     assert {s.name for s in doc_tree.sections} <= {'Parameters', 'Example', 'Examples', 'Note', 'Returns', 'See Also'}, [s.name for s in doc_tree.sections]
     try:
@@ -170,7 +181,7 @@ def autodoc(t: Type):
     assert {s.name for s in doc_tree.sections} <= {'Example', 'Examples', 'Note', 'See Also'}, [s.name for s in doc_tree.sections]
 
     if t.methods:
-        methods_doc = Section('Methods', [autodoc(f) for f in t.methods.values()])
+        methods_doc = Section('Methods', [doc_func(f, t) for f in t.methods.values()])
         doc_tree.sections.insert(0, methods_doc)
 
     if t in subtypes:

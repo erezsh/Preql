@@ -1001,7 +1001,7 @@ def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false
 
     Parameters:
         column_name: The name of the column to add index
-        unique: Whether each value in the column is expected to be unique 
+        unique: If true, every value in the column is expected to be unique 
 
     Note:
         Future versions of this function will accept several columns.
