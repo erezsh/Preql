@@ -242,7 +242,9 @@ T.struct = [T.container]
 T.row = [T.struct]
 
 # T.collection = [T.container], {}
-T.table = [T.container], {}
+# T.table = [T.container], {}
+T._register('table', [T.container], {})
+
 T.list = [T.table], {ITEM_NAME: T.any}
 T.set = [T.table], {ITEM_NAME: T.any}
 T.t_id = [T.primitive], (T.table,)

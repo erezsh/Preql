@@ -493,12 +493,25 @@ class ColumnAlias(SqlTree):
     type = property(X.value.type)
 
 
+class SqlStatement(SqlTree):
+    type = T.nulltype
+
 @dataclass
-class Insert(SqlTree):
+class AddIndex(SqlStatement):
+    index_name: Id
+    table_name: Id
+    column: str
+    unique: bool
+
+    def _compile(self, qb):
+        return [f"CREATE {'UNIQUE' if self.unique else ''} INDEX IF NOT EXISTS {qb.quote(self.index_name)}"
+                f" ON {qb.quote(self.table_name)}({self.column})"]
+
+@dataclass
+class Insert(SqlStatement):
     table_name: Id
     columns: List[str]
     query: Sql
-    type = T.nulltype
 
     def _compile(self, qb):
         columns = [qb.quote(Id(c)) for c in self.columns]
@@ -514,11 +527,10 @@ class Insert(SqlTree):
         return super().finalize_with_subqueries(qb, subqueries)
 
 @dataclass
-class InsertConsts(SqlTree):
+class InsertConsts(SqlStatement):
     table: str
     cols: List[str]
     tuples: list #List[List[Sql]]
-    type = T.nulltype
 
     def _compile(self, qb):
         cols = self.cols
@@ -538,11 +550,10 @@ class InsertConsts(SqlTree):
         return [' '.join(q)] + values #+ [';']
 
 @dataclass
-class InsertConsts2(SqlTree):
+class InsertConsts2(SqlStatement):
     table: Id
     cols: List[str]
     tuples: list #List[List[Sql]]
-    type = T.nulltype
 
     def _compile(self, qb):
         assert self.tuples, self

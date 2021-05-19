@@ -45,6 +45,9 @@ def cast_to_instance(x):
 @listgen
 def _process_fields(fields):
     for f in fields:
+        if isinstance(f.value, objects.Function):
+            # Skip functions
+            continue
         try:
             v = cast_to_instance(f.value)
         except Signal as e:
@@ -194,7 +197,7 @@ def compile_to_inst(proj: ast.Projection):
     if dup:
         raise Signal.make(T.TypeError, dup, f"Field '{dup.name}' was already used in this projection")
 
-    attrs = table.all_attrs()
+    attrs = table.all_attrs()   # TODO separate here between columns and methods? (not it's done in _process_fields)
 
     with use_scope({n: projected(c) for n, c in attrs.items()}):
         fields = _process_fields(fields)

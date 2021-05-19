@@ -1,10 +1,12 @@
+from typing import Optional
+
 from runtype import dataclass
 
 from preql.utils import safezip, dsp
 
 from preql.docstring.docstring import parse, Section, Defin, Text
 
-from preql.core.pql_objects import Module, Function, T
+from preql.core.pql_objects import Module, Function, T, MethodInstance
 from preql.core.pql_types import Type, subtypes
 
 from . import type_docs
@@ -36,6 +38,10 @@ class ModuleDoc:
 class FuncDoc:
     func: object
     doc: object
+    parent_type: Optional[str]
+
+    def _print_text(self, indent):
+        return self.print_text(indent)
 
     def print_text(self, indent=0):
         params = [str(p.name) for p in self.func.params]
@@ -43,7 +49,8 @@ class FuncDoc:
             params.append('...' + self.func.param_collector.name)
         params = ', '.join(params)
         indent_str = ' ' * indent
-        s = f'{indent_str}[dodger_blue2]func[/dodger_blue2] [bold white]{self.func.name}[/bold white]({params}) = ...\n\n'
+        parent = (self.parent_type + '.') if self.parent_type else ''
+        s = f'{indent_str}[dodger_blue2]func[/dodger_blue2] {parent}[bold white]{self.func.name}[/bold white]({params}) = ...\n\n'
         return s + self.doc.print_text(indent+4)
 
     def print_rst(self):
@@ -77,6 +84,10 @@ class TypeDoc:
 from lark import LarkError
 
 def doc_func(f):
+    parent_type = None
+    if isinstance(f, MethodInstance):
+        parent_type = f.parent.type.typename    # XXX What if a method only applies to a subtype?
+        f = f.func
     try:
         doc_tree = parse(f.docstring or '')
     except LarkError as e:
@@ -102,7 +113,7 @@ def doc_func(f):
             d.type = str(p.type) if p.type else ''
             d.default = p.default.repr() if p.default else ''
 
-    return FuncDoc(f, doc_tree)
+    return FuncDoc(f, doc_tree, parent_type=parent_type)
 
 
 def doc_module(m):
@@ -158,6 +169,10 @@ def autodoc(t: Type):
 
     assert {s.name for s in doc_tree.sections} <= {'Example', 'Examples', 'Note', 'See Also'}, [s.name for s in doc_tree.sections]
 
+    if t.methods:
+        methods_doc = Section('Methods', [autodoc(f) for f in t.methods.values()])
+        doc_tree.sections.insert(0, methods_doc)
+
     if t in subtypes:
         subtypes_doc = Section('Subtypes', [Text([str(st) + ", "]) for st in subtypes[t]])
         doc_tree.sections.insert(0, subtypes_doc)
@@ -166,6 +181,7 @@ def autodoc(t: Type):
     if t.supertypes:
         supertypes_doc = Section('Supertypes', [Text([str(st)]) for st in t.supertypes])
         doc_tree.sections.insert(0, supertypes_doc)
+
 
     return TypeDoc(t, doc_tree)
 

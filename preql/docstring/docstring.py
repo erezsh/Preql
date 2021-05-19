@@ -74,7 +74,7 @@ class Defin:
 @dataclass
 class Section:
     name: str
-    items: List[Union[Defin, Text]]
+    items: List[Union[Defin, Text, object]]
 
     def _print_text(self, indent):
         l = [f'[bold white]{indent_str(indent)}{self.name}[/bold white]:\n']

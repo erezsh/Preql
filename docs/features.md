@@ -26,6 +26,7 @@ Preql is a programming language, a library, an interactive shell, and a set of t
     - Shell (REPL), with auto-completion
     - Runs on Jupyter Notebook, with auto-completion
 
+- Thread-safe
 - REST+JSON server, automatically generated
 
 

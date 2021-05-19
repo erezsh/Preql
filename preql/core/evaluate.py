@@ -511,10 +511,11 @@ def eval_func_call(func, args):
     matched_args = func.match_params(args)
 
     if isinstance(func, objects.MethodInstance):
-        args = {'this': func.parent}
+        ordered_args = {'this': func.parent}
+        func = func.func
         # args.update(func.parent.all_attrs())
     else:
-        args = {}
+        ordered_args = {}
 
     # XXX simplify destroys text_ref, so it harms error messages.
     # TODO Can I get rid of it, or make it preserve the text_ref somehow?
@@ -526,20 +527,20 @@ def eval_func_call(func, args):
         # TODO cast?
         if p.type and not a.type <= p.type:
             raise Signal.make(T.TypeError, func, f"Argument #{i} of '{func.name}' is of type '{a.type}', expected '{p.type}'")
-        args[p.name] = a
+        ordered_args[p.name] = a
 
 
     if isinstance(func, objects.InternalFunction):
         # TODO ensure pure function?
         # TODO Ensure correct types
-        args = list(args.values())
-        return func.func(*args)
+        ordered_args = list(ordered_args.values())
+        return func.func(*ordered_args)
 
     # TODO make tests to ensure caching was successful
     expr = func.expr
     if settings.cache:
-        params = {name: ast.Parameter(name, value.type) for name, value in args.items()}
-        sig = (func.name,) + tuple(a.type for a in args.values())
+        params = {name: ast.Parameter(name, value.type) for name, value in ordered_args.items()}
+        sig = (func.name,) + tuple(a.type for a in ordered_args.values())
 
         try:
             with use_scope(params):
@@ -558,13 +559,13 @@ def eval_func_call(func, args):
                         compiled_expr = compiled_expr.replace(code=x)
                     state._cache[sig] = compiled_expr
 
-            expr = ast.ResolveParameters(compiled_expr, args)
+            expr = ast.ResolveParameters(compiled_expr, ordered_args)
 
         except exc.InsufficientAccessLevel:
             # Don't cache
             pass
 
-    with use_scope(args):
+    with use_scope(ordered_args):
         res = _call_expr(expr)
 
     if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack

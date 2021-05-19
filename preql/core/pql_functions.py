@@ -702,16 +702,30 @@ def pql_help(inst: T.any = objects.null):
 
 
     lines = []
+
+    table_type = None
+    if inst.type <= T.table:
+        table_type = inst.type
+    elif isinstance(inst, Type) and inst <= T.table:
+        table_type = inst
+
+    if table_type:
+        inst = T.table
+
     try:
         doc = autodoc(inst).print_text()    # TODO maybe html
         if doc:
             lines += [doc]
     except NotImplementedError:
-        lines = [f"No help available for {inst.repr()}"]
+        inst_repr = inst.rich_repr()
+        lines = [f"No help available for {inst_repr}"]
     except runtype.DispatchError:
-        lines += [f"<doc not available yet for object of type '{inst.type}>'"]
+        type_repr = inst.type.rich_repr()
+        lines += [f"<doc not available yet for object of type '{type_repr}>'"]
     except AutoDocError:
-        lines += [f"<error generating documentation for object '{inst}'"]
+        inst_repr = inst.rich_repr()
+        lines += [f"<error generating documentation for object '{inst_repr}'>"]
+
 
 
     text = '\n'.join(lines) + '\n'
@@ -979,6 +993,42 @@ def pql_serve_rest(endpoints: T.struct, port: T.int = pyvalue_inst(8080)):
     uvicorn.run(app, port=port_)
     return objects.null
 
+
+def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false):
+    """Add an index to the table, to optimize filtering operations.
+
+    A method of the `table` type.
+
+    Parameters:
+        column_name: The name of the column to add index
+        unique: Whether each value in the column is expected to be unique 
+
+    Note:
+        Future versions of this function will accept several columns.
+
+    Example:
+        >> table x = [1,2,3]{item}
+        >> x.add_index("item")
+    """
+    try:
+        table_name = table.type.options['name']
+    except KeyError:
+        raise Signal.make(T.TypeError, None, f"Can only add indexes to persistent tables")
+
+    unique = cast_to_python(unique)
+    column_name = cast_to_python(column_name)
+    
+    index_name = unique_name(f'index_{table_name.repr_name}_{column_name}')
+
+    code = sql.AddIndex(Id(index_name), table_name, column_name, unique=unique)
+    db_query(code)
+
+    return objects.null
+
+
+T.table.methods.update(create_internal_funcs({
+    'add_index': pql_table_add_index
+}))
 
 internal_funcs = create_internal_funcs({
     'exit': pql_exit,

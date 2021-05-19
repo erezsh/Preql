@@ -680,7 +680,7 @@ class BasicTests(PreqlTests):
     @uses_tables('Node', 'Square', 'a')
     def test_methods(self):
         preql = self.Preql()
-        assert not T.table.methods
+        base_methods = dict(T.table.methods)
         preql('''
             table Square {
                 size: float
@@ -697,7 +697,7 @@ class BasicTests(PreqlTests):
             }
         ''')
 
-        assert not T.table.methods
+        assert base_methods == T.table.methods
         self.assertRaises(Signal, preql, 'a{area()}')
 
         # self.assertEqual( preql('s.area()'), 16 ) # TODO
@@ -1082,7 +1082,7 @@ class BasicTests(PreqlTests):
             table a {x: int}
         ''')
 
-        self.assertEqual( p('list(names(a){name})'), ['id', 'x'] )
+        self.assertEqual( p("list(names(a)[not (type ~ 'function%')]{name})"), ['id', 'x'] )
         self.assertEqual( p('columns(a)'), {'id': p.t_id, 'x': p.int} )
 
 
