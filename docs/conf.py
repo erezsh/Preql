@@ -39,6 +39,7 @@ extensions = [
     'sphinx.ext.coverage',
     'recommonmark',
     'sphinx_markdown_tables',
+    'sphinx_copybutton',
     'preql_autodoc',
     # 'sphinx_gallery.gen_gallery'
 ]

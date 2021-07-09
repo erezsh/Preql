@@ -180,8 +180,8 @@ def autodoc(t: Type):
 
     assert {s.name for s in doc_tree.sections} <= {'Example', 'Examples', 'Note', 'See Also'}, [s.name for s in doc_tree.sections]
 
-    if t.methods:
-        methods_doc = Section('Methods', [doc_func(f, t) for f in t.methods.values()])
+    if t.proto_attrs:
+        methods_doc = Section('Methods', [doc_func(f, t) for f in t.proto_attrs.values() if isinstance(f, Function)])
         doc_tree.sections.insert(0, methods_doc)
 
     if t in subtypes:
