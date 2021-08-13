@@ -49,7 +49,7 @@ For features that are database-specific, or aren't implemented in Preql, there i
 Simply install via pip:
 
 ```sh
-    pip install -U preql-lang
+    pip install -U preql
 ```
 
 Then just run the interpreter:

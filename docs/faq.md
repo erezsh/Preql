@@ -9,7 +9,7 @@ First, you need to make sure Python is installed, at version 3.6 or above. You c
 Then, open your command-line or shell, and write the following:
 
 ```sh
-python -m pip install preql-lang --user
+python -m pip install preql --user
 ```
 
 The Python executable might be called `python3`, or `python3.9` etc.

@@ -9,7 +9,7 @@
 3. Run the following command:
 
 ```sh
-    pip install -U preql-lang
+    pip install -U preql
 ```
 
 ## Run the interpreter in the console (REPL)

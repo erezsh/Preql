@@ -105,6 +105,9 @@ def _expand_ellipsis(obj, fields):
                 # Inline struct
                 with use_scope(obj.all_attrs()):
                     s = evaluate( f.value.from_struct)
+                    if not s.type <= T.struct:
+                        raise Signal.make(T.TypeError, s, f"Cannot inline objects of type {s.type}")
+
                     items = s.attrs
             else:
                 # Ellipsis for current projection
