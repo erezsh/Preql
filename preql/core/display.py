@@ -15,7 +15,6 @@ from .state import get_display
 
 from preql.settings import color_theme
 
-color_string = color_theme['string']
 
 TABLE_PREVIEW_SIZE = 16
 LIST_PREVIEW_SIZE = 128
@@ -46,6 +45,7 @@ def pql_repr(t: T.string, value):
     if get_display().format == 'html':
         res = html.escape(res)
     elif get_display().format == 'rich':
+        color_string = color_theme['string']
         res = rich.markup.escape(res)
         return rich.text.Text.from_markup(f'[{color_string}]{res}[/{color_string}]')
 

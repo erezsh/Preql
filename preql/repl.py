@@ -149,38 +149,22 @@ def _code_is_valid(code):
     return True
 
 
-
-def pigments_style_from_color_theme(theme):
-    _styles = {}
-    for name, value in theme.items():
-        style = value[0]
-        if not style.startswith('#'):
-            style = 'ansi' + style
-        if len(value) > 1:
-            style = value[1] + ' ' + style
-        _styles[name] = style
-
+def make_preql_style():
     class PreqlStyle(Style):
         default_style = ""
-        styles = _styles
-
+        styles = {
+            Generic:                settings.color_theme['text'],
+            Comment:                settings.color_theme['comment'],
+            Keyword:                settings.color_theme['keyword'],
+            Name:                   settings.color_theme['name'],
+            Name.Function:          settings.color_theme['name_func'],
+            Name.Class:             settings.color_theme['name_class'],
+            String:                 settings.color_theme['string'],
+            Number:                 settings.color_theme['number'],
+            Operator:               settings.color_theme['operator'],
+            Error:                  'bg:ansired ansigray',
+        }
     return PreqlStyle
-
-
-class PreqlStyle(Style):
-    default_style = ""
-    styles = {
-        Generic:                settings.color_theme['text'],
-        Comment:                settings.color_theme['comment'],
-        Keyword:                settings.color_theme['keyword'],
-        Name:                   settings.color_theme['name'],
-        Name.Function:          settings.color_theme['name_func'],
-        Name.Class:             settings.color_theme['name_class'],
-        String:                 settings.color_theme['string'],
-        Number:                 settings.color_theme['number'],
-        Operator:               settings.color_theme['operator'],
-        Error:                  'bg:ansired ansigray',
-    }
 
 
 def start_repl(p, prompt=' >> '):
@@ -195,7 +179,7 @@ def start_repl(p, prompt=' >> '):
 
     try:
         session = PromptSession(
-            style=style_from_pygments_cls(PreqlStyle),
+            style=style_from_pygments_cls(make_preql_style()),
             lexer=PygmentsLexer(GoLexer),
             completer=Autocompleter(interp.state),
             # key_bindings=kb

@@ -14,16 +14,14 @@ from . import type_docs
 class AutoDocError(Exception):
     pass
 
-color_kw = color_theme['keyword']
-color_class = color_theme['name_class']
-color_func = color_theme['name_func']
-
 @dataclass
 class ModuleDoc:
     module: object
     items: list
 
     def print_text(self):
+        color_class = color_theme['name_class']
+        color_kw = color_theme['keyword']
         s = f'\n[{color_kw}]module[/{color_kw}] [{color_class}]{self.module.name}[/{color_class}]\n'
         line = '=' * (len(self.module.name) + 7)
         s += f'[{color_kw}]{line}[/{color_kw}]\n\n\n'
@@ -50,6 +48,7 @@ class FuncDoc:
         return self.print_rst()
 
     def print_text(self, indent=0):
+        color_kw = color_theme['keyword']
         params = [str(p.name) for p in self.func.params]
         if self.func.param_collector:
             params.append('...' + self.func.param_collector.name)
@@ -80,6 +79,8 @@ class TypeDoc:
     doc: object
 
     def print_text(self, indent=0):
+        color_kw = color_theme['keyword']
+        color_class = color_theme['name_class']
         params = [str(p) for p in self.type.elems]
         params = ', '.join(params)
         if params:
