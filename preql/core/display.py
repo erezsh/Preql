@@ -108,6 +108,8 @@ def _html_table(name, count_str, rows, offset, has_more, colors):
     return '%s<table class="preql_table">%s%s</table>' % (header, ths, '\n'.join(trs)) + style
 
 
+from preql.settings import color_theme
+
 def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_footer=False):
     header = 'table '
     if name:
@@ -129,11 +131,11 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
 
         if colors:
             if isinstance(v, int):
-                kw['style']='cyan'
+                kw['style'] = color_theme['number']
             elif isinstance(v, float):
-                kw['style']='yellow'
+                kw['style'] ='yellow'
             elif isinstance(v, str):
-                kw['style']='green'
+                kw['style'] = color_theme['string']
 
         table.add_column(k, footer=k, **kw)
 
@@ -247,6 +249,7 @@ class RichDisplay(Display):
             self.console.print(repr_, overflow="ellipsis", end=end)
         else:
             # repr_ = rich.text.Text(repr_)
+            # XXX Rich adds automatic colors, but they are not the same as the color theme
             self.console.print(repr_, overflow="ellipsis", markup=False, end=end)
 
     def print_exception(self, e):

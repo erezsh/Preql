@@ -103,6 +103,9 @@ def sql_result_to_python(res: T.primitive):
     #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
     return item
 
+@dp_inst
+def sql_result_to_python(res):
+    return res.value
 
 @dp_inst
 def sql_result_to_python(res: T.datetime):

@@ -3,11 +3,10 @@ from typing import Optional
 from runtype import dataclass
 
 from preql.utils import safezip, dsp
-
 from preql.docstring.docstring import parse, Section, Defin, Text
-
 from preql.core.pql_objects import Module, Function, T, MethodInstance
 from preql.core.pql_types import Type, subtypes
+from preql.settings import color_theme
 
 from . import type_docs
 
@@ -15,15 +14,19 @@ from . import type_docs
 class AutoDocError(Exception):
     pass
 
+color_kw = color_theme['keyword']
+color_class = color_theme['name_class']
+color_func = color_theme['name_func']
+
 @dataclass
 class ModuleDoc:
     module: object
     items: list
 
     def print_text(self):
-        s = f'\n[dodger_blue2]module[/dodger_blue2] [bold white]{self.module.name}[/bold white]\n'
+        s = f'\n[{color_kw}]module[/{color_kw}] [{color_class}]{self.module.name}[/{color_class}]\n'
         line = '=' * (len(self.module.name) + 7)
-        s += f'[dodger_blue2]{line}[/dodger_blue2]\n\n\n'
+        s += f'[{color_kw}]{line}[/{color_kw}]\n\n\n'
         return s + '\n\n'.join(i.print_text(2) for i in self.items)
 
     def print_rst(self):
@@ -53,7 +56,7 @@ class FuncDoc:
         params = ', '.join(params)
         indent_str = ' ' * indent
         parent = (self.parent_type.repr() + '.') if self.parent_type else ''
-        s = f'{indent_str}[dodger_blue2]func[/dodger_blue2] {parent}[bold white]{self.func.name}[/bold white]({params}) = ...\n\n'
+        s = f'{indent_str}[{color_kw}]func[/{color_kw}] {parent}[bold white]{self.func.name}[/bold white]({params}) = ...\n\n'
         return s + self.doc.print_text(indent+4)
 
     def print_rst(self):
@@ -82,7 +85,7 @@ class TypeDoc:
         if params:
             params = f'\\[{params}]'
         indent_str = ' ' * indent
-        s = f'{indent_str}[dodger_blue2]type[/dodger_blue2] [bold white]{self.type.typename}[/bold white]{params}\n\n'
+        s = f'{indent_str}[{color_kw}]type[/{color_kw}] [{color_class}]{self.type.typename}[/{color_class}]{params}\n\n'
         return s + self.doc.print_text(indent+4)
 
     def print_rst(self):

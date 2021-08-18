@@ -149,18 +149,36 @@ def _code_is_valid(code):
     return True
 
 
+
+def pigments_style_from_color_theme(theme):
+    _styles = {}
+    for name, value in theme.items():
+        style = value[0]
+        if not style.startswith('#'):
+            style = 'ansi' + style
+        if len(value) > 1:
+            style = value[1] + ' ' + style
+        _styles[name] = style
+
+    class PreqlStyle(Style):
+        default_style = ""
+        styles = _styles
+
+    return PreqlStyle
+
+
 class PreqlStyle(Style):
     default_style = ""
     styles = {
-        Generic:                'ansigray',
-        Comment:                'italic #888',
-        Keyword:                'bold #00f',
-        Name:                   '#fff',
-        Name.Function:          'bold #8f8',
-        Name.Class:             'bold #0f0',
-        String:                 'ansigreen',
-        Number:                 'ansicyan',
-        Operator:               'ansigray',
+        Generic:                settings.color_theme['text'],
+        Comment:                settings.color_theme['comment'],
+        Keyword:                settings.color_theme['keyword'],
+        Name:                   settings.color_theme['name'],
+        Name.Function:          settings.color_theme['name_func'],
+        Name.Class:             settings.color_theme['name_class'],
+        String:                 settings.color_theme['string'],
+        Number:                 settings.color_theme['number'],
+        Operator:               settings.color_theme['operator'],
         Error:                  'bg:ansired ansigray',
     }
 
