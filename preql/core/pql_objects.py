@@ -84,6 +84,7 @@ class Function(Object):
         return T.function[tuple(p.type or T.any for p in self.params)](param_collector=self.param_collector is not None)
 
     def help_str(self):
+        # XXX probably belongs in display.py
         params = []
         for p in self.params:
             s = p.name

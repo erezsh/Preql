@@ -46,7 +46,7 @@ def main():
 
     interactive = args.interactive
 
-    res = 0
+    error_code = 0
     start = time.time()
     try:
         if args.file:
@@ -64,7 +64,7 @@ def main():
             interactive = True
     except Signal as e:
         p._display.print_exception(e)
-        res = -1
+        error_code = -1
         if args.python_traceback:
             raise
     except KeyboardInterrupt:
@@ -78,7 +78,7 @@ def main():
         p.load_all_tables()
         p.start_repl()
     else:
-        return res
+        return error_code
 
 if __name__ == '__main__':
     main()

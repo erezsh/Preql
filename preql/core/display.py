@@ -3,6 +3,7 @@ import html
 import rich.table
 import rich.text
 import rich.console
+import rich.markup
 
 from .exceptions import Signal
 from .pql_types import T, ITEM_NAME
@@ -12,6 +13,9 @@ from .types_impl import dp_type, pql_repr
 from .interp_common import call_builtin_func, cast_to_python_int, cast_to_python
 from .state import get_display
 
+from preql.settings import color_theme
+
+color_string = color_theme['string']
 
 TABLE_PREVIEW_SIZE = 16
 LIST_PREVIEW_SIZE = 128
@@ -41,6 +45,10 @@ def pql_repr(t: T.string, value):
     res = f'"{value}"'
     if get_display().format == 'html':
         res = html.escape(res)
+    elif get_display().format == 'rich':
+        res = rich.markup.escape(res)
+        return rich.text.Text.from_markup(f'[{color_string}]{res}[/{color_string}]')
+
     return res
 
 @dp_type
