@@ -1585,6 +1585,27 @@ class TestFunctions(PreqlTests):
          assert p.f5 == 'hello my world!'
 
 
+@parameterized_class(("name", "uri"), [
+    ("Normal_Lt", SQLITE_URI),
+    ("Normal_Pg", POSTGRES_URI),
+    ("Normal_My", MYSQL_URI),
+    # ("Normal_Bq", BIGQUERY_URI, True),
+    # ("Normal_Dk", DUCK_URI, True),
+])
+class TestStdlib(PreqlTests):
+    def test_round(self):
+        p = self.Preql()
+        n = 1928.9182
+        assert p.round(n) == p.round(n, 0) == 1929
+        assert float(p.round(n, 1)) == 1928.9
+        assert float(p.round(n, 2)) == 1928.92
+        assert float(p.round(n, -1)) == 1930
+        assert float(p.round(n, -3)) == 2000
+        assert float(p.round(-59.9)) == -60
+        assert float(p.round(-4.535,2)) == -4.54
+
+
+
 class TestPandas(PreqlTests):
     def test_pandas(self):
         from pandas import DataFrame
