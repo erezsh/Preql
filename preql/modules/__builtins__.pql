@@ -534,7 +534,7 @@ func page(table, index, page_size=20) {
 
 func remove_table(table_name) {
     "Remove table from database (drop table)"
-    SQL(nulltype, "DROP TABLE $table_name")
+    force_eval(SQL(nulltype, "DROP TABLE $table_name"))
 }
 
 // func remove_tables(tables) {
