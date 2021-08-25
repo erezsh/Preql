@@ -973,9 +973,7 @@ def new_table_from_rows(name, columns, rows):
     code = sql.InsertConsts(name, columns, tuples)
     db_query(code)
 
-    x = objects.new_table(table)
-    set_var(name, x)
-    return x
+    return objects.new_table(table)
 
 
 def new_table_from_expr(name, expr, const, temporary):

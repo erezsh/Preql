@@ -353,7 +353,7 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
 
         assert isinstance(source_file, (str, Path)), source_file
 
-        pos =  TextPos(e.pos_in_stream, e.line, e.column)
+        pos =  TextPos(e.start_pos, e.line, e.column)
         ref = TextReference(s, str(source_file), TextRange(pos, pos))
         if isinstance(e, UnexpectedToken):
             if e.token.type == '$END':
@@ -367,7 +367,7 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
                 accepts = terminal_list_desc(expected)
                 msg += '. Expected: %s' % ' or '.join(accepts)
         else:
-            msg = "Unexpected character: %r" % s[e.pos_in_stream]
+            msg = "Unexpected character: %r" % s[e.start_pos]
 
         raise pql_SyntaxError(ref, msg)
 

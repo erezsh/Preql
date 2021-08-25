@@ -17,7 +17,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import pyvalue_inst, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
-from .state import get_var, get_db, use_scope, unique_name, get_db_target, require_access, AccessLevels
+from .state import get_var, get_db, use_scope, unique_name, get_db_target, require_access, AccessLevels, set_var
 from .evaluate import evaluate, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
 from .pql_types import T, Type, Id
 from .types_impl import join_names
@@ -833,7 +833,9 @@ def import_pandas(dfs):
                     for rec in df.to_records()]
             rows = [ row[1:] for row in rows ]    # drop index
 
-        yield new_table_from_rows(name, cols, rows)
+        tbl = new_table_from_rows(name, cols, rows)
+        set_var(name, tbl)
+        yield tbl
 
 def pql_import_json(table_name: T.string, uri: T.string):
     """Imports a json file into a new table.
