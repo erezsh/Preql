@@ -4,7 +4,7 @@ from dataclasses import field
 from preql.utils import dataclass, TextReference, field_list
 
 from . import pql_types as types
-from .pql_types import T, Object
+from .pql_types import T, Object, Id
 from .types_impl import pql_repr
 
 
@@ -228,14 +228,14 @@ class FuncDef(Statement, Definition):
 
 @dataclass
 class TableDef(Statement, Definition):
-    name: str
+    name: Id
     columns: List[Union[ColumnDef, Ellipsis]]
     methods: list
 
 
 @dataclass
 class TableDefFromExpr(Statement, Definition):
-    name: str
+    name: Id
     expr: Expr
     const: bool
 

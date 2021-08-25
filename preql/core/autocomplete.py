@@ -65,7 +65,6 @@ def eval_autocomplete(cb: ast.CodeBlock, go_inside):
 @dsp
 def eval_autocomplete(td: ast.TableDefFromExpr, go_inside):
     expr = evaluate(td.expr)
-    assert isinstance(td.name, str)
     set_var(td.name, expr)
 
 @dsp

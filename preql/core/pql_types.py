@@ -18,15 +18,33 @@ class Id:
     def __init__(self, *parts):
         assert all(isinstance(p, str) for p in parts), parts
         self.parts = parts
+
     def __repr__(self):
         return 'Id(%s)' % '.'.join(self.parts)
+
     def __str__(self):
+        # Prevents accidents!
         raise Exception("Operation not allowed!")
+
     def __hash__(self):
-        raise Exception("Operation not allowed!")
+        return hash(tuple(self.parts))
+        
+    def __eq__(self, other):
+        if not isinstance(other, Id):
+            return NotImplemented
+
+        return self.parts == other.parts
+
     @property
     def repr_name(self):
         return self.parts[-1]
+
+    @property
+    def name(self):
+        return self.parts[-1]
+
+    def lower(self):
+        return Id(*[p.lower() for p in self.parts])
 
 
 def _repr_type_elem(t, depth):

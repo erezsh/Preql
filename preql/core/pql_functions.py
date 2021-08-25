@@ -321,7 +321,7 @@ def pql_temptable(expr: T.table, const: T.bool.as_nullable() = objects.null):
     const = cast_to_python(const)
     assert_type(expr.type, T.table, expr, 'temptable')
 
-    name = unique_name("temp")    # TODO get name from table options
+    name = Id(unique_name("temp"))    # TODO get name from table options
 
     return new_table_from_expr(name, expr, const, True)
 
@@ -670,7 +670,7 @@ def pql_import_table(name: T.string, columns: T.list[T.string].as_nullable() = o
         columns_whitelist = set(columns_whitelist)
 
     # Get table type
-    t = get_db().import_table_type(name_str, columns_whitelist)
+    t = get_db().import_table_type(Id(*name_str.split('.')), columns_whitelist)
     assert t <= T.table
 
     # Get table contents
@@ -777,7 +777,7 @@ def pql_tables():
     db = get_db()
     names = db.list_tables()
     values = [(name, db.import_table_type(name, None)) for name in names]
-    tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in values]
+    tuples = [sql.Tuple(T.list[T.string], [new_str('.'.join(n.parts)).code,new_str(t).code]) for n,t in values]
 
     table_type = T.table(dict(name=T.string, type=T.string))
     return objects.new_const_table(table_type, tuples)

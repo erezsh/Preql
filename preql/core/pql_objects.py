@@ -70,6 +70,9 @@ class Module(Object):
         funcs.sort(key=lambda f: f.name)
         return funcs
 
+    def set_var(self, name, value):
+        self.namespace[name] = value
+
 
 class Function(Object):
     # Abstract class

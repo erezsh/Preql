@@ -30,19 +30,26 @@ def resolve(struct_def: ast.StructDef):
     set_var(struct_def.name, struct)
     return struct
 
-@dsp
-def resolve(table_def: ast.TableDef):
-    name = table_def.name
+
+def _resolve_name_and_scope(name, ast_node):
     if is_global_scope(context.state):
         name = get_db().qualified_name(name)
         temporary = False
     else:
-        name = '__local_' + unique_name(name)
+        if len(name.parts) > 1:
+            raise Signal(T.NameError, ast_node, "Local tables cannot include a schema (namespace)")
+        name ,= name.parts
+        name = Id('__local_' + unique_name(name))
         temporary = True
+    return name, temporary
 
-    t = T.table({}, name=Id(name), temporary=temporary)
+@dsp
+def resolve(table_def: ast.TableDef):
+    name, temporary = _resolve_name_and_scope(table_def.name, table_def)
 
-    with use_scope({table_def.name: t}):  # For self-reference
+    t = T.table({}, name=name, temporary=temporary)
+
+    with use_scope({table_def.name.name: t}):  # For self-reference
         elems = {c.name: resolve(c) for c in table_def.columns}
         t = t(elems)
 
@@ -142,14 +149,10 @@ def _execute(struct_def: ast.StructDef):
 
 @method
 def _execute(table_def: ast.TableDefFromExpr):
-    state = context.state
     expr = cast_to_instance(table_def.expr)
-    name = table_def.name
-    if is_global_scope(state):
-        temporary = False
-    else:
-        name = '__local_' + unique_name(name)
-        temporary = True
+
+    name, temporary = _resolve_name_and_scope(table_def.name, table_def)
+
     t = new_table_from_expr(name, expr, table_def.const, temporary)
     set_var(table_def.name, t)
     
@@ -177,10 +180,10 @@ def _execute(table_def: ast.TableDef):
     t = resolve(table_def)
     db_name = t.options['name']
 
-    exists = get_db().table_exists(db_name.repr_name)
+    exists = get_db().table_exists(db_name)
     if exists:
         assert not t.options['temporary']
-        cur_type = get_db().import_table_type(db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
+        cur_type = get_db().import_table_type(db_name, None if ellipsis else set(t.elems) | {'id'})
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -212,7 +215,7 @@ def _execute(table_def: ast.TableDef):
         t = t(elems, pk=[['id']])
         inst = objects.new_table(t, db_name)
 
-    set_var(table_def.name, inst)
+    set_var(table_def.name.name, inst)
 
     if not exists:
         sql_code = sql.compile_type_def(db_name, t)
@@ -977,7 +980,7 @@ def new_table_from_rows(name, columns, rows):
 
 
 def new_table_from_expr(name, expr, const, temporary):
-    name = Id(name)
+    assert isinstance(name, Id)
     elems = expr.type.elems
 
     if any(t <= T.unknown for t in elems.values()):

@@ -9,7 +9,7 @@ from .exceptions import pql_SyntaxError
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .compiler import guess_field_name
-from .pql_types import T
+from .pql_types import T, Id
 
 
 class Str(str):
@@ -260,6 +260,11 @@ class TreeToAst(Transformer):
             raise pql_SyntaxError(lval.text_ref, f"{lval.type} is not a valid l-value")
         return ast.SetValue(lval, rval)
 
+    def name_path(self, path, name):
+        if not path:
+            return Id(name)
+        return Id(*path.parts, name)
+
     insert_rows = ast.InsertRows
     struct_def = ast.StructDef
     table_def = ast.TableDef
@@ -353,7 +358,7 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
 
         assert isinstance(source_file, (str, Path)), source_file
 
-        pos =  TextPos(e.start_pos, e.line, e.column)
+        pos =  TextPos(e.pos_in_stream, e.line, e.column)
         ref = TextReference(s, str(source_file), TextRange(pos, pos))
         if isinstance(e, UnexpectedToken):
             if e.token.type == '$END':
@@ -367,7 +372,7 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
                 accepts = terminal_list_desc(expected)
                 msg += '. Expected: %s' % ' or '.join(accepts)
         else:
-            msg = "Unexpected character: %r" % s[e.start_pos]
+            msg = "Unexpected character: %r" % s[e.pos_in_stream]
 
         raise pql_SyntaxError(ref, msg)
 
