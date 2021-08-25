@@ -69,10 +69,24 @@ def _prepare_to_compare(op, a, b):
     raise Signal.make(T.TypeError, op, f"Operator '{op}' not implemented for {a.type} and {b.type}")
 
 @dp_inst
-def _prepare_to_compare(op, a: T.number | T.bool | T.t_id, b: T.number | T.bool | T.t_id):
+def _prepare_to_compare(op, a: T.number | T.bool, b: T.number | T.bool):
     pass
 @dp_inst
 def _prepare_to_compare(op, a: T.string, b: T.string):
+    pass
+
+# XXX id/relation can be either int or string, so we can't tell if comparison is necessary or not
+# So we always allow the comparison 
+# TODO use generics/phantoms to disambiguate the situation
+id_or_relation = T.t_relation | T.t_id
+@dp_inst
+def _prepare_to_compare(op, a: id_or_relation, b):
+    pass
+@dp_inst
+def _prepare_to_compare(op, a, b: id_or_relation):
+    pass
+@dp_inst
+def _prepare_to_compare(op, a: id_or_relation, b: id_or_relation):
     pass
 
 @dp_inst

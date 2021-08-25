@@ -919,6 +919,7 @@ def _repr(_t: T.union[T.string, T.text], x):
 
 def _quote(target, name):
     assert isinstance(name, str), name
+    assert target == get_db_target()
     if target is sqlite:
         return f'[{name}]'
     elif target is mysql or target is bigquery:

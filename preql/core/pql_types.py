@@ -251,7 +251,7 @@ T._register('table', [T.container], {})
 T.list = [T.table], {ITEM_NAME: T.any}
 T.set = [T.table], {ITEM_NAME: T.any}
 T.t_id = [T.primitive], (T.table,)
-T.t_relation = [T.number], (T.any,)   # t_id?
+T.t_relation = [T.primitive], (T.any,)   # t_id?
 
 # XXX sequence instead of container?
 T._register('aggregated', [T.container], (T.any,), type_class=PhantomType)

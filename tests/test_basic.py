@@ -91,10 +91,10 @@ class BasicTests(PreqlTests):
         assert set(preql.query1()) == {"England", "United States"}, preql.query1()
 
         res = preql("list(Person[country==isr]{name})")
-        assert set(res) == {"Erez Shinan", "Ephraim Kishon"}
+        self.assertEqual(set(res), {"Erez Shinan", "Ephraim Kishon"})
 
         res = preql("list(Person[id!=me]{name})")
-        assert set(res) == {"Ephraim Kishon", "Eric Blaire", "H.G. Wells", "John Steinbeck"}    # order not guaranteed
+        self.assertEqual(set(res), {"Ephraim Kishon", "Eric Blaire", "H.G. Wells", "John Steinbeck"})
 
     def _test_cache(self, preql):
         # Ensure that names affect type

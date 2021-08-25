@@ -412,6 +412,9 @@ class BigQueryInterface(SqlInterface):
         # XXX No error? No warning?
         pass
 
+    def close(self):
+        self._client.close()
+
 class AbsSqliteInterface:
     def table_exists(self, name):
         sql_code = "SELECT count(*) FROM sqlite_master where name='%s' and type='table'" % name
