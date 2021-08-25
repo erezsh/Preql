@@ -101,7 +101,7 @@ def db_query(sql_code, subqueries=None):
         raise Signal.make(T.DbQueryError, None, e.args[0]) from e
 
 def drop_table(state, table_type):
-    name ,= table_type.options['name'].parts
+    name = table_type.options['name']
     code = sql.compile_drop_table(name)
     return state.db.query(code, {})
 
@@ -215,7 +215,7 @@ def _execute(table_def: ast.TableDef):
     set_var(table_def.name, inst)
 
     if not exists:
-        sql_code = sql.compile_type_def(db_name.repr_name, t)
+        sql_code = sql.compile_type_def(db_name, t)
         db_query(sql_code)
 @method
 def _execute(insert_rows: ast.InsertRows):
@@ -791,10 +791,10 @@ def _new_row(new_ast, table, matched):
         rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []))
         keys += ['id']
         values += [sql.make_value(rowid)]
-        q = sql.InsertConsts(table.options['name'].repr_name, keys, [values])
+        q = sql.InsertConsts(table.options['name'], keys, [values])
         db_query(q)
     else:
-        q = sql.InsertConsts(table.options['name'].repr_name, keys, [values])
+        q = sql.InsertConsts(table.options['name'], keys, [values])
         # q = sql.InsertConsts(new_ast.type, keys, [values])
         db_query(q)
         rowid = db_query(sql.LastRowId())
@@ -956,6 +956,7 @@ def localize(x: Object):
 
 def new_table_from_rows(name, columns, rows):
     # TODO check table doesn't exist
+    name = Id(name)
 
     tuples = [
         [sql.make_value(i) for i in row]
@@ -965,7 +966,7 @@ def new_table_from_rows(name, columns, rows):
     # TODO refactor into function?
     elems = {c:v.type.as_nullable() for c,v in zip(columns, tuples[0])}
     elems['id'] = T.t_id
-    table = T.table(elems, temporary=True, pk=[['id']], name=Id(name))
+    table = T.table(elems, temporary=True, pk=[['id']], name=name)
 
     db_query(sql.compile_type_def(name, table))
 
@@ -978,6 +979,7 @@ def new_table_from_rows(name, columns, rows):
 
 
 def new_table_from_expr(name, expr, const, temporary):
+    name = Id(name)
     elems = expr.type.elems
 
     if any(t <= T.unknown for t in elems.values()):
@@ -987,7 +989,7 @@ def new_table_from_expr(name, expr, const, temporary):
         msg = "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is."
         raise Signal.make(T.NameError, None, msg)
 
-    table = T.table(dict(elems), name=Id(name), pk=[] if const else [['id']], temporary=temporary)
+    table = T.table(dict(elems), name=name, pk=[] if const else [['id']], temporary=temporary)
 
     if not const:
         table.elems['id'] = T.t_id
@@ -996,7 +998,7 @@ def new_table_from_expr(name, expr, const, temporary):
 
     read_only, flat_columns = table_flat_for_insert(table)
     expr = exclude_fields(expr, set(read_only) & set(elems))
-    db_query(sql.Insert(Id(name), flat_columns, expr.code), expr.subqueries)
+    db_query(sql.Insert(name, flat_columns, expr.code), expr.subqueries)
 
     return objects.new_table(table)
 

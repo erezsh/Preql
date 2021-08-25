@@ -401,9 +401,11 @@ class BigQueryInterface(SqlInterface):
         return self._default_dataset
 
     def qualified_name(self, name):
-        if '.' in name: # already has dataset
+        assert isinstance(name, Id)
+        if len(name.parts) > 1:
+            # already has dataset
             return name
-        return self.get_default_dataset() + '.' + name
+        return Id(self.get_default_dataset(), name.parts[-1])
 
     def rollback(self):
         # XXX No error? No warning?
@@ -601,7 +603,7 @@ def _drop_tables(state, *tables):
     db = state.db
     with context(state=state):
         for t in tables:
-            t = quote_id(Id(db.qualified_name(t)))
+            t = quote_id(db.qualified_name(Id(t)))
             db._execute_sql(T.nulltype, f"DROP TABLE {t};")
 
 

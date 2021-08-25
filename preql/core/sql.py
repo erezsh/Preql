@@ -520,7 +520,7 @@ class Insert(SqlStatement):
 
 @dataclass
 class InsertConsts(SqlStatement):
-    table: str
+    table: Id
     cols: List[str]
     tuples: list #List[List[Sql]]
 
@@ -535,7 +535,7 @@ class InsertConsts(SqlStatement):
         )
 
         cols = [quote_name(c) for c in cols]
-        q = ['INSERT INTO', quote_id(Id(self.table)),
+        q = ['INSERT INTO', quote_id(self.table),
              "(", ', '.join(cols), ")",
              "VALUES ",
         ]
@@ -924,7 +924,6 @@ def quote_id(id_):
     return '.'.join(quote_name(n) for n in id_.parts)
 
 
-
 @dp_type
 def _compile_type(target, type_: T.t_relation):
     # TODO might have a different type
@@ -992,12 +991,13 @@ def _compile_type(target, _type: T.json):
 # API
 
 def compile_drop_table(table_name) -> Sql:
-    return RawSql(T.nulltype, f'DROP TABLE {quote_id(Id(table_name))}')
+    return RawSql(T.nulltype, f'DROP TABLE {quote_id(table_name)}')
 
 
 
 
 def compile_type_def(table_name, table) -> Sql:
+    assert isinstance(table_name, Id)
     assert table <= T.table
 
     target = get_db_target()
@@ -1029,8 +1029,8 @@ def compile_type_def(table_name, table) -> Sql:
                     # In postgres, constraints on temporary tables may reference only temporary tables
                     rel = c.options['rel']
                     if rel['key']:          # Requires a unique constraint
-                        _tbl_name ,= rel['table'].options['name'].parts   # TODO fix for multiple parts
-                        s = f"FOREIGN KEY({name}) REFERENCES {quote_id(Id(_tbl_name))}({rel['column']})"
+                        tbl_name = rel['table'].options['name']
+                        s = f"FOREIGN KEY({name}) REFERENCES {quote_id(tbl_name)}({rel['column']})"
                         posts.append(s)
 
     if pks and target != bigquery:
@@ -1039,7 +1039,7 @@ def compile_type_def(table_name, table) -> Sql:
 
     # Consistent among SQL databases
     command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
-    return RawSql(T.nulltype, f'{command} {quote_id(Id(table_name))} (' + ', '.join(columns + posts) + ')')
+    return RawSql(T.nulltype, f'{command} {quote_id(table_name)} (' + ', '.join(columns + posts) + ')')
 
 
 
