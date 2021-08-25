@@ -9,7 +9,7 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, _quote
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id
 from .core.sql_import_result import sql_result_to_python, type_from_sql
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
@@ -46,7 +46,7 @@ class SqlInterface:
         return self._execute_sql(sql.type, sql_code)
 
     def compile_sql(self, sql, subqueries=None, qargs=()):
-        qb = QueryBuilder(self.target)
+        qb = QueryBuilder()
 
         return sql.finalize_with_subqueries(qb, subqueries)
 
@@ -601,7 +601,7 @@ def _drop_tables(state, *tables):
     db = state.db
     with context(state=state):
         for t in tables:
-            t = _quote(db.target, db.qualified_name(t))
+            t = quote_id(Id(db.qualified_name(t)))
             db._execute_sql(T.nulltype, f"DROP TABLE {t};")
 
 

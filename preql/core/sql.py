@@ -14,8 +14,8 @@ bigquery = 'bigquery'
 mysql = 'mysql'
 
 class QueryBuilder:
-    def __init__(self, target, is_root=True, start_count=0):
-        self.target = target
+    def __init__(self, is_root=True, start_count=0):
+        self.target = get_db_target()
         self.is_root = is_root
 
         self.counter = start_count
@@ -29,21 +29,13 @@ class QueryBuilder:
     def replace(self, is_root):
         if is_root == self.is_root:
             return self # Optimize
-        return QueryBuilder(self.target, is_root, self.counter)
+        return QueryBuilder(is_root, self.counter)
 
     def push_table(self, t):
         self.table_name.append(t)
     def pop_table(self, t):
         t2 = self.table_name.pop()
         assert t2 == t
-
-    def safe_name(self, base):
-        "Return a name that is safe for use as variable. Must be consistent (pure func)"
-        return _quote(self.target, base)
-
-    def quote(self, id_):
-        assert isinstance(id_, Id)
-        return '.'.join(self.safe_name(n) for n in id_.parts)
 
 
 
@@ -214,7 +206,7 @@ class TableName(Table):
     name: Id
 
     def _compile(self, qb):
-        return [qb.quote(self.name)]
+        return [quote_id(self.name)]
 
     _needs_select = True
 
@@ -457,7 +449,7 @@ class Name(SqlTree):
         assert self.name, self.type
 
     def _compile(self, qb):
-        name = qb.safe_name(self.name)
+        name = quote_name(self.name)
         if qb.table_name:
             name = qb.table_name[-1] + '.' + name
         return [name]
@@ -482,7 +474,7 @@ class ColumnAlias(SqlTree):
         return cls(value, alias)
 
     def _compile(self, qb):
-        alias = qb.safe_name(self.alias)
+        alias = quote_name(self.alias)
         value = self.value.compile_wrap(qb).code
         assert alias and value, (alias, value)
         if value == [alias]:  # TODO disable when unoptimized?
@@ -504,8 +496,8 @@ class AddIndex(SqlStatement):
     unique: bool
 
     def _compile(self, qb):
-        return [f"CREATE {'UNIQUE' if self.unique else ''} INDEX IF NOT EXISTS {qb.quote(self.index_name)}"
-                f" ON {qb.quote(self.table_name)}({self.column})"]
+        return [f"CREATE {'UNIQUE' if self.unique else ''} INDEX IF NOT EXISTS {quote_id(self.index_name)}"
+                f" ON {quote_id(self.table_name)}({self.column})"]
 
 @dataclass
 class Insert(SqlStatement):
@@ -514,13 +506,13 @@ class Insert(SqlStatement):
     query: Sql
 
     def _compile(self, qb):
-        columns = [qb.quote(Id(c)) for c in self.columns]
-        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
+        columns = [quote_name(c) for c in self.columns]
+        return [f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
         if qb.target is mysql:
-            columns = [qb.quote(Id(c)) for c in self.columns]
-            sql_code = f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) '
+            columns = [quote_name(c) for c in self.columns]
+            sql_code = f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '
             sql_code += self.query.finalize_with_subqueries(qb, subqueries)
             return ''.join(sql_code)
 
@@ -542,8 +534,8 @@ class InsertConsts(SqlStatement):
             for tpl in tuples
         )
 
-        cols = [qb.quote(Id(c)) for c in cols]
-        q = ['INSERT INTO', qb.safe_name(self.table),
+        cols = [quote_name(c) for c in cols]
+        q = ['INSERT INTO', quote_id(Id(self.table)),
              "(", ', '.join(cols), ")",
              "VALUES ",
         ]
@@ -563,7 +555,7 @@ class InsertConsts2(SqlStatement):
             for tpl in self.tuples
         )
 
-        q = ['INSERT INTO', qb.quote(self.table),
+        q = ['INSERT INTO', quote_id(self.table),
              "(", ', '.join(self.cols), ")",
              "VALUES ",
         ]
@@ -917,15 +909,19 @@ def _repr(_t: T.union[T.string, T.text], x):
     quoted_quote = r"\'" if get_db_target() == bigquery else "''"
     return "'%s'" % str(x).replace("'", quoted_quote)
 
-def _quote(target, name):
+def quote_name(name):
     assert isinstance(name, str), name
-    assert target == get_db_target()
+    target = get_db_target()
     if target is sqlite:
         return f'[{name}]'
     elif target is mysql or target is bigquery:
         return f'`{name}`'
     else:
         return f'"{name}"'
+
+def quote_id(id_):
+    assert isinstance(id_, Id)
+    return '.'.join(quote_name(n) for n in id_.parts)
 
 
 
@@ -996,8 +992,7 @@ def _compile_type(target, _type: T.json):
 # API
 
 def compile_drop_table(table_name) -> Sql:
-    target = get_db_target()
-    return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
+    return RawSql(T.nulltype, f'DROP TABLE {quote_id(Id(table_name))}')
 
 
 
@@ -1025,7 +1020,7 @@ def compile_type_def(table_name, table) -> Sql:
         else:
             type_ = _compile_type(target if target != mysql else 'mysql_def', c)
 
-        columns.append( f'{_quote(target, name)} {type_}' )
+        columns.append( f'{quote_name(name)} {type_}' )
 
         if c <= T.t_relation:
             if target != 'bigquery':
@@ -1035,7 +1030,7 @@ def compile_type_def(table_name, table) -> Sql:
                     rel = c.options['rel']
                     if rel['key']:          # Requires a unique constraint
                         _tbl_name ,= rel['table'].options['name'].parts   # TODO fix for multiple parts
-                        s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, _tbl_name)}({rel['column']})"
+                        s = f"FOREIGN KEY({name}) REFERENCES {quote_id(Id(_tbl_name))}({rel['column']})"
                         posts.append(s)
 
     if pks and target != bigquery:
@@ -1044,7 +1039,7 @@ def compile_type_def(table_name, table) -> Sql:
 
     # Consistent among SQL databases
     command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
-    return RawSql(T.nulltype, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
+    return RawSql(T.nulltype, f'{command} {quote_id(Id(table_name))} (' + ', '.join(columns + posts) + ')')
 
 
 

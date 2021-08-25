@@ -553,7 +553,7 @@ def eval_func_call(func, args):
                     logging.info("Compiled successfully")
                     if isinstance(compiled_expr, objects.Instance):
                         # XXX a little ugly
-                        qb = sql.QueryBuilder(get_db_target(), True)
+                        qb = sql.QueryBuilder(True)
                         x = compiled_expr.code.compile(qb)
                         x = x.optimize()
                         compiled_expr = compiled_expr.replace(code=x)

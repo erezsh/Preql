@@ -464,7 +464,7 @@ def compile_to_inst(res: ast.ResolveParameters):
 
 
 def _resolve_sql_parameters(compiled_sql, wrap=False, subqueries=None):
-    qb = sql.QueryBuilder(get_db_target(), False)
+    qb = sql.QueryBuilder(False)
 
     # Ensure <= CompiledSQL
     compiled_sql = compiled_sql.compile(qb)
