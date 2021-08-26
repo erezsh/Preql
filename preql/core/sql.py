@@ -871,12 +871,12 @@ class StringSlice(SqlTree):
         else:
             length = None
 
-        if qb.target == sqlite:
+        if qb.target in (sqlite, bigquery):
             f = 'substr'
             params = string + [', '] + start
             if length:
                 params += [', '] + length
-        elif qb.target in (postgres, mysql, bigquery):
+        elif qb.target in (postgres, mysql):
             f = 'substring'
             params = string + [' from '] + start
             if length:
@@ -1046,13 +1046,14 @@ def compile_type_def(table_name, table) -> Sql:
 
 def deletes_by_ids(table, ids):
     for id_ in ids:
-        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
+        compare = Compare('=', [Name(T.t_id, 'id'), Primitive(T.t_id, str(id_))])
         yield Delete(TableName(table.type, table.type.options['name']), [compare])
 
 def updates_by_ids(table, proj, ids):
+    # TODO this function is not safe & secure enough
     sql_proj = {Name(value.type, name): value.code for name, value in proj.items()}
     for id_ in ids:
-        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
+        compare = Compare('=', [Name(T.t_id, 'id'), Primitive(T.t_id, repr(id_))])
         yield Update(TableName(table.type, table.type.options['name']), sql_proj, [compare])
 
 def create_list(name, elems):
