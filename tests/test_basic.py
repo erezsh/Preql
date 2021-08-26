@@ -623,7 +623,7 @@ class BasicTests(PreqlTests):
             assert preql('adult()[..10]') == list(range(18, 28))
         except Signal as e:
             assert e.type <= T.NotImplementedError
-            assert preql._interp.state.db.target == mysql   # Not supported
+            assert preql._interp.state.db.target in (mysql, bigquery)   # Infinite series not supported
             return
 
         assert preql('adult()[..10]') == list(range(18, 28))
@@ -1460,7 +1460,7 @@ class BasicTests(PreqlTests):
 
     def test_json(self):
         p = self.Preql()
-        res = p('list([1,7,3,4]{item%2 => item}{count(item)})')
+        res = p('list([1,7,3,4]{item%2 => item}{count(item)} order {count})')
         assert res == [1, 3], res
 
     def test_table_def_dicts(self):

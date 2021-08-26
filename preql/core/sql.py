@@ -244,6 +244,8 @@ class JsonLength(Scalar):
             return [f'(length('] + code + [') - length(replace('] + code + [f', "{_ARRAY_SEP}", ""))) / length("{_ARRAY_SEP}") + 1']
         elif qb.target == postgres:
             return [f'array_length('] + code + [', 1)']
+        elif qb.target == bigquery:
+            return [f'array_length('] + code + [')']
         else:
             return [f'json_length('] + code + [')']
 
@@ -585,22 +587,6 @@ class SelectValue(Atom, TableOperation):
 
     type = property(X.value.type)
 
-# @dataclass
-# class RowDict(SqlTree):
-#     values: Dict[str, Sql]
-
-#     def _compile(self, qb):
-#         breakpoint()
-#         return {v.compile_wrap(qb).code + [f' as {name}'] for name, v in self.values.items()}
-
-
-@dataclass
-class ValuesTuple(SqlTree):
-    type: Type
-    values: List[Sql]
-    def _compile(self, qb):
-        values = [v.compile_wrap(qb) for v in self.values]
-        return join_comma(v.code for v in values)
 
 @dataclass
 class Values(Table):
@@ -629,6 +615,15 @@ class Tuple(SqlTree):
     def _compile(self, qb):
         values = [v.compile_wrap(qb).code for v in self.values]
         return join_comma(values)
+
+@dataclass
+class ValuesTuple(Tuple):
+    type: Type
+    values: List[Sql]
+
+    def _compile(self, qb):
+        values = [v.compile_wrap(qb) for v in self.values]
+        return join_comma(v.code for v in values)
 
 @dataclass
 class ValuesTuples(Table):
@@ -746,6 +741,10 @@ class Select(TableOperation):
                 # MySQL requires a specific limit, always!
                 # See: https://stackoverflow.com/questions/255517/mysql-offset-infinite-rows
                 sql += [' LIMIT 18446744073709551615']
+            elif qb.target == bigquery:
+                # BigQuery requires a specific limit, always!
+                sql += [' LIMIT 9223372036854775807']
+
 
         if self.offset is not None:
             sql += [' OFFSET ', str(self.offset)]
@@ -1046,7 +1045,7 @@ def compile_type_def(table_name, table) -> Sql:
 
 def deletes_by_ids(table, ids):
     for id_ in ids:
-        compare = Compare('=', [Name(T.t_id, 'id'), Primitive(T.t_id, str(id_))])
+        compare = Compare('=', [Name(T.t_id, 'id'), Primitive(T.t_id, repr(id_))])
         yield Delete(TableName(table.type, table.type.options['name']), [compare])
 
 def updates_by_ids(table, proj, ids):
