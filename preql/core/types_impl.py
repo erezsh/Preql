@@ -48,9 +48,9 @@ def table_params(t):
 
 
 def table_flat_for_insert(table):
-    pks = {join_names(pk) for pk in table.options.get('pk', [])}
+    read_only = {join_names(pk) for pk in table.options.get('pk', [])}
     names = [name for name, t in flatten_type(table)]
-    return classify_bool(names, lambda name: name in pks)
+    return classify_bool(names, lambda name: name in read_only)
 
 
 def join_names(names):

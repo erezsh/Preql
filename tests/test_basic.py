@@ -1043,7 +1043,7 @@ class BasicTests(PreqlTests):
             a2 = new A(2, 1)
         ''')
 
-        assert preql('A{y}') == [{'y': 2}, {'y': 1}]
+        self.assertEqual( preql('A{y}'), [{'y': 2}, {'y': 1}] )
         assert preql('a2.y') == 1
 
 
@@ -1092,7 +1092,7 @@ class BasicTests(PreqlTests):
         preql = self.Preql()
         preql.load('simple1.pql', rel_to=__file__)
 
-        self.assertEqual([x['name'] for x in preql.english], ['Eric Blaire', 'H.G. Wells'])
+        self.assertEqual({x['name'] for x in preql.english}, {'Eric Blaire', 'H.G. Wells'})
         assert [x['name'] for x in preql.by_country('Israel')] == ['Erez Shinan']
 
         assert preql.english2 == [{'name': 'H.G. Wells'}, {'name': 'Eric Blaire'}]
@@ -1218,7 +1218,7 @@ class BasicTests(PreqlTests):
             table a = [1..3]
             new a(5)
         """)
-        assert [x['item'] for x in p.a] == [1,2,5], p.a
+        assert {x['item'] for x in p.a} == {1,2,5}, p.a
 
 
     @uses_tables('A')

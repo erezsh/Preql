@@ -134,9 +134,20 @@ def _copy_rows(target_name: ast.Name, source: objects.TableInstance):
         if p not in source.type.elems:
             raise Signal.make(T.TypeError, source, f"Missing column '{p}' in {source.type}")
 
-    primary_keys, columns = table_flat_for_insert(target.type)
+    read_only, columns = table_flat_for_insert(target.type)
 
-    source = exclude_fields(source, set(primary_keys) & set(source.type.elems))
+    if get_db_target() == sql.bigquery and 'id' in read_only:
+        # XXX very hacky!
+        to_exclude = ['id'] if 'id' in source.type.elems else []
+        proj = ast.Projection(source, [
+            ast.NamedField('id', objects.Instance.make(sql.RawSql(T.string, 'GENERATE_UUID()'), T.string, [])),
+            ast.NamedField(None, ast.Ellipsis(None, to_exclude))
+        ])
+        source = cast_to_instance(proj)
+        read_only.remove('id')
+        columns.insert(0, 'id')
+
+    source = exclude_fields(source, set(read_only) & set(source.type.elems))
 
     code = sql.Insert(target.type.options['name'], columns, source.code)
     db_query(code, source.subqueries)
@@ -998,6 +1009,18 @@ def new_table_from_expr(name, expr, const, temporary):
     db_query(sql.compile_type_def(name, table))
 
     read_only, flat_columns = table_flat_for_insert(table)
+
+    if get_db_target() == sql.bigquery and 'id' in read_only:
+        # XXX very hacky!
+        to_exclude = ['id'] if 'id' in expr.type.elems else []
+        proj = ast.Projection(expr, [
+            ast.NamedField('id', objects.Instance.make(sql.RawSql(T.string, 'GENERATE_UUID()'), T.string, [])),
+            ast.NamedField(None, ast.Ellipsis(None, to_exclude))
+        ])
+        expr = cast_to_instance(proj)
+        read_only.remove('id')
+        flat_columns.insert(0, 'id')
+
     expr = exclude_fields(expr, set(read_only) & set(elems))
     db_query(sql.Insert(name, flat_columns, expr.code), expr.subqueries)
 

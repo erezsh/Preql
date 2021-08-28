@@ -6,6 +6,7 @@ from . import pql_types
 from .pql_types import T, Type, dp_type, Id
 from .types_impl import join_names, flatten_type
 from .state import get_db_target
+from .exceptions import Signal
 
 duck = 'duck'
 sqlite = 'sqlite'
@@ -512,7 +513,7 @@ class Insert(SqlStatement):
         return [f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
-        if qb.target is mysql:
+        if qb.target in (mysql, bigquery):
             columns = [quote_name(c) for c in self.columns]
             sql_code = f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '
             sql_code += self.query.finalize_with_subqueries(qb, subqueries)
@@ -1114,7 +1115,7 @@ def make_value(x):
     try:
         t = pql_types.from_python(type(x))
     except KeyError as e:
-        raise ValueError(x) from e
+        raise Signal.make(T.ValueError, x, f"Cannot import value of Python type {type(x)}") from e
 
     return Primitive(t, _repr(t, x))
 
