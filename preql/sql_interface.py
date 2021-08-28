@@ -496,7 +496,7 @@ class AbsSqliteInterface:
     def import_table_type(self, name, columns_whitelist=None):
         assert isinstance(name, Id)
 
-        columns_q = """pragma table_info('%s')""" % quote_id(name)
+        columns_q = """pragma table_info(%s)""" % quote_id(name)
         sql_columns = self._execute_sql(self.table_schema_type, columns_q)
 
         if columns_whitelist:
