@@ -939,7 +939,8 @@ def _compile_type(target, type_: T.primitive):
             'float': "FLOAT64",
             'bool': "BOOLEAN",
             'text': "STRING",
-            'datetime': "TIMESTAMP",
+            'datetime': "DATETIME",
+            'date': "DATE",
         }
     elif target == mysql:
         d = {

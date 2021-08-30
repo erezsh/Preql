@@ -255,7 +255,9 @@ T.float = [T.number]
 T.bool = [T.primitive]    # number?
 T.decimal = [T.number]
 
+# TODO datetime vs timestamp ! 
 T.datetime = [T.primitive]    # struct?
+T.date = [T.primitive]    # struct?
 
 T.container = [T.object]
 

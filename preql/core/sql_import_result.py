@@ -172,6 +172,7 @@ def type_from_sql(type, nullable):
         'boolean': T.bool,
         'timestamp': T.datetime,
         'timestamp without time zone': T.datetime,
+        'date': T.date,
         'text': T.text,
     }
     try:
