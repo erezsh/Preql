@@ -351,8 +351,9 @@ def import_module(state, r):
         assert state.stacktrace[-1] is r.text_ref
         state.stacktrace.pop()
 
-    # Inherit module db (in case it called connect())
-    assert state.db is i.state.db
+    # Inherit module db (in case it called global connect())
+    # assert state.db is i.state.db
+    # state.state.db = i.state.db
 
     ns = i.state.ns
     assert len(ns) == 1
