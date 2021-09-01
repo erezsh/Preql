@@ -162,7 +162,7 @@ def sql_result_to_python(arr: T.table):
 def _bool_from_sql(n):
     if n == 'NO':
         n = False
-    if n == 'YES':
+    elif n == 'YES':
         n = True
     assert isinstance(n, bool), n
     return n
@@ -185,6 +185,7 @@ def type_from_sql(type, nullable):
         'boolean': T.bool,
         'timestamp': T.timestamp,
         'timestamp without time zone': T.timestamp,
+        'timestamp with time zone': T.datetime,
         'datetime': T.datetime,
         'date': T.date,
         'time': T.time,
