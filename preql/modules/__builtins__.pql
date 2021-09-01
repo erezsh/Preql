@@ -279,7 +279,7 @@ func _pi() = SQL(float, "PI()")
 func _round(n: number, precision: int) = SQL(float, "round($n, $precision)")
 
 func _repeat(s: string, num: int) = SQL(string, "REPEAT($s, $num)")
-func _now() = SQL(datetime, "NOW()")
+func _now() = SQL(timestamp, "NOW()")
 func _count_false(field: aggregated) = SQL(int, "sum(cast($field=0 as int))")
 func _count_true(field: aggregated) = SQL(int, "sum(cast($field!=0 as int))")
 
@@ -339,7 +339,7 @@ if (db_type == "postgres") {
 } else if (db_type == "sqlite" or db_type == "duck") {
     func _cast_string_to_int(s: string) = SQL(int, "case when cast($s as int)||''=$s then cast($s as int) else _pql_throw('Error trying to cast string to int') end")
     func _repeat(s: string, num: int) = SQL(string, "replace(hex(zeroblob($num)), '00', $s)")
-    func _now() = SQL(datetime, "datetime('now')")
+    func _now() = SQL(timestamp, "datetime('now')")
     func _random() = SQL(float, "abs(CAST(random() AS REAL))/9223372036854775808")
     func _pi() = SQL(float, "3.141592653589793")
 
@@ -380,7 +380,7 @@ if (db_type == "postgres") {
 
 } else if (db_type == "bigquery") {
     func _cast_string_to_int(s: string) = SQL(int, "cast($s as int64)")
-    func _now() = SQL(datetime, "current_datetime()")
+    func _now() = SQL(timestamp, "current_timestamp()")
     func _random() = SQL(float, "RAND()")
     
     func _str_index(a: string, b: string) = SQL(int, "INSTR($b, $a)-1")    // same as sqlite
@@ -467,7 +467,7 @@ func repeat(s: string, num: int) = _repeat(s, num)
     """
 
 func now() = _now()
-    "Returns the current datetime"
+    "Returns the current timestamp"
 
 // End of wrapping of database specific code
 
