@@ -900,10 +900,11 @@ def _repr(_t: T.decimal, x):
     return repr(float(x))  # TODO SQL decimal?
 
 @dp_type
-def _repr(_t: T.timestamp, x):
+def _repr(_t: T.datetime, x):
     # TODO Better to pass the object instead of a string?
     return repr(str(x))
 
+@dp_type
 def _repr(_t: T.timestamp, x):
     # TODO Better to pass the object instead of a string?
     return repr(str(x))
@@ -941,10 +942,9 @@ class Types_PqlToSql:
     date = "DATE"
     datetime = "DATETIME"
     timestamp = "TIMESTAMP"
-
     int = "INTEGER"
-    string = "VARCHAR(4000)"
     float = "FLOAT"
+    string = "VARCHAR(4000)"
     text = "TEXT"
 
 class P2S_BigQuery(Types_PqlToSql):
@@ -958,8 +958,8 @@ class P2S_MySql(Types_PqlToSql):
     int = "SIGNED"
 
 class P2S_Sqlite(Types_PqlToSql):
-    datetime = "TEXT"
-    timestamp = "TEXT"
+    datetime = "DATETIME"
+    timestamp = "TIMESTAMP"
 
 class P2S_Postgres(Types_PqlToSql):
     datetime = "timestamp with time zone"
@@ -967,6 +967,7 @@ class P2S_Postgres(Types_PqlToSql):
 _pql_to_sql_by_target = {
     bigquery: P2S_BigQuery,
     mysql: P2S_MySql,
+    "mysql_def": Types_PqlToSql, # Standard (Different) types for declaration!
     sqlite: P2S_Sqlite,
     postgres: P2S_Postgres,
 }

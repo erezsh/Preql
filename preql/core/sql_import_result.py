@@ -184,7 +184,7 @@ def type_from_sql(type, nullable):
         'double precision': T.float,    # double on 32-bit?
         'boolean': T.bool,
         'timestamp': T.timestamp,
-        'timestamp without time zone': T.datetime,
+        'timestamp without time zone': T.timestamp,
         'datetime': T.datetime,
         'date': T.date,
         'time': T.time,
