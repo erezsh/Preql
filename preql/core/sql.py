@@ -6,6 +6,7 @@ from . import pql_types
 from .pql_types import T, Type, dp_type, Id
 from .types_impl import join_names, flatten_type
 from .state import get_db_target
+from .exceptions import Signal
 
 duck = 'duck'
 sqlite = 'sqlite'
@@ -14,8 +15,8 @@ bigquery = 'bigquery'
 mysql = 'mysql'
 
 class QueryBuilder:
-    def __init__(self, target, is_root=True, start_count=0):
-        self.target = target
+    def __init__(self, is_root=True, start_count=0):
+        self.target = get_db_target()
         self.is_root = is_root
 
         self.counter = start_count
@@ -29,21 +30,13 @@ class QueryBuilder:
     def replace(self, is_root):
         if is_root == self.is_root:
             return self # Optimize
-        return QueryBuilder(self.target, is_root, self.counter)
+        return QueryBuilder(is_root, self.counter)
 
     def push_table(self, t):
         self.table_name.append(t)
     def pop_table(self, t):
         t2 = self.table_name.pop()
         assert t2 == t
-
-    def safe_name(self, base):
-        "Return a name that is safe for use as variable. Must be consistent (pure func)"
-        return _quote(self.target, base)
-
-    def quote(self, id_):
-        assert isinstance(id_, Id)
-        return '.'.join(self.safe_name(n) for n in id_.parts)
 
 
 
@@ -214,7 +207,7 @@ class TableName(Table):
     name: Id
 
     def _compile(self, qb):
-        return [qb.quote(self.name)]
+        return [quote_id(self.name)]
 
     _needs_select = True
 
@@ -252,6 +245,8 @@ class JsonLength(Scalar):
             return [f'(length('] + code + [') - length(replace('] + code + [f', "{_ARRAY_SEP}", ""))) / length("{_ARRAY_SEP}") + 1']
         elif qb.target == postgres:
             return [f'array_length('] + code + [', 1)']
+        elif qb.target == bigquery:
+            return [f'array_length('] + code + [')']
         else:
             return [f'json_length('] + code + [')']
 
@@ -457,7 +452,7 @@ class Name(SqlTree):
         assert self.name, self.type
 
     def _compile(self, qb):
-        name = qb.safe_name(self.name)
+        name = quote_name(self.name)
         if qb.table_name:
             name = qb.table_name[-1] + '.' + name
         return [name]
@@ -482,7 +477,7 @@ class ColumnAlias(SqlTree):
         return cls(value, alias)
 
     def _compile(self, qb):
-        alias = qb.safe_name(self.alias)
+        alias = quote_name(self.alias)
         value = self.value.compile_wrap(qb).code
         assert alias and value, (alias, value)
         if value == [alias]:  # TODO disable when unoptimized?
@@ -504,8 +499,8 @@ class AddIndex(SqlStatement):
     unique: bool
 
     def _compile(self, qb):
-        return [f"CREATE {'UNIQUE' if self.unique else ''} INDEX IF NOT EXISTS {qb.quote(self.index_name)}"
-                f" ON {qb.quote(self.table_name)}({self.column})"]
+        return [f"CREATE {'UNIQUE' if self.unique else ''} INDEX IF NOT EXISTS {quote_id(self.index_name)}"
+                f" ON {quote_id(self.table_name)}({self.column})"]
 
 @dataclass
 class Insert(SqlStatement):
@@ -514,13 +509,13 @@ class Insert(SqlStatement):
     query: Sql
 
     def _compile(self, qb):
-        columns = [qb.quote(Id(c)) for c in self.columns]
-        return [f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
+        columns = [quote_name(c) for c in self.columns]
+        return [f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
-        if qb.target is mysql:
-            columns = [qb.quote(Id(c)) for c in self.columns]
-            sql_code = f'INSERT INTO {qb.quote(self.table_name)}({", ".join(columns)}) '
+        if qb.target in (mysql, bigquery):
+            columns = [quote_name(c) for c in self.columns]
+            sql_code = f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '
             sql_code += self.query.finalize_with_subqueries(qb, subqueries)
             return ''.join(sql_code)
 
@@ -528,7 +523,7 @@ class Insert(SqlStatement):
 
 @dataclass
 class InsertConsts(SqlStatement):
-    table: str
+    table: Id
     cols: List[str]
     tuples: list #List[List[Sql]]
 
@@ -542,8 +537,8 @@ class InsertConsts(SqlStatement):
             for tpl in tuples
         )
 
-        cols = [qb.quote(Id(c)) for c in cols]
-        q = ['INSERT INTO', qb.safe_name(self.table),
+        cols = [quote_name(c) for c in cols]
+        q = ['INSERT INTO', quote_id(self.table),
              "(", ', '.join(cols), ")",
              "VALUES ",
         ]
@@ -563,7 +558,7 @@ class InsertConsts2(SqlStatement):
             for tpl in self.tuples
         )
 
-        q = ['INSERT INTO', qb.quote(self.table),
+        q = ['INSERT INTO', quote_id(self.table),
              "(", ', '.join(self.cols), ")",
              "VALUES ",
         ]
@@ -593,22 +588,6 @@ class SelectValue(Atom, TableOperation):
 
     type = property(X.value.type)
 
-# @dataclass
-# class RowDict(SqlTree):
-#     values: Dict[str, Sql]
-
-#     def _compile(self, qb):
-#         breakpoint()
-#         return {v.compile_wrap(qb).code + [f' as {name}'] for name, v in self.values.items()}
-
-
-@dataclass
-class ValuesTuple(SqlTree):
-    type: Type
-    values: List[Sql]
-    def _compile(self, qb):
-        values = [v.compile_wrap(qb) for v in self.values]
-        return join_comma(v.code for v in values)
 
 @dataclass
 class Values(Table):
@@ -637,6 +616,15 @@ class Tuple(SqlTree):
     def _compile(self, qb):
         values = [v.compile_wrap(qb).code for v in self.values]
         return join_comma(values)
+
+@dataclass
+class ValuesTuple(Tuple):
+    type: Type
+    values: List[Sql]
+
+    def _compile(self, qb):
+        values = [v.compile_wrap(qb) for v in self.values]
+        return join_comma(v.code for v in values)
 
 @dataclass
 class ValuesTuples(Table):
@@ -754,6 +742,10 @@ class Select(TableOperation):
                 # MySQL requires a specific limit, always!
                 # See: https://stackoverflow.com/questions/255517/mysql-offset-infinite-rows
                 sql += [' LIMIT 18446744073709551615']
+            elif qb.target == bigquery:
+                # BigQuery requires a specific limit, always!
+                sql += [' LIMIT 9223372036854775807']
+
 
         if self.offset is not None:
             sql += [' OFFSET ', str(self.offset)]
@@ -879,12 +871,12 @@ class StringSlice(SqlTree):
         else:
             length = None
 
-        if qb.target == sqlite:
+        if qb.target in (sqlite, bigquery):
             f = 'substr'
             params = string + [', '] + start
             if length:
                 params += [', '] + length
-        elif qb.target in (postgres, mysql, bigquery):
+        elif qb.target in (postgres, mysql):
             f = 'substring'
             params = string + [' from '] + start
             if length:
@@ -917,8 +909,9 @@ def _repr(_t: T.union[T.string, T.text], x):
     quoted_quote = r"\'" if get_db_target() == bigquery else "''"
     return "'%s'" % str(x).replace("'", quoted_quote)
 
-def _quote(target, name):
+def quote_name(name):
     assert isinstance(name, str), name
+    target = get_db_target()
     if target is sqlite:
         return f'[{name}]'
     elif target is mysql or target is bigquery:
@@ -926,6 +919,9 @@ def _quote(target, name):
     else:
         return f'"{name}"'
 
+def quote_id(id_):
+    assert isinstance(id_, Id)
+    return '.'.join(quote_name(n) for n in id_.parts)
 
 
 @dp_type
@@ -943,7 +939,8 @@ def _compile_type(target, type_: T.primitive):
             'float': "FLOAT64",
             'bool': "BOOLEAN",
             'text': "STRING",
-            'datetime': "TIMESTAMP",
+            'datetime': "DATETIME",
+            'date': "DATE",
         }
     elif target == mysql:
         d = {
@@ -995,13 +992,13 @@ def _compile_type(target, _type: T.json):
 # API
 
 def compile_drop_table(table_name) -> Sql:
-    target = get_db_target()
-    return RawSql(T.nulltype, f'DROP TABLE {_quote(target, table_name)}')
+    return RawSql(T.nulltype, f'DROP TABLE {quote_id(table_name)}')
 
 
 
 
 def compile_type_def(table_name, table) -> Sql:
+    assert isinstance(table_name, Id)
     assert table <= T.table
 
     target = get_db_target()
@@ -1024,7 +1021,7 @@ def compile_type_def(table_name, table) -> Sql:
         else:
             type_ = _compile_type(target if target != mysql else 'mysql_def', c)
 
-        columns.append( f'{_quote(target, name)} {type_}' )
+        columns.append( f'{quote_name(name)} {type_}' )
 
         if c <= T.t_relation:
             if target != 'bigquery':
@@ -1033,8 +1030,8 @@ def compile_type_def(table_name, table) -> Sql:
                     # In postgres, constraints on temporary tables may reference only temporary tables
                     rel = c.options['rel']
                     if rel['key']:          # Requires a unique constraint
-                        _tbl_name ,= rel['table'].options['name'].parts   # TODO fix for multiple parts
-                        s = f"FOREIGN KEY({name}) REFERENCES {_quote(target, _tbl_name)}({rel['column']})"
+                        tbl_name = rel['table'].options['name']
+                        s = f"FOREIGN KEY({name}) REFERENCES {quote_id(tbl_name)}({rel['column']})"
                         posts.append(s)
 
     if pks and target != bigquery:
@@ -1043,20 +1040,21 @@ def compile_type_def(table_name, table) -> Sql:
 
     # Consistent among SQL databases
     command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
-    return RawSql(T.nulltype, f'{command} {_quote(target, table_name)} (' + ', '.join(columns + posts) + ')')
+    return RawSql(T.nulltype, f'{command} {quote_id(table_name)} (' + ', '.join(columns + posts) + ')')
 
 
 
 
 def deletes_by_ids(table, ids):
     for id_ in ids:
-        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
+        compare = Compare('=', [Name(T.t_id, 'id'), Primitive(T.t_id, repr(id_))])
         yield Delete(TableName(table.type, table.type.options['name']), [compare])
 
 def updates_by_ids(table, proj, ids):
+    # TODO this function is not safe & secure enough
     sql_proj = {Name(value.type, name): value.code for name, value in proj.items()}
     for id_ in ids:
-        compare = Compare('=', [Name(T.int, 'id'), Primitive(T.int, str(id_))])
+        compare = Compare('=', [Name(T.t_id, 'id'), Primitive(T.t_id, repr(id_))])
         yield Update(TableName(table.type, table.type.options['name']), sql_proj, [compare])
 
 def create_list(name, elems):
@@ -1118,7 +1116,7 @@ def make_value(x):
     try:
         t = pql_types.from_python(type(x))
     except KeyError as e:
-        raise ValueError(x) from e
+        raise Signal.make(T.ValueError, x, f"Cannot import value of Python type {type(x)}") from e
 
     return Primitive(t, _repr(t, x))
 

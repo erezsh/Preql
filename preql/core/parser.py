@@ -9,7 +9,7 @@ from .exceptions import pql_SyntaxError
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .compiler import guess_field_name
-from .pql_types import T
+from .pql_types import T, Id
 
 
 class Str(str):
@@ -259,6 +259,11 @@ class TreeToAst(Transformer):
         if not isinstance(lval, (ast.Name, ast.Attr)):
             raise pql_SyntaxError(lval.text_ref, f"{lval.type} is not a valid l-value")
         return ast.SetValue(lval, rval)
+
+    def name_path(self, path, name):
+        if not path:
+            return Id(name)
+        return Id(*path.parts, name)
 
     insert_rows = ast.InsertRows
     struct_def = ast.StructDef

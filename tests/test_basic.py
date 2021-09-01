@@ -7,7 +7,7 @@ from parameterized import parameterized_class
 
 from preql.core.pql_objects import UserFunction
 from preql.core.exceptions import Signal
-from preql.core.pql_types import T
+from preql.core.pql_types import T, Id
 from preql.sql_interface import _drop_tables
 
 from .common import PreqlTests, SQLITE_URI, POSTGRES_URI, MYSQL_URI, DUCK_URI, BIGQUERY_URI
@@ -20,13 +20,12 @@ def uses_tables(*names):
                 return decorated(self)
 
             p = self.Preql()
-            tables = p._interp.list_tables()
             def _key(t):
                 try:
                     return names.index(t.lower())
                 except ValueError:
                     return -1
-            tables.sort(key=_key)
+            tables = sorted(p._interp.list_tables(), key=_key)
             if tables:
                 print("@@ Deleting", tables, decorated)
             _drop_tables(p._interp.state, *tables)
@@ -37,7 +36,7 @@ def uses_tables(*names):
                 p = self.preql
                 # Table contents weren't dropped, due to autocommit
                 if p._interp.state.db.target in (mysql, bigquery):
-                    _drop_tables(p._interp.state, *names)
+                    _drop_tables(p._interp.state, *map(Id,names))
                 tables = p._interp.list_tables()
                 assert not tables, tables
 
@@ -91,10 +90,10 @@ class BasicTests(PreqlTests):
         assert set(preql.query1()) == {"England", "United States"}, preql.query1()
 
         res = preql("list(Person[country==isr]{name})")
-        assert set(res) == {"Erez Shinan", "Ephraim Kishon"}
+        self.assertEqual(set(res), {"Erez Shinan", "Ephraim Kishon"})
 
         res = preql("list(Person[id!=me]{name})")
-        assert set(res) == {"Ephraim Kishon", "Eric Blaire", "H.G. Wells", "John Steinbeck"}    # order not guaranteed
+        self.assertEqual(set(res), {"Ephraim Kishon", "Eric Blaire", "H.G. Wells", "John Steinbeck"})
 
     def _test_cache(self, preql):
         # Ensure that names affect type
@@ -624,7 +623,7 @@ class BasicTests(PreqlTests):
             assert preql('adult()[..10]') == list(range(18, 28))
         except Signal as e:
             assert e.type <= T.NotImplementedError
-            assert preql._interp.state.db.target == mysql   # Not supported
+            assert preql._interp.state.db.target in (mysql, bigquery)   # Infinite series not supported
             return
 
         assert preql('adult()[..10]') == list(range(18, 28))
@@ -1044,7 +1043,7 @@ class BasicTests(PreqlTests):
             a2 = new A(2, 1)
         ''')
 
-        assert preql('A{y}') == [{'y': 2}, {'y': 1}]
+        self.assertEqual( preql('A{y}'), [{'y': 2}, {'y': 1}] )
         assert preql('a2.y') == 1
 
 
@@ -1093,7 +1092,7 @@ class BasicTests(PreqlTests):
         preql = self.Preql()
         preql.load('simple1.pql', rel_to=__file__)
 
-        self.assertEqual([x['name'] for x in preql.english], ['Eric Blaire', 'H.G. Wells'])
+        self.assertEqual({x['name'] for x in preql.english}, {'Eric Blaire', 'H.G. Wells'})
         assert [x['name'] for x in preql.by_country('Israel')] == ['Erez Shinan']
 
         assert preql.english2 == [{'name': 'H.G. Wells'}, {'name': 'Eric Blaire'}]
@@ -1219,7 +1218,7 @@ class BasicTests(PreqlTests):
             table a = [1..3]
             new a(5)
         """)
-        assert [x['item'] for x in p.a] == [1,2,5], p.a
+        assert {x['item'] for x in p.a} == {1,2,5}, p.a
 
 
     @uses_tables('A')
@@ -1461,7 +1460,7 @@ class BasicTests(PreqlTests):
 
     def test_json(self):
         p = self.Preql()
-        res = p('list([1,7,3,4]{item%2 => item}{count(item)})')
+        res = p('list([1,7,3,4]{item%2 => item}{count(item)} order {count})')
         assert res == [1, 3], res
 
     def test_table_def_dicts(self):

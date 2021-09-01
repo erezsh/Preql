@@ -24,7 +24,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.output.color_depth import ColorDepth
 
-from . import __version__
+from . import __version__, __branch__
 from . import settings
 from .utils import memoize
 from .loggers import repl_log
@@ -175,7 +175,7 @@ def start_repl(p, prompt=' >> '):
     display = p._display
     interp = p._interp
     console = display.console
-    console.print(f"[purple]Preql {__version__} interactive prompt. Type help() for help[/purple]")
+    console.print(f"[purple]Preql {__version__}{__branch__} interactive prompt. Type help() for help[/purple]")
 
     try:
         session = PromptSession(

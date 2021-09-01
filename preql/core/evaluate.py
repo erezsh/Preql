@@ -30,19 +30,26 @@ def resolve(struct_def: ast.StructDef):
     set_var(struct_def.name, struct)
     return struct
 
-@dsp
-def resolve(table_def: ast.TableDef):
-    name = table_def.name
+
+def _resolve_name_and_scope(name, ast_node):
     if is_global_scope(context.state):
         name = get_db().qualified_name(name)
         temporary = False
     else:
-        name = '__local_' + unique_name(name)
+        if len(name.parts) > 1:
+            raise Signal(T.NameError, ast_node, "Local tables cannot include a schema (namespace)")
+        name ,= name.parts
+        name = Id('__local_' + unique_name(name))
         temporary = True
+    return name, temporary
 
-    t = T.table({}, name=Id(name), temporary=temporary)
+@dsp
+def resolve(table_def: ast.TableDef):
+    name, temporary = _resolve_name_and_scope(table_def.name, table_def)
 
-    with use_scope({table_def.name: t}):  # For self-reference
+    t = T.table({}, name=name, temporary=temporary)
+
+    with use_scope({table_def.name.name: t}):  # For self-reference
         elems = {c.name: resolve(c) for c in table_def.columns}
         t = t(elems)
 
@@ -101,7 +108,7 @@ def db_query(sql_code, subqueries=None):
         raise Signal.make(T.DbQueryError, None, e.args[0]) from e
 
 def drop_table(state, table_type):
-    name ,= table_type.options['name'].parts
+    name = table_type.options['name']
     code = sql.compile_drop_table(name)
     return state.db.query(code, {})
 
@@ -127,9 +134,20 @@ def _copy_rows(target_name: ast.Name, source: objects.TableInstance):
         if p not in source.type.elems:
             raise Signal.make(T.TypeError, source, f"Missing column '{p}' in {source.type}")
 
-    primary_keys, columns = table_flat_for_insert(target.type)
+    read_only, columns = table_flat_for_insert(target.type)
 
-    source = exclude_fields(source, set(primary_keys) & set(source.type.elems))
+    if get_db_target() == sql.bigquery and 'id' in read_only:
+        # XXX very hacky!
+        to_exclude = ['id'] if 'id' in source.type.elems else []
+        proj = ast.Projection(source, [
+            ast.NamedField('id', objects.Instance.make(sql.RawSql(T.string, 'GENERATE_UUID()'), T.string, [])),
+            ast.NamedField(None, ast.Ellipsis(None, to_exclude))
+        ])
+        source = cast_to_instance(proj)
+        read_only.remove('id')
+        columns.insert(0, 'id')
+
+    source = exclude_fields(source, set(read_only) & set(source.type.elems))
 
     code = sql.Insert(target.type.options['name'], columns, source.code)
     db_query(code, source.subqueries)
@@ -142,14 +160,10 @@ def _execute(struct_def: ast.StructDef):
 
 @method
 def _execute(table_def: ast.TableDefFromExpr):
-    state = context.state
     expr = cast_to_instance(table_def.expr)
-    name = table_def.name
-    if is_global_scope(state):
-        temporary = False
-    else:
-        name = '__local_' + unique_name(name)
-        temporary = True
+
+    name, temporary = _resolve_name_and_scope(table_def.name, table_def)
+
     t = new_table_from_expr(name, expr, table_def.const, temporary)
     set_var(table_def.name, t)
     
@@ -177,10 +191,10 @@ def _execute(table_def: ast.TableDef):
     t = resolve(table_def)
     db_name = t.options['name']
 
-    exists = get_db().table_exists(db_name.repr_name)
+    exists = get_db().table_exists(db_name)
     if exists:
         assert not t.options['temporary']
-        cur_type = get_db().import_table_type(db_name.repr_name, None if ellipsis else set(t.elems) | {'id'})
+        cur_type = get_db().import_table_type(db_name, None if ellipsis else set(t.elems) | {'id'})
 
         if ellipsis:
             elems_to_add = {Str(n, ellipsis.text_ref): v for n, v in cur_type.elems.items() if n not in t.elems}
@@ -212,10 +226,10 @@ def _execute(table_def: ast.TableDef):
         t = t(elems, pk=[['id']])
         inst = objects.new_table(t, db_name)
 
-    set_var(table_def.name, inst)
+    set_var(table_def.name.name, inst)
 
     if not exists:
-        sql_code = sql.compile_type_def(db_name.repr_name, t)
+        sql_code = sql.compile_type_def(db_name, t)
         db_query(sql_code)
 @method
 def _execute(insert_rows: ast.InsertRows):
@@ -337,8 +351,9 @@ def import_module(state, r):
         assert state.stacktrace[-1] is r.text_ref
         state.stacktrace.pop()
 
-    # Inherit module db (in case it called connect())
-    assert state.db is i.state.db
+    # Inherit module db (in case it called global connect())
+    # assert state.db is i.state.db
+    # state.state.db = i.state.db
 
     ns = i.state.ns
     assert len(ns) == 1
@@ -553,7 +568,7 @@ def eval_func_call(func, args):
                     logging.info("Compiled successfully")
                     if isinstance(compiled_expr, objects.Instance):
                         # XXX a little ugly
-                        qb = sql.QueryBuilder(get_db_target(), True)
+                        qb = sql.QueryBuilder(True)
                         x = compiled_expr.code.compile(qb)
                         x = x.optimize()
                         compiled_expr = compiled_expr.replace(code=x)
@@ -791,10 +806,10 @@ def _new_row(new_ast, table, matched):
         rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []))
         keys += ['id']
         values += [sql.make_value(rowid)]
-        q = sql.InsertConsts(table.options['name'].repr_name, keys, [values])
+        q = sql.InsertConsts(table.options['name'], keys, [values])
         db_query(q)
     else:
-        q = sql.InsertConsts(table.options['name'].repr_name, keys, [values])
+        q = sql.InsertConsts(table.options['name'], keys, [values])
         # q = sql.InsertConsts(new_ast.type, keys, [values])
         db_query(q)
         rowid = db_query(sql.LastRowId())
@@ -956,6 +971,7 @@ def localize(x: Object):
 
 def new_table_from_rows(name, columns, rows):
     # TODO check table doesn't exist
+    name = Id(name)
 
     tuples = [
         [sql.make_value(i) for i in row]
@@ -965,19 +981,18 @@ def new_table_from_rows(name, columns, rows):
     # TODO refactor into function?
     elems = {c:v.type.as_nullable() for c,v in zip(columns, tuples[0])}
     elems['id'] = T.t_id
-    table = T.table(elems, temporary=True, pk=[['id']], name=Id(name))
+    table = T.table(elems, temporary=True, pk=[['id']], name=name)
 
     db_query(sql.compile_type_def(name, table))
 
     code = sql.InsertConsts(name, columns, tuples)
     db_query(code)
 
-    x = objects.new_table(table)
-    set_var(name, x)
-    return x
+    return objects.new_table(table)
 
 
 def new_table_from_expr(name, expr, const, temporary):
+    assert isinstance(name, Id)
     elems = expr.type.elems
 
     if any(t <= T.unknown for t in elems.values()):
@@ -987,7 +1002,7 @@ def new_table_from_expr(name, expr, const, temporary):
         msg = "Field 'id' already exists. Rename it, or use 'const table' to copy it as-is."
         raise Signal.make(T.NameError, None, msg)
 
-    table = T.table(dict(elems), name=Id(name), pk=[] if const else [['id']], temporary=temporary)
+    table = T.table(dict(elems), name=name, pk=[] if const else [['id']], temporary=temporary)
 
     if not const:
         table.elems['id'] = T.t_id
@@ -995,8 +1010,20 @@ def new_table_from_expr(name, expr, const, temporary):
     db_query(sql.compile_type_def(name, table))
 
     read_only, flat_columns = table_flat_for_insert(table)
+
+    if get_db_target() == sql.bigquery and 'id' in read_only:
+        # XXX very hacky!
+        to_exclude = ['id'] if 'id' in expr.type.elems else []
+        proj = ast.Projection(expr, [
+            ast.NamedField('id', objects.Instance.make(sql.RawSql(T.string, 'GENERATE_UUID()'), T.string, [])),
+            ast.NamedField(None, ast.Ellipsis(None, to_exclude))
+        ])
+        expr = cast_to_instance(proj)
+        read_only.remove('id')
+        flat_columns.insert(0, 'id')
+
     expr = exclude_fields(expr, set(read_only) & set(elems))
-    db_query(sql.Insert(Id(name), flat_columns, expr.code), expr.subqueries)
+    db_query(sql.Insert(name, flat_columns, expr.code), expr.subqueries)
 
     return objects.new_table(table)
 

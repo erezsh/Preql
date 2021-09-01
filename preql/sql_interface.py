@@ -9,7 +9,7 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, _quote
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id
 from .core.sql_import_result import sql_result_to_python, type_from_sql
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
@@ -46,7 +46,7 @@ class SqlInterface:
         return self._execute_sql(sql.type, sql_code)
 
     def compile_sql(self, sql, subqueries=None, qargs=()):
-        qb = QueryBuilder(self.target)
+        qb = QueryBuilder()
 
         return sql.finalize_with_subqueries(qb, subqueries)
 
@@ -224,14 +224,19 @@ class MysqlInterface(SqlInterfaceCursor):
                 raise ConnectError(*e.args) from e
 
     def table_exists(self, name):
+        assert isinstance(name, Id)
         tables = [t.lower() for t in self.list_tables()]
         return name.lower() in tables
 
     def list_tables(self):
         sql_code = "SHOW TABLES"
-        return self._execute_sql(T.list[T.string], sql_code)
+        names = self._execute_sql(T.list[T.string], sql_code)
+        return list(map(Id, names))
 
     def import_table_type(self, name, columns_whitelist=None):
+        assert isinstance(name, Id)
+        assert len(name.parts) == 1 # TODO !
+
         columns_t = T.table(dict(
             name=T.string,
             type=T.string,
@@ -240,7 +245,7 @@ class MysqlInterface(SqlInterfaceCursor):
             default=T.string,
             extra=T.string,
         ))
-        columns_q = "desc %s" % name
+        columns_q = "desc %s" % name.name
         sql_columns = self._execute_sql(columns_t, columns_q)
 
         if columns_whitelist:
@@ -249,7 +254,7 @@ class MysqlInterface(SqlInterfaceCursor):
 
         cols = {c['name']: type_from_sql(c['type'].decode(), c['nullable']) for c in sql_columns}
 
-        return T.table(cols, name=Id(name))
+        return T.table(cols, name=name)
 
 
 class PostgresInterface(SqlInterfaceCursor):
@@ -271,14 +276,25 @@ class PostgresInterface(SqlInterfaceCursor):
 
 
 
-    def table_exists(self, name):
-        sql_code = "SELECT count(*) FROM information_schema.tables where table_name='%s'" % name
+    def table_exists(self, table_id):
+        assert isinstance(table_id, Id)
+        if len(table_id.parts) == 1:
+            schema = 'public'
+            name ,= table_id.parts
+        elif len(table_id.parts) == 2:
+            schema, name = table_id.parts
+        else:
+            raise Signal.make(T.DbError, None, "Postgres doesn't support nested schemas")
+
+        sql_code = f"SELECT count(*) FROM information_schema.tables where table_name='{name}' and table_schema='{schema}'"
         cnt = self._execute_sql(T.int, sql_code)
         return cnt > 0
 
     def list_tables(self):
+        # TODO import more schemas?
         sql_code = "SELECT table_name FROM information_schema.tables where table_schema='public'"
-        return self._execute_sql(T.list[T.string], sql_code)
+        names = self._execute_sql(T.list[T.string], sql_code)
+        return list(map(Id, names))
 
 
     _schema_columns_t = T.table(dict(
@@ -290,12 +306,21 @@ class PostgresInterface(SqlInterfaceCursor):
         type=T.string,
     ))
 
-    def import_table_type(self, name, columns_whitelist=None):
+    def import_table_type(self, table_id, columns_whitelist=None):
+        assert isinstance(table_id, Id)
 
-        columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
+        if len(table_id.parts) == 1:
+            schema = 'public'
+            name ,= table_id.parts
+        elif len(table_id.parts) == 2:
+            schema, name = table_id.parts
+        else:
+            raise Signal.make(T.DbError, None, "Postgres doesn't support nested schemas")
+
+        columns_q = f"""SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
             FROM information_schema.columns
-            WHERE table_name = '%s'
-            """ % name
+            WHERE table_name = '{name}' AND table_schema = '{schema}'
+            """
         sql_columns = self._execute_sql(self._schema_columns_t, columns_q)
 
         if columns_whitelist:
@@ -306,7 +331,7 @@ class PostgresInterface(SqlInterfaceCursor):
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
-        return T.table(cols, name=Id(name))
+        return T.table(cols, name=table_id)
 
     def import_table_types(self):
         columns_q = """SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
@@ -338,18 +363,11 @@ class BigQueryInterface(SqlInterface):
         self._print_sql = print_sql
 
 
-    def table_exists(self, name):
-        from google.api_core.exceptions import NotFound
-        try:
-            self._client.get_table(name)
-        except NotFound:
-            return False
-        return True
-
     def _list_tables(self):
         for ds in self._client.list_datasets():
             for t in self._client.list_tables(ds.reference):
-                yield t.full_table_id.replace(':', '.')     # Hacky
+                # yield t.full_table_id.replace(':', '.')     # Hacky
+                yield Id(*t.full_table_id.replace(':', '.').split('.'))
 
     def list_tables(self):
         return list(self._list_tables())
@@ -378,13 +396,48 @@ class BigQueryInterface(SqlInterface):
         type=T.string,
     ))
 
-    def import_table_type(self, name, columns_whitelist=None):
-        cols = {}
-        for f in self._client.get_table(name).schema:
-            if columns_whitelist is None or f.name in columns_whitelist:
-                cols[f.name] = type_from_sql(f.field_type, f.is_nullable)
 
-        return T.table(cols, name=Id(name))
+    def get_table(self, name):
+        from google.api_core.exceptions import NotFound, BadRequest
+        try:
+            return self._client.get_table('.'.join(name.parts))
+        except NotFound as e:
+            raise Signal.make(T.DbQueryError, None, str(e))
+        except BadRequest as e:
+            raise Signal.make(T.DbQueryError, None, str(e))
+
+
+    def table_exists(self, name):
+        try:
+            self.get_table(name)
+        except Signal:
+            return False
+        return True
+
+
+    def import_table_type(self, name, columns_whitelist=None):
+        assert isinstance(name, Id)
+
+        schema = self.get_table(name).schema
+
+        cols = {
+            f.name: type_from_sql(f.field_type, f.is_nullable)
+            for f in schema
+            if columns_whitelist is None or f.name in columns_whitelist
+        }
+
+        return T.table(cols, name=name)
+
+    def import_table_types(self):
+        # Inefficient implementation
+        tables = self.list_tables()
+        for table_id in tables:
+            table_type = self.import_table_type(table_id)
+
+            # XXX support nested schemas
+            schema = table_id.parts[:-1]
+            name = table_id.parts[-1]
+            yield schema[-1], name, table_type
 
     def list_datasets(self):
         return [ds.dataset_id for ds in self._client.list_datasets()]
@@ -396,14 +449,16 @@ class BigQueryInterface(SqlInterface):
         if self._default_dataset is None:
             datasets = self.list_datasets()
             if not datasets:
-                raise Signal(T.ValueError, None, "No dataset found.")
+                raise Signal.make(T.ValueError, None, "No dataset found.")
             self._default_dataset = datasets[0]
         return self._default_dataset
 
     def qualified_name(self, name):
-        if '.' in name: # already has dataset
+        assert isinstance(name, Id)
+        if len(name.parts) > 1:
+            # already has dataset
             return name
-        return self.get_default_dataset() + '.' + name
+        return Id(self.get_default_dataset(), name.parts[-1])
 
     def rollback(self):
         # XXX No error? No warning?
@@ -412,9 +467,16 @@ class BigQueryInterface(SqlInterface):
         # XXX No error? No warning?
         pass
 
+    def close(self):
+        self._client.close()
+
 class AbsSqliteInterface:
     def table_exists(self, name):
-        sql_code = "SELECT count(*) FROM sqlite_master where name='%s' and type='table'" % name
+        assert isinstance(name, Id)
+        if len(name.parts) > 1:
+            raise Signal.make(T.DbError, None, "Sqlite does not implement namespaces")
+
+        sql_code = "SELECT count(*) FROM sqlite_master where name='%s' and type='table'" % name.name
         cnt = self._execute_sql(T.int, sql_code)
         return cnt > 0
 
@@ -432,7 +494,9 @@ class AbsSqliteInterface:
     ))
 
     def import_table_type(self, name, columns_whitelist=None):
-        columns_q = """pragma table_info('%s')""" % name
+        assert isinstance(name, Id)
+
+        columns_q = """pragma table_info(%s)""" % quote_id(name)
         sql_columns = self._execute_sql(self.table_schema_type, columns_q)
 
         if columns_whitelist:
@@ -445,7 +509,7 @@ class AbsSqliteInterface:
 
         pk = [[c['name']] for c in sql_columns if c['pk']]
 
-        return T.table(cols, name=Id(name), pk=pk)
+        return T.table(cols, name=name, pk=pk)
 
 
 class _SqliteProduct:
@@ -569,6 +633,8 @@ class GitInterface(AbsSqliteInterface):
             return sql_result_to_python(Const(sql_type, res))
 
     def import_table_type(self, name, columns_whitelist=None):
+        assert isinstance(name, Id)
+        assert len(name.parts) == 1 # TODO !
         # TODO merge with superclass
 
         columns_q = """pragma table_info('%s')""" % name
@@ -582,15 +648,13 @@ class GitInterface(AbsSqliteInterface):
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
-        return T.table(cols, name=Id(name))
+        return T.table(cols, name=name)
 
     def list_tables(self):
         # TODO merge with superclass?
         sql_code = "SELECT name FROM sqlite_master where type='table'"
         res = self._execute_sql(T.table(dict(name=T.string)), sql_code)
-        return [x['name'] for x in res]
-
-
+        return [Id(x['name']) for x in res]
 
 
 def _drop_tables(state, *tables):
@@ -598,7 +662,7 @@ def _drop_tables(state, *tables):
     db = state.db
     with context(state=state):
         for t in tables:
-            t = _quote(db.target, db.qualified_name(t))
+            t = quote_id(db.qualified_name(t))
             db._execute_sql(T.nulltype, f"DROP TABLE {t};")
 
 

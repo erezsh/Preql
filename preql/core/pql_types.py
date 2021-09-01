@@ -18,15 +18,33 @@ class Id:
     def __init__(self, *parts):
         assert all(isinstance(p, str) for p in parts), parts
         self.parts = parts
+
     def __repr__(self):
         return 'Id(%s)' % '.'.join(self.parts)
+
     def __str__(self):
+        # Prevents accidents!
         raise Exception("Operation not allowed!")
+
     def __hash__(self):
-        raise Exception("Operation not allowed!")
+        return hash(tuple(self.parts))
+        
+    def __eq__(self, other):
+        if not isinstance(other, Id):
+            return NotImplemented
+
+        return self.parts == other.parts
+
     @property
     def repr_name(self):
         return self.parts[-1]
+
+    @property
+    def name(self):
+        return self.parts[-1]
+
+    def lower(self):
+        return Id(*[p.lower() for p in self.parts])
 
 
 def _repr_type_elem(t, depth):
@@ -237,7 +255,9 @@ T.float = [T.number]
 T.bool = [T.primitive]    # number?
 T.decimal = [T.number]
 
+# TODO datetime vs timestamp ! 
 T.datetime = [T.primitive]    # struct?
+T.date = [T.primitive]    # struct?
 
 T.container = [T.object]
 
@@ -251,7 +271,7 @@ T._register('table', [T.container], {})
 T.list = [T.table], {ITEM_NAME: T.any}
 T.set = [T.table], {ITEM_NAME: T.any}
 T.t_id = [T.primitive], (T.table,)
-T.t_relation = [T.number], (T.any,)   # t_id?
+T.t_relation = [T.primitive], (T.any,)   # t_id?
 
 # XXX sequence instead of container?
 T._register('aggregated', [T.container], (T.any,), type_class=PhantomType)

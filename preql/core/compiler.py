@@ -464,7 +464,7 @@ def compile_to_inst(res: ast.ResolveParameters):
 
 
 def _resolve_sql_parameters(compiled_sql, wrap=False, subqueries=None):
-    qb = sql.QueryBuilder(get_db_target(), False)
+    qb = sql.QueryBuilder(False)
 
     # Ensure <= CompiledSQL
     compiled_sql = compiled_sql.compile(qb)
@@ -694,7 +694,8 @@ def compile_to_inst(range: ast.Range):
     type_ = T.list[T.int]
 
     if target == sql.bigquery:
-        code = sql.RawSql(type_, f'UNNEST(GENERATE_ARRAY({start}, {stop-1})) as item')
+        # Ensure SELECT *, since UNNEST at the root level is a syntax error
+        code = sql.RawSql(type_, f'SELECT * FROM UNNEST(GENERATE_ARRAY({start}, {stop-1})) as item')
         return objects.TableInstance.make(code, type_, [])
 
     if stop is None:

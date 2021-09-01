@@ -6,7 +6,7 @@ from preql.context import context
 
 
 from .exceptions import InsufficientAccessLevel, Signal
-from .pql_types import T
+from .pql_types import T, Id
 from . import pql_ast as ast
 
 class NameNotFound(Exception):
@@ -36,6 +36,15 @@ class Namespace:
         raise NameNotFound(name)
 
     def set_var(self, name, value):
+        if isinstance(name, Id):
+            path = name.parts[:-1]
+            ns = self
+            for p in path:
+                ns = ns.get_var(p)
+            ns.set_var(name.parts[-1], value)
+            return
+
+        assert isinstance(name, str), name
         assert not isinstance(value, ast.Name)
         self._ns[-1][name] = value
 
