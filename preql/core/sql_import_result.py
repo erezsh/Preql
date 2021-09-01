@@ -85,6 +85,11 @@ def _restructure_result(t: T.json_array[T.union[T.primitive, T.nulltype]], i):
     return res
 
 @dp_type
+def _restructure_result(_t: T.datetime, i):
+    s = next(i)
+    return _from_datetime(s)
+
+@dp_type
 def _restructure_result(_t: T.timestamp, i):
     s = next(i)
     return _from_datetime(s)
@@ -106,6 +111,14 @@ def sql_result_to_python(res: T.primitive):
 @dp_inst
 def sql_result_to_python(res):
     return res.value
+
+@dp_inst
+def sql_result_to_python(res: T.datetime):
+    # XXX doesn't belong here?
+    row ,= res.value
+    item ,= row
+    s = item
+    return _from_datetime(s)
 
 @dp_inst
 def sql_result_to_python(res: T.timestamp):
@@ -171,8 +184,10 @@ def type_from_sql(type, nullable):
         'double precision': T.float,    # double on 32-bit?
         'boolean': T.bool,
         'timestamp': T.timestamp,
-        'timestamp without time zone': T.timestamp,
+        'timestamp without time zone': T.datetime,
+        'datetime': T.datetime,
         'date': T.date,
+        'time': T.time,
         'text': T.text,
     }
     try:

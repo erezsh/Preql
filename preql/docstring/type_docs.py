@@ -59,7 +59,8 @@ T.float: "A floating-point number",
 T.bool: "A boolean, which can be either `true` or `false`",
 # T.decimal: "A decimal number",
 
-T.timestamp: "A timestamp type",
+T.datetime: "A datetime type (date+time combined)",
+T.timestamp: "A timestamp type (unix epoch)",
 
 T.container: """The base type of containers.
 
