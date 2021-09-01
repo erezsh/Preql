@@ -904,6 +904,10 @@ def _repr(_t: T.datetime, x):
     # TODO Better to pass the object instead of a string?
     return repr(str(x))
 
+def _repr(_t: T.timestamp, x):
+    # TODO Better to pass the object instead of a string?
+    return repr(str(x))
+
 @dp_type
 def _repr(_t: T.union[T.string, T.text], x):
     quoted_quote = r"\'" if get_db_target() == bigquery else "''"
@@ -930,37 +934,47 @@ def _compile_type(target, type_: T.t_relation):
     #return 'INTEGER'    # Foreign-key is integer
     return _compile_type(target, type_.elems['item'])
 
+
+class Types_PqlToSql:
+    bool = "BOOLEAN"
+    time = "TIME"
+    date = "DATE"
+    datetime = "DATETIME"
+    timestamp = "TIMESTAMP"
+
+    int = "INTEGER"
+    string = "VARCHAR(4000)"
+    float = "FLOAT"
+    text = "TEXT"
+
+class P2S_BigQuery(Types_PqlToSql):
+    int = "INT64"
+    string = "STRING"
+    float = "FLOAT64"
+    text = "STRING"
+
+
+class P2S_MySql(Types_PqlToSql):
+    int = "SIGNED"
+
+class P2S_Sqlite(Types_PqlToSql):
+    datetime = "TEXT"
+    timestamp = "TEXT"
+
+class P2S_Postgres(Types_PqlToSql):
+    datetime = "timestamp with time zone"
+
+_pql_to_sql_by_target = {
+    bigquery: P2S_BigQuery,
+    mysql: P2S_MySql,
+    sqlite: P2S_Sqlite,
+    postgres: P2S_Postgres,
+}
+
+
 @dp_type
 def _compile_type(target, type_: T.primitive):
-    if target == bigquery:
-        d = {
-            'int': "INT64",
-            'string': "STRING",
-            'float': "FLOAT64",
-            'bool': "BOOLEAN",
-            'text': "STRING",
-            'datetime': "DATETIME",
-            'date': "DATE",
-        }
-    elif target == mysql:
-        d = {
-            'int': "SIGNED",
-            'string': "VARCHAR(4000)",
-            'float': "FLOAT",
-            'bool': "BOOLEAN",
-            'text': "TEXT",
-            'datetime': "TIMESTAMP",
-        }
-    else:
-        d = {
-            'int': "INTEGER",
-            'string': "VARCHAR(4000)",
-            'float': "FLOAT",
-            'bool': "BOOLEAN",
-            'text': "TEXT",
-            'datetime': "TIMESTAMP",
-        }
-    s = d[type_.typename]
+    s = getattr(_pql_to_sql_by_target[target], type_.typename)
     if not type_.maybe_null():
         s += " NOT NULL"
     return s

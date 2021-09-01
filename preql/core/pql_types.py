@@ -256,8 +256,10 @@ T.bool = [T.primitive]    # number?
 T.decimal = [T.number]
 
 # TODO datetime vs timestamp ! 
+T.timestamp = [T.primitive]    # struct?
 T.datetime = [T.primitive]    # struct?
 T.date = [T.primitive]    # struct?
+T.time = [T.primitive]    # struct?
 
 T.container = [T.object]
 
@@ -331,18 +333,18 @@ subtypes = _get_subtypes()
 #-------------
 
 
-_t = {
+_python_type_to_sql_type = {
     bool: T.bool,
     int: T.int,
     float: T.float,
     str: T.string,
-    datetime: T.datetime,
+    datetime: T.timestamp,
     Decimal: T.decimal,
-    arrow.Arrow: T.datetime,
+    arrow.Arrow: T.timestamp,   # datetime?
 }
 def from_python(t):
     # TODO throw proper exception if this fails
-    return _t[t]
+    return _python_type_to_sql_type[t]
 
 
 def common_type(t1, t2):

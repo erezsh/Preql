@@ -1380,7 +1380,7 @@ class BasicTests(PreqlTests):
                 c: string
                 d: float
                 e: bool
-                f: datetime
+                f: timestamp
                 g: text
             }
         """)
