@@ -1053,7 +1053,7 @@ def _make_datetime_method(func_name):
 
 _datetime_methods = 'hour', 'minute', 'day', 'month', 'year', 'day_of_week', 'week_of_year'
 
-T.datetime.proto_attrs.update(create_internal_properties({
+T.timestamp.proto_attrs.update(create_internal_properties({
     n: _make_datetime_method(n) for n in _datetime_methods
 }))
 

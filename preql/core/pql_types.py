@@ -256,7 +256,7 @@ T.bool = [T.primitive]    # number?
 T.decimal = [T.number]
 
 # TODO datetime vs timestamp ! 
-T.datetime = [T.primitive]    # struct?
+T.timestamp = [T.primitive]    # struct?
 T.date = [T.primitive]    # struct?
 
 T.container = [T.object]
@@ -336,9 +336,9 @@ _t = {
     int: T.int,
     float: T.float,
     str: T.string,
-    datetime: T.datetime,
+    datetime: T.timestamp,
     Decimal: T.decimal,
-    arrow.Arrow: T.datetime,
+    arrow.Arrow: T.timestamp,
 }
 def from_python(t):
     # TODO throw proper exception if this fails

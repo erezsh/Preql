@@ -1380,7 +1380,7 @@ class BasicTests(PreqlTests):
                 c: string
                 d: float
                 e: bool
-                f: datetime
+                f: timestamp
                 g: text
             }
         """)
@@ -1490,7 +1490,7 @@ class BasicTests(PreqlTests):
         p = self.Preql()
         p("""
             table A {
-                dt: datetime = now()
+                dt: timestamp = now()
             }
 
             x = new A()

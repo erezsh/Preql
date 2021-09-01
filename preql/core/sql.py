@@ -900,7 +900,7 @@ def _repr(_t: T.decimal, x):
     return repr(float(x))  # TODO SQL decimal?
 
 @dp_type
-def _repr(_t: T.datetime, x):
+def _repr(_t: T.timestamp, x):
     # TODO Better to pass the object instead of a string?
     return repr(str(x))
 
@@ -939,7 +939,7 @@ def _compile_type(target, type_: T.primitive):
             'float': "FLOAT64",
             'bool': "BOOLEAN",
             'text': "STRING",
-            'datetime': "DATETIME",
+            'timestamp': "timestamp",
             'date': "DATE",
         }
     elif target == mysql:
@@ -949,7 +949,7 @@ def _compile_type(target, type_: T.primitive):
             'float': "FLOAT",
             'bool': "BOOLEAN",
             'text': "TEXT",
-            'datetime': "TIMESTAMP",
+            'timestamp': "TIMESTAMP",
         }
     else:
         d = {
@@ -958,7 +958,7 @@ def _compile_type(target, type_: T.primitive):
             'float': "FLOAT",
             'bool': "BOOLEAN",
             'text': "TEXT",
-            'datetime': "TIMESTAMP",
+            'timestamp': "TIMESTAMP",
         }
     s = d[type_.typename]
     if not type_.maybe_null():
