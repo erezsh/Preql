@@ -6,4 +6,4 @@ from .core.exceptions import Signal
 # import importlib.metadata as importlib_metadata
 # __version__ = importlib_metadata.version("prql")
 __version__ = "0.2.4"
-__branch__ = "-schemas"
+__branch__ = ""
