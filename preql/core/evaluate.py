@@ -47,10 +47,6 @@ def _resolve_name_and_scope(name, ast_node):
 def resolve(table_def: ast.TableDef):
     name, temporary = _resolve_name_and_scope(table_def.name, table_def)
 
-    if temporary:
-        # register name for later removal
-        pass
-
     t = T.table({}, name=name, temporary=temporary)
 
     with use_scope({table_def.name.name: t}):  # For self-reference
@@ -111,10 +107,10 @@ def db_query(sql_code, subqueries=None):
     except exc.DatabaseQueryError as e:
         raise Signal.make(T.DbQueryError, None, e.args[0]) from e
 
-def drop_table(state, table_type):
+def drop_table(table_type):
     name = table_type.options['name']
     code = sql.compile_drop_table(name)
-    return state.db.query(code, {})
+    return get_db().query(code, {})
 
 
 
@@ -195,6 +191,10 @@ def _execute(table_def: ast.TableDef):
     t = resolve(table_def)
     db_name = t.options['name']
 
+    if t.options['temporary']:
+        # register name for later removal
+        get_var('__unwind__').append( lambda: drop_table(t) )
+
     exists = get_db().table_exists(db_name)
     if exists:
         assert not t.options['temporary']
@@ -235,6 +235,7 @@ def _execute(table_def: ast.TableDef):
     if not exists:
         sql_code = sql.compile_type_def(db_name, t)
         db_query(sql_code)
+
 @method
 def _execute(insert_rows: ast.InsertRows):
     if not isinstance(insert_rows.name, ast.Name):
@@ -584,8 +585,10 @@ def eval_func_call(func, args):
             # Don't cache
             pass
 
-    with use_scope(ordered_args):
+    with use_scope({**ordered_args, '__unwind__': []}):
         res = _call_expr(expr)
+        for to_unwind in get_var('__unwind__'):
+            to_unwind()
 
     if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
         raise exc.InsufficientAccessLevel()
@@ -1007,6 +1010,9 @@ def new_table_from_expr(name, expr, const, temporary):
         table.elems['id'] = T.t_id
 
     db_query(sql.compile_type_def(name, table))
+
+    if temporary:
+        get_var('__unwind__').append( lambda: drop_table(table) )
 
     read_only, flat_columns = table_flat_for_insert(table)
 

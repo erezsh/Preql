@@ -323,7 +323,8 @@ def pql_temptable(expr: T.table, const: T.bool.as_nullable() = objects.null):
 
     name = Id(unique_name("temp"))    # TODO get name from table options
 
-    return new_table_from_expr(name, expr, const, True)
+    with use_scope({'__unwind__': []}):     # Disable unwinding
+        return new_table_from_expr(name, expr, const, True)
 
 
 def pql_get_db_type():
