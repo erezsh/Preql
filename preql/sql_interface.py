@@ -354,6 +354,8 @@ class PostgresInterface(SqlInterfaceCursor):
 class BigQueryInterface(SqlInterface):
     target = bigquery
 
+    PREQL_DATASET = '_preql'
+
     def __init__(self, project, print_sql=False):
         from google.cloud import bigquery
 
@@ -361,6 +363,18 @@ class BigQueryInterface(SqlInterface):
         self._default_dataset = None
 
         self._print_sql = print_sql
+
+        self._dataset_ensured = False
+
+    def ensure_dataset(self):
+        if self._dataset_ensured:
+            return
+
+        self._client.delete_dataset(self.PREQL_DATASET, delete_contents=True, not_found_ok=True)
+        self._client.create_dataset(self.PREQL_DATASET)
+
+        self._dataset_ensured = True
+
 
 
     def _list_tables(self):
@@ -446,14 +460,17 @@ class BigQueryInterface(SqlInterface):
         self._default_dataset = dataset
 
     def get_default_dataset(self):
-        if self._default_dataset is None:
-            datasets = self.list_datasets()
-            if not datasets:
-                raise Signal.make(T.ValueError, None, "No dataset found.")
-            self._default_dataset = datasets[0]
-        return self._default_dataset
+        # if self._default_dataset is None:
+        #     datasets = self.list_datasets()
+        #     if not datasets:
+        #         raise Signal.make(T.ValueError, None, "No dataset found.")
+        #     self._default_dataset = datasets[0]
+        # return self._default_dataset
+        self.ensure_dataset()
+        return self.PREQL_DATASET
 
     def qualified_name(self, name):
+        "Ensure the name has a dataset"
         assert isinstance(name, Id)
         if len(name.parts) > 1:
             # already has dataset

@@ -321,7 +321,7 @@ def pql_temptable(expr: T.table, const: T.bool.as_nullable() = objects.null):
     const = cast_to_python(const)
     assert_type(expr.type, T.table, expr, 'temptable')
 
-    name = Id(unique_name("temp"))    # TODO get name from table options
+    name = get_db().qualified_name(Id(unique_name("temp")))    # TODO get name from table options
 
     with use_scope({'__unwind__': []}):     # Disable unwinding
         return new_table_from_expr(name, expr, const, True)

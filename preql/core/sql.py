@@ -1054,7 +1054,11 @@ def compile_type_def(table_name, table) -> Sql:
         posts.append(f"PRIMARY KEY ({names})")
 
     # Consistent among SQL databases
-    command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
+    if target == 'bigquery':
+        command = ("CREATE TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS")
+    else:
+        command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
+
     return RawSql(T.nulltype, f'{command} {quote_id(table_name)} (' + ', '.join(columns + posts) + ')')
 
 
