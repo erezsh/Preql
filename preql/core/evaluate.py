@@ -47,6 +47,10 @@ def _resolve_name_and_scope(name, ast_node):
 def resolve(table_def: ast.TableDef):
     name, temporary = _resolve_name_and_scope(table_def.name, table_def)
 
+    if temporary:
+        # register name for later removal
+        pass
+
     t = T.table({}, name=name, temporary=temporary)
 
     with use_scope({table_def.name.name: t}):  # For self-reference
@@ -966,10 +970,7 @@ def localize(x: Object):
     return x
 
 
-
-
-
-def new_table_from_rows(name, columns, rows):
+def new_table_from_rows(name, columns, rows, temporary):
     # TODO check table doesn't exist
     name = Id(name)
 
@@ -980,13 +981,11 @@ def new_table_from_rows(name, columns, rows):
 
     # TODO refactor into function?
     elems = {c:v.type.as_nullable() for c,v in zip(columns, tuples[0])}
-    elems['id'] = T.t_id
-    table = T.table(elems, temporary=True, pk=[['id']], name=name)
+    elems = {'id': T.t_id, **elems}
+    table = T.table(elems, temporary=temporary, pk=[['id']], name=name)
 
     db_query(sql.compile_type_def(name, table))
-
-    code = sql.InsertConsts(name, columns, tuples)
-    db_query(code)
+    db_query(sql.InsertConsts(name, columns, tuples))
 
     return objects.new_table(table)
 

@@ -5,39 +5,39 @@ Matrices are stored as a list of tuples (row, col, value)
 """
 
 func matrix_from_list(M, width) {
-	return enum(M) {				// generates an index column
-		row: int(index / width)
-		col: index % width
-		value: item
-	}
+    return enum(M) {                // generates an index column
+        row: int(index / width)
+        col: index % width
+        value: item
+    }
 }
 
 func mult_matrices(A, B) {
-	return join(a: A.col, b: B.row) {
-		a.row, b.col => value: sum(a.value * b.value)
-	}
+    return join(a: A.col, b: B.row) {
+        a.row, b.col => value: sum(a.value * b.value)
+    }
 }
 
 func print_matrix(M) {
-	print M { row => value} {matrix: value}
+    print M { row => value} {matrix: value}
 }
 
 func main() {
-	M1 = [-1, 0, 6
-		   2, 5, 1]
-	m1 = matrix_from_list(M1, 3)
+    M1 = [-1, 0, 6
+           2, 5, 1]
+    m1 = matrix_from_list(M1, 3)
 
-	 
-	M2 = [2, -4, 9, 3
-		  0, 5,  1, 2
-		  3, 6, -1, 1]
-	m2 = matrix_from_list(M2, 4)
+     
+    M2 = [2, -4, 9, 3
+          0, 5,  1, 2
+          3, 6, -1, 1]
+    m2 = matrix_from_list(M2, 4)
 
-	print_matrix(m1)
-	print "*"
-	print_matrix(m2)
-	print "="
-	print_matrix( mult_matrices(m1, m2) )
+    print_matrix(m1)
+    print "*"
+    print_matrix(m2)
+    print "="
+    print_matrix( mult_matrices(m1, m2) )
 }
 
 main()

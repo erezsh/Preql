@@ -279,6 +279,8 @@ T.t_relation = [T.primitive], (T.any,)   # t_id?
 T._register('aggregated', [T.container], (T.any,), type_class=PhantomType)
 T._register('projected', [T.container], (T.any,), type_class=PhantomType)
 
+T._register('aggregate_result', [T.object], (T.any,), type_class=PhantomType)
+
 T.json = [T.container], (T.any,)
 T.json_array = [T.json]
 

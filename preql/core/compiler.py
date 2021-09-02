@@ -408,7 +408,7 @@ def compile_to_inst(lst: ast.List_):
         # XXX a little awkward
         return objects.EmptyList
 
-    elems = evaluate( lst.elems)
+    elems = evaluate( lst.elems )
 
     types = {e.type for e in elems}
 
@@ -423,6 +423,8 @@ def compile_to_inst(lst: ast.List_):
         name = unique_name("table_")
         table_code, subq = sql.create_table(list_type, name, rows)
     else:
+        if elem_type <= (T.projected | T.aggregated):
+            raise Signal.make(T.TypeError, lst, "Cannot create lists of projections or aggregations (%s)" % elem_type)
         if not (elem_type <= T.union[T.primitive, T.nulltype]):
             raise Signal.make(T.TypeError, lst, "Cannot create lists of type %s" % elem_type)
 

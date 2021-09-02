@@ -12,7 +12,7 @@ func _sql_agg_func(name, obj, t=null) {
     }
 
     if (isa(obj, aggregated)) {
-        return SQL(t, name + "($obj)")
+        return SQL(projected[t], name + "($obj)")
     } else {
         if (not (issubclass(t, number))) {
             throw new TypeError(name + "() expects numeric elements, instead got: '" + repr(t) + "'")
@@ -26,8 +26,9 @@ func _sql_agg_func(name, obj, t=null) {
     throw new TypeError(name + "() doesn't support object of type '" + repr(type(field)) + "'")
 }
 func _table_or_agg(n) = union[table[n], aggregated[n]]
+_seq_number = _table_or_agg(number)
 
-func sum(col: _table_or_agg(number)) {
+func sum(col: _seq_number) {
     """Sums up a column or a list.
 
     Examples:
@@ -44,7 +45,7 @@ func sum(col: _table_or_agg(number)) {
     return _sql_agg_func("SUM", col)
 }
 
-func product(col: _table_or_agg(number)) = _sql_agg_func("_pql_PRODUCT", col)
+func product(col: _seq_number) = _sql_agg_func("_pql_PRODUCT", col)
     """Returns the product of a column or a list
 
     See Also `sum`.
@@ -56,25 +57,25 @@ func product(col: _table_or_agg(number)) = _sql_agg_func("_pql_PRODUCT", col)
         For databases that don't support product, see `approx_product()`.
     """
 
-func stddev(col: _table_or_agg(number)) = _sql_agg_func("stddev", col)
+func stddev(col: _seq_number) = _sql_agg_func("stddev", col)
     """Finds the standard deviation of a column or a list
 
     See Also `sum`.
     """
 
-func mean(col: _table_or_agg(number)) = _sql_agg_func("AVG", col, float)
+func mean(col: _seq_number) = _sql_agg_func("AVG", col, float)
     """Returns the mean average of a column or a list
 
     See Also `sum`.
     """
 
-func min(col: _table_or_agg(number)) = _sql_agg_func("MIN", col)
+func min(col: _seq_number) = _sql_agg_func("MIN", col)
     """Finds the minimum of a column or a list
 
     See Also `sum`.
     """
 
-func max(col: _table_or_agg(number)) = _sql_agg_func("MAX", col)
+func max(col: _seq_number) = _sql_agg_func("MAX", col)
     """Finds the maximum of a column or a list
 
     See Also `sum`.

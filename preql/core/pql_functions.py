@@ -845,7 +845,7 @@ def import_pandas(dfs):
                     for rec in df.to_records()]
             rows = [ row[1:] for row in rows ]    # drop index
 
-        tbl = new_table_from_rows(name, cols, rows)
+        tbl = new_table_from_rows(name, cols, rows, temporary=True)
         set_var(name, tbl)
         yield tbl
 

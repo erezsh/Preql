@@ -63,7 +63,7 @@ class SqlInterface:
         # Inefficient implementation but generic
         tables = self.list_tables()
         for table_name in tables:
-            table_type = self.import_table_type(table_name)
+            table_type = self.import_table_type(Id(table_name))
             yield None, table_name, table_type
 
     def qualified_name(self, name):
@@ -494,7 +494,7 @@ class AbsSqliteInterface:
     ))
 
     def import_table_type(self, name, columns_whitelist=None):
-        assert isinstance(name, Id)
+        assert isinstance(name, Id), name
 
         columns_q = """pragma table_info(%s)""" % quote_id(name)
         sql_columns = self._execute_sql(self.table_schema_type, columns_q)
