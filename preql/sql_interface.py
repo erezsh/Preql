@@ -33,6 +33,7 @@ class SqlInterface:
     _conn: object
 
     supports_foreign_key = True
+    requires_subquery_name = False
     id_type_decl = 'INTEGER'
 
 
@@ -72,6 +73,10 @@ class SqlInterface:
 
     def qualified_name(self, name):
         return name
+
+    def quote_name(self, name):
+        return f'"{name}"'
+
 
 
 # from multiprocessing import Queue
@@ -207,6 +212,7 @@ class MysqlInterface(SqlInterfaceCursor):
     target = mysql
 
     id_type_decl = "INTEGER NOT NULL AUTO_INCREMENT"
+    requires_subquery_name = True
 
     def __init__(self, host, port, database, user, password, print_sql=False):
         self._print_sql = print_sql
@@ -262,11 +268,15 @@ class MysqlInterface(SqlInterfaceCursor):
 
         return T.table(cols, name=name)
 
+    def quote_name(self, name):
+        return f'`{name}`'
+
 
 class PostgresInterface(SqlInterfaceCursor):
     target = postgres
 
     id_type_decl = "SERIAL"
+    requires_subquery_name = True
 
     def __init__(self, host, port, database, user, password, print_sql=False):
         self.args = dict(host=host, port=port, database=database, user=user, password=password)
@@ -376,6 +386,9 @@ class BigQueryInterface(SqlInterface):
         self._print_sql = print_sql
 
         self._dataset_ensured = False
+
+    def quote_name(self, name):
+        return f'`{name}`'
 
     def ensure_dataset(self):
         if self._dataset_ensured:
@@ -597,14 +610,22 @@ class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
         conn.create_aggregate("stddev", 1, _SqliteStddev)
         return conn
 
+    def quote_name(self, name):
+        return f'[{name}]'
 
-class DuckInterface(AbsSqliteInterface):
+
+class DuckInterface(SqliteInterface):
     target = duck
 
-    def __init__(self, filename=None, print_sql=False):
+    supports_foreign_key = False
+    requires_subquery_name = True
+
+    def _create_connection(self):
         import duckdb
-        self._conn = duckdb.connect(filename or ':memory:')
-        self._print_sql = print_sql
+        return duckdb.connect(self._filename or ':memory:')
+
+    def quote_name(self, name):
+        return f'"{name}"'
 
     def rollback(self):
         pass    # XXX

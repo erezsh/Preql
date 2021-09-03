@@ -64,10 +64,7 @@ class SqlTree(Sql):
     def finalize_with_subqueries(self, qb, subqueries):
         if subqueries:
             subqs = [q.compile_wrap(qb).finalize(qb) for (name, q) in subqueries.items()]
-            if qb.target in (postgres, mysql):
-                sql_code = ['WITH RECURSIVE ']
-            else:
-                sql_code = ['WITH ']
+            sql_code = ['WITH RECURSIVE '] if qb.target in (postgres, mysql) else ['WITH ']
             sql_code += join_comma([q, '\n    '] for q in subqs)
         else:
             sql_code = []
@@ -101,11 +98,10 @@ class CompiledSQL(Sql):
                 return self.replace(code=code, _needs_select=False, _is_select=True)
         else:
             if self._is_select and not self._needs_select:
-                # Bad recursion
-                if qb.target in (postgres, mysql, duck):
-                    code = ['('] + code + [') ', qb.unique_name()]  # postgres requires an alias
-                else:
-                    code = ['('] + code + [')']
+                # Bad recursion (?)
+                code = ['('] + code + [')']
+                if get_db().requires_subquery_name:
+                    code += [' ' + qb.unique_name()]
 
                 return self.replace(code=code, _is_select=False)
 
@@ -300,7 +296,7 @@ class MakeArray(SqlTree):
 
     def _compile(self, qb):
         field = self.field.compile_wrap(qb).code
-        if qb.target == sqlite:
+        if qb.target in (sqlite, duck):
             return ['group_concat('] + field + [f', "{_ARRAY_SEP}")']
         elif qb.target == postgres:
             return ['array_agg('] + field + [')']
@@ -345,7 +341,7 @@ class Compare(Scalar):
 
         if any(e.type.maybe_null() for e in self.exprs):
             # Null values are possible, so we'll use identity operators
-            if qb.target == sqlite:
+            if qb.target in (sqlite, duck):
                 op = {
                     '=': 'is',
                     '!=': 'is not'
@@ -570,7 +566,7 @@ class LastRowId(Atom):
     type = T.int
 
     def _compile(self, qb):
-        if qb.target == sqlite:
+        if qb.target in (sqlite, duck):
             return ['last_insert_rowid()']   # Sqlite
         elif qb.target == mysql:
             return ['last_insert_id()']
@@ -871,7 +867,7 @@ class StringSlice(SqlTree):
         else:
             length = None
 
-        if qb.target in (sqlite, bigquery):
+        if qb.target in (sqlite, duck, bigquery):
             f = 'substr'
             params = string + [', '] + start
             if length:
@@ -920,13 +916,7 @@ def _repr(_t: T.union[T.string, T.text], x):
 
 def quote_name(name):
     assert isinstance(name, str), name
-    target = get_db().target
-    if target is sqlite:
-        return f'[{name}]'
-    elif target is mysql or target is bigquery:
-        return f'`{name}`'
-    else:
-        return f'"{name}"'
+    return get_db().quote_name(name)
 
 def quote_id(id_):
     assert isinstance(id_, Id)
@@ -973,6 +963,7 @@ _pql_to_sql_by_target = {
     mysql: P2S_MySql,
     "mysql_def": Types_PqlToSql, # Standard (Different) types for declaration!
     sqlite: P2S_Sqlite,
+    duck: P2S_Sqlite,
     postgres: P2S_Postgres,
 }
 
