@@ -1,7 +1,7 @@
 from multiprocessing.pool import ThreadPool
 
 from preql.core.sql import mysql, bigquery, sqlite
-from unittest import skip
+from unittest import skip, SkipTest
 
 from parameterized import parameterized_class
 
@@ -1373,17 +1373,31 @@ class BasicTests(PreqlTests):
     @uses_tables('A')
     def test_import_table(self):
         preql = self.Preql()
-        preql("""
-            table A {
-                a: int
-                b: int?
-                c: string
-                d: float
-                e: bool
-                f: timestamp
-                g: text
-            }
-        """)
+
+        if self.uri == BIGQUERY_URI:
+            preql("""
+                table A {
+                    a: int
+                    b: int?
+                    c: string
+                    d: float
+                    e: bool
+                    f: timestamp
+                }
+            """)
+        else:
+            preql("""
+                table A {
+                    a: int
+                    b: int?
+                    c: string
+                    d: float
+                    e: bool
+                    f: timestamp
+                    g: text
+                }
+            """)
+
         a_type = preql('type(A{...!id})')   # TODO convert 'id' to t_id
         preql._reset_interpreter()
         self.assertRaises(Signal, preql, 'A')
@@ -1473,6 +1487,9 @@ class BasicTests(PreqlTests):
 
 
     def test_join_on(self):
+        if self.uri == BIGQUERY_URI:
+            raise SkipTest("Not supported in BigQuery")
+
         p = self.Preql()
         p("""
             A = [1, 3]

@@ -404,7 +404,7 @@ class BinOp(Scalar):
 @dataclass
 class TableArith(TableOperation):
     op: str
-    exprs: List[Table]
+    exprs: List[Sql]
 
     def _compile(self, qb):
         tables = [t.compile_wrap(qb) for t in self.exprs]
