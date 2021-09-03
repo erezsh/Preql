@@ -32,6 +32,10 @@ def log_sql(sql):
 class SqlInterface:
     _conn: object
 
+    supports_foreign_key = True
+    id_type_decl = 'INTEGER'
+
+
     def __init__(self, print_sql=False):
         self._print_sql = print_sql
 
@@ -202,6 +206,8 @@ class SqlInterfaceCursor(SqlInterface):
 class MysqlInterface(SqlInterfaceCursor):
     target = mysql
 
+    id_type_decl = "INTEGER NOT NULL AUTO_INCREMENT"
+
     def __init__(self, host, port, database, user, password, print_sql=False):
         self._print_sql = print_sql
 
@@ -259,6 +265,8 @@ class MysqlInterface(SqlInterfaceCursor):
 
 class PostgresInterface(SqlInterfaceCursor):
     target = postgres
+
+    id_type_decl = "SERIAL"
 
     def __init__(self, host, port, database, user, password, print_sql=False):
         self.args = dict(host=host, port=port, database=database, user=user, password=password)
@@ -355,6 +363,9 @@ class BigQueryInterface(SqlInterface):
     target = bigquery
 
     PREQL_DATASET = '_preql'
+
+    supports_foreign_key = False
+    id_type_decl = 'STRING NOT NULL'
 
     def __init__(self, project, print_sql=False):
         from google.cloud import bigquery

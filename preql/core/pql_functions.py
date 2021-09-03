@@ -17,7 +17,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import pyvalue_inst, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
-from .state import get_var, get_db, use_scope, unique_name, get_db_target, require_access, AccessLevels, set_var
+from .state import get_var, get_db, use_scope, unique_name, get_db, require_access, AccessLevels, set_var
 from .evaluate import evaluate, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
 from .pql_types import T, Type, Id
 from .types_impl import join_names
@@ -335,7 +335,7 @@ def pql_get_db_type():
         "sqlite"
     """
     require_access(AccessLevels.EVALUATE)
-    return pyvalue_inst(get_db_target(), T.string)
+    return pyvalue_inst(get_db().target, T.string)
 
 
 
@@ -363,7 +363,7 @@ def sql_bin_op(op, t1, t2, name):
 
 def pql_table_intersect(t1: T.table, t2: T.table):
     "Intersect two tables. Used for `t1 & t2`"
-    if get_db_target() == sql.bigquery:
+    if get_db().target == sql.bigquery:
         op = 'INTERSECT DISTINCT'
     else:
         op = 'INTERSECT'
@@ -371,9 +371,9 @@ def pql_table_intersect(t1: T.table, t2: T.table):
 
 def pql_table_substract(t1: T.table, t2: T.table):
     "Substract two tables (except). Used for `t1 - t2`"
-    if get_db_target() is sql.mysql:
+    if get_db().target is sql.mysql:
         raise Signal.make(T.NotImplementedError, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
-    if get_db_target() == sql.bigquery:
+    if get_db().target == sql.bigquery:
         op = 'EXCEPT DISTINCT'
     else:
         op = 'EXCEPT'
@@ -381,7 +381,7 @@ def pql_table_substract(t1: T.table, t2: T.table):
 
 def pql_table_union(t1: T.table, t2: T.table):
     "Union two tables. Used for `t1 | t2`"
-    if get_db_target() == sql.bigquery:
+    if get_db().target == sql.bigquery:
         op = 'UNION DISTINCT'
     else:
         op = 'UNION'

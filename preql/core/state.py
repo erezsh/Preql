@@ -225,9 +225,6 @@ def use_scope(scope):
 def get_var(name):
     return context.state.get_var(name)
 
-def get_db_target():
-    return context.state.db.target
-
 def get_db():
     return context.state.db
 

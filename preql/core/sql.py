@@ -5,7 +5,7 @@ from preql.utils import dataclass, X, listgen, field_list, safezip
 from . import pql_types
 from .pql_types import T, Type, dp_type, Id
 from .types_impl import join_names, flatten_type
-from .state import get_db_target
+from .state import get_db
 from .exceptions import Signal
 
 duck = 'duck'
@@ -16,7 +16,7 @@ mysql = 'mysql'
 
 class QueryBuilder:
     def __init__(self, is_root=True, start_count=0):
-        self.target = get_db_target()
+        self.target = get_db().target
         self.is_root = is_root
 
         self.counter = start_count
@@ -911,15 +911,16 @@ def _repr(_t: T.timestamp, x):
 
 @dp_type
 def _repr(_t: T.union[T.string, T.text], x):
-    quoted_quote = r"\'" if get_db_target() == bigquery else "''"
+    target = get_db().target
+    quoted_quote = r"\'" if target == bigquery else "''"
     res = "'%s'" % str(x).replace("'", quoted_quote)
-    if get_db_target() == bigquery:
+    if target == bigquery:
         res = res.replace('\n', '\\n')
     return res
 
 def quote_name(name):
     assert isinstance(name, str), name
-    target = get_db_target()
+    target = get_db().target
     if target is sqlite:
         return f'[{name}]'
     elif target is mysql or target is bigquery:
@@ -1019,7 +1020,7 @@ def compile_type_def(table_name, table) -> Sql:
     assert isinstance(table_name, Id)
     assert table <= T.table
 
-    target = get_db_target()
+    db = get_db()
 
     posts = []
     pks = []
@@ -1028,21 +1029,14 @@ def compile_type_def(table_name, table) -> Sql:
     pks = {join_names(pk) for pk in table.options['pk']}
     for name, c in flatten_type(table):
         if name in pks and c <= T.t_id:
-            if target == postgres:
-                type_ = "SERIAL" # Postgres
-            elif target == mysql:
-                type_ = "INTEGER NOT NULL AUTO_INCREMENT"
-            elif target == bigquery:
-                type_ = "STRING NOT NULL"
-            else:
-                type_ = "INTEGER"   # TODO non-int idtypes
+            type_decl = db.id_type_decl
         else:
-            type_ = _compile_type(target if target != mysql else 'mysql_def', c)
+            type_decl = _compile_type(db.target if db.target != mysql else 'mysql_def', c)
 
-        columns.append( f'{quote_name(name)} {type_}' )
+        columns.append( f'{quote_name(name)} {type_decl}' )
 
         if c <= T.t_relation:
-            if target != 'bigquery':
+            if db.supports_foreign_key:
                 # TODO any column, using projection / get_attr
                 if not table.options.get('temporary', False):
                     # In postgres, constraints on temporary tables may reference only temporary tables
@@ -1052,12 +1046,12 @@ def compile_type_def(table_name, table) -> Sql:
                         s = f"FOREIGN KEY({name}) REFERENCES {quote_id(tbl_name)}({rel['column']})"
                         posts.append(s)
 
-    if pks and target != bigquery:
+    if pks and db.supports_foreign_key: 
         names = ", ".join(pks)
         posts.append(f"PRIMARY KEY ({names})")
 
     # Consistent among SQL databases
-    if target == 'bigquery':
+    if db.target == 'bigquery':
         command = ("CREATE TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS")
     else:
         command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
@@ -1103,7 +1097,9 @@ def table_selection(table, conds):
 def table_order(table, fields):
     return Select(table.type, table.code, [AllFields(table.type)], order=fields)
 
-def arith(target, res_type, op, args):
+def arith(res_type, op, args):
+    target = get_db().target
+
     arg_codes = list(args)
     if res_type == T.string:
         assert op == '+'

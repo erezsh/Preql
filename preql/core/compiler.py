@@ -7,7 +7,7 @@ from . import pql_objects as objects
 from . import pql_ast as ast
 from . import sql
 from .interp_common import dsp, assert_type, pyvalue_inst, evaluate, cast_to_python_string, cast_to_python_int
-from .state import use_scope, get_var, get_db_target, unique_name, require_access, AccessLevels, get_access_level
+from .state import use_scope, get_var, get_db, unique_name, require_access, AccessLevels, get_access_level
 from .pql_types import T, Type, Id, ITEM_NAME
 from .types_impl import flatten_type, pql_repr, kernel_type
 from .casts import cast
@@ -677,7 +677,7 @@ def compile_to_inst(marker: ast.Marker):
 
 @method
 def compile_to_inst(range: ast.Range):
-    target = get_db_target()
+    target = get_db().target
     # TODO move to sql.py
     # Requires subqueries to be part of 'code' instead of a separate 'subqueries'?
     # But then what's the point of an instance, other than carrying methods...

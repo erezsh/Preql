@@ -7,7 +7,7 @@ from . import sql
 from . import pql_objects as objects
 from .exceptions import Signal
 from .pql_objects import make_instance, remove_phantom_type
-from .state import get_var, get_db_target
+from .state import get_var
 from .casts import cast
 
 ## Compare
@@ -239,7 +239,7 @@ def _compile_arith(arith, a: T.number, b: T.number):
             value = float(value)
         return pyvalue_inst(value, res_type)
 
-    code = sql.arith(get_db_target(), res_type, arith.op, [a.code, b.code])
+    code = sql.arith(res_type, arith.op, [a.code, b.code])
     return make_instance(code, res_type, [a, b])
 
 @dp_inst
@@ -255,6 +255,6 @@ def _compile_arith(arith, a: T.string, b: T.string):
         # Local folding for better performance (optional, for better performance)
         return pyvalue_inst(a.local_value + b.local_value, T.string)
 
-    code = sql.arith(get_db_target(), T.string, arith.op, [a.code, b.code])
+    code = sql.arith(T.string, arith.op, [a.code, b.code])
     return make_instance(code, T.string, [a, b])
 

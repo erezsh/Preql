@@ -7,7 +7,7 @@ from preql import settings
 from preql.context import context
 
 from .interp_common import assert_type, exclude_fields, call_builtin_func, is_global_scope, cast_to_python_string, cast_to_python_int
-from .state import set_var, use_scope, get_var, unique_name, get_db, get_db_target, catch_access, AccessLevels, get_access_level, reduce_access
+from .state import set_var, use_scope, get_var, unique_name, get_db, catch_access, AccessLevels, get_access_level, reduce_access
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -137,7 +137,7 @@ def _copy_rows(target_name: ast.Name, source: objects.TableInstance):
 
     read_only, columns = table_flat_for_insert(target.type)
 
-    if get_db_target() == sql.bigquery and 'id' in read_only:
+    if get_db().target == sql.bigquery and 'id' in read_only:
         # XXX very hacky!
         to_exclude = ['id'] if 'id' in source.type.elems else []
         proj = ast.Projection(source, [
@@ -811,16 +811,15 @@ def _new_row(new_ast, table, matched):
     if 'name' not in table.options:
         raise Signal.make(T.TypeError, new_ast, f"'new' expects a persistent table. Instead got a table expression.")
 
-    if get_db_target() == sql.bigquery:
+    if get_db().target == sql.bigquery:
         rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []))
         keys += ['id']
         values += [sql.make_value(rowid)]
-        q = sql.InsertConsts(table.options['name'], keys, [values])
-        db_query(q)
-    else:
-        q = sql.InsertConsts(table.options['name'], keys, [values])
-        # q = sql.InsertConsts(new_ast.type, keys, [values])
-        db_query(q)
+
+    q = sql.InsertConsts(table.options['name'], keys, [values])
+    db_query(q)
+
+    if get_db().target != sql.bigquery:
         rowid = db_query(sql.LastRowId())
 
     d = SafeDict({'id': objects.pyvalue_inst(rowid)})
@@ -1018,7 +1017,7 @@ def new_table_from_expr(name, expr, const, temporary):
 
     read_only, flat_columns = table_flat_for_insert(table)
 
-    if get_db_target() == sql.bigquery and 'id' in read_only:
+    if get_db().target == sql.bigquery and 'id' in read_only:
         # XXX very hacky!
         to_exclude = ['id'] if 'id' in expr.type.elems else []
         proj = ast.Projection(expr, [
