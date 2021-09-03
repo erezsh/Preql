@@ -912,7 +912,10 @@ def _repr(_t: T.timestamp, x):
 @dp_type
 def _repr(_t: T.union[T.string, T.text], x):
     quoted_quote = r"\'" if get_db_target() == bigquery else "''"
-    return "'%s'" % str(x).replace("'", quoted_quote)
+    res = "'%s'" % str(x).replace("'", quoted_quote)
+    if get_db_target() == bigquery:
+        res = res.replace('\n', '\\n')
+    return res
 
 def quote_name(name):
     assert isinstance(name, str), name

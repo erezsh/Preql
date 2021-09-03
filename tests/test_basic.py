@@ -26,8 +26,8 @@ def uses_tables(*names):
                 except ValueError:
                     return -1
             tables = sorted(p._interp.list_tables(), key=_key)
-            if tables:
-                print("@@ Deleting", tables, decorated)
+            # if tables:
+            #     print("@@ Deleting", tables, decorated)
             _drop_tables(p._interp.state, *tables)
             # assert not tables
             try:
@@ -873,21 +873,21 @@ class BasicTests(PreqlTests):
         ]
 
         preql("""english_countries = temptable(Country[language=="en"], true)""")
-        res = preql("english_countries{name}")
+        res = preql("english_countries{name} order {name}")
         assert is_eq(res, [("England",), ("United States",)])
 
         preql("""names = temptable(Person{name}) """)
-        res = preql('names{name}')
+        res = preql('names{name} order {name}')
         assert is_eq(res, [
-            ("Erez Shinan",),
             ("Ephraim Kishon",),
+            ("Erez Shinan",),
             ("Eric Blaire",),
             ("H.G. Wells",),
             ("John Steinbeck",),
         ])
 
         # temptable join
-        res = preql(""" temptable(join(c: Country[language=="en"], p: Person)) {person:p.name, country:c.name} """)
+        res = preql(""" temptable(join(c: Country[language=="en"], p: Person)) {person:p.name, country:c.name} order {person}""")
         assert is_eq(res, english_speakers)
 
         res = preql(""" temptable(temptable(Person, true)[name=="Erez Shinan"], true){name} """) # 2 temp tables
@@ -999,12 +999,12 @@ class BasicTests(PreqlTests):
         preql(r'''
             table A { x: text }
 
-            new A("hello")
-            new A("hello\nworld")
+            a = new A("hello")
+            b = new A("hello\nworld")
         ''')
 
-        self.assertEqual( preql("one A[id==1]{x}"), {'x': "hello"} )
-        self.assertEqual( preql("one A[id==2]{x}"), {'x': "hello\nworld"} )
+        self.assertEqual( preql("one A[id==%r]{x}" % preql.a['id']), {'x': "hello"} )
+        self.assertEqual( preql("one A[id==%r]{x}" % preql.b['id']), {'x': "hello\nworld"} )
 
 
     def test_nonzero(self):
@@ -1043,7 +1043,7 @@ class BasicTests(PreqlTests):
             a2 = new A(2, 1)
         ''')
 
-        self.assertEqual( preql('A{y}'), [{'y': 2}, {'y': 1}] )
+        self.assertEqual( preql('A{y} order {^y}'), [{'y': 2}, {'y': 1}] )
         assert preql('a2.y') == 1
 
 
