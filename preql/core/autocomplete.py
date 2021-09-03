@@ -23,7 +23,6 @@ def eval_autocomplete(x, go_inside):
 def eval_autocomplete(cb: ast.Statement, go_inside):
     raise NotImplementedError(cb)
 
-
 @dsp
 def eval_autocomplete(t: ast.Try, go_inside):
     eval_autocomplete(t.try_, go_inside)
@@ -47,6 +46,15 @@ def eval_autocomplete(x: ast.If, go_inside):
     eval_autocomplete(x.then, go_inside)
     if x.else_:
         eval_autocomplete(x.else_, go_inside)
+
+@dsp
+def eval_autocomplete(x: ast.For, go_inside):
+    with use_scope({x.var: None}):
+        eval_autocomplete(x.do, go_inside)
+
+@dsp
+def eval_autocomplete(x: ast.While, go_inside):
+    eval_autocomplete(x.do, go_inside)
 
 @dsp
 def eval_autocomplete(x: ast.SetValue, go_inside):

@@ -165,6 +165,24 @@ class AutocompleteTests(PreqlTests):
         progressive_test(state, s)
 
 
+    def test_statements(self):
+        p = self.Preql()
+        state = p._interp.state
+
+        s = """
+        for (i in [1, 2]) {
+            <<<print>>> <<<i>>>
+        }
+        """
+        progressive_test(state, s)
+
+        s = """
+        while (True) {
+            <<<print>>> 1
+        }
+        """
+        progressive_test(state, s)
+
 
 
 
