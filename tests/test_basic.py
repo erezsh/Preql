@@ -51,7 +51,7 @@ NORMAL_TARGETS = [
     ("Normal_Lt", SQLITE_URI, True),
     ("Normal_Pg", POSTGRES_URI, True),
     ("Normal_My", MYSQL_URI, True),
-    ("Normal_Bq", BIGQUERY_URI, True),
+    # ("Normal_Bq", BIGQUERY_URI, True),
     # ("Normal_Dk", DUCK_URI, True),
 ]
 UNOPTIMIZED_TARGETS = [
