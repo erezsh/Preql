@@ -14,7 +14,7 @@ Currently supported dialects are:
 * Postgres
 * MySQL
 * Sqlite
-* BigQuery (WIP)
+* BigQuery
 * More... (planned)
 
 For features that are database-specific, or aren't implemented in Preql, there is a `SQL()` function that provides a convenient escape hatch to write raw SQL code.

@@ -14,7 +14,6 @@ While plans can always change, here is a list of features that will probably mak
     - JIT compilation (PoC is already working!)
     - Compile control flow to SQL
 - **Support for more databases**
-    - BigQuery (partial support already available)
     - Redshift
     - CockroachDB
     - TimeSeries
