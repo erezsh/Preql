@@ -47,15 +47,19 @@ def is_eq(a, b):
     a = [tuple(row.values()) for row in a]
     return a == b
 
-@parameterized_class(("name", "uri", "optimized"), [
+NORMAL_TARGETS = [
     ("Normal_Lt", SQLITE_URI, True),
     ("Normal_Pg", POSTGRES_URI, True),
     ("Normal_My", MYSQL_URI, True),
-    # ("Normal_Bq", BIGQUERY_URI, True),
+    ("Normal_Bq", BIGQUERY_URI, True),
     # ("Normal_Dk", DUCK_URI, True),
+]
+UNOPTIMIZED_TARGETS = [
     ("Unoptimized_Lt", SQLITE_URI, False),
     ("Unoptimized_Pg", POSTGRES_URI, False),
-])
+]
+
+@parameterized_class(("name", "uri", "optimized"), NORMAL_TARGETS + UNOPTIMIZED_TARGETS)
 class BasicTests(PreqlTests):
     @uses_tables('Person', 'Country')
     def test_basic1(self):
@@ -1601,13 +1605,7 @@ class TestFunctions(PreqlTests):
          assert p.f5 == 'hello my world!'
 
 
-@parameterized_class(("name", "uri"), [
-    ("Normal_Lt", SQLITE_URI),
-    ("Normal_Pg", POSTGRES_URI),
-    ("Normal_My", MYSQL_URI),
-    # ("Normal_Bq", BIGQUERY_URI, True),
-    # ("Normal_Dk", DUCK_URI, True),
-])
+@parameterized_class(("name", "uri"), NORMAL_TARGETS)
 class TestStdlib(PreqlTests):
     def test_round(self):
         p = self.Preql()

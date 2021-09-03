@@ -33,15 +33,15 @@ def resolve(struct_def: ast.StructDef):
 
 def _resolve_name_and_scope(name, ast_node):
     if is_global_scope(context.state):
-        name = get_db().qualified_name(name)
         temporary = False
     else:
+        temporary = True
         if len(name.parts) > 1:
             raise Signal(T.NameError, ast_node, "Local tables cannot include a schema (namespace)")
         name ,= name.parts
         name = '__local_' + unique_name(name)
-        name = get_db().qualified_name(name)
-        temporary = True
+
+    name = get_db().qualified_name(name)
     return name, temporary
 
 @dsp
@@ -111,7 +111,7 @@ def db_query(sql_code, subqueries=None):
 def drop_table(table_type):
     name = table_type.options['name']
     code = sql.compile_drop_table(name)
-    return get_db().query(code, {})
+    return db_query(code, {})
 
 
 
@@ -165,7 +165,7 @@ def _execute(table_def: ast.TableDefFromExpr):
 
     name, temporary = _resolve_name_and_scope(table_def.name, table_def)
 
-    name = get_db().qualified_name(name)
+    # name = get_db().qualified_name(name)
     t = new_table_from_expr(name, expr, table_def.const, temporary)
     set_var(table_def.name, t)
     
