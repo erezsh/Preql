@@ -267,13 +267,12 @@ def compile_to_inst(proj: ast.Projection):
     limit = None
     if proj.groupby:
         if fields:
-            # groupby = [new_table.get_column(n).primary_key().code for n, rc in fields]
-            groupby = [sql.Primitive(T.int, str(i+1)) for i in range(len(fields))]
-        else:
-            limit = 1
             # Alternatively we could
             #   groupby = [sql.null]
             # But postgres doesn't support it
+            groupby = [sql.Primitive(T.int, str(i+1)) for i in range(len(fields))]
+        else:
+            limit = 1
 
     code = sql.Select(new_table_type, table.code, sql_fields, group_by=groupby, limit=limit)
 

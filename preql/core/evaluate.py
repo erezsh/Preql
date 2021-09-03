@@ -172,6 +172,9 @@ def _execute(table_def: ast.TableDefFromExpr):
 @method
 def _execute(var_def: ast.SetValue):
     res = evaluate(var_def.value)
+
+    if res.type <= T.primitive:
+        res = objects.pyvalue_inst(res.localize(), res.type)
     # res = apply_database_rw(res)
     _set_value(var_def.name, res)
     return res
