@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional
 from functools import wraps
 from operator import getitem
-import dataclasses
 
 import runtype
 from rich.text import Text
@@ -17,9 +16,6 @@ from . import settings
 mut_dataclass = runtype.dataclass(check_types=settings.typecheck, frozen=False)
 dataclass = runtype.dataclass(check_types=settings.typecheck)
 dsp = runtype.Dispatch()
-
-def field_list():
-    return dataclasses.field(default_factory=list)
 
 class SafeDict(dict):
     def __setitem__(self, key, value):

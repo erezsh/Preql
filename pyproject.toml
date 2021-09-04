@@ -28,7 +28,7 @@ packages = [{ include = "preql" }]
 [tool.poetry.dependencies]
 python = "^3.6"
 lark-parser = "^0.11.3"
-runtype = "^0.1.12"
+runtype = "^0.1.16"
 dsnparse = "*"
 prompt-toolkit = "*"
 pygments = "*"

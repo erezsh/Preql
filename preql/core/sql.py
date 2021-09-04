@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict
 
-from preql.utils import dataclass, X, listgen, field_list, safezip
+from preql.utils import dataclass, X, listgen, safezip
 
 from . import pql_types
 from .pql_types import T, Type, dp_type, Id
@@ -675,9 +675,9 @@ class Select(TableOperation):
     type: Type
     table: Sql # XXX Table won't work with RawSQL
     fields: List[Sql]
-    conds: List[Sql] = field_list()
-    group_by: List[Sql] = field_list()
-    order: List[Sql] = field_list()
+    conds: List[Sql] = []
+    group_by: List[Sql] = []
+    order: List[Sql] = []
 
     # MySQL doesn't support arithmetic in offset/limit, and we don't need it anyway
     offset: Optional[int] = None

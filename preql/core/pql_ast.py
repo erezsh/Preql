@@ -1,7 +1,7 @@
 from typing import List, Any, Optional, Dict, Union
 from dataclasses import field
 
-from preql.utils import dataclass, TextReference, field_list
+from preql.utils import dataclass, TextReference
 
 from . import pql_types as types
 from .pql_types import T, Object, Id
@@ -153,7 +153,7 @@ class Projection(TableOperation):
     table: Object
     fields: List[NamedField]
     groupby: bool = False
-    agg_fields: List[NamedField] = field_list()
+    agg_fields: List[NamedField] = []
 
     def __post_init__(self):
         if self.groupby:
