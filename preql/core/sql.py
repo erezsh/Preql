@@ -387,6 +387,7 @@ class LogicalNot(Scalar):
 
 @dataclass
 class BinOp(Scalar):
+    type: Type
     op: str
     exprs: List[Sql]
 
@@ -394,7 +395,6 @@ class BinOp(Scalar):
         x = join_sep([e.compile_wrap(qb).code for e in self.exprs], f' {self.op} ')
         return parens(x)
 
-    type = property(X.exprs[0].type)     # TODO ensure type correctness
 
 
 @dataclass
@@ -1115,7 +1115,7 @@ def arith(res_type, op, args):
     elif op == '**':
         return FuncCall(T.float, 'power', arg_codes)
 
-    return BinOp(op, arg_codes)
+    return BinOp(res_type, op, arg_codes)
 
     
 def make_value(x):
@@ -1130,4 +1130,4 @@ def make_value(x):
     return Primitive(t, _repr(t, x))
 
 def add_one(x):
-    return BinOp('+', [x, make_value(1)])
+    return BinOp(x.type, '+', [x, make_value(1)])

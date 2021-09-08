@@ -96,21 +96,33 @@ def _restructure_result(_t: T.timestamp, i):
 
 
 
-@dp_inst
-def sql_result_to_python(res: T.primitive):
+def _extract_primitive(res, expected):
     try:
         row ,= res.value
         item ,= row
     except ValueError:
-        raise Signal.make(T.TypeError, None, "Expected primitive. Got: '%s'" % res.value)
-    # t = from_python(type(item))
-    # if not (t <= res.type):
-    #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
-    if res.type <= T.bool:
-        assert item in (0, 1)
-        return bool(item)
+        raise Signal.make(T.TypeError, None, f"Expected a single {expected}. Got: '{res.value}'")
 
     return item
+
+@dp_inst
+def sql_result_to_python(res: T.bool):
+    item = _extract_primitive(res, 'bool')
+    if item not in (0, 1):
+        raise Signal.make(T.ValueError, None, f"Expected SQL to return a bool. Instead got '{item}'")
+    return bool(item)
+
+@dp_inst
+def sql_result_to_python(res: T.int):
+    item = _extract_primitive(res, 'int')
+    if not isinstance(item, int):
+        breakpoint()
+        raise Signal.make(T.ValueError, None, f"Expected SQL to return an int. Instead got '{item}'")
+    return item
+
+@dp_inst
+def sql_result_to_python(res: T.primitive):
+    return _extract_primitive(res, res)
 
 @dp_inst
 def sql_result_to_python(res):
@@ -119,18 +131,14 @@ def sql_result_to_python(res):
 @dp_inst
 def sql_result_to_python(res: T.datetime):
     # XXX doesn't belong here?
-    row ,= res.value
-    item ,= row
-    s = item
-    return _from_datetime(s)
+    item = _extract_primitive(res, 'datetime')
+    return _from_datetime(item)
 
 @dp_inst
 def sql_result_to_python(res: T.timestamp):
     # XXX doesn't belong here?
-    row ,= res.value
-    item ,= row
-    s = item
-    return _from_datetime(s)
+    item = _extract_primitive(res, 'datetime')
+    return _from_datetime(item)
 
 def _from_sql_primitive(p):
     if isinstance(p, decimal.Decimal):

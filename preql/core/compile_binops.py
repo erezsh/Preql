@@ -245,7 +245,7 @@ def _compile_arith(arith, a: T.number, b: T.number):
 @dp_inst
 def _compile_arith(arith, a: T.string, b: T.string):
     if arith.op == 'like':
-        code = sql.BinOp('like', [a.code, b.code])
+        code = sql.BinOp(T.bool, 'like', [a.code, b.code])
         return objects.Instance.make(code, T.bool, [a, b])
 
     if arith.op != '+':
