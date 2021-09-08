@@ -173,8 +173,8 @@ def _execute(table_def: ast.TableDefFromExpr):
 def _execute(var_def: ast.SetValue):
     res = evaluate(var_def.value)
 
-    # if res.type <= T.primitive:
-    #     res = objects.pyvalue_inst(res.localize(), res.type)
+    if res.type <= T.primitive and not res.type <= (T.union[T.aggregated, T.projected]):
+        res = objects.pyvalue_inst(res.localize(), res.type)
     
     _set_value(var_def.name, res)
     return res

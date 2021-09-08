@@ -106,6 +106,10 @@ def sql_result_to_python(res: T.primitive):
     # t = from_python(type(item))
     # if not (t <= res.type):
     #     raise Signal.make(T.TypeError, state, None, f"Incorrect type returned from SQL: '{t}' instead of '{res.type}'")
+    if res.type <= T.bool:
+        assert item in (0, 1)
+        return bool(item)
+
     return item
 
 @dp_inst
