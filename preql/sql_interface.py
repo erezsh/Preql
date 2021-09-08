@@ -439,6 +439,8 @@ class BigQueryInterface(SqlInterface):
         from google.api_core.exceptions import NotFound, BadRequest
         try:
             return self._client.get_table('.'.join(name.parts))
+        except ValueError as e:
+            raise Signal.make(T.ValueError, None, f'BigQuery error: {e}')
         except NotFound as e:
             raise Signal.make(T.DbQueryError, None, str(e))
         except BadRequest as e:

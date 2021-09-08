@@ -876,7 +876,11 @@ def pql_import_json(table_name: T.string, uri: T.string):
     print(f"Importing JSON file: '{uri}'")
 
     import pandas
-    df = pandas.read_json(uri)
+    try:
+        df = pandas.read_json(uri)
+    except ValueError as e:
+        raise Signal.make(T.ValueError, uri, f'Pandas error: {e}')
+
     tbl ,= import_pandas({table_name: df})
     return tbl
 
