@@ -155,7 +155,19 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
 _g_last_table = None
 _g_last_offset = 0
 
-def _view_table(table, size, offset):
+
+def _table_name(table):
+    try:
+        return table.type.options['name'].repr_name
+    except KeyError:
+        return ''
+
+def _preview_table(table, size, offset):
+    if size == 0:
+        return []
+    if not (size > 0):
+        raise Signal.make(T.ValueError, table, "Table preview size cannot be negative")
+
     global _g_last_table, _g_last_offset
     rows = cast_to_python(table_limit(table, size, offset))
     _g_last_table = table
@@ -163,17 +175,13 @@ def _view_table(table, size, offset):
     if table.type <= T.list:
         rows = [{ITEM_NAME: x} for x in rows]
 
-    try:
-        table_name = table.type.options['name'].repr_name
-    except KeyError:
-        table_name = ''
-
-    return table_name, rows
+    return rows
 
 
 def table_inline_repr(self):
     offset = 0
-    table_name, rows, = _view_table(self, DisplaySettings.TABLE_PREVIEW_SIZE_SHELL, offset)
+    preview = DisplaySettings.TABLE_PREVIEW_SIZE_SHELL
+    rows = _preview_table(self, preview, offset)
     return '[%s]' % ', '.join(repr(r) for r in rows)
 
 
@@ -207,7 +215,8 @@ def table_repr(self, offset=0):
     else:
         assert display.format == 'rich'
 
-    table_name, rows, = _view_table(self, preview, offset)
+    table_name = _table_name(self)
+    rows = _preview_table(self, preview, offset)
     has_more = offset + len(rows) < count
     return table_f(table_name, count_str, rows, offset, has_more, colors=colors)
 
