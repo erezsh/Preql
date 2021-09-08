@@ -599,8 +599,8 @@ def eval_func_call(func, args):
 
     with use_scope({**ordered_args, '__unwind__': []}):
         res = _call_expr(expr)
-        for to_unwind in get_var('__unwind__'):
-            to_unwind()
+        # for to_unwind in get_var('__unwind__'):
+        #     to_unwind()
 
     if isinstance(res, ast.ResolveParameters):  # XXX A bit of a hack
         raise exc.InsufficientAccessLevel()
