@@ -380,6 +380,7 @@ if (db_type == "postgres") {
     func _count_true(field) = SQL(int, "sum(cast($field!=0 as unsigned))")
 
 } else if (db_type == "bigquery") {
+    func _pi() = SQL(float, "ACOS(-1)")
     func _cast_string_to_int(s: string) = SQL(int, "cast($s as int64)")
     func _now() = SQL(timestamp, "current_timestamp()")
     func _random() = SQL(float, "RAND()")

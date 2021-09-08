@@ -39,7 +39,7 @@ def _resolve_name_and_scope(name, ast_node):
         if len(name.parts) > 1:
             raise Signal(T.NameError, ast_node, "Local tables cannot include a schema (namespace)")
         name ,= name.parts
-        name = '__local_' + unique_name(name)
+        name = Id('__local_' + unique_name(name))
 
     name = get_db().qualified_name(name)
     return name, temporary
@@ -195,6 +195,7 @@ def _execute(table_def: ast.TableDef):
     # Create type and a corresponding table in the database
     t = resolve(table_def)
     db_name = t.options['name']
+    assert isinstance(db_name, Id), (db_name, t)
 
     if t.options['temporary']:
         # register name for later removal

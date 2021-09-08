@@ -513,7 +513,7 @@ class BigQueryInterface(SqlInterface):
 
 class AbsSqliteInterface:
     def table_exists(self, name):
-        assert isinstance(name, Id)
+        assert isinstance(name, Id), name
         if len(name.parts) > 1:
             raise Signal.make(T.DbError, None, "Sqlite does not implement namespaces")
 
