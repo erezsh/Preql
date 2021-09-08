@@ -182,6 +182,13 @@ class Preql:
             obj = self._interp.evaluate_obj( var )
             return self._wrap_result(obj)
 
+    def __setattr__(self, name, value):
+        if name.startswith('_'):
+            return super().__setattr__(name, value)
+
+        obj = objects.from_python(value)
+        self._interp.state.set_var(name, obj)
+
     def _wrap_result(self, res):
         "Wraps Preql result in a Python-friendly object"
         if isinstance(res, Ast):

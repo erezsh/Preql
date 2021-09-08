@@ -150,7 +150,13 @@ def _copy_rows(target_name: ast.Name, source: objects.TableInstance):
 
     source = exclude_fields(source, set(read_only) & set(source.type.elems))
 
-    code = sql.Insert(target.type.options['name'], columns, source.code)
+    table = target.type
+    try:
+        table_name = table.options['name']
+    except KeyError:
+        raise Signal.make(T.ValueError, target_name, "Cannot add a new row to an unnamed table")
+
+    code = sql.Insert(table_name, columns, source.code)
     db_query(code, source.subqueries)
     return objects.null
 
@@ -820,7 +826,12 @@ def _new_row(new_ast, table, matched):
         keys += ['id']
         values += [sql.make_value(rowid)]
 
-    q = sql.InsertConsts(table.options['name'], keys, [values])
+    try:
+        table_name = table.options['name']
+    except KeyError:
+        raise Signal.make(T.ValueError, new_ast, "Cannot add a new row to an unnamed table")
+
+    q = sql.InsertConsts(table_name, keys, [values])
     db_query(q)
 
     if get_db().target != sql.bigquery:
