@@ -13,12 +13,11 @@ from .types_impl import dp_type, pql_repr
 from .interp_common import call_builtin_func, cast_to_python_int, cast_to_python
 from .state import get_display
 
-from preql.settings import color_theme
+from preql.settings import color_theme, Display as DisplaySettings
 
 
-TABLE_PREVIEW_SIZE = 16
-LIST_PREVIEW_SIZE = 128
-MAX_AUTO_COUNT = 10000
+
+
 
 @dp_type
 def pql_repr(t: T.function, value):
@@ -116,8 +115,6 @@ def _html_table(name, count_str, rows, offset, has_more, colors):
     return '%s<table class="preql_table">%s%s</table>' % (header, ths, '\n'.join(trs)) + style
 
 
-from preql.settings import color_theme
-
 def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_footer=False):
     header = 'table '
     if name:
@@ -176,15 +173,16 @@ def _view_table(table, size, offset):
 
 def table_inline_repr(self):
     offset = 0
-    table_name, rows, = _view_table(self, TABLE_PREVIEW_SIZE, offset)
+    table_name, rows, = _view_table(self, DisplaySettings.TABLE_PREVIEW_SIZE_SHELL, offset)
     return '[%s]' % ', '.join(repr(r) for r in rows)
 
 
 
 def table_repr(self, offset=0):
+    max_count = DisplaySettings.MAX_AUTO_COUNT
 
-    count = cast_to_python_int(call_builtin_func('count', [table_limit(self, MAX_AUTO_COUNT)]))
-    if count == MAX_AUTO_COUNT:
+    count = cast_to_python_int(call_builtin_func('count', [table_limit(self, max_count)]))
+    if count == max_count:
         count_str = f'>={count}'
     else:
         count_str = f'={count}'
@@ -197,12 +195,12 @@ def table_repr(self, offset=0):
 
     # TODO load into preql and repr, instead of casting to python
     table_f = _rich_table
-    preview = TABLE_PREVIEW_SIZE
+    preview = DisplaySettings.TABLE_PREVIEW_SIZE_SHELL
     colors = True
     display = get_display()
 
     if display.format == 'html':
-        preview = TABLE_PREVIEW_SIZE * 10
+        preview = DisplaySettings.TABLE_PREVIEW_SIZE_HTML
         table_f = _html_table
     elif display.format == 'text':
         colors = False

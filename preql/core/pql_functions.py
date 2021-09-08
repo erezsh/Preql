@@ -207,6 +207,15 @@ def pql_breakpoint():
     breakpoint()
     return objects.null
 
+def pql_set_setting(name: T.string, value: T.any):
+    name = cast_to_python_string(name)
+    value = cast_to_python(value)
+
+    from preql.settings import Display
+    setattr(Display, name, value)
+    return objects.null
+
+
 def pql_debug():
     """Breaks the execution of the interpreter, and enters into a debug
     session using the REPL environment.
@@ -1091,6 +1100,7 @@ internal_funcs = create_internal_funcs({
     'serve_rest': pql_serve_rest,
     'force_eval': pql_force_eval,
     'fmt': pql_fmt,
+    'set_setting': pql_set_setting,
 })
 
 _joins = {

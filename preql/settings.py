@@ -24,6 +24,12 @@ color_theme = {
 
 update_color_theme = {}
 
+class Display:
+    TABLE_PREVIEW_SIZE_SHELL = 16
+    TABLE_PREVIEW_SIZE_HTML = 64
+    LIST_PREVIEW_SIZE = 128
+    MAX_AUTO_COUNT = 10000
+
 try:
     from .local_settings import *
 except ImportError:
