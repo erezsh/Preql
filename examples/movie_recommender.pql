@@ -31,29 +31,36 @@ import_csv(movies, "ml-latest-small/movies.csv", true)
 
 
 func recommend(liked_movie_ids) {
-    // Get the ratings for the movies that the user likes
+    // Get the ratings data for the movies that the user likes
     liked_ratings = ratings[movieId in liked_movie_ids]
 
     // For each rater, get the sum of their ratings.
     // Higher means more similar to the user.
     user_similarity = liked_ratings {
-        userId => similarity_score: sum(rating)
+        userId 
+          => 
+        similarity_score: sum(rating)
     }
 
     // Get the ratings for all the movies the user hasn't seen yet
     unseen_ratings = ratings[movieId !in liked_movie_ids]
 
     // For each unseen rating, attach a similarity score according to the rater
-    unseen_ratings_with_similarity = (
-        join(rating: unseen_ratings.userId, rater: user_similarity.userId) {
-            rater.similarity_score, ...rating
+    unseen_ratings_with_similarity = \
+        join(
+            rating: unseen_ratings.userId,
+            rater: user_similarity.userId
+        ) {
+            rater.similarity_score
+            ...rating
         }
-    )
 
     // Aggregate the score per movie, weighted by the similarity
     // between the user and the rater
     movie_score = unseen_ratings_with_similarity {
-        movieId => score: sum(similarity_score * rating)
+        movieId
+          => 
+        score: sum(similarity_score * rating)
     }
 
     return movie_score order{ ^score }
@@ -80,7 +87,7 @@ func test() {
 
     // Outputs:
     //
-    //         Top 5 recommended movies:
+    //     Top 5 recommended movies:
     //     -------------------------
     //                     table  =5
     //     ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓

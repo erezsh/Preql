@@ -815,7 +815,6 @@ def _new_row(new_ast, table, matched):
 
     keys = [name for (name, _) in destructured_pairs]
     values = [sql.make_value(v) for (_,v) in destructured_pairs]
-    assert keys and values
     # XXX use regular insert?
 
     if 'name' not in table.options:

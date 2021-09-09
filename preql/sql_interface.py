@@ -380,6 +380,8 @@ class BigQueryInterface(SqlInterface):
     def __init__(self, project, print_sql=False):
         from google.cloud import bigquery
 
+        # job_config = bigquery.job.QueryJobConfig(default_dataset=f'{project}._preql')
+        # self._client = bigquery.Client(project, default_query_job_config=job_config)
         self._client = bigquery.Client(project)
         self._default_dataset = None
 

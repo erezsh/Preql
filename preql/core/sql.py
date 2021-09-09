@@ -528,6 +528,9 @@ class InsertConsts(SqlStatement):
         tuples = self.tuples
         assert self.tuples, self
 
+        if not cols:
+            return ['INSERT INTO', quote_id(self.table), 'DEFAULT VALUES']
+
         values = join_comma(
             parens(join_comma([e.compile_wrap(qb).code for e in tpl]))
             for tpl in tuples
