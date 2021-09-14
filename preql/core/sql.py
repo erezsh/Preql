@@ -112,13 +112,14 @@ class CompiledSQL(Sql):
     def compile(self, qb):
         return self
     def finalize_with_subqueries(self, qb, subqueries):
+        # Why not inherit from Sql?
         return SqlTree.finalize_with_subqueries(self, qb, subqueries)
 
     def optimize(self):
         if not self.code:
             return self
 
-        # unify strings for faster resolve_parameters and finalize
+        # unify strings for faster parameter resolution
         new_code = []
         last = self.code[0]
         for c in self.code[1:]:

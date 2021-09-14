@@ -437,7 +437,6 @@ def compile_to_inst(lst: ast.List_):
     return inst
 
 
-# def resolve_parameters(state: State, res: ast.ResolveParameters):
 @method
 def compile_to_inst(res: ast.ResolveParameters):
     # XXX use a different mechanism??

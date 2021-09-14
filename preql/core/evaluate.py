@@ -898,14 +898,6 @@ def add_as_subquery(inst: objects.Instance):
     return inst.replace(code=code_cls(inst.code.type, name), subqueries=inst.subqueries.update({name: inst.code}))
 
 
-@method
-def resolve_parameters(x: Object):
-    return x
-
-@method
-def resolve_parameters(p: ast.Parameter):
-    return get_var(p.name)
-
 
 @dsp
 def evaluate(obj: list):
@@ -933,7 +925,8 @@ def evaluate(obj_):
 
     # - Resolve parameters to "instantiate" the cached code
     # TODO necessary?
-    obj = obj.resolve_parameters()
+    if isinstance(obj, ast.Parameter):
+        obj = get_var(obj.name)
 
     if access_level < AccessLevels.READ_DB:
         return obj

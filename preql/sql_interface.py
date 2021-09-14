@@ -372,7 +372,7 @@ class PostgresInterface(SqlInterfaceCursor):
 class BigQueryInterface(SqlInterface):
     target = bigquery
 
-    PREQL_DATASET = '_preql'
+    PREQL_DATASET = '_preql_d9e7334a9e028e8aa38509912dfc2aac'
 
     supports_foreign_key = False
     id_type_decl = 'STRING NOT NULL'
