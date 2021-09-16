@@ -64,6 +64,9 @@ class SqlInterface:
     def close(self):
         self._conn.close()
 
+    def list_namespaces(self):
+        return []
+
     def import_table_types(self):
         # Inefficient implementation but generic
         tables = self.list_tables()
@@ -412,6 +415,9 @@ class BigQueryInterface(SqlInterface):
     def list_tables(self):
         return list(self._list_tables())
 
+    def list_namespaces(self):
+        datasets = self._client.list_datasets()
+        return [x.reference.dataset_id for x in datasets]
 
     def _execute_sql(self, sql_type, sql_code):
         assert context.state

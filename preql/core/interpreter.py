@@ -153,20 +153,32 @@ class Interpreter:
 
     @entrypoint
     def load_all_tables(self):
+        modules = {}
+        namespaces = set(self.state.db.list_namespaces())
+        for name in namespaces:
+            module = objects.Module(name, {})
+            modules[name] = module
+            self.set_var(name, module)
+
+        def get_module(name):
+            try:
+                return modules[schema_name]
+            except KeyError:
+                module = objects.Module(name, {})
+                modules[name] = module
+                self.set_var(name, module)
+
+
         table_types = self.state.db.import_table_types()
         table_types_by_schema = classify(table_types, lambda x: x[0], lambda x: x[1:])
 
         for schema_name, table_types in table_types_by_schema.items():
-            if schema_name:
-                schema = objects.Module(schema_name, {})
-                self.set_var(schema_name, schema)
-
             for table_name, table_type in table_types:
                 db_name = table_type.options['name']
                 inst = objects.new_table(table_type, db_name)
 
                 if schema_name:
-                    schema.namespace[table_name] = inst
+                    get_module(schema_name).namespace[table_name] = inst
                 else:
                     if not self.has_var(table_name):
                         self.set_var(table_name, inst)

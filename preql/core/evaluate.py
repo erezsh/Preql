@@ -7,7 +7,7 @@ from preql import settings
 from preql.context import context
 
 from .interp_common import assert_type, exclude_fields, call_builtin_func, is_global_scope, cast_to_python_string, cast_to_python_int
-from .state import set_var, use_scope, get_var, unique_name, get_db, catch_access, AccessLevels, get_access_level, reduce_access
+from .state import set_var, use_scope, get_var, unique_name, get_db, catch_access, AccessLevels, get_access_level, reduce_access, has_var
 from . import exceptions as exc
 from . import pql_objects as objects
 from . import pql_ast as ast
@@ -186,6 +186,20 @@ def _execute(var_def: ast.SetValue):
     return res
 
 
+def ensure_namespace(name: Id):
+    path = name.parts[:-1]
+    if not path:
+        return
+
+    if len(path) > 1:
+        raise Signal(T.NotImplementedError, name, "Nested namespaces not supported yet!")
+
+    name ,= path
+    if not has_var(name):
+        module = objects.Module(name, {})
+        set_var(name, module)
+
+
 
 @method
 def _execute(table_def: ast.TableDef):
@@ -242,7 +256,8 @@ def _execute(table_def: ast.TableDef):
         t = t(elems, pk=[['id']])
         inst = objects.new_table(t, db_name)
 
-    set_var(table_def.name.name, inst)
+    ensure_namespace(table_def.name)
+    set_var(table_def.name, inst)
 
     if not exists:
         sql_code = sql.compile_type_def(db_name, t)

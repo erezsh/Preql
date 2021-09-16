@@ -185,6 +185,14 @@ class ThreadState:
     def get_all_vars_with_rank(self):
         return self.ns.get_all_vars_with_rank()
 
+    def has_var(self, name):
+        try:
+            self.ns.get_var(name)
+        except NameNotFound:
+            return False
+            
+        return True
+
     def get_var(self, name):
         try:
             return self.ns.get_var(name)
@@ -200,7 +208,10 @@ class ThreadState:
 
 
     def set_var(self, name, value):
-        return self.ns.set_var(name, value)
+        try:
+            return self.ns.set_var(name, value)
+        except NameNotFound as e:
+            raise Signal.make(T.NameError, None, str(e))
 
     def use_scope(self, scope: dict):
         return self.ns.use_scope(scope)
@@ -224,6 +235,9 @@ def use_scope(scope):
 
 def get_var(name):
     return context.state.get_var(name)
+
+def has_var(name):
+    return context.state.has_var(name)
 
 def get_db():
     return context.state.db
