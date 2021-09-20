@@ -522,7 +522,7 @@ class SelectedColumnInstance(AbsInstance):
 
     @property
     def code(self):
-        raise Signal.make(T.TypeError, [], f"Operation not supported for {self}")
+        raise Signal.make(T.TypeError, None, f"Operation not supported for {self}")
     #     return self._resolve_attr().code
 
     def flatten_code(self):
