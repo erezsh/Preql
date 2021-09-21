@@ -167,7 +167,7 @@ class Interpreter:
                 module = objects.Module(name, {})
                 modules[name] = module
                 self.set_var(name, module)
-
+                return module
 
         table_types = self.state.db.import_table_types()
         table_types_by_schema = classify(table_types, lambda x: x[0], lambda x: x[1:])
