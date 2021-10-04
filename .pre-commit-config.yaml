@@ -1,0 +1,33 @@
+repos:
+  - repo: local
+    hooks:
+      - id: system
+        name: isort
+        stages: [commit]
+        entry: poetry run isort preql/
+        pass_filenames: false
+        language: system
+  - repo: local
+    hooks:
+      - id: system
+        name: black
+        stages: [commit]
+        entry: poetry run black preql/
+        pass_filenames: false
+        language: system
+  - repo: local
+    hooks:
+      - id: system
+        name: pylint
+        stages: [manual]
+        entry: poetry run pylint preql/
+        pass_filenames: false
+        language: system
+  - repo: local
+    hooks:
+      - id: system
+        name: test
+        stages: [push]
+        entry: poetry run python -m tests minimal
+        pass_filenames: false
+        language: system

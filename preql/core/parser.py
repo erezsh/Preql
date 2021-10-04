@@ -1,15 +1,15 @@
 from ast import literal_eval
 from pathlib import Path
 
-from lark import Lark, Transformer, v_args, UnexpectedInput, UnexpectedToken
+from lark import Lark, Transformer, UnexpectedInput, UnexpectedToken, v_args
 
 from preql.utils import TextPos, TextRange, TextReference
 
-from .exceptions import pql_SyntaxError
 from . import pql_ast as ast
 from . import pql_objects as objects
 from .compiler import guess_field_name
-from .pql_types import T, Id
+from .exceptions import pql_SyntaxError
+from .pql_types import Id, T
 
 
 class Str(str):
@@ -34,7 +34,7 @@ def make_text_reference(text, source_file, meta, children=()):
             meta.end_pos or meta.start_pos,
             meta.end_line or meta.line,
             meta.end_column or meta.column,
-        )
+        ),
     )
 
     for c in children:
@@ -87,10 +87,12 @@ def _wrap_result(res, f, meta, children):
         res.set_text_ref(ref)
     return res
 
+
 def _args_wrapper(f, _data, children, meta):
     "Create meta with 'code' from transformer"
     res = f(*children)
     return _wrap_result(res, f, meta, children)
+
 
 def _args_wrapper_meta(f, _data, children, meta):
     ref = make_text_reference(*f.__self__.code_ref, meta, children)
@@ -99,12 +101,15 @@ def _args_wrapper_meta(f, _data, children, meta):
         res.set_text_ref(ref)
     return res
 
+
 def _args_wrapper_list(f, _data, children, meta):
     res = f(children)
     return _wrap_result(res, f, meta, children)
 
+
 with_meta = v_args(wrapper=_args_wrapper_meta)
 no_inline = v_args(wrapper=_args_wrapper_list)
+
 
 def token_value(self, t):
     return Str(str(t))
@@ -124,6 +129,7 @@ class TreeToAst(Transformer):
 
     def STRING(self, s):
         return _fix_escaping(s[1:-1])
+
     def LONG_STRING(self, s):
         return _fix_escaping(s[3:-3])
 
@@ -136,7 +142,9 @@ class TreeToAst(Transformer):
         for item in items:
             name = item.name or guess_field_name(item.value)
             if name in d:
-                raise pql_SyntaxError(meta, f"Dict key appearing more than once: {name}")
+                raise pql_SyntaxError(
+                    meta, f"Dict key appearing more than once: {name}"
+                )
             d[name] = item.value
 
         return ast.Dict_(d)
@@ -149,8 +157,10 @@ class TreeToAst(Transformer):
 
     def null(self):
         return ast.Const(T.nulltype, None)
+
     def false(self):
         return ast.Const(T.bool, False)
+
     def true(self):
         return ast.Const(T.bool, True)
 
@@ -165,6 +175,7 @@ class TreeToAst(Transformer):
     # types
     def typemod(self, *args):
         return [t.value for t in args]
+
     def type(self, name, mods):
         # TODO pk
         return ast.Type(name, '?' in (mods or ''))
@@ -174,14 +185,14 @@ class TreeToAst(Transformer):
     comp_op = token_value
 
     def compare(self, a, op, b):
-        return ast.Compare(op, [a,b])
+        return ast.Compare(op, [a, b])
 
     def _arith_expr(self, a, op, b):
-        return ast.BinOp(op, [a,b])
+        return ast.BinOp(op, [a, b])
 
     add_expr = _arith_expr
     term = _arith_expr
-    power = lambda self, a,b: self._arith_expr(a, '**', b)
+    power = lambda self, a, b: self._arith_expr(a, '**', b)
 
     def like(self, string, pattern):
         return ast.BinOp('like', [string, pattern])
@@ -233,25 +244,28 @@ class TreeToAst(Transformer):
         collector = None
         for i, p in enumerate(params):
             if isinstance(p, objects.ParamVariadic):
-                if i != len(params)-1:
+                if i != len(params) - 1:
                     msg = f"A variadic parameter may only appear at the end of the function ({p.name})"
                     raise pql_SyntaxError(meta, msg)
 
                 collector = p
                 params = params[:-1]
 
-
         docstring = get_docstring(expr)
 
-        return ast.FuncDef(objects.UserFunction(name, params, expr, collector, docstring=docstring))
+        return ast.FuncDef(
+            objects.UserFunction(name, params, expr, collector, docstring=docstring)
+        )
 
     @with_meta
     def func_call(self, meta, func, args):
         for i, a in enumerate(args):
             if isinstance(a, ast.Ellipsis):
-                if i != len(args)-1:
-                    raise pql_SyntaxError(meta, f"An inlined struct must appear at the end of the function call ({a})")
-
+                if i != len(args) - 1:
+                    raise pql_SyntaxError(
+                        meta,
+                        f"An inlined struct must appear at the end of the function call ({a})",
+                    )
 
         return ast.FuncCall(func, args)
 
@@ -291,7 +305,6 @@ class TreeToAst(Transformer):
     def ellipsis(self, from_struct, *exclude):
         return ast.Ellipsis(from_struct, list(exclude))
 
-
     def __default__(self, data, children, meta):
         raise Exception("Unknown rule:", data)
 
@@ -320,10 +333,14 @@ class Postlexer:
 # Changing these terminals in the grammar will prevent collision detection
 # Waiting on interregular!
 from lark.lexer import PatternRE
+
 _operators = ['IN', 'NOT_IN', 'AND', 'OR']
+
+
 def _edit_terminals(t):
     if t.name in _operators:
         t.pattern = PatternRE('%s(?!\w)' % t.pattern.value)
+
 
 parser = Lark.open(
     'preql.lark',
@@ -346,24 +363,28 @@ def terminal_desc(name):
         return p.value
     return '<%s>' % name
 
+
 def terminal_list_desc(term_list):
     return [terminal_desc(x) for x in term_list if x != 'MARKER']
 
+
 def parse_stmts(s, source_file, wrap_syntax_error=True):
     try:
-        tree = parser.parse(s+"\n", start="module")
+        tree = parser.parse(s + "\n", start="module")
     except UnexpectedInput as e:
         if not wrap_syntax_error:
             raise
 
         assert isinstance(source_file, (str, Path)), source_file
 
-        pos =  TextPos(e.pos_in_stream, e.line, e.column)
+        pos = TextPos(e.pos_in_stream, e.line, e.column)
         ref = TextReference(s, str(source_file), TextRange(pos, pos))
         if isinstance(e, UnexpectedToken):
             if e.token.type == '$END':
                 msg = "Code ended unexpectedly"
-                ref = TextReference(s, str(source_file), TextRange(pos, TextPos(len(s), -1 ,-1)))
+                ref = TextReference(
+                    s, str(source_file), TextRange(pos, TextPos(len(s), -1, -1))
+                )
             else:
                 msg = "Unexpected token: %r" % e.token.value
 

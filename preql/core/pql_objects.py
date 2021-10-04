@@ -2,18 +2,16 @@
 A collection of objects that may come to interaction with the user.
 """
 
-from typing import List, Optional, Callable, Any, Dict
+from typing import Any, Callable, Dict, List, Optional
 
-from preql.utils import dataclass, SafeDict, X, listgen
 from preql import settings
+from preql.utils import SafeDict, X, dataclass, listgen
 
-from .exceptions import pql_AttributeError, Signal
 from . import pql_ast as ast
-from . import sql
-from . import pql_types
+from . import pql_types, sql
+from .exceptions import Signal, pql_AttributeError
+from .pql_types import Object, T, Type, dp_inst
 from .state import unique_name
-
-from .pql_types import T, Type, Object, dp_inst
 from .types_impl import flatten_type, join_names, pql_repr
 
 
@@ -23,7 +21,8 @@ class Param(ast.Ast):
     name: str
     type: Optional[Object] = None
     default: Optional[Object] = None
-    orig: Any = None # XXX temporary and lazy, for TableConstructor
+    orig: Any = None  # XXX temporary and lazy, for TableConstructor
+
 
 class ParamVariadic(Param):
     pass
@@ -41,7 +40,8 @@ class ParamDict(Object):
 
     @property
     def type(self):
-        return tuple((n,p.type) for n,p in self.params.items())
+        return tuple((n, p.type) for n, p in self.params.items())
+
 
 @dataclass
 class Module(Object):
@@ -65,8 +65,11 @@ class Module(Object):
         return f'<preql:Module | {len(self.namespace)} members>'
 
     def public_functions(self):
-        funcs = [v for v in self.namespace.values()
-                 if v.type <= T.function and v.docstring and not v.name.startswith('_')]
+        funcs = [
+            v
+            for v in self.namespace.values()
+            if v.type <= T.function and v.docstring and not v.name.startswith('_')
+        ]
         funcs.sort(key=lambda f: f.name)
         return funcs
 
@@ -84,7 +87,9 @@ class Function(Object):
 
     @property
     def type(self):
-        return T.function[tuple(p.type or T.any for p in self.params)](param_collector=self.param_collector is not None)
+        return T.function[tuple(p.type or T.any for p in self.params)](
+            param_collector=self.param_collector is not None
+        )
 
     def help_str(self):
         # XXX probably belongs in display.py
@@ -116,12 +121,10 @@ class Function(Object):
                     msg = f"Function '{self.name}' is missing a value for parameter '{p.name}'"
                     raise Signal.make(T.TypeError, None, msg)
 
-
             yield p, v
 
         if self.param_collector:
             yield self.param_collector, ast.Dict_({})
-
 
     def _localize_keys(self, struct):
         raise NotImplementedError()
@@ -140,15 +143,19 @@ class Function(Object):
             if isinstance(a, ast.NamedField):
                 inline_args.append(a)
             elif isinstance(a, ast.Ellipsis):
-                assert i == len(args)-1
+                assert i == len(args) - 1
                 if a.exclude:
-                    raise NotImplementedError("Cannot exclude keys when inlining struct")
+                    raise NotImplementedError(
+                        "Cannot exclude keys when inlining struct"
+                    )
 
                 # XXX we only want to localize the keys, not the values
                 # TODO remove this?
                 d = self._localize_keys(a.from_struct)
                 if not isinstance(d, dict):
-                    raise Signal.make(T.TypeError, None, f"Expression to inline is not a map: {d}")
+                    raise Signal.make(
+                        T.TypeError, None, f"Expression to inline is not a map: {d}"
+                    )
                 for k, v in d.items():
                     inline_args.append(ast.NamedField(k, pyvalue_inst(v)))
             else:
@@ -185,7 +192,11 @@ class Function(Object):
                 arg_name = named_arg.name
                 if arg_name in values:
                     if arg_name in names_set:
-                        raise Signal.make(T.SyntaxError, None, f"Function '{self.name}' recieved argument '{arg_name}' both as keyword and as positional.")
+                        raise Signal.make(
+                            T.SyntaxError,
+                            None,
+                            f"Function '{self.name}' recieved argument '{arg_name}' both as keyword and as positional.",
+                        )
 
                     names_set.add(arg_name)
                     values[arg_name] = named_arg.value
@@ -194,8 +205,11 @@ class Function(Object):
                     collected[arg_name] = named_arg.value
                 else:
                     # TODO meta
-                    raise Signal.make(T.TypeError, None, f"Function '{self.name}' has no parameter named '{arg_name}'")
-
+                    raise Signal.make(
+                        T.TypeError,
+                        None,
+                        f"Function '{self.name}' has no parameter named '{arg_name}'",
+                    )
 
         for name, value in values.items():
             if value is None:
@@ -208,7 +222,6 @@ class Function(Object):
         if self.param_collector:
             matched.append((self.param_collector, ast.Dict_(collected)))
         return matched
-
 
 
 @dataclass
@@ -227,11 +240,12 @@ class InternalFunction(Function):
     func: Callable
     param_collector: Optional[Param] = None
 
-    meta = None     # Not defined in PQL code
+    meta = None  # Not defined in PQL code
 
     @property
     def docstring(self):
         return self.func.__doc__
+
 
 @dataclass
 class Property(Object):
@@ -243,22 +257,25 @@ class Property(Object):
 
 # post_instance_getattr. Property handling is specified in evaluate
 
+
 @dp_inst
 def post_instance_getattr(inst, obj):
     return obj
+
 
 @dp_inst
 def post_instance_getattr(inst, f: T.function):
     return MethodInstance(inst, f)
 
 
-
 # Instances
+
 
 class AbsInstance(Object):
     def get_attr(self, name):
         v = self.type.get_attr(name)
         return post_instance_getattr(self, v)
+
 
 @dataclass
 class MethodInstance(AbsInstance, Function):
@@ -271,6 +288,7 @@ class MethodInstance(AbsInstance, Function):
 
     name = property(X.func.name)
 
+
 @dataclass
 class PropertyInstance(AbsInstance):
     parent: AbsInstance
@@ -279,10 +297,10 @@ class PropertyInstance(AbsInstance):
     name = property(X.func.name)
     type = T.any
 
+
 @dataclass
 class ExceptionInstance(AbsInstance):
     exc: Exception
-
 
 
 @dataclass
@@ -312,7 +330,6 @@ class Instance(AbsInstance):
         return self
 
 
-
 def pyvalue_inst(value, type_=None, force_type=False):
 
     r = sql.make_value(value)
@@ -325,7 +342,7 @@ def pyvalue_inst(value, type_=None, force_type=False):
     else:
         type_ = r.type
 
-    if settings.optimize:   # XXX a little silly? But maybe good for tests
+    if settings.optimize:  # XXX a little silly? But maybe good for tests
         return ValueInstance.make(r, type_, [], value)
     return Instance.make(r, type_, [])
 
@@ -345,19 +362,20 @@ class ValueInstance(Instance):
 class CollectionInstance(Instance):
     pass
 
+
 @dataclass
 class TableInstance(CollectionInstance):
     def __post_init__(self):
-        assert self.type <= T.table, self.type #and not self.type <= T.list, self.type
+        assert self.type <= T.table, self.type  # and not self.type <= T.list, self.type
 
     @property
     def __columns(self):
-        return {n:self.get_column(n) for n in self.type.elems.keys()}
+        return {n: self.get_column(n) for n in self.type.elems.keys()}
 
     def get_column(self, name):
         # TODO memoize? columns shouldn't change
         t = self.type.elems
-        return make_instance_from_name(t[name], name) #t.column_codename(name))
+        return make_instance_from_name(t[name], name)  # t.column_codename(name))
 
     def all_attrs(self):
         attrs = SafeDict(self.type.proto_attrs)
@@ -371,12 +389,17 @@ class TableInstance(CollectionInstance):
             return super().get_attr(name)
 
 
-
-
 def make_instance_from_name(t, cn):
     if t <= T.struct:
-        return StructInstance(t, {n: make_instance_from_name(mt, join_names((cn, n))) for n,mt in t.elems.items()})
+        return StructInstance(
+            t,
+            {
+                n: make_instance_from_name(mt, join_names((cn, n)))
+                for n, mt in t.elems.items()
+            },
+        )
     return make_instance(sql.Name(t, cn), t, [])
+
 
 def make_instance(code, t, insts):
     if t.issubtype(T.struct):
@@ -389,7 +412,6 @@ def make_instance(code, t, insts):
         return unknown
 
     return Instance.make(code, t, insts)
-
 
 
 class AbsStructInstance(AbsInstance):
@@ -495,7 +517,7 @@ class UnknownInstance(AbsInstance):
     code = sql.unknown
 
     def get_attr(self, name):
-        return self # XXX use name?
+        return self  # XXX use name?
 
     def all_attrs(self):
         return {}
@@ -510,6 +532,7 @@ class UnknownInstance(AbsInstance):
 
 unknown = UnknownInstance()
 
+
 @dataclass
 class SelectedColumnInstance(AbsInstance):
     parent: CollectionInstance
@@ -523,6 +546,7 @@ class SelectedColumnInstance(AbsInstance):
     @property
     def code(self):
         raise Signal.make(T.TypeError, [], f"Operation not supported for {self}")
+
     #     return self._resolve_attr().code
 
     def flatten_code(self):
@@ -542,7 +566,6 @@ class SelectedColumnInstance(AbsInstance):
         return f'{p}.{self.name}'
 
 
-
 def merge_subqueries(instances):
     return SafeDict().update(*[i.subqueries for i in instances])
 
@@ -554,8 +577,10 @@ def ensure_phantom_type(inst, ptype):
         return inst
     return inst.replace(type=ptype[inst.type])
 
+
 def aggregate(inst):
     return ensure_phantom_type(inst, T.aggregated)
+
 
 def projected(inst):
     return ensure_phantom_type(inst, T.projected)
@@ -566,12 +591,14 @@ def remove_phantom_type(inst):
         return inst.replace(type=inst.type.elem)
     return inst
 
+
 def inherit_vectorized_type(t, objs):
     # XXX reevaluate this function
     for src in objs:
         if src.type <= T.projected:
             return T.projected[t]
     return t
+
 
 def inherit_phantom_type(o, objs):
     for src in objs:
@@ -580,16 +607,18 @@ def inherit_phantom_type(o, objs):
     return o
 
 
-
 null = ValueInstance.make(sql.null, T.nulltype, [], None)
+
 
 @dataclass
 class EmptyListInstance(TableInstance):
-    """Special case, because it is untyped
-    """
+    """Special case, because it is untyped"""
+
 
 _empty_list_type = T.list[T.nulltype]
-EmptyList = EmptyListInstance.make(sql.EmptyList(_empty_list_type), _empty_list_type, [])
+EmptyList = EmptyListInstance.make(
+    sql.EmptyList(_empty_list_type), _empty_list_type, []
+)
 
 
 def alias_table_columns(t, prefix):
@@ -612,10 +641,13 @@ def new_table(type_, name=None, instances=None, select_fields=False):
     inst = TableInstance.make(sql.TableName(type_, name), type_, instances or [])
 
     if select_fields:
-        code = sql.Select(type_, inst.code, [sql.Name(t, n) for n, t in type_.elems.items()])
+        code = sql.Select(
+            type_, inst.code, [sql.Name(t, n) for n, t in type_.elems.items()]
+        )
         inst = inst.replace(code=code)
 
     return inst
+
 
 def new_const_table(table_type, tuples):
     name = unique_name("table_")
@@ -624,7 +656,6 @@ def new_const_table(table_type, tuples):
     inst = TableInstance.make(table_code, table_type, [])
     inst.subqueries[name] = subq
     return inst
-
 
 
 class PythonList(ast.Ast):
@@ -641,7 +672,7 @@ class PythonList(ast.Ast):
         if len(types) > 1:
             raise ValueError("Expecting all items of the list to be of the same type")
         # TODO if not one type, raise typeerror
-        type_ ,= types
+        (type_,) = types
         self.type = T.list[pql_types.from_python(type_)]
 
         # allow to compile it straight to SQL, no AST in the middle
@@ -656,43 +687,57 @@ def from_python(value: type(None)):
     assert value is None
     return null
 
+
 @dsp
 def from_python(value: str):
     return ast.Const(T.string, value)
+
 
 @dsp
 def from_python(value: bytes):
     return ast.Const(T.string, value.decode())
 
+
 @dsp
 def from_python(value: bool):
     return ast.Const(T.bool, value)
+
 
 @dsp
 def from_python(value: int):
     return ast.Const(T.int, value)
 
+
 @dsp
 def from_python(value: float):
     return ast.Const(T.float, value)
+
 
 @dsp
 def from_python(value: list):
     return PythonList(value)
 
+
 @dsp
 def from_python(value: dict):
-    elems = {k:from_python(v) for k,v in value.items()}
+    elems = {k: from_python(v) for k, v in value.items()}
     return ast.Dict_(elems)
+
 
 @dsp
 def from_python(value: type):
     return pql_types.from_python(value)
 
+
 @dsp
 def from_python(value: Object):
-        return value
+    return value
+
 
 @dsp
 def from_python(value):
-    raise Signal.make(T.TypeError, None, f"Cannot import into Preql a Python object of type {type(value)}")
+    raise Signal.make(
+        T.TypeError,
+        None,
+        f"Cannot import into Preql a Python object of type {type(value)}",
+    )

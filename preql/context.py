@@ -1,6 +1,7 @@
 import threading
 from contextlib import contextmanager
 
+
 class Context(threading.local):
     def __init__(self):
         self._ctx = [{}]
@@ -28,9 +29,9 @@ class Context(threading.local):
             assert attrs is _d
 
 
-
 def test_threading():
-    import time, random
+    import random
+    import time
 
     context = Context()
 
@@ -43,7 +44,6 @@ def test_threading():
         time.sleep(random.random())
         assert context.i == i
         print(i, end=', ')
-
 
     for i in range(100):
         t = threading.Thread(target=f, args=(i,))

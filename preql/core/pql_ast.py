@@ -1,16 +1,16 @@
-from typing import List, Any, Optional, Dict, Union
 from dataclasses import field
+from typing import Any, Dict, List, Optional, Union
 
-from preql.utils import dataclass, TextReference
+from preql.utils import TextReference, dataclass
 
 from . import pql_types as types
-from .pql_types import T, Object, Id
+from .pql_types import Id, Object, T
 from .types_impl import pql_repr
-
 
 # TODO We want Ast to typecheck, but sometimes types are still unknown (i.e. at parse time).
 # * Use incremental type checks?
 # * Use two tiers of Ast?
+
 
 @dataclass
 class Ast(Object):
@@ -20,14 +20,18 @@ class Ast(Object):
         object.__setattr__(self, 'text_ref', text_ref)
         return self
 
+
 class Expr(Ast):
     _args = ()
+
 
 @dataclass
 class Marker(Expr):
     pass
 
-class Statement(Ast): pass
+
+class Statement(Ast):
+    pass
 
 
 @dataclass
@@ -38,11 +42,13 @@ class Name(Expr):
     def __repr__(self):
         return f'Name({self.name})'
 
+
 @dataclass
 class Parameter(Expr):
     "A typed object without a value"
     name: str
     type: types.Type
+
 
 @dataclass
 class ResolveParameters(Expr):
@@ -61,10 +67,11 @@ class ParameterizedSqlCode(Expr):
 @dataclass
 class Attr(Expr):
     "Reference to an attribute (usually a column)"
-    expr: Optional[Object] #Expr
+    expr: Optional[Object]  # Expr
     name: Union[str, Marker]
 
-    _args = 'expr',
+    _args = ('expr',)
+
 
 @dataclass
 class Const(Expr):
@@ -74,16 +81,19 @@ class Const(Expr):
     def repr(self):
         return pql_repr(self.type, self.value)
 
+
 @dataclass
 class Ellipsis(Expr):
     from_struct: Optional[Union[Expr, Marker]]
     exclude: List[Union[str, Marker]]
 
+
 class BinOpExpr(Expr):
-    _args = 'args',
+    _args = ('args',)
+
 
 class UnaryOpExpr(Expr):
-    _args = 'expr',
+    _args = ('expr',)
 
 
 @dataclass
@@ -97,32 +107,39 @@ class BinOp(BinOpExpr):
     op: str
     args: List[Object]
 
+
 @dataclass
 class Or(BinOpExpr):
     args: List[Object]
+
 
 @dataclass
 class And(BinOpExpr):
     args: List[Object]
 
+
 @dataclass
 class Not(UnaryOpExpr):
     expr: Object
 
+
 @dataclass
 class Neg(UnaryOpExpr):
     expr: Object
+
 
 @dataclass
 class Contains(BinOpExpr):
     op: str
     args: List[Object]
 
+
 @dataclass
 class DescOrder(Expr):
     value: Object
 
-    _args = 'value',
+    _args = ('value',)
+
 
 @dataclass
 class Range(Expr):
@@ -131,22 +148,25 @@ class Range(Expr):
 
     _args = 'start', 'stop'
 
+
 @dataclass
 class NamedField(Expr):
     name: Optional[str]
-    value: Object #(Expr, types.PqlType)
+    value: Object  # (Expr, types.PqlType)
     user_defined: bool = True
 
-    _args = 'value',
+    _args = ('value',)
 
 
+class TableOperation(Expr):
+    pass
 
-class TableOperation(Expr): pass
 
 @dataclass
 class Selection(TableOperation):
     table: Object
     conds: List[Expr]
+
 
 @dataclass
 class Projection(TableOperation):
@@ -161,43 +181,49 @@ class Projection(TableOperation):
         else:
             assert self.fields and not self.agg_fields
 
+
 @dataclass
 class Order(TableOperation):
     table: Object
     fields: List[Expr]
+
 
 @dataclass
 class Update(TableOperation):
     table: Object
     fields: List[NamedField]
 
+
 @dataclass
 class Delete(TableOperation):
     table: Object
     conds: List[Expr]
+
 
 @dataclass
 class Slice(Expr):
     obj: Object
     range: Range
 
-    _args = 'obj',
+    _args = ('obj',)
+
 
 @dataclass
 class New(Expr):
     type: str
-    args: list   # Func args
+    args: list  # Func args
+
 
 @dataclass
 class NewRows(Expr):
     type: str
-    args: list   # Func args
+    args: list  # Func args
+
 
 @dataclass
 class FuncCall(Expr):
-    func: Any   # objects.Function ?
-    args: list   # Func args
-
+    func: Any  # objects.Function ?
+    args: list  # Func args
 
 
 @dataclass
@@ -211,8 +237,10 @@ class Type(Ast):
     type_obj: Object
     nullable: bool = False
 
+
 class Definition:
     pass
+
 
 @dataclass
 class ColumnDef(Ast, Definition):
@@ -221,9 +249,10 @@ class ColumnDef(Ast, Definition):
     query: Optional[Expr] = None
     default: Optional[Expr] = None
 
+
 @dataclass
 class FuncDef(Statement, Definition):
-    userfunc: Object   # XXX Why not use UserFunction?
+    userfunc: Object  # XXX Why not use UserFunction?
 
 
 @dataclass
@@ -245,31 +274,38 @@ class StructDef(Statement, Definition):
     name: str
     members: list
 
+
 @dataclass
 class SetValue(Statement):
     name: (Name, Attr)
     value: Expr
+
 
 @dataclass
 class InsertRows(Statement):
     name: (Name, Attr)
     value: Expr
 
+
 @dataclass
 class Print(Statement):
     value: List[Object]
+
 
 @dataclass
 class Assert(Statement):
     cond: Object
 
+
 @dataclass
 class Return(Statement):
     value: Object
 
+
 @dataclass
 class Throw(Statement):
     value: Object
+
 
 @dataclass
 class Import(Statement):
@@ -277,9 +313,11 @@ class Import(Statement):
     as_name: Optional[str] = None
     use_core: bool = True
 
+
 @dataclass
 class CodeBlock(Statement):
     statements: List[Ast]
+
 
 @dataclass
 class Try(Statement):
@@ -288,11 +326,13 @@ class Try(Statement):
     catch_expr: Expr
     catch_block: CodeBlock
 
+
 @dataclass
 class If(Statement):
     cond: Object
     then: Statement
     else_: Optional[Statement] = None
+
 
 @dataclass
 class For(Statement):
@@ -300,29 +340,31 @@ class For(Statement):
     iterable: Object
     do: CodeBlock
 
+
 @dataclass
 class While(Statement):
     cond: Object
     do: Statement
 
 
-
 # Collections
+
 
 @dataclass
 class List_(Expr):
     type: Object
     elems: list
 
+
 @dataclass
 class Table_Columns(Expr):
     type: Object
     cols: Dict[str, list]
 
+
 @dataclass
 class Dict_(Expr):
     elems: dict
-
 
 
 def pyvalue(value):

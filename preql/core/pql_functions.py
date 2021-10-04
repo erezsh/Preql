@@ -1,38 +1,60 @@
-import inspect
-import re
-import os
-from datetime import datetime
 import csv
+import inspect
 import itertools
+import os
+import re
+from datetime import datetime
 
 import rich.progress
 import runtype
 
-from preql.utils import safezip, listgen, re_split
-from preql.docstring.autodoc import autodoc, AutoDocError
 from preql.context import context
+from preql.docstring.autodoc import AutoDocError, autodoc
+from preql.utils import listgen, re_split, safezip
 
-from .exceptions import Signal, ExitInterp
-from . import pql_objects as objects
 from . import pql_ast as ast
+from . import pql_objects as objects
 from . import sql
-from .interp_common import pyvalue_inst, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
-from .state import get_var, get_db, use_scope, unique_name, get_db, require_access, AccessLevels, set_var
-from .evaluate import evaluate, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
-from .pql_types import T, Type, Id
-from .types_impl import join_names
 from .casts import cast
 from .compiler import cast_to_instance
+from .evaluate import (
+    TableConstructor,
+    db_query,
+    evaluate,
+    new_table_from_expr,
+    new_table_from_rows,
+)
+from .exceptions import ExitInterp, Signal
+from .interp_common import (
+    assert_type,
+    cast_to_python,
+    cast_to_python_int,
+    cast_to_python_string,
+    pyvalue_inst,
+)
+from .pql_types import Id, T, Type
+from .state import (
+    AccessLevels,
+    get_db,
+    get_var,
+    require_access,
+    set_var,
+    unique_name,
+    use_scope,
+)
+from .types_impl import join_names
+
 
 def new_str(x):
     return pyvalue_inst(str(x), T.string)
+
 
 def _pql_PY_callback(var: str):
     var = var.group()
     assert var[0] == '$'
     var_name = var[1:]
     obj = get_var(var_name)
-    inst = evaluate( obj)
+    inst = evaluate(obj)
 
     if not isinstance(inst, objects.ValueInstance):
         raise Signal.make(T.TypeError, None, f"Cannot convert {inst} to a Python value")
@@ -63,22 +85,29 @@ def pql_PY(code_expr: T.string, code_setup: T.string.as_nullable() = objects.nul
         try:
             res = exec(py_setup)
         except Exception as e:
-            raise Signal.make(T.EvalError, code_expr, f"Python code provided returned an error: {e}")
+            raise Signal.make(
+                T.EvalError, code_expr, f"Python code provided returned an error: {e}"
+            )
 
     try:
         res = eval(py_code)
     except Exception as e:
-        raise Signal.make(T.EvalError, code_expr, f"Python code provided returned an error: {e}")
+        raise Signal.make(
+            T.EvalError, code_expr, f"Python code provided returned an error: {e}"
+        )
 
     return objects.from_python(res)
     # return pyvalue_inst(res)
 
-def pql_inspect_sql(obj: T.object):
-    """Returns the SQL code that would be executed to evaluate the given object
 
-    """
+def pql_inspect_sql(obj: T.object):
+    """Returns the SQL code that would be executed to evaluate the given object"""
     if not isinstance(obj, objects.Instance):
-        raise Signal.make(T.TypeError, None, f"inspect_sql() expects a concrete object. Instead got: {obj.type}")
+        raise Signal.make(
+            T.TypeError,
+            None,
+            f"inspect_sql() expects a concrete object. Instead got: {obj.type}",
+        )
     s = get_db().compile_sql(obj.code, obj.subqueries)
     return objects.ValueInstance.make(sql.make_value(s), T.text, [], s)
 
@@ -122,12 +151,14 @@ def pql_SQL(result_type: T.union[T.table, T.type], sql_code: T.string):
     # .. why not just compile with parameters? the types are already known
     return ast.ParameterizedSqlCode(result_type, sql_code)
 
+
 def pql_force_eval(expr: T.object):
     """Forces the evaluation of the given expression.
 
     Executes any db queries necessary.
     """
-    return objects.pyvalue_inst( cast_to_python(expr) )
+    return objects.pyvalue_inst(cast_to_python(expr))
+
 
 def pql_fmt(s: T.string):
     """Format the given string using interpolation on variables marked as `$var`
@@ -164,22 +195,30 @@ def pql_fmt(s: T.string):
 
     a = string_parts[0]
     for b in string_parts[1:]:
-        a = ast.BinOp("+", [a,b])
+        a = ast.BinOp("+", [a, b])
 
     return cast_to_instance(a)
-
 
 
 def _canonize_default(d):
     return None if d is inspect._empty else d
 
+
 def create_internal_func(fname, f):
     sig = inspect.signature(f)
-    return objects.InternalFunction(fname, [
-        objects.Param(pname, type_ if isinstance(type_, Type) else T.any,
-                      _canonize_default(sig.parameters[pname].default))
-        for pname, type_ in list(f.__annotations__.items())
-    ], f)
+    return objects.InternalFunction(
+        fname,
+        [
+            objects.Param(
+                pname,
+                type_ if isinstance(type_, Type) else T.any,
+                _canonize_default(sig.parameters[pname].default),
+            )
+            for pname, type_ in list(f.__annotations__.items())
+        ],
+        f,
+    )
+
 
 def create_internal_funcs(d):
     new_d = {}
@@ -189,6 +228,7 @@ def create_internal_funcs(d):
         for name in names:
             new_d[name] = create_internal_func(name, f)
     return new_d
+
 
 def create_internal_properties(d):
     return {k: objects.Property(v) for k, v in create_internal_funcs(d).items()}
@@ -207,11 +247,13 @@ def pql_breakpoint():
     breakpoint()
     return objects.null
 
+
 def pql_set_setting(name: T.string, value: T.any):
     name = cast_to_python_string(name)
     value = cast_to_python(value)
 
     from preql.settings import Display
+
     setattr(Display, name, value)
     return objects.null
 
@@ -228,7 +270,6 @@ def pql_debug():
     with use_scope(breakpoint_funcs):
         py_api.start_repl('debug> ')
     return objects.null
-
 
 
 def pql_issubclass(a: T.type, b: T.type):
@@ -248,6 +289,7 @@ def pql_issubclass(a: T.type, b: T.type):
     assert isinstance(b, Type)
     return pyvalue_inst(a <= b, T.bool)
 
+
 def pql_isa(obj: T.any, type: T.type):
     """Checks if the give object is an instance of the given type
 
@@ -264,6 +306,7 @@ def pql_isa(obj: T.any, type: T.type):
     assert_type(type.type, T.type, obj, 'isa')
     res = obj.isa(type)
     return pyvalue_inst(res, T.bool)
+
 
 def _count(obj, table_func, name='count'):
     if obj is objects.null:
@@ -285,6 +328,7 @@ def _count(obj, table_func, name='count'):
         code = sql.FieldFunc('count', obj.code)
 
     return objects.Instance.make(code, T.int, [obj])
+
 
 def pql_count(obj: T.container.as_nullable() = objects.null):
     """Count how many rows are in the given table, or in the projected column.
@@ -330,9 +374,11 @@ def pql_temptable(expr: T.table, const: T.bool.as_nullable() = objects.null):
     const = cast_to_python(const)
     assert_type(expr.type, T.table, expr, 'temptable')
 
-    name = get_db().qualified_name(Id(unique_name("temp")))    # TODO get name from table options
+    name = get_db().qualified_name(
+        Id(unique_name("temp"))
+    )  # TODO get name from table options
 
-    with use_scope({'__unwind__': []}):     # Disable unwinding
+    with use_scope({'__unwind__': []}):  # Disable unwinding
         return new_table_from_expr(name, expr, const, True)
 
 
@@ -347,13 +393,16 @@ def pql_get_db_type():
     return pyvalue_inst(get_db().target, T.string)
 
 
-
 def sql_bin_op(op, t1, t2, name):
 
     if not isinstance(t1, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, t1, f"First argument isn't a table, it's a {t1.type}")
+        raise Signal.make(
+            T.TypeError, t1, f"First argument isn't a table, it's a {t1.type}"
+        )
     if not isinstance(t2, objects.CollectionInstance):
-        raise Signal.make(T.TypeError, t2, f"Second argument isn't a table, it's a {t2.type}")
+        raise Signal.make(
+            T.TypeError, t2, f"Second argument isn't a table, it's a {t2.type}"
+        )
 
     # TODO Smarter matching?
     l1 = len(t1.type.elems)
@@ -364,11 +413,16 @@ def sql_bin_op(op, t1, t2, name):
 
     for e1, e2 in zip(t1.type.elems.values(), t2.type.elems.values()):
         if not e2 <= e1:
-            raise Signal.make(T.TypeError, None, f"Cannot {name}. Column types don't match: '{e1}' and '{e2}'")
+            raise Signal.make(
+                T.TypeError,
+                None,
+                f"Cannot {name}. Column types don't match: '{e1}' and '{e2}'",
+            )
 
     code = sql.TableArith(op, [t1.code, t2.code])
 
     return type(t1).make(code, t1.type, [t1, t2])
+
 
 def pql_table_intersect(t1: T.table, t2: T.table):
     "Intersect two tables. Used for `t1 & t2`"
@@ -378,15 +432,19 @@ def pql_table_intersect(t1: T.table, t2: T.table):
         op = 'INTERSECT'
     return sql_bin_op(op, t1, t2, "intersect")
 
+
 def pql_table_substract(t1: T.table, t2: T.table):
     "Substract two tables (except). Used for `t1 - t2`"
     if get_db().target is sql.mysql:
-        raise Signal.make(T.NotImplementedError, t1, "MySQL doesn't support EXCEPT (yeah, really!)")
+        raise Signal.make(
+            T.NotImplementedError, t1, "MySQL doesn't support EXCEPT (yeah, really!)"
+        )
     if get_db().target == sql.bigquery:
         op = 'EXCEPT DISTINCT'
     else:
         op = 'EXCEPT'
     return sql_bin_op(op, t1, t2, "subtract")
+
 
 def pql_table_union(t1: T.table, t2: T.table):
     "Union two tables. Used for `t1 | t2`"
@@ -395,6 +453,7 @@ def pql_table_union(t1: T.table, t2: T.table):
     else:
         op = 'UNION'
     return sql_bin_op(op, t1, t2, "union")
+
 
 def pql_table_concat(t1: T.table, t2: T.table):
     "Concatenate two tables (union all). Used for `t1 + t2`"
@@ -413,16 +472,24 @@ def _get_table(t):
         raise Signal.make(T.TypeError, None, f"join() arguments must be tables")
     return t
 
+
 def _join2(a, b):
-    if isinstance(a, objects.SelectedColumnInstance) and isinstance(b, objects.SelectedColumnInstance):
+    if isinstance(a, objects.SelectedColumnInstance) and isinstance(
+        b, objects.SelectedColumnInstance
+    ):
         return [a, b]
 
     if not ((a.type <= T.table) and (b.type <= T.table)):
         a = a.type.repr()
         b = b.type.repr()
-        raise Signal.make(T.TypeError, None, f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}")
+        raise Signal.make(
+            T.TypeError,
+            None,
+            f"join() arguments must be of same type. Instead got:\n * {a}\n * {b}",
+        )
 
     return _auto_join(a, b)
+
 
 def _auto_join(ta, tb):
     refs1 = _find_table_reference(ta, tb)
@@ -430,8 +497,10 @@ def _auto_join(ta, tb):
     auto_join_count = len(refs1) + len(refs2)
     if auto_join_count < 1:
         raise NoAutoJoinFound(ta, tb)
-    elif auto_join_count > 1:   # Ambiguity in auto join resolution
-        raise Signal.make(T.JoinError, None, "Cannot auto-join: Several plausible relations found")
+    elif auto_join_count > 1:  # Ambiguity in auto join resolution
+        raise Signal.make(
+            T.JoinError, None, "Cannot auto-join: Several plausible relations found"
+        )
 
     if len(refs1) == 1:
         dst, src = refs1[0]
@@ -445,11 +514,14 @@ def _auto_join(ta, tb):
 
 def _join(join: str, on, exprs_dict: dict, joinall=False, nullable=None):
     names = list(exprs_dict)
-    exprs = [evaluate( value) for value in exprs_dict.values()]
+    exprs = [evaluate(value) for value in exprs_dict.values()]
 
     if len(exprs_dict.attrs) < 2:
-        raise Signal.make(T.ValueError, None, f"Need at least two tables to join. Got {len(exprs_dict.attrs)}")
-
+        raise Signal.make(
+            T.ValueError,
+            None,
+            f"Need at least two tables to join. Got {len(exprs_dict.attrs)}",
+        )
 
     # Validation and edge cases
     for x in exprs:
@@ -468,28 +540,39 @@ def _join(join: str, on, exprs_dict: dict, joinall=False, nullable=None):
     tables = [_get_table(x) for x in exprs]
     assert all((t.type <= T.table) for t in tables)
 
-    structs = {name: T.struct(table.type.elems) for name, table in safezip(names, tables)}
+    structs = {
+        name: T.struct(table.type.elems) for name, table in safezip(names, tables)
+    }
 
     if nullable:
         # Update nullable for left/right/outer joins
-        structs = {name: t.as_nullable() if n else t
-                   for (name, t), n in safezip(structs.items(), nullable)}
+        structs = {
+            name: t.as_nullable() if n else t
+            for (name, t), n in safezip(structs.items(), nullable)
+        }
 
     tables = [objects.alias_table_columns(t, n) for n, t in safezip(names, tables)]
 
-    primary_keys = [[name] + pk
-                    for name, t in safezip(names, tables)
-                    for pk in t.type.options.get('pk', [])
-                   ]
-    table_type = T.table(structs, name=Id(unique_name("joinall" if joinall else "join")), pk=primary_keys)
+    primary_keys = [
+        [name] + pk
+        for name, t in safezip(names, tables)
+        for pk in t.type.options.get('pk', [])
+    ]
+    table_type = T.table(
+        structs, name=Id(unique_name("joinall" if joinall else "join")), pk=primary_keys
+    )
 
     conds = []
     if joinall:
         for e in exprs:
             if not isinstance(e, objects.CollectionInstance):
-                raise Signal.make(T.TypeError, None, f"joinall() expected tables. Got {e}")
+                raise Signal.make(
+                    T.TypeError, None, f"joinall() expected tables. Got {e}"
+                )
     elif on is not objects.null:
-        attrs = {n: objects.make_instance_from_name(table_type.elems[n], n) for n in names}
+        attrs = {
+            n: objects.make_instance_from_name(table_type.elems[n], n) for n in names
+        }
         with use_scope({n: objects.projected(c) for n, c in attrs.items()}):
             on = cast_to_instance(on)
         conds.append(on.code)
@@ -501,7 +584,13 @@ def _join(join: str, on, exprs_dict: dict, joinall=False, nullable=None):
         for (na, ta), (nb, tb) in itertools.combinations(safezip(names, exprs), 2):
             try:
                 cols = _join2(ta, tb)
-                cond = sql.Compare('=', [sql.Name(c.type, join_names((n, c.name))) for n, c in safezip([na, nb], cols)])
+                cond = sql.Compare(
+                    '=',
+                    [
+                        sql.Name(c.type, join_names((n, c.name)))
+                        for n, c in safezip([na, nb], cols)
+                    ],
+                )
                 conds.append(cond)
                 joined_exprs |= {id(ta), id(tb)}
             except NoAutoJoinFound as e:
@@ -510,8 +599,11 @@ def _join(join: str, on, exprs_dict: dict, joinall=False, nullable=None):
         if {id(e) for e in exprs} != set(joined_exprs):
             # TODO better error!!! table name?? specific failed auto-join?
             s = ', '.join(repr(t.type) for t in exprs)
-            raise Signal.make(T.JoinError, None, f"Cannot auto-join: No plausible relations found between {s}")
-
+            raise Signal.make(
+                T.JoinError,
+                None,
+                f"Cannot auto-join: No plausible relations found between {s}",
+            )
 
     code = sql.Join(table_type, join, [t.code for t in tables], conds)
     return objects.TableInstance.make(code, table_type, exprs)
@@ -567,6 +659,7 @@ def pql_join(on, tables):
     """
     return _join("JOIN", on, tables)
 
+
 def pql_leftjoin(on, tables):
     """Left-join any number of tables
 
@@ -574,12 +667,14 @@ def pql_leftjoin(on, tables):
     """
     return _join("LEFT JOIN", on, tables, nullable=[False, True])
 
+
 def pql_outerjoin(on, tables):
     """Outer-join any number of tables
 
     See `join`
     """
     return _join("FULL OUTER JOIN", on, tables, nullable=[False, True])
+
 
 def pql_joinall(on, tables):
     """Cartesian product of any number of tables
@@ -600,6 +695,7 @@ def pql_joinall(on, tables):
     """
     return _join("JOIN", on, tables, True)
 
+
 class NoAutoJoinFound(Exception):
     pass
 
@@ -609,8 +705,11 @@ def _find_table_reference(t1, t2):
     for name, c in t1.type.elems.items():
         if c <= T.t_relation:
             rel = c.options['rel']
-            if rel['table'] == t2.type:     # if same table
-                yield t2.get_attr(rel['column']), objects.SelectedColumnInstance(t1, c, name)
+            if rel['table'] == t2.type:  # if same table
+                yield t2.get_attr(rel['column']), objects.SelectedColumnInstance(
+                    t1, c, name
+                )
+
 
 def pql_type(obj: T.any):
     """Returns the type of the given object
@@ -627,16 +726,18 @@ def pql_type(obj: T.any):
 
 
 def pql_repr(obj: T.any):
-    """Returns the representation text of the given object
-    """
+    """Returns the representation text of the given object"""
     if obj.type <= T.projected | T.aggregated:
-        raise Signal.make(T.CompileError, obj, "repr() cannot run in projected/aggregated mode")
+        raise Signal.make(
+            T.CompileError, obj, "repr() cannot run in projected/aggregated mode"
+        )
 
     try:
         return pyvalue_inst(obj.repr())
     except ValueError:
         value = repr(cast_to_python(obj))
         return pyvalue_inst(value)
+
 
 def pql_columns(obj: T.container):
     """Returns a dictionary `{column_name: column_type}` for the given table
@@ -647,8 +748,8 @@ def pql_columns(obj: T.container):
     """
 
     elems = obj.type.elems
-    if isinstance(elems, tuple):    # Create a tuple/list instead of dict?
-        elems = {f't{i}':e for i, e in enumerate(elems)}
+    if isinstance(elems, tuple):  # Create a tuple/list instead of dict?
+        elems = {f't{i}': e for i, e in enumerate(elems)}
 
     return ast.Dict_(elems)
 
@@ -666,7 +767,9 @@ def pql_cast(obj: T.any, target_type: T.type):
     """
     type_ = target_type
     if not isinstance(type_, Type):
-        raise Signal.make(T.TypeError, type_, f"Cast expected a type, got {type_} instead.")
+        raise Signal.make(
+            T.TypeError, type_, f"Cast expected a type, got {type_} instead."
+        )
 
     if obj.type is type_:
         return obj
@@ -674,7 +777,9 @@ def pql_cast(obj: T.any, target_type: T.type):
     return cast(obj, type_)
 
 
-def pql_import_table(name: T.string, columns: T.list[T.string].as_nullable() = objects.null):
+def pql_import_table(
+    name: T.string, columns: T.list[T.string].as_nullable() = objects.null
+):
     """Import an existing table from the database, and fill in the types automatically.
 
     Parameters:
@@ -699,8 +804,9 @@ def pql_import_table(name: T.string, columns: T.list[T.string].as_nullable() = o
     return objects.new_table(t, select_fields=bool(columns_whitelist))
 
 
-
-def pql_connect(uri: T.string, load_all_tables: T.bool = ast.false, auto_create: T.bool = ast.false):
+def pql_connect(
+    uri: T.string, load_all_tables: T.bool = ast.false, auto_create: T.bool = ast.false
+):
     """Connect to a new database, specified by the uri
 
     Parameters:
@@ -717,12 +823,12 @@ def pql_connect(uri: T.string, load_all_tables: T.bool = ast.false, auto_create:
     auto_create = cast_to_python(auto_create)
     state.connect(uri, auto_create=auto_create)
     if load_all_tables:
-        state.interp.load_all_tables()     # XXX
+        state.interp.load_all_tables()  # XXX
     return objects.null
 
+
 def pql_help(inst: T.any = objects.null):
-    """Provides a brief summary for the given object
-    """
+    """Provides a brief summary for the given object"""
     if inst is objects.null:
         text = (
             "To see the list of functions and objects available in the namespace, type '[b]names()[/b]'\n"
@@ -733,7 +839,6 @@ def pql_help(inst: T.any = objects.null):
             "    >> help(help)\n"
         )
         return pyvalue_inst(text, T.string).replace(type=T._rich)
-
 
     lines = []
 
@@ -747,7 +852,7 @@ def pql_help(inst: T.any = objects.null):
         inst = T.table
 
     try:
-        doc = autodoc(inst).print_text()    # TODO maybe html
+        doc = autodoc(inst).print_text()  # TODO maybe html
         if doc:
             lines += [doc]
     except NotImplementedError:
@@ -760,16 +865,16 @@ def pql_help(inst: T.any = objects.null):
         inst_repr = inst.rich_repr()
         lines += [f"<error generating documentation for object '{inst_repr}'>"]
 
-
-
     text = '\n'.join(lines) + '\n'
     return pyvalue_inst(text).replace(type=T._rich)
+
 
 def _get_doc(v):
     s = ''
     if v.type <= T.function and v.docstring:
         s = v.docstring.splitlines()[0]
     return new_str(s).code
+
 
 def pql_names(obj: T.any = objects.null):
     """List all names in the namespace of the given object.
@@ -778,14 +883,19 @@ def pql_names(obj: T.any = objects.null):
     """
     state = context.state
     if obj is objects.null:
-        all_vars = (state.ns.get_all_vars())
+        all_vars = state.ns.get_all_vars()
     else:
         all_vars = obj.all_attrs()
 
     assert all(isinstance(s, str) for s in all_vars)
     all_vars = list(all_vars.items())
     all_vars.sort()
-    tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(v.type).code, _get_doc(v)]) for n,v in all_vars]
+    tuples = [
+        sql.Tuple(
+            T.list[T.string], [new_str(n).code, new_str(v.type).code, _get_doc(v)]
+        )
+        for n, v in all_vars
+    ]
 
     table_type = T.table(dict(name=T.string, type=T.string, doc=T.string))
     return objects.new_const_table(table_type, tuples)
@@ -799,7 +909,10 @@ def pql_tables():
     db = get_db()
     names = db.list_tables()
     values = [(name, db.import_table_type(name, None)) for name in names]
-    tuples = [sql.Tuple(T.list[T.string], [new_str('.'.join(n.parts)).code,new_str(t).code]) for n,t in values]
+    tuples = [
+        sql.Tuple(T.list[T.string], [new_str('.'.join(n.parts)).code, new_str(t).code])
+        for n, t in values
+    ]
 
     table_type = T.table(dict(name=T.string, type=T.string))
     return objects.new_const_table(table_type, tuples)
@@ -810,15 +923,16 @@ def pql_env_vars():
 
     The resulting table has two columns: name, and value.
     """
-    tuples = [sql.Tuple(T.list[T.string], [new_str(n).code,new_str(t).code]) for n,t in os.environ.items()]
+    tuples = [
+        sql.Tuple(T.list[T.string], [new_str(n).code, new_str(t).code])
+        for n, t in os.environ.items()
+    ]
 
-    table_type = T.table({'name':T.string, 'value': T.string})
+    table_type = T.table({'name': T.string, 'value': T.string})
     return objects.new_const_table(table_type, tuples)
 
 
-breakpoint_funcs = create_internal_funcs({
-    ('c', 'continue'): pql_brk_continue
-})
+breakpoint_funcs = create_internal_funcs({('c', 'continue'): pql_brk_continue})
 
 
 def pql_exit(value: T.any.as_nullable() = None):
@@ -833,11 +947,10 @@ def pql_exit(value: T.any.as_nullable() = None):
     raise ExitInterp(value)
 
 
-
 def import_pandas(dfs):
-    """Import pandas.DataFrame instances into SQL tables
-    """
+    """Import pandas.DataFrame instances into SQL tables"""
     import pandas as pd
+
     def normalize_item(i):
         if pd.isna(i):
             return None
@@ -847,17 +960,20 @@ def import_pandas(dfs):
     for name, df in dfs.items():
         if isinstance(df, pd.Series):
             cols = ['key', 'value']
-            rows = [(dt.to_pydatetime() if isinstance(dt, datetime) else dt,v) for dt, v in df.items()]
+            rows = [
+                (dt.to_pydatetime() if isinstance(dt, datetime) else dt, v)
+                for dt, v in df.items()
+            ]
         else:
             assert isinstance(df, pd.DataFrame)
             cols = list(df)
-            rows = [[normalize_item(i) for i in rec]
-                    for rec in df.to_records()]
-            rows = [ row[1:] for row in rows ]    # drop index
+            rows = [[normalize_item(i) for i in rec] for rec in df.to_records()]
+            rows = [row[1:] for row in rows]  # drop index
 
         tbl = new_table_from_rows(name, cols, rows, temporary=True)
         set_var(name, tbl)
         yield tbl
+
 
 def pql_import_json(table_name: T.string, uri: T.string):
     """Imports a json file into a new table.
@@ -876,17 +992,19 @@ def pql_import_json(table_name: T.string, uri: T.string):
     print(f"Importing JSON file: '{uri}'")
 
     import pandas
+
     try:
         df = pandas.read_json(uri)
     except ValueError as e:
         raise Signal.make(T.ValueError, uri, f'Pandas error: {e}')
 
-    tbl ,= import_pandas({table_name: df})
+    (tbl,) = import_pandas({table_name: df})
     return tbl
 
 
-
-def pql_import_csv(table: T.table, filename: T.string, header: T.bool = ast.Const(T.bool, False)):
+def pql_import_csv(
+    table: T.table, filename: T.string, header: T.bool = ast.Const(T.bool, False)
+):
     """Import a csv file into an existing table
 
     Parameters:
@@ -910,14 +1028,15 @@ def pql_import_csv(table: T.table, filename: T.string, header: T.bool = ast.Cons
         q = sql.InsertConsts2(table.type.options['name'], keys, rows)
         db_query(q)
 
-
     try:
         with open(filename, 'r', encoding='utf8') as f:
             line_count = len(list(f))
             f.seek(0)
 
             reader = csv.reader(f)
-            for i, row in enumerate(rich.progress.track(reader, total=line_count, description=msg)):
+            for i, row in enumerate(
+                rich.progress.track(reader, total=line_count, description=msg)
+            ):
                 if i == 0:
                     matched = cons.match_params(row)
                     keys = [p.name for (p, _) in matched]
@@ -929,7 +1048,7 @@ def pql_import_csv(table: T.table, filename: T.string, header: T.bool = ast.Cons
                 values = ["'%s'" % (v.replace("'", "''")) for v in row]
                 rows.append(values)
 
-                if (i+1) % ROWS_PER_QUERY == 0:
+                if (i + 1) % ROWS_PER_QUERY == 0:
                     insert_values()
                     rows = []
 
@@ -943,26 +1062,33 @@ def pql_import_csv(table: T.table, filename: T.string, header: T.bool = ast.Cons
 
 def _rest_func_endpoint(func):
     from starlette.responses import JSONResponse
+
     async def callback(request):
         params = [objects.pyvalue_inst(v) for k, v in request.path_params.items()]
         expr = ast.FuncCall(func, params)
-        res = evaluate( expr)
+        res = evaluate(expr)
         res = cast_to_python(res)
         return JSONResponse(res)
+
     return callback
+
 
 def _rest_table_endpoint(table):
     from starlette.responses import JSONResponse
+
     async def callback(request):
         tbl = table
         params = dict(request.query_params)
         if params:
-            conds = [ast.Compare('=', [ast.Name(k), objects.pyvalue_inst(v)])
-                     for k, v in params.items()]
+            conds = [
+                ast.Compare('=', [ast.Name(k), objects.pyvalue_inst(v)])
+                for k, v in params.items()
+            ]
             expr = ast.Selection(tbl, conds)
-            tbl = evaluate( expr)
+            tbl = evaluate(expr)
         res = cast_to_python(tbl)
         return JSONResponse(res)
+
     return callback
 
 
@@ -990,21 +1116,23 @@ def pql_serve_rest(endpoints: T.struct, port: T.int = pyvalue_inst(8080)):
         from starlette.responses import JSONResponse
         from starlette.routing import Route
     except ImportError:
-        raise Signal.make(T.ImportError, None, "starlette not installed! Run 'pip install starlette'")
+        raise Signal.make(
+            T.ImportError, None, "starlette not installed! Run 'pip install starlette'"
+        )
 
     try:
         import uvicorn
     except ImportError:
-        raise Signal.make(T.ImportError, None, "uvicorn not installed! Run 'pip install uvicorn'")
+        raise Signal.make(
+            T.ImportError, None, "uvicorn not installed! Run 'pip install uvicorn'"
+        )
 
     port_ = cast_to_python_int(port)
 
     async def root(_request):
         return JSONResponse(list(endpoints.attrs))
 
-    routes = [
-        Route("/", endpoint=root)
-    ]
+    routes = [Route("/", endpoint=root)]
 
     for func_name, func in endpoints.attrs.items():
         path = "/" + func_name
@@ -1016,7 +1144,9 @@ def pql_serve_rest(endpoints: T.struct, port: T.int = pyvalue_inst(8080)):
         elif func.type <= T.table:
             routes.append(Route(path, endpoint=_rest_table_endpoint(func)))
         else:
-            raise Signal.make(T.TypeError, func, f"Expected a function or a table, got {func.type}")
+            raise Signal.make(
+                T.TypeError, func, f"Expected a function or a table, got {func.type}"
+            )
 
     app = Starlette(debug=True, routes=routes)
 
@@ -1031,7 +1161,7 @@ def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false
 
     Parameters:
         column_name: The name of the column to add index
-        unique: If true, every value in the column is expected to be unique 
+        unique: If true, every value in the column is expected to be unique
 
     Note:
         Future versions of this function will accept several columns.
@@ -1043,11 +1173,13 @@ def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false
     try:
         table_name = table.type.options['name']
     except KeyError:
-        raise Signal.make(T.TypeError, None, f"Can only add indexes to persistent tables")
+        raise Signal.make(
+            T.TypeError, None, f"Can only add indexes to persistent tables"
+        )
 
     unique = cast_to_python(unique)
     column_name = cast_to_python(column_name)
-    
+
     index_name = unique_name(f'index_{table_name.repr_name}_{column_name}')
 
     code = sql.AddIndex(Id(index_name), table_name, column_name, unique=unique)
@@ -1055,57 +1187,68 @@ def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false
 
     return objects.null
 
-T.table.proto_attrs.update(create_internal_funcs({
-    'add_index': pql_table_add_index
-}))
+
+T.table.proto_attrs.update(create_internal_funcs({'add_index': pql_table_add_index}))
 
 
 def _make_datetime_method(func_name):
     def f(datetime):
         return context.state.interp.call_func(func_name, [datetime])
+
     return f
 
-_datetime_methods = 'hour', 'minute', 'day', 'month', 'year', 'day_of_week', 'week_of_year'
 
-T.timestamp.proto_attrs.update(create_internal_properties({
-    n: _make_datetime_method(n) for n in _datetime_methods
-}))
+_datetime_methods = (
+    'hour',
+    'minute',
+    'day',
+    'month',
+    'year',
+    'day_of_week',
+    'week_of_year',
+)
+
+T.timestamp.proto_attrs.update(
+    create_internal_properties({n: _make_datetime_method(n) for n in _datetime_methods})
+)
 
 
-internal_funcs = create_internal_funcs({
-    'exit': pql_exit,
-    'help': pql_help,
-    'names': pql_names,
-    'tables': pql_tables,
-    'env_vars': pql_env_vars,
-    'dir': pql_names,
-    'connect': pql_connect,
-    'import_table': pql_import_table,
-    'count': pql_count,
-    'temptable': pql_temptable,
-    'table_concat': pql_table_concat,
-    'table_intersect': pql_table_intersect,
-    'table_union': pql_table_union,
-    'table_subtract': pql_table_substract,
-    'SQL': pql_SQL,
-    'inspect_sql': pql_inspect_sql,
-    'PY': pql_PY,
-    'isa': pql_isa,
-    'issubclass': pql_issubclass,
-    'type': pql_type,
-    'repr': pql_repr,
-    'debug': pql_debug,
-    '_breakpoint': pql_breakpoint,
-    'get_db_type': pql_get_db_type,
-    'cast': pql_cast,
-    'columns': pql_columns,
-    'import_csv': pql_import_csv,
-    'import_json': pql_import_json,
-    'serve_rest': pql_serve_rest,
-    'force_eval': pql_force_eval,
-    'fmt': pql_fmt,
-    'set_setting': pql_set_setting,
-})
+internal_funcs = create_internal_funcs(
+    {
+        'exit': pql_exit,
+        'help': pql_help,
+        'names': pql_names,
+        'tables': pql_tables,
+        'env_vars': pql_env_vars,
+        'dir': pql_names,
+        'connect': pql_connect,
+        'import_table': pql_import_table,
+        'count': pql_count,
+        'temptable': pql_temptable,
+        'table_concat': pql_table_concat,
+        'table_intersect': pql_table_intersect,
+        'table_union': pql_table_union,
+        'table_subtract': pql_table_substract,
+        'SQL': pql_SQL,
+        'inspect_sql': pql_inspect_sql,
+        'PY': pql_PY,
+        'isa': pql_isa,
+        'issubclass': pql_issubclass,
+        'type': pql_type,
+        'repr': pql_repr,
+        'debug': pql_debug,
+        '_breakpoint': pql_breakpoint,
+        'get_db_type': pql_get_db_type,
+        'cast': pql_cast,
+        'columns': pql_columns,
+        'import_csv': pql_import_csv,
+        'import_json': pql_import_json,
+        'serve_rest': pql_serve_rest,
+        'force_eval': pql_force_eval,
+        'fmt': pql_fmt,
+        'set_setting': pql_set_setting,
+    }
+)
 
 _joins = {
     'join': pql_join,
@@ -1115,6 +1258,8 @@ _joins = {
 }
 
 joins = {
-    k: objects.InternalFunction(k, [objects.Param('$on', default=objects.null)], v, objects.Param('tables'))
+    k: objects.InternalFunction(
+        k, [objects.Param('$on', default=objects.null)], v, objects.Param('tables')
+    )
     for k, v in _joins.items()
 }
