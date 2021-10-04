@@ -2,17 +2,18 @@ from typing import Optional
 
 from runtype import dataclass
 
-from preql.utils import safezip, dsp
-from preql.docstring.docstring import parse, Section, Defin, Text
-from preql.core.pql_objects import Module, Function, T, MethodInstance
+from preql.core.pql_objects import Function, MethodInstance, Module, T
 from preql.core.pql_types import Type, subtypes
+from preql.docstring.docstring import Defin, Section, Text, parse
 from preql.settings import color_theme
+from preql.utils import dsp, safezip
 
 from . import type_docs
 
 
 class AutoDocError(Exception):
     pass
+
 
 @dataclass
 class ModuleDoc:
@@ -56,7 +57,7 @@ class FuncDoc:
         indent_str = ' ' * indent
         parent = (self.parent_type.repr() + '.') if self.parent_type else ''
         s = f'{indent_str}[{color_kw}]func[/{color_kw}] {parent}[bold white]{self.func.name}[/bold white]({params}) = ...\n\n'
-        return s + self.doc.print_text(indent+4)
+        return s + self.doc.print_text(indent + 4)
 
     def print_rst(self):
         is_method = bool(self.parent_type)
@@ -73,6 +74,7 @@ class FuncDoc:
             s = '  ' + s.replace('\n', '\n  ')  # XXX hack to indent methods
         return s
 
+
 @dataclass
 class TypeDoc:
     type: object
@@ -87,19 +89,19 @@ class TypeDoc:
             params = f'\\[{params}]'
         indent_str = ' ' * indent
         s = f'{indent_str}[{color_kw}]type[/{color_kw}] [{color_class}]{self.type.typename}[/{color_class}]{params}\n\n'
-        return s + self.doc.print_text(indent+4)
+        return s + self.doc.print_text(indent + 4)
 
     def print_rst(self):
         type_name = str(self.type)
         # s = type_name + '\n'
         # s += '^' * len(type_name) + '\n'
 
-        s = f".. class:: {type_name}⁣\n\n"     # includes an invisible unicode separator to trick sphinx
+        s = f".. class:: {type_name}⁣\n\n"  # includes an invisible unicode separator to trick sphinx
         return s + self.doc.print_rst()
 
 
-
 from lark import LarkError
+
 
 def doc_func(f, parent_type=None):
     if isinstance(f, MethodInstance):
@@ -109,12 +111,22 @@ def doc_func(f, parent_type=None):
     except LarkError as e:
         raise AutoDocError(f"Error in docstring of function {f.name}: {e}")
 
-    assert {s.name for s in doc_tree.sections} <= {'Parameters', 'Example', 'Examples', 'Note', 'Returns', 'See Also'}, [s.name for s in doc_tree.sections]
+    assert {s.name for s in doc_tree.sections} <= {
+        'Parameters',
+        'Example',
+        'Examples',
+        'Note',
+        'Returns',
+        'See Also',
+    }, [s.name for s in doc_tree.sections]
     try:
         params_doc = doc_tree.get_section('Parameters')
     except KeyError:
         if f.params:
-            params_doc = Section('Parameters', [Defin(p.name, None, str(p.type) if p.type else '') for p in f.params])
+            params_doc = Section(
+                'Parameters',
+                [Defin(p.name, None, str(p.type) if p.type else '') for p in f.params],
+            )
             doc_tree.sections.insert(0, params_doc)
     else:
         params = list(f.params)
@@ -143,8 +155,10 @@ def doc_module(m):
 #     p = Preql()
 #     rich.print(doc_module(p('__builtins__')).print_text())
 
+
 def generate_rst(modules_fn, types_fn):
     from preql import Preql
+
     p = Preql()
 
     with open(types_fn, 'w', encoding='utf8') as f:
@@ -163,13 +177,16 @@ def generate_rst(modules_fn, types_fn):
         p('import graph')
         print(doc_module(p('graph')).print_rst(), file=f)
 
+
 @dsp
 def autodoc(m: Module):
     return doc_module(m)
 
+
 @dsp
 def autodoc(f: Function):
     return doc_func(f)
+
 
 @dsp
 def autodoc(t: Type):
@@ -182,23 +199,32 @@ def autodoc(t: Type):
     except LarkError as e:
         raise AutoDocError(f"Error in docstring of type {t}")
 
-    assert {s.name for s in doc_tree.sections} <= {'Example', 'Examples', 'Note', 'See Also'}, [s.name for s in doc_tree.sections]
+    assert {s.name for s in doc_tree.sections} <= {
+        'Example',
+        'Examples',
+        'Note',
+        'See Also',
+    }, [s.name for s in doc_tree.sections]
 
     if t.proto_attrs:
-        methods_doc = Section('Methods', [doc_func(f, t) for f in t.proto_attrs.values() if isinstance(f, Function)])
+        methods_doc = Section(
+            'Methods',
+            [doc_func(f, t) for f in t.proto_attrs.values() if isinstance(f, Function)],
+        )
         doc_tree.sections.insert(0, methods_doc)
 
     if t in subtypes:
-        subtypes_doc = Section('Subtypes', [Text([str(st) + ", "]) for st in subtypes[t]])
+        subtypes_doc = Section(
+            'Subtypes', [Text([str(st) + ", "]) for st in subtypes[t]]
+        )
         doc_tree.sections.insert(0, subtypes_doc)
-
 
     if t.supertypes:
         supertypes_doc = Section('Supertypes', [Text([str(st)]) for st in t.supertypes])
         doc_tree.sections.insert(0, supertypes_doc)
 
-
     return TypeDoc(t, doc_tree)
+
 
 # test_func()
 # test_module()

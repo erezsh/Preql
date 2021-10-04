@@ -1,22 +1,20 @@
 import html
 
-import rich.table
-import rich.text
 import rich.console
 import rich.markup
+import rich.table
+import rich.text
 
-from .exceptions import Signal
-from .pql_types import T, ITEM_NAME
+from preql.settings import Display as DisplaySettings
+from preql.settings import color_theme
+
 from . import pql_objects as objects
+from .exceptions import Signal
+from .interp_common import call_builtin_func, cast_to_python, cast_to_python_int
 from .pql_ast import pyvalue
-from .types_impl import dp_type, pql_repr
-from .interp_common import call_builtin_func, cast_to_python_int, cast_to_python
+from .pql_types import ITEM_NAME, T
 from .state import get_display
-
-from preql.settings import color_theme, Display as DisplaySettings
-
-
-
+from .types_impl import dp_type, pql_repr
 
 
 @dp_type
@@ -30,14 +28,20 @@ def pql_repr(t: T.function, value):
 
     return f'{{func {value.name}({", ".join(params)})}}'
 
+
 @dp_type
 def pql_repr(t: T.decimal, value):
     raise Signal.make(T.NotImplementedError, None, "Decimal not implemented")
 
+
 @dp_type
 def pql_repr(t: T.string, value):
     if not isinstance(value, str):
-        raise Signal.make(T.TypeError, None, f"Expected value of type 'string', instead got {type(value)}")
+        raise Signal.make(
+            T.TypeError,
+            None,
+            f"Expected value of type 'string', instead got {type(value)}",
+        )
 
     value = value.replace('"', r'\"')
     res = f'"{value}"'
@@ -50,10 +54,12 @@ def pql_repr(t: T.string, value):
 
     return res
 
+
 @dp_type
 def pql_repr(t: T.text, value):
     assert isinstance(value, str), value
     return str(value)
+
 
 @dp_type
 def pql_repr(t: T._rich, value):
@@ -62,9 +68,11 @@ def pql_repr(t: T._rich, value):
         return _rich_to_html(r)
     return r
 
+
 @dp_type
 def pql_repr(t: T.bool, value):
     return 'true' if value else 'false'
+
 
 @dp_type
 def pql_repr(t: T.nulltype, value):
@@ -74,7 +82,9 @@ def pql_repr(t: T.nulltype, value):
 def _rich_to_html(r):
     console = rich.console.Console(record=True)
     console.print(r)
-    return console.export_html(code_format='<style>{stylesheet}</style><pre>{code}</pre>').replace('━', '-')
+    return console.export_html(
+        code_format='<style>{stylesheet}</style><pre>{code}</pre>'
+    ).replace('━', '-')
 
 
 def table_limit(table, limit, offset=0):
@@ -112,10 +122,15 @@ def _html_table(name, count_str, rows, offset, has_more, colors):
     }
     </style>
     """
-    return '%s<table class="preql_table">%s%s</table>' % (header, ths, '\n'.join(trs)) + style
+    return (
+        '%s<table class="preql_table">%s%s</table>' % (header, ths, '\n'.join(trs))
+        + style
+    )
 
 
-def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_footer=False):
+def _rich_table(
+    name, count_str, rows, offset, has_more, colors=True, show_footer=False
+):
     header = 'table '
     if name:
         header += name
@@ -126,31 +141,36 @@ def _rich_table(name, count_str, rows, offset, has_more, colors=True, show_foote
     if not rows:
         return header
 
-    table = rich.table.Table(title=rich.text.Text(header), show_footer=show_footer, min_width=len(header))
+    table = rich.table.Table(
+        title=rich.text.Text(header), show_footer=show_footer, min_width=len(header)
+    )
 
     # TODO enable/disable styling
     for k, v in rows[0].items():
         kw = {}
         if isinstance(v, (int, float)):
-            kw['justify']='right'
+            kw['justify'] = 'right'
 
         if colors:
             if isinstance(v, int):
                 kw['style'] = color_theme['number']
             elif isinstance(v, float):
-                kw['style'] ='yellow'
+                kw['style'] = 'yellow'
             elif isinstance(v, str):
                 kw['style'] = color_theme['string']
 
         table.add_column(k, footer=k, **kw)
 
     for r in rows:
-        table.add_row(*[rich.markup.escape(str(x) if x is not None else '-') for x in r.values()])
+        table.add_row(
+            *[rich.markup.escape(str(x) if x is not None else '-') for x in r.values()]
+        )
 
     if has_more:
         table.add_row(*['...' for x in rows[0]])
 
     return table
+
 
 _g_last_table = None
 _g_last_offset = 0
@@ -161,6 +181,7 @@ def _table_name(table):
         return table.type.options['name'].repr_name
     except KeyError:
         return ''
+
 
 def _preview_table(table, size, offset):
     if size == 0:
@@ -185,11 +206,12 @@ def table_inline_repr(self):
     return '[%s]' % ', '.join(repr(r) for r in rows)
 
 
-
 def table_repr(self, offset=0):
     max_count = DisplaySettings.MAX_AUTO_COUNT
 
-    count = cast_to_python_int(call_builtin_func('count', [table_limit(self, max_count)]))
+    count = cast_to_python_int(
+        call_builtin_func('count', [table_limit(self, max_count)])
+    )
     if count == max_count:
         count_str = f'>={count}'
     else:
@@ -234,6 +256,7 @@ def module_repr(module):
         res = html.escape(res)
     return res
 
+
 def function_repr(func):
     res = '<%s>' % func.help_str()
     if get_display().format == 'html':
@@ -245,13 +268,15 @@ class Display:
     def print(self, repr_):
         print(repr_)
 
+
 def _print_rich_exception(console, e):
     console.print('[bold]Exception traceback:[/bold]')
     for ref in e.text_refs:
-        for line in (ref.get_pinpoint_text(rich=True) if ref else ['???']):
+        for line in ref.get_pinpoint_text(rich=True) if ref else ['???']:
             console.print(line)
         console.print()
     console.print(rich.text.Text('%s: %s' % (e.type, e.message)))
+
 
 class RichDisplay(Display):
     format = "rich"
@@ -274,7 +299,7 @@ class RichDisplay(Display):
 
 def print_to_string(x, format):
     console = rich.console.Console(color_system=None)
-    with console.capture() as capture: 
+    with console.capture() as capture:
         console.print(x)
     return capture.get()
 
@@ -293,7 +318,9 @@ class HtmlDisplay(Display):
     def print_exception(self, e):
         console = rich.console.Console(record=True)
         _print_rich_exception(console, e)
-        res = console.export_html(code_format='<style>{stylesheet}</style><pre>{code}</pre>').replace('━', '-')
+        res = console.export_html(
+            code_format='<style>{stylesheet}</style><pre>{code}</pre>'
+        ).replace('━', '-')
         self.buffer.append(res)
 
     def as_html(self):
@@ -302,7 +329,6 @@ class HtmlDisplay(Display):
         res = '\n'.join(self.buffer)
         self.buffer.clear()
         return res
-
 
 
 def install_reprs():

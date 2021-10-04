@@ -1,17 +1,17 @@
-from typing import Optional, List
+from typing import List, Optional
 
 from lark.exceptions import GrammarError
 
-from preql.utils import dataclass, TextReference
 from preql.context import context
+from preql.utils import TextReference, dataclass
 
 from .base import Object
 
 
 @dataclass
 class Signal(Object, Exception):
-    type: object    # Type
-    text_refs: List[Optional[TextReference]]    # XXX must it be optional?
+    type: object  # Type
+    text_refs: List[Optional[TextReference]]  # XXX must it be optional?
     message: Optional[str]
     orig_exc: Optional[Exception] = None
 
@@ -19,7 +19,7 @@ class Signal(Object, Exception):
     def make(cls, type, ast, message):
         ast_ref = getattr(ast, 'text_ref', None)
         try:
-            refs = context.state.stacktrace+([ast_ref] if ast_ref else [])
+            refs = context.state.stacktrace + ([ast_ref] if ast_ref else [])
         except AttributeError:
             refs = []
         return cls(type, refs, message)
@@ -50,9 +50,11 @@ class pql_SyntaxError(GrammarError):
     text_ref: TextReference
     message: str
 
+
 @dataclass
 class ExitInterp(Exception):
     value: object
+
 
 @dataclass
 class ReturnSignal(Exception):
@@ -63,7 +65,10 @@ class ReturnSignal(Exception):
 class pql_AttributeError(Exception):
     message: str
 
+
 class InsufficientAccessLevel(Exception):
     pass
+
+
 class DatabaseQueryError(Exception):
     pass

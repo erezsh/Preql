@@ -1,54 +1,61 @@
-from pathlib import Path
-from time import time
-
 ### XXX Fix for Python 3.8 bug (https://github.com/prompt-toolkit/python-prompt-toolkit/issues/1023)
 import asyncio
 import selectors
+from pathlib import Path
+from time import time
+
 selector = selectors.SelectSelector()
 loop = asyncio.SelectorEventLoop(selector)
 asyncio.set_event_loop(loop)
 ### XXX End of fix
 
-from pygments.lexers.go import GoLexer
-from pygments.style import Style
-from pygments.token import Keyword, Name, Comment, String, Error, Number, Operator, Generic
-from prompt_toolkit.styles.pygments import style_from_pygments_cls
 from prompt_toolkit import PromptSession
-from prompt_toolkit.lexers import PygmentsLexer
-from prompt_toolkit.filters import Condition
-from prompt_toolkit.validation import Validator, ValidationError
 from prompt_toolkit.application.current import get_app
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text.html import HTML, html_escape
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.output.color_depth import ColorDepth
+from prompt_toolkit.styles.pygments import style_from_pygments_cls
+from prompt_toolkit.validation import ValidationError, Validator
+from pygments.lexers.go import GoLexer
+from pygments.style import Style
+from pygments.token import (
+    Comment,
+    Error,
+    Generic,
+    Keyword,
+    Name,
+    Number,
+    Operator,
+    String,
+)
 
-from . import __version__, __branch__
-from . import settings
-from .utils import memoize
-from .loggers import repl_log
+from . import __branch__, __version__, settings
 from .context import context
-
-from .core.exceptions import Signal, ExitInterp, pql_SyntaxError
-from .core.autocomplete import autocomplete
-from .core.parser import parse_stmts
 from .core import pql_objects as objects
+from .core.autocomplete import autocomplete
 from .core.display import table_more
-from .core.pql_types import Object
-from .core.pql_types import T
+from .core.exceptions import ExitInterp, Signal, pql_SyntaxError
+from .core.parser import parse_stmts
+from .core.pql_types import Object, T
+from .loggers import repl_log
+from .utils import memoize
 
 
 def is_name(s):
     return s.isalnum() or s in ('_', '!')
 
+
 def last_word(s):
     if not s:
         return '', ''
     i = len(s)
-    while i and is_name(s[i-1]):
+    while i and is_name(s[i - 1]):
         i -= 1
-    if i < len(s) and s[i] == '!' :
+    if i < len(s) and s[i] == '!':
         i += 1  # hack to support ... !var and !in
     return s[:i], s[i:]
 
@@ -84,7 +91,7 @@ class Autocompleter(Completer):
 
         for k, (_rank, v) in all_vars:
             if k.startswith(fragment):
-                a, b = k[:len(fragment)], k[len(fragment):]
+                a, b = k[: len(fragment)], k[len(fragment) :]
                 if v is None:
                     t = "<keyword>"
                 else:
@@ -94,14 +101,19 @@ class Autocompleter(Completer):
                         t = type(v)
 
                 yield Completion(
-                    b, start_position=0,
-                    display=HTML('<b>%s</b>%s<ansibrightblack> : %s</ansibrightblack>' % (a, b, html_escape(t))),
+                    b,
+                    start_position=0,
+                    display=HTML(
+                        '<b>%s</b>%s<ansibrightblack> : %s</ansibrightblack>'
+                        % (a, b, html_escape(t))
+                    ),
                     style='bg:ansigray fg:black',
                     selected_style="fg:black bg:ansibrightyellow",
-                    )
+                )
 
     def get_completions(self, document, complete_event):
         return self._get_completions(document)
+
 
 class MyValidator(Validator):
     def validate(self, document):
@@ -119,8 +131,9 @@ class MyValidator(Validator):
                 # if pos <= len(text):
                 raise ValidationError(message=e.message, cursor_position=pos)
         # except Exception as e:
-            # raise ValidationError(message=e.args[0], cursor_position=0)
-            # pass
+        # raise ValidationError(message=e.args[0], cursor_position=0)
+        # pass
+
 
 # from prompt_toolkit.key_binding import KeyBindings
 # kb = KeyBindings()
@@ -153,29 +166,32 @@ def make_preql_style():
     class PreqlStyle(Style):
         default_style = ""
         styles = {
-            Generic:                settings.color_theme['text'],
-            Comment:                settings.color_theme['comment'],
-            Keyword:                settings.color_theme['keyword'],
-            Name:                   settings.color_theme['name'],
-            Name.Function:          settings.color_theme['name_func'],
-            Name.Class:             settings.color_theme['name_class'],
-            String:                 settings.color_theme['string'],
-            Number:                 settings.color_theme['number'],
-            Operator:               settings.color_theme['operator'],
-            Error:                  'bg:ansired ansigray',
+            Generic: settings.color_theme['text'],
+            Comment: settings.color_theme['comment'],
+            Keyword: settings.color_theme['keyword'],
+            Name: settings.color_theme['name'],
+            Name.Function: settings.color_theme['name_func'],
+            Name.Class: settings.color_theme['name_class'],
+            String: settings.color_theme['string'],
+            Number: settings.color_theme['number'],
+            Operator: settings.color_theme['operator'],
+            Error: 'bg:ansired ansigray',
         }
+
     return PreqlStyle
 
 
 def start_repl(p, prompt=' >> '):
-    save_last = '_'   # XXX A little hacky
+    save_last = '_'  # XXX A little hacky
 
     p.set_output_format('rich')
 
     display = p._display
     interp = p._interp
     console = display.console
-    console.print(f"[purple]Preql {__version__}{__branch__} interactive prompt. Type help() for help[/purple]")
+    console.print(
+        f"[purple]Preql {__version__}{__branch__} interactive prompt. Type help() for help[/purple]"
+    )
 
     try:
         session = PromptSession(
@@ -201,7 +217,6 @@ def start_repl(p, prompt=' >> '):
                 if not code.strip():
                     continue
 
-
                 start_time = time()
                 try:
                     if code == '.':
@@ -223,9 +238,13 @@ def start_repl(p, prompt=' >> '):
                             res_repr = res.repr()
 
                         # repl_log.info(res)
-                        if isinstance(res_repr, str) and res.type == T.string:  # Not text
+                        if (
+                            isinstance(res_repr, str) and res.type == T.string
+                        ):  # Not text
                             if len(res_repr) > 200:
-                                res_repr = res_repr[:100] + "..." + res_repr[-100:]    # smarter limit?
+                                res_repr = (
+                                    res_repr[:100] + "..." + res_repr[-100:]
+                                )  # smarter limit?
                         display.print(res_repr)
 
                 except Signal as s:
@@ -246,8 +265,6 @@ def start_repl(p, prompt=' >> '):
 
             except KeyboardInterrupt:
                 repl_log.info("Interrupted (Ctrl+C)")
-
-
 
     except (KeyboardInterrupt, EOFError):
         repl_log.info('Exiting Preql interaction')

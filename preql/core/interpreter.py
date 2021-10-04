@@ -1,26 +1,25 @@
-from copy import copy
 import threading
-from pathlib import Path
+from copy import copy
 from functools import wraps
+from pathlib import Path
 
-from preql.utils import classify
 from preql.context import context
+from preql.utils import classify
 
-from .exceptions import Signal, pql_SyntaxError, ReturnSignal
-from .evaluate import execute, eval_func_call, import_module, evaluate, cast_to_python
-from .parser import parse_stmts
 from . import pql_ast as ast
 from . import pql_objects as objects
-from .interp_common import pyvalue_inst, call_builtin_func
+from .evaluate import cast_to_python, eval_func_call, evaluate, execute, import_module
+from .exceptions import ReturnSignal, Signal, pql_SyntaxError
+from .interp_common import call_builtin_func, pyvalue_inst
+from .parser import parse_stmts
+from .pql_functions import import_pandas, internal_funcs, joins
+from .pql_types import Object, T
 from .state import ThreadState
-from .pql_types import T, Object
-from .pql_functions import import_pandas
-from .pql_functions import internal_funcs, joins
 
 
 def initial_namespace():
     # TODO localinstance / metainstance
-    ns = {k:v for k, v in T.items()}
+    ns = {k: v for k, v in T.items()}
     ns.update(internal_funcs)
     ns.update(joins)
     # TODO all exceptions
@@ -34,6 +33,7 @@ def entrypoint(f):
     def inner(interp, *args, **kwargs):
         with interp.setup_context():
             return f(interp, *args, **kwargs)
+
     return inner
 
 
@@ -50,9 +50,13 @@ class LocalCopy(threading.local):
 
 class Interpreter:
     def __init__(self, sqlengine, display, use_core=True):
-        self.state = ThreadState.from_components(self, sqlengine, display, initial_namespace())
+        self.state = ThreadState.from_components(
+            self, sqlengine, display, initial_namespace()
+        )
         if use_core:
-            mns = import_module(self.state, ast.Import('__builtins__', use_core=False)).namespace
+            mns = import_module(
+                self.state, ast.Import('__builtins__', use_core=False)
+            ).namespace
             bns = self.state.get_var('__builtins__').namespace
             # safe-update
             for k, v in mns.items():
@@ -72,7 +76,6 @@ class Interpreter:
         except pql_SyntaxError as e:
             raise Signal(T.SyntaxError, [e.text_ref], e.message)
 
-
         if stmts:
             if isinstance(stmts[0], ast.Const) and stmts[0].type == T.string:
                 self.set_var('__doc__', stmts[0].value)
@@ -80,7 +83,7 @@ class Interpreter:
         last = None
 
         # with self.state.ns.use_parameters(args or {}):
-        with context(parameters=args or {}):    # Set parameters for Namespace.get_var()
+        with context(parameters=args or {}):  # Set parameters for Namespace.get_var()
             for stmt in stmts:
                 try:
                     last = execute(stmt)
@@ -111,13 +114,10 @@ class Interpreter:
             return False
         return True
 
-
-
     #####################
 
     execute_code = entrypoint(_execute_code)
     include = entrypoint(_include)
-
 
     @entrypoint
     def evaluate_obj(self, obj):
@@ -130,7 +130,7 @@ class Interpreter:
     @entrypoint
     def call_func(self, fname, args, kw=None):
         if kw:
-            args = args + [ast.NamedField(k, v, False) for k,v in kw.items()]
+            args = args + [ast.NamedField(k, v, False) for k, v in kw.items()]
         res = eval_func_call(context.state.get_var(fname), args)
         return evaluate(res)
 
@@ -150,7 +150,6 @@ class Interpreter:
     def list_tables(self):
         return self.state.db.list_tables()
 
-
     @entrypoint
     def load_all_tables(self):
         modules = {}
@@ -168,7 +167,6 @@ class Interpreter:
                 modules[name] = module
                 self.set_var(name, module)
 
-
         table_types = self.state.db.import_table_types()
         table_types_by_schema = classify(table_types, lambda x: x[0], lambda x: x[1:])
 
@@ -183,9 +181,8 @@ class Interpreter:
                     if not self.has_var(table_name):
                         self.set_var(table_name, inst)
 
-
     def clone(self, use_core):
         state = self.state
         i = Interpreter(state.db, state.display, use_core=use_core)
-        i.state.stacktrace = state.stacktrace   # XXX proper interface
+        i.state.stacktrace = state.stacktrace  # XXX proper interface
         return i

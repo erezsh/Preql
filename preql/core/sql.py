@@ -1,18 +1,19 @@
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
-from preql.utils import dataclass, X, listgen, safezip
+from preql.utils import X, dataclass, listgen, safezip
 
 from . import pql_types
-from .pql_types import T, Type, dp_type, Id
-from .types_impl import join_names, flatten_type
-from .state import get_db
 from .exceptions import Signal
+from .pql_types import Id, T, Type, dp_type
+from .state import get_db
+from .types_impl import flatten_type, join_names
 
 duck = 'duck'
 sqlite = 'sqlite'
 postgres = 'postgres'
 bigquery = 'bigquery'
 mysql = 'mysql'
+
 
 class QueryBuilder:
     def __init__(self, is_root=True, start_count=0):
@@ -29,19 +30,20 @@ class QueryBuilder:
 
     def replace(self, is_root):
         if is_root == self.is_root:
-            return self # Optimize
+            return self  # Optimize
         return QueryBuilder(is_root, self.counter)
 
     def push_table(self, t):
         self.table_name.append(t)
+
     def pop_table(self, t):
         t2 = self.table_name.pop()
         assert t2 == t
 
 
-
 class Sql:
     pass
+
 
 @dataclass
 class SqlTree(Sql):
@@ -59,12 +61,18 @@ class SqlTree(Sql):
         assert isinstance(sql_code, list), self
         assert all(isinstance(c, (str, Parameter)) for c in sql_code), self
 
-        return CompiledSQL(self.type, sql_code, self, self._is_select, self._needs_select)
+        return CompiledSQL(
+            self.type, sql_code, self, self._is_select, self._needs_select
+        )
 
     def finalize_with_subqueries(self, qb, subqueries):
         if subqueries:
-            subqs = [q.compile_wrap(qb).finalize(qb) for (name, q) in subqueries.items()]
-            sql_code = ['WITH RECURSIVE '] if qb.target in (postgres, mysql) else ['WITH ']
+            subqs = [
+                q.compile_wrap(qb).finalize(qb) for (name, q) in subqueries.items()
+            ]
+            sql_code = (
+                ['WITH RECURSIVE '] if qb.target in (postgres, mysql) else ['WITH ']
+            )
             sql_code += join_comma([q, '\n    '] for q in subqs)
         else:
             sql_code = []
@@ -77,13 +85,15 @@ class CompiledSQL(Sql):
     type: Type
     code: list
     source_tree: Optional[Sql]
-    _is_select: bool   # Needed for embedding in SqlTree
+    _is_select: bool  # Needed for embedding in SqlTree
     _needs_select: bool
 
     def finalize(self, qb):
         wrapped = self.wrap(qb)
         assert qb.is_root
-        if wrapped.type <= T.primitive and not wrapped.code[0].lower().startswith('select '):
+        if wrapped.type <= T.primitive and not wrapped.code[0].lower().startswith(
+            'select '
+        ):
             code = ['SELECT '] + wrapped.code
         else:
             code = wrapped.code
@@ -109,8 +119,10 @@ class CompiledSQL(Sql):
 
     def compile_wrap(self, qb):
         return self.wrap(qb)
+
     def compile(self, qb):
         return self
+
     def finalize_with_subqueries(self, qb, subqueries):
         # Why not inherit from Sql?
         return SqlTree.finalize_with_subqueries(self, qb, subqueries)
@@ -142,7 +154,10 @@ class RawSql(SqlTree):
 
     @property
     def _is_select(self):
-        return self.text.lstrip().lower().startswith('select')   # XXX Hacky! Is there a cleaner solution?
+        return (
+            self.text.lstrip().lower().startswith('select')
+        )  # XXX Hacky! Is there a cleaner solution?
+
 
 @dataclass
 class Null(SqlTree):
@@ -151,13 +166,16 @@ class Null(SqlTree):
     def _compile(self, qb):
         return ['null']
 
+
 @dataclass
 class Unknown(SqlTree):
     def _compile(self, qb):
         raise NotImplementedError("Unknown")
 
+
 null = Null()
 unknown = Unknown()
+
 
 @dataclass
 class Parameter(SqlTree):
@@ -172,9 +190,11 @@ class Parameter(SqlTree):
 class Scalar(SqlTree):
     pass
 
+
 @dataclass
 class Atom(Scalar):
     pass
+
 
 @dataclass
 class Primitive(Atom):
@@ -189,6 +209,7 @@ class Primitive(Atom):
 class Table(SqlTree):
     pass
 
+
 @dataclass
 class EmptyList(Table):
     type: Type
@@ -197,6 +218,7 @@ class EmptyList(Table):
 
     def _compile(self, qb):
         return ['SELECT NULL AS ITEM LIMIT 0']
+
 
 @dataclass
 class TableName(Table):
@@ -231,6 +253,7 @@ class CountTable(Scalar):
     def _compile(self, qb):
         return [f'(SELECT COUNT(*) FROM '] + self.table.compile_wrap(qb).code + [')']
 
+
 @dataclass
 class JsonLength(Scalar):
     expr: Sql
@@ -239,13 +262,20 @@ class JsonLength(Scalar):
     def _compile(self, qb):
         code = self.expr.compile_wrap(qb).code
         if qb.target == sqlite:
-            return [f'(length('] + code + [') - length(replace('] + code + [f', "{_ARRAY_SEP}", ""))) / length("{_ARRAY_SEP}") + 1']
+            return (
+                [f'(length(']
+                + code
+                + [') - length(replace(']
+                + code
+                + [f', "{_ARRAY_SEP}", ""))) / length("{_ARRAY_SEP}") + 1']
+            )
         elif qb.target == postgres:
             return [f'array_length('] + code + [', 1)']
         elif qb.target == bigquery:
             return [f'array_length('] + code + [')']
         else:
             return [f'json_length('] + code + [')']
+
 
 @dataclass
 class FuncCall(SqlTree):
@@ -257,6 +287,7 @@ class FuncCall(SqlTree):
         s = join_comma(f.compile_wrap(qb).code for f in self.fields)
         return [f'{self.name}('] + s + [')']
 
+
 @dataclass
 class Cast(SqlTree):
     type: Type
@@ -267,7 +298,9 @@ class Cast(SqlTree):
             # XXX distinguish between these cases properly, not as a hack
             t = 'char'
         else:
-            t = _compile_type(qb.target, self.type.as_nullable())     # XXX as-nullable here is a hack
+            t = _compile_type(
+                qb.target, self.type.as_nullable()
+            )  # XXX as-nullable here is a hack
         return [f'CAST('] + self.value.compile_wrap(qb).code + [f' AS {t})']
 
 
@@ -283,12 +316,14 @@ class Case(SqlTree):
     def _compile(self, qb):
         cond = self.cond.compile_wrap(qb).code
         then = self.then.compile_wrap(qb).code
-        code = ["CASE WHEN "] + cond +[" THEN "] + then
+        code = ["CASE WHEN "] + cond + [" THEN "] + then
         if self.else_:
-            code += [ " ELSE " ] + self.else_.compile_wrap(qb).code
+            code += [" ELSE "] + self.else_.compile_wrap(qb).code
         return code + [" END "]
 
+
 _ARRAY_SEP = '||'
+
 
 @dataclass
 class MakeArray(SqlTree):
@@ -326,6 +361,7 @@ class Contains(Scalar):
 def parens(x):
     return ['('] + x + [')']
 
+
 @dataclass
 class Compare(Scalar):
     op: str
@@ -343,25 +379,19 @@ class Compare(Scalar):
         if any(e.type.maybe_null() for e in self.exprs):
             # Null values are possible, so we'll use identity operators
             if qb.target in (sqlite, duck):
-                op = {
-                    '=': 'is',
-                    '!=': 'is not'
-                }.get(op, op)
+                op = {'=': 'is', '!=': 'is not'}.get(op, op)
             elif qb.target is mysql:
                 if op == '!=':
                     # Special case,
-                    return parens( ['not '] + join_sep(elems, f' <=> ') )
+                    return parens(['not '] + join_sep(elems, f' <=> '))
 
                 op = {
                     '=': '<=>',
                 }.get(op, op)
             else:
-                op = {
-                    '=': 'is not distinct from',
-                    '!=': 'is distinct from'
-                }.get(op, op)
+                op = {'=': 'is not distinct from', '!=': 'is distinct from'}.get(op, op)
 
-        return parens( join_sep(elems, f' {op} ') )
+        return parens(join_sep(elems, f' {op} '))
 
 
 @dataclass
@@ -374,6 +404,7 @@ class LogicalBinOp(Scalar):
         return parens(x)
 
     type = T.bool
+
 
 @dataclass
 class LogicalNot(Scalar):
@@ -397,7 +428,6 @@ class BinOp(Scalar):
         return parens(x)
 
 
-
 @dataclass
 class TableArith(TableOperation):
     op: str
@@ -415,7 +445,7 @@ class TableArith(TableOperation):
 
         return code
 
-    type = property(X.exprs[0].type)   # TODO ensure type correctness
+    type = property(X.exprs[0].type)  # TODO ensure type correctness
 
 
 @dataclass
@@ -428,6 +458,7 @@ class Neg(SqlTree):
 
     type = property(X.expr.type)
 
+
 @dataclass
 class Desc(SqlTree):
     expr: Sql
@@ -438,7 +469,20 @@ class Desc(SqlTree):
 
     type = property(X.expr.type)
 
-_reserved = {'index', 'create', 'unique', 'table', 'select', 'where', 'group', 'by', 'over', 'user'}
+
+_reserved = {
+    'index',
+    'create',
+    'unique',
+    'table',
+    'select',
+    'where',
+    'group',
+    'by',
+    'over',
+    'user',
+}
+
 
 @dataclass
 class Name(SqlTree):
@@ -454,15 +498,15 @@ class Name(SqlTree):
             name = qb.table_name[-1] + '.' + name
         return [name]
 
+
 @dataclass
 class Attr(SqlTree):
     type: Type
     obj: Sql
     name: str
 
-
-
     # return base
+
 
 @dataclass
 class ColumnAlias(SqlTree):
@@ -488,6 +532,7 @@ class ColumnAlias(SqlTree):
 class SqlStatement(SqlTree):
     type = T.nulltype
 
+
 @dataclass
 class AddIndex(SqlStatement):
     index_name: Id
@@ -496,8 +541,11 @@ class AddIndex(SqlStatement):
     unique: bool
 
     def _compile(self, qb):
-        return [f"CREATE {'UNIQUE' if self.unique else ''} INDEX IF NOT EXISTS {quote_id(self.index_name)}"
-                f" ON {quote_id(self.table_name)}({self.column})"]
+        return [
+            f"CREATE {'UNIQUE' if self.unique else ''} INDEX IF NOT EXISTS {quote_id(self.index_name)}"
+            f" ON {quote_id(self.table_name)}({self.column})"
+        ]
+
 
 @dataclass
 class Insert(SqlStatement):
@@ -507,7 +555,9 @@ class Insert(SqlStatement):
 
     def _compile(self, qb):
         columns = [quote_name(c) for c in self.columns]
-        return [f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
+        return [
+            f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '
+        ] + self.query.compile(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
         if qb.target in (mysql, bigquery):
@@ -518,11 +568,12 @@ class Insert(SqlStatement):
 
         return super().finalize_with_subqueries(qb, subqueries)
 
+
 @dataclass
 class InsertConsts(SqlStatement):
     table: Id
     cols: List[str]
-    tuples: list #List[List[Sql]]
+    tuples: list  # List[List[Sql]]
 
     def _compile(self, qb):
         cols = self.cols
@@ -533,36 +584,41 @@ class InsertConsts(SqlStatement):
             return ['INSERT INTO', quote_id(self.table), 'DEFAULT VALUES']
 
         values = join_comma(
-            parens(join_comma([e.compile_wrap(qb).code for e in tpl]))
-            for tpl in tuples
+            parens(join_comma([e.compile_wrap(qb).code for e in tpl])) for tpl in tuples
         )
 
         cols = [quote_name(c) for c in cols]
-        q = ['INSERT INTO', quote_id(self.table),
-             "(", ', '.join(cols), ")",
-             "VALUES ",
+        q = [
+            'INSERT INTO',
+            quote_id(self.table),
+            "(",
+            ', '.join(cols),
+            ")",
+            "VALUES ",
         ]
-        return [' '.join(q)] + values #+ [';']
+        return [' '.join(q)] + values  # + [';']
+
 
 @dataclass
 class InsertConsts2(SqlStatement):
     table: Id
     cols: List[str]
-    tuples: list #List[List[Sql]]
+    tuples: list  # List[List[Sql]]
 
     def _compile(self, qb):
         assert self.tuples, self
 
-        values = join_comma(
-            parens(join_comma([t] for t in tpl))
-            for tpl in self.tuples
-        )
+        values = join_comma(parens(join_comma([t] for t in tpl)) for tpl in self.tuples)
 
-        q = ['INSERT INTO', quote_id(self.table),
-             "(", ', '.join(self.cols), ")",
-             "VALUES ",
+        q = [
+            'INSERT INTO',
+            quote_id(self.table),
+            "(",
+            ', '.join(self.cols),
+            ")",
+            "VALUES ",
         ]
-        return [' '.join(q)] + values #+ ';'
+        return [' '.join(q)] + values  # + ';'
 
 
 @dataclass
@@ -571,11 +627,12 @@ class LastRowId(Atom):
 
     def _compile(self, qb):
         if qb.target in (sqlite, duck):
-            return ['last_insert_rowid()']   # Sqlite
+            return ['last_insert_rowid()']  # Sqlite
         elif qb.target == mysql:
             return ['last_insert_id()']
         else:
-            return ['lastval()']   # Postgres
+            return ['lastval()']  # Postgres
+
 
 @dataclass
 class SelectValue(Atom, TableOperation):
@@ -601,12 +658,15 @@ class Values(Table):
             return ['SELECT ' + nulls + ' LIMIT 0']
 
         if qb.target == mysql:
+
             def row_func(x):
                 return ['ROW('] + x + [')']
+
         else:
             row_func = parens
 
         return ['VALUES '] + join_comma(row_func(v.code) for v in values)
+
 
 @dataclass
 class Tuple(SqlTree):
@@ -617,6 +677,7 @@ class Tuple(SqlTree):
         values = [v.compile_wrap(qb).code for v in self.values]
         return join_comma(values)
 
+
 @dataclass
 class ValuesTuple(Tuple):
     type: Type
@@ -626,6 +687,7 @@ class ValuesTuple(Tuple):
         values = [v.compile_wrap(qb) for v in self.values]
         return join_comma(v.code for v in values)
 
+
 @dataclass
 class ValuesTuples(Table):
     type: Type
@@ -633,10 +695,11 @@ class ValuesTuples(Table):
 
     def _compile(self, qb):
         if not self.values:  # SQL doesn't support empty values
-            return ['SELECT '] + join_comma(['NULL']*len(self.type.elems)) +  ['LIMIT 0']
+            return (
+                ['SELECT '] + join_comma(['NULL'] * len(self.type.elems)) + ['LIMIT 0']
+            )
         values = [v.compile_wrap(qb) for v in self.values]
         return ['VALUES '] + join_comma(v.code for v in values)
-
 
 
 @dataclass
@@ -646,6 +709,7 @@ class AllFields(SqlTree):
     def _compile(self, qb):
         return ['*']
 
+
 @dataclass
 class Update(SqlTree):
     table: TableName
@@ -654,15 +718,21 @@ class Update(SqlTree):
     type = T.nulltype
 
     def _compile(self, qb):
-        fields_sql = [k.compile_wrap(qb).code + [' = '] + v.compile_wrap(qb).code for k, v in self.fields.items()]
+        fields_sql = [
+            k.compile_wrap(qb).code + [' = '] + v.compile_wrap(qb).code
+            for k, v in self.fields.items()
+        ]
         fields_sql = join_comma(fields_sql)
 
         sql = ['UPDATE '] + self.table.compile_wrap(qb).code + [' SET '] + fields_sql
 
         if self.conds:
-            sql += [' WHERE '] + join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
+            sql += [' WHERE '] + join_sep(
+                [c.compile_wrap(qb).code for c in self.conds], ' AND '
+            )
 
         return sql
+
 
 @dataclass
 class Delete(SqlTree):
@@ -674,10 +744,11 @@ class Delete(SqlTree):
         conds = join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
         return ['DELETE FROM '] + self.table.compile_wrap(qb).code + [' WHERE '] + conds
 
+
 @dataclass
 class Select(TableOperation):
     type: Type
-    table: Sql # XXX Table won't work with RawSQL
+    table: Sql  # XXX Table won't work with RawSQL
     fields: List[Sql]
     conds: List[Sql] = []
     group_by: List[Sql] = []
@@ -724,14 +795,19 @@ class Select(TableOperation):
         sql = ['SELECT '] + select_sql + [' FROM '] + self.table.compile_wrap(qb).code
 
         if self.conds:
-            sql += [' WHERE '] + join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
-
+            sql += [' WHERE '] + join_sep(
+                [c.compile_wrap(qb).code for c in self.conds], ' AND '
+            )
 
         if self.group_by:
-            sql += [' GROUP BY '] + join_comma(e.compile_wrap(qb).code for e in self.group_by)
+            sql += [' GROUP BY '] + join_comma(
+                e.compile_wrap(qb).code for e in self.group_by
+            )
 
         if self.order:
-            sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
+            sql += [' ORDER BY '] + join_comma(
+                o.compile_wrap(qb).code for o in self.order
+            )
 
         if self.limit is not None:
             sql += [' LIMIT ', str(self.limit)]
@@ -745,7 +821,6 @@ class Select(TableOperation):
             elif qb.target == bigquery:
                 # BigQuery requires a specific limit, always!
                 sql += [' LIMIT 9223372036854775807']
-
 
         if self.offset is not None:
             sql += [' OFFSET ', str(self.offset)]
@@ -763,8 +838,10 @@ def join_sep(code_list, sep):
             yield sep
             yield from c
 
+
 def join_comma(code_list):
     return join_sep(code_list, ", ")
+
 
 @dataclass
 class Subquery(SqlTree):
@@ -778,9 +855,12 @@ class Subquery(SqlTree):
         if qb.target == bigquery:
             fields_str = []
         else:
-            fields = [f.compile_wrap(qb.replace(is_root=False)).code for f in self.fields]
+            fields = [
+                f.compile_wrap(qb.replace(is_root=False)).code for f in self.fields
+            ]
             fields_str = ["("] + join_comma(fields) + [")"] if fields else []
         return [f"{self.table_name}"] + fields_str + [" AS ("] + query + [")"]
+
 
 def _enum_is_last(seq):
     last = len(seq) - 1
@@ -807,10 +887,9 @@ class Join(TableOperation):
             if self.conds and is_last:
                 code += join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')
             else:
-                code += ['1=1']   # Postgres requires ON clause
+                code += ['1=1']  # Postgres requires ON clause
 
         return code
-
 
 
 @dataclass
@@ -823,14 +902,19 @@ class BigQueryValues(SqlTree):
 
         rows = [
             (
-             ['STRUCT('] + join_comma(v.compile(qb).code + [" as ", name]
-                                  for name, v in safezip(cols, row.values)) + [")"]
-            ) if isinstance(row, Tuple) else row.compile(qb).code
-             for row in self.values
+                ['STRUCT(']
+                + join_comma(
+                    v.compile(qb).code + [" as ", name]
+                    for name, v in safezip(cols, row.values)
+                )
+                + [")"]
+            )
+            if isinstance(row, Tuple)
+            else row.compile(qb).code
+            for row in self.values
         ]
 
         return ["SELECT * FROM UNNEST(["] + join_comma(rows) + ["]) as item"]
-
 
 
 @dataclass
@@ -844,14 +928,16 @@ class TableQueryValues(SqlTree):
     def _compile(self, qb):
         if qb.target != 'bigquery':
             values_cls = Values
-            fields = [Name(col_type, col_name) for col_name, col_type in self.type.elems.items()]
+            fields = [
+                Name(col_type, col_name)
+                for col_name, col_type in self.type.elems.items()
+            ]
         else:
             values_cls = BigQueryValues
             fields = None
 
         subq = Subquery(self.name, fields, values_cls(self.type, self.rows))
         return subq._compile(qb)
-
 
 
 @dataclass
@@ -891,23 +977,28 @@ class StringSlice(SqlTree):
 def _repr(_t: T.number, x):
     return str(x)
 
+
 @dp_type
 def _repr(_t: T.bool, x):
     return ['false', 'true'][x]
 
+
 @dp_type
 def _repr(_t: T.decimal, x):
     return repr(float(x))  # TODO SQL decimal?
+
 
 @dp_type
 def _repr(_t: T.datetime, x):
     # TODO Better to pass the object instead of a string?
     return repr(str(x))
 
+
 @dp_type
 def _repr(_t: T.timestamp, x):
     # TODO Better to pass the object instead of a string?
     return repr(str(x))
+
 
 @dp_type
 def _repr(_t: T.union[T.string, T.text], x):
@@ -918,9 +1009,11 @@ def _repr(_t: T.union[T.string, T.text], x):
         res = res.replace('\n', '\\n')
     return res
 
+
 def quote_name(name):
     assert isinstance(name, str), name
     return get_db().quote_name(name)
+
 
 def quote_id(id_):
     assert isinstance(id_, Id)
@@ -930,7 +1023,7 @@ def quote_id(id_):
 @dp_type
 def _compile_type(target, type_: T.t_relation):
     # TODO might have a different type
-    #return 'INTEGER'    # Foreign-key is integer
+    # return 'INTEGER'    # Foreign-key is integer
     return _compile_type(target, type_.elems['item'])
 
 
@@ -945,6 +1038,7 @@ class Types_PqlToSql:
     string = "VARCHAR(4000)"
     text = "TEXT"
 
+
 class P2S_BigQuery(Types_PqlToSql):
     int = "INT64"
     string = "STRING"
@@ -955,17 +1049,20 @@ class P2S_BigQuery(Types_PqlToSql):
 class P2S_MySql(Types_PqlToSql):
     int = "SIGNED"
 
+
 class P2S_Sqlite(Types_PqlToSql):
     datetime = "DATETIME"
     timestamp = "TIMESTAMP"
 
+
 class P2S_Postgres(Types_PqlToSql):
     datetime = "timestamp with time zone"
+
 
 _pql_to_sql_by_target = {
     bigquery: P2S_BigQuery,
     mysql: P2S_MySql,
-    "mysql_def": Types_PqlToSql, # Standard (Different) types for declaration!
+    "mysql_def": Types_PqlToSql,  # Standard (Different) types for declaration!
     sqlite: P2S_Sqlite,
     duck: P2S_Sqlite,
     postgres: P2S_Postgres,
@@ -979,36 +1076,37 @@ def _compile_type(target, type_: T.primitive):
         s += " NOT NULL"
     return s
 
+
 @dp_type
 def _compile_type(target, _type: T.nulltype):
     if target == bigquery:
         return 'INT64'
-    return 'INTEGER'    # TODO is there a better value here? Maybe make it read-only somehow
+    return (
+        'INTEGER'  # TODO is there a better value here? Maybe make it read-only somehow
+    )
+
 
 @dp_type
 def _compile_type(target, idtype: T.t_id):
     if target == bigquery:
         s = "STRING"
     else:
-        s = "INTEGER"   # TODO non-int idtypes
+        s = "INTEGER"  # TODO non-int idtypes
     if not idtype.maybe_null():
         s += " NOT NULL"
     return s
+
 
 @dp_type
 def _compile_type(target, _type: T.json):
     return 'JSON'
 
 
-
-
-
 # API
+
 
 def compile_drop_table(table_name) -> Sql:
     return RawSql(T.nulltype, f'DROP TABLE {quote_id(table_name)}')
-
-
 
 
 def compile_type_def(table_name, table) -> Sql:
@@ -1026,9 +1124,11 @@ def compile_type_def(table_name, table) -> Sql:
         if name in pks and c <= T.t_id:
             type_decl = db.id_type_decl
         else:
-            type_decl = _compile_type(db.target if db.target != mysql else 'mysql_def', c)
+            type_decl = _compile_type(
+                db.target if db.target != mysql else 'mysql_def', c
+            )
 
-        columns.append( f'{quote_name(name)} {type_decl}' )
+        columns.append(f'{quote_name(name)} {type_decl}')
 
         if c <= T.t_relation:
             if db.supports_foreign_key:
@@ -1036,24 +1136,33 @@ def compile_type_def(table_name, table) -> Sql:
                 if not table.options.get('temporary', False):
                     # In postgres, constraints on temporary tables may reference only temporary tables
                     rel = c.options['rel']
-                    if rel['key']:          # Requires a unique constraint
+                    if rel['key']:  # Requires a unique constraint
                         tbl_name = rel['table'].options['name']
                         s = f"FOREIGN KEY({name}) REFERENCES {quote_id(tbl_name)}({rel['column']})"
                         posts.append(s)
 
-    if pks and db.supports_foreign_key: 
+    if pks and db.supports_foreign_key:
         names = ", ".join(pks)
         posts.append(f"PRIMARY KEY ({names})")
 
     # Consistent among SQL databases
     if db.target == 'bigquery':
-        command = ("CREATE TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS")
+        command = (
+            "CREATE TABLE"
+            if table.options.get('temporary', False)
+            else "CREATE TABLE IF NOT EXISTS"
+        )
     else:
-        command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
+        command = (
+            "CREATE TEMPORARY TABLE"
+            if table.options.get('temporary', False)
+            else "CREATE TABLE IF NOT EXISTS"
+        )
 
-    return RawSql(T.nulltype, f'{command} {quote_id(table_name)} (' + ', '.join(columns + posts) + ')')
-
-
+    return RawSql(
+        T.nulltype,
+        f'{command} {quote_id(table_name)} (' + ', '.join(columns + posts) + ')',
+    )
 
 
 def deletes_by_ids(table, ids):
@@ -1061,12 +1170,16 @@ def deletes_by_ids(table, ids):
         compare = Compare('=', [Name(T.t_id, 'id'), Primitive(T.t_id, repr(id_))])
         yield Delete(TableName(table.type, table.type.options['name']), [compare])
 
+
 def updates_by_ids(table, proj, ids):
     # TODO this function is not safe & secure enough
     sql_proj = {Name(value.type, name): value.code for name, value in proj.items()}
     for id_ in ids:
         compare = Compare('=', [Name(T.t_id, 'id'), Primitive(T.t_id, repr(id_))])
-        yield Update(TableName(table.type, table.type.options['name']), sql_proj, [compare])
+        yield Update(
+            TableName(table.type, table.type.options['name']), sql_proj, [compare]
+        )
+
 
 def create_list(name, elems):
     # Assumes all elems have the same type!
@@ -1076,21 +1189,26 @@ def create_list(name, elems):
     return table, subq, t
 
 
-
 def create_table(t, name, rows):
     subq = TableQueryValues(t, name, rows)
     table = TableName(t, Id(name))
     return table, subq
 
+
 def table_slice(table, start, stop):
     limit = stop - start if stop else None
-    return Select(table.type, table.code, [AllFields(table.type)], offset=start, limit=limit)
+    return Select(
+        table.type, table.code, [AllFields(table.type)], offset=start, limit=limit
+    )
+
 
 def table_selection(table, conds):
     return Select(table.type, table.code, [AllFields(table.type)], conds=conds)
 
+
 def table_order(table, fields):
     return Select(table.type, table.code, [AllFields(table.type)], order=fields)
+
 
 def arith(res_type, op, args):
     target = get_db().target
@@ -1099,7 +1217,7 @@ def arith(res_type, op, args):
     if res_type == T.string:
         assert op == '+'
         op = '||'
-        if target is mysql: # doesn't support a || b
+        if target is mysql:  # doesn't support a || b
             return FuncCall(res_type, 'concat', arg_codes)
     elif op == '/':
         if target != mysql:
@@ -1121,7 +1239,7 @@ def arith(res_type, op, args):
 
     return BinOp(res_type, op, arg_codes)
 
-    
+
 def make_value(x):
     if x is None:
         return null
@@ -1129,9 +1247,12 @@ def make_value(x):
     try:
         t = pql_types.from_python(type(x))
     except KeyError as e:
-        raise Signal.make(T.ValueError, x, f"Cannot import value of Python type {type(x)}") from e
+        raise Signal.make(
+            T.ValueError, x, f"Cannot import value of Python type {type(x)}"
+        ) from e
 
     return Primitive(t, _repr(t, x))
+
 
 def add_one(x):
     return BinOp(x.type, '+', [x, make_value(1)])

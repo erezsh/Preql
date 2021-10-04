@@ -1,18 +1,20 @@
-from contextlib import suppress
-from typing import Union
-from datetime import datetime
-from dataclasses import field
-from decimal import Decimal
 from collections import defaultdict, deque
+from contextlib import suppress
+from dataclasses import field
+from datetime import datetime
+from decimal import Decimal
+from typing import Union
 
 import arrow
 import runtype
 from runtype.typesystem import TypeSystem
 
 from preql.utils import dataclass
+
 from .base import Object
 
 global_methods = {}
+
 
 class Id:
     def __init__(self, *parts):
@@ -28,7 +30,7 @@ class Id:
 
     def __hash__(self):
         return hash(tuple(self.parts))
-        
+
     def __eq__(self, other):
         if not isinstance(other, Id):
             return NotImplemented
@@ -48,13 +50,16 @@ class Id:
 
 
 def _repr_type_elem(t, depth):
-    return _repr_type(t, depth-1) if isinstance(t, Type) else repr(t)
+    return _repr_type(t, depth - 1) if isinstance(t, Type) else repr(t)
+
 
 def _repr_type(t, depth=2):
     if t.elems:
         if depth > 0:
             if isinstance(t.elems, dict):
-                elems = '[%s]' % ', '.join(f'{k}: {_repr_type_elem(v, depth)}' for k,v in t.elems.items())
+                elems = '[%s]' % ', '.join(
+                    f'{k}: {_repr_type_elem(v, depth)}' for k, v in t.elems.items()
+                )
             else:
                 elems = '[%s]' % ', '.join(_repr_type_elem(e, depth) for e in t.elems)
         else:
@@ -63,7 +68,9 @@ def _repr_type(t, depth=2):
         elems = ''
     return f'{t._typename_with_q}{elems}'
 
+
 ITEM_NAME = 'item'
+
 
 @dataclass
 class Type(Object):
@@ -71,7 +78,9 @@ class Type(Object):
     supertypes: frozenset
     elems: Union[tuple, dict] = field(hash=False, default_factory=dict)
     options: dict = field(hash=False, compare=False, default_factory=dict)
-    proto_attrs: dict = field(hash=False, compare=False, default_factory=lambda: dict(global_methods))
+    proto_attrs: dict = field(
+        hash=False, compare=False, default_factory=lambda: dict(global_methods)
+    )
     _nullable: bool = field(default_factory=bool)
 
     @property
@@ -82,9 +91,9 @@ class Type(Object):
     @property
     def elem(self):
         if isinstance(self.elems, dict):
-            elem ,= self.elems.values()
+            (elem,) = self.elems.values()
         else:
-            elem ,= self.elems
+            (elem,) = self.elems
         return elem
 
     def as_nullable(self):
@@ -95,18 +104,13 @@ class Type(Object):
         return self._nullable or self is T.nulltype
 
     def supertype_chain(self):
-        res = {
-            t2
-            for t1 in self.supertypes
-            for t2 in t1.supertype_chain()
-        }
+        res = {t2 for t1 in self.supertypes for t2 in t1.supertype_chain()}
 
         assert self not in res
         return res | {self}
 
     def __eq__(self, other, memo=None):
         "Repetitive nested equalities are assumed to be true"
-
 
         if not isinstance(other, Type):
             return False
@@ -115,22 +119,25 @@ class Type(Object):
             memo = set()
 
         a, b = id(self), id(other)
-        if (a,b) in memo or (b,a) in memo:
+        if (a, b) in memo or (b, a) in memo:
             return True
 
         memo.add((a, b))
 
         l1 = self.elems if isinstance(self.elems, dict) else dict(enumerate(self.elems))
-        l2 = other.elems if isinstance(other.elems, dict) else dict(enumerate(other.elems))
+        l2 = (
+            other.elems
+            if isinstance(other.elems, dict)
+            else dict(enumerate(other.elems))
+        )
         if len(l1) != len(l2):
             return False
 
         res = self.typename == other.typename and all(
-            k1==k2 and v1.__eq__(v2, memo)
-            for (k1,v1), (k2,v2) in zip(l1.items(), l2.items())
+            k1 == k2 and v1.__eq__(v2, memo)
+            for (k1, v1), (k2, v2) in zip(l1.items(), l2.items())
         )
         return res
-
 
     @property
     def elem_types(self):
@@ -140,7 +147,7 @@ class Type(Object):
 
     def issubtype(self, t):
         assert isinstance(t, Type), t
-        if t.typename == 'union':   # XXX a little hacky. Change to issupertype?
+        if t.typename == 'union':  # XXX a little hacky. Change to issupertype?
             return any(self.issubtype(t2) for t2 in t.elem_types)
 
         if self is T.nulltype:
@@ -149,7 +156,9 @@ class Type(Object):
 
         # TODO zip should be aware of lengths
         if t.typename in (s.typename for s in self.supertype_chain()):
-            return all(e1.issubtype(e2) for e1, e2 in zip(self.elem_types, t.elem_types))
+            return all(
+                e1.issubtype(e2) for e1, e2 in zip(self.elem_types, t.elem_types)
+            )
         return False
 
     def __le__(self, other):
@@ -162,7 +171,11 @@ class Type(Object):
         return self.replace(elems=elems)
 
     def __call__(self, elems=None, **options):
-        return self.replace(elems=elems or self.elems, proto_attrs=dict(self.proto_attrs), options={**self.options, **options})
+        return self.replace(
+            elems=elems or self.elems,
+            proto_attrs=dict(self.proto_attrs),
+            options={**self.options, **options},
+        )
 
     def __repr__(self):
         # TODO Move to dp_inst?
@@ -193,6 +206,7 @@ class Type(Object):
     def __or__(self, other):
         return T.union[self, other]
 
+
 class TupleType(Type):
     def __getitem__(self, elems):
         assert not self.elems
@@ -201,13 +215,16 @@ class TupleType(Type):
     def __or__(self, other):
         return self.replace(elems=self.elems + (other,))
 
+
 class SumType(TupleType):
     def issubtype(self, other):
         return all(t.issubtype(other) for t in self.elem_types)
 
+
 class ProductType(TupleType):
     def issubtype(self, other):
         return all(a.issubtype(b) for a, b in zip(self.elem_types, other.elem_types))
+
 
 class PhantomType(Type):
     def issubtype(self, other):
@@ -215,7 +232,6 @@ class PhantomType(Type):
 
 
 class TypeDict(dict):
-
     def _register(self, name, supertypes=(), elems=(), type_class=Type):
         t = type_class(name, frozenset(supertypes), elems)
         assert name not in self
@@ -227,7 +243,6 @@ class TypeDict(dict):
             self._register(name, *args)
         else:
             self._register(name, args)
-
 
 
 T = TypeDict()
@@ -252,14 +267,14 @@ T.string = [T.text]
 T.number = [T.primitive]
 T.int = [T.number]
 T.float = [T.number]
-T.bool = [T.primitive]    # number?
+T.bool = [T.primitive]  # number?
 T.decimal = [T.number]
 
-# TODO datetime vs timestamp ! 
-T.timestamp = [T.primitive]    # struct?
-T.datetime = [T.primitive]    # struct?
-T.date = [T.primitive]    # struct?
-T.time = [T.primitive]    # struct?
+# TODO datetime vs timestamp !
+T.timestamp = [T.primitive]  # struct?
+T.datetime = [T.primitive]  # struct?
+T.date = [T.primitive]  # struct?
+T.time = [T.primitive]  # struct?
 
 T.container = [T.object]
 
@@ -273,7 +288,7 @@ T._register('table', [T.container], {})
 T.list = [T.table], {ITEM_NAME: T.any}
 T.set = [T.table], {ITEM_NAME: T.any}
 T.t_id = [T.primitive], (T.table,)
-T.t_relation = [T.primitive], (T.any,)   # t_id?
+T.t_relation = [T.primitive], (T.any,)  # t_id?
 
 # XXX sequence instead of container?
 T._register('aggregated', [T.container], (T.any,), type_class=PhantomType)
@@ -290,7 +305,7 @@ T.property = [T.object]
 T.module = [T.object]
 
 T.signal = [T.object]
-#-----------
+# -----------
 
 T.Exception = [T.signal]
 
@@ -330,9 +345,10 @@ def _get_subtypes():
             d[st].append(t)
     return dict(d)
 
+
 subtypes = _get_subtypes()
 
-#-------------
+# -------------
 
 
 _python_type_to_sql_type = {
@@ -342,8 +358,10 @@ _python_type_to_sql_type = {
     str: T.string,
     datetime: T.timestamp,
     Decimal: T.decimal,
-    arrow.Arrow: T.timestamp,   # datetime?
+    arrow.Arrow: T.timestamp,  # datetime?
 }
+
+
 def from_python(t):
     # TODO throw proper exception if this fails
     return _python_type_to_sql_type[t]
@@ -378,7 +396,7 @@ def union_types(types):
     if len(ts) > 1:
         elem_type = T.union(elems=tuple(ts))
     else:
-        elem_type ,= ts
+        (elem_type,) = ts
     return elem_type
 
 

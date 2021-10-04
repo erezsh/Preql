@@ -1,15 +1,14 @@
-
-from typing import Optional, List, Union
+from typing import List, Optional, Union
 
 from lark import Lark, Transformer, v_args
 from lark.indenter import Indenter
-
-from runtype import dataclass
 from rich.markup import escape as rich_esc
+from runtype import dataclass
 
 
 def indent_str(indent):
     return ' ' * (indent)
+
 
 @dataclass
 class Text:
@@ -35,7 +34,6 @@ class Text:
         yield from self._print_text(8)
 
 
-
 @dataclass(frozen=False)
 class Defin:
     name: str
@@ -51,7 +49,7 @@ class Defin:
         decl = f'[bold]{self.name}[/bold]{type}'
         yield f'{indent_str(indent)}{decl}: '
         if self.text:
-            yield from self.text._print_text(indent+len(decl)+2, True)
+            yield from self.text._print_text(indent + len(decl) + 2, True)
         else:
             yield '\n'
 
@@ -64,7 +62,11 @@ class Defin:
         yield from self.text._print_html()
 
     def _print_rst(self):
-        text = self.text.replace(lines = self.text.lines + [f'(default={self.default})']) if self.default else self.text
+        text = (
+            self.text.replace(lines=self.text.lines + [f'(default={self.default})'])
+            if self.default
+            else self.text
+        )
         text = ''.join(text._print_rst()) if self.text else '\n'
         yield f"    :param  {self.name}: {text}"
         if self.type:
@@ -79,7 +81,7 @@ class Section:
     def _print_text(self, indent):
         l = [f'[bold white]{indent_str(indent)}{self.name}[/bold white]:\n']
         for item in self.items:
-            l += item._print_text(indent+4)
+            l += item._print_text(indent + 4)
         return l
 
     def _print_html(self):
@@ -102,6 +104,7 @@ class Section:
         else:
             for item in self.items:
                 yield from item._print_rst()
+
 
 @dataclass
 class DocString:
@@ -144,8 +147,9 @@ class DocString:
         return ''.join(self._print_rst())
 
 
-
 _inline = v_args(inline=True)
+
+
 class DocTransformer(Transformer):
     def as_list(self, items):
         return items
@@ -167,7 +171,6 @@ class DocTransformer(Transformer):
         return Defin(name.rstrip(':'), text)
 
 
-
 class DocIndenter(Indenter):
     NL_type = '_NL'
     OPEN_PAREN_types = []
@@ -177,18 +180,20 @@ class DocIndenter(Indenter):
     tab_len = 1
 
 
-parser = Lark.open('docstring.lark', rel_to=__file__,
-                    parser='lalr', #lexer=_Lexer,
-                    postlex=DocIndenter(),
-                    maybe_placeholders=True,
-                    )
+parser = Lark.open(
+    'docstring.lark',
+    rel_to=__file__,
+    parser='lalr',  # lexer=_Lexer,
+    postlex=DocIndenter(),
+    maybe_placeholders=True,
+)
 
 
 def parse(s):
     s = s.strip()
     if not s:
         return DocString(Text([]), [])
-    tree = parser.parse(s+'\n')
+    tree = parser.parse(s + '\n')
     return DocTransformer().transform(tree)
 
 

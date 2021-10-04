@@ -1,23 +1,33 @@
-import operator
-from pathlib import Path
-import subprocess
 import json
+import operator
+import subprocess
+from pathlib import Path
 
 import dsnparse
 
-from .utils import classify, dataclass
-from .loggers import sql_log
 from .context import context
-
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id
-from .core.sql_import_result import sql_result_to_python, type_from_sql
-from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
+from .core.pql_types import Id, Object, T, Type
+from .core.sql import (
+    QueryBuilder,
+    Sql,
+    bigquery,
+    duck,
+    mysql,
+    postgres,
+    quote_id,
+    sqlite,
+)
+from .core.sql_import_result import sql_result_to_python, type_from_sql
+from .loggers import sql_log
+from .utils import classify, dataclass
+
 
 @dataclass
 class Const(Object):
     type: Type
     value: object
+
 
 class ConnectError(Exception):
     pass
@@ -26,7 +36,7 @@ class ConnectError(Exception):
 def log_sql(sql):
     for i, s in enumerate(sql.split('\n')):
         prefix = '/**/    ' if i else '/**/;;  '
-        sql_log.debug(prefix+s)
+        sql_log.debug(prefix + s)
 
 
 class SqlInterface:
@@ -35,7 +45,6 @@ class SqlInterface:
     supports_foreign_key = True
     requires_subquery_name = False
     id_type_decl = 'INTEGER'
-
 
     def __init__(self, print_sql=False):
         self._print_sql = print_sql
@@ -81,11 +90,11 @@ class SqlInterface:
         return f'"{name}"'
 
 
-
 # from multiprocessing import Queue
 import queue
 import threading
 from time import sleep
+
 
 class TaskQueue:
     def __init__(self):
@@ -113,12 +122,11 @@ class TaskQueue:
             except queue.Empty:
                 continue
             try:
-                res = item(*args, **kwargs)  
+                res = item(*args, **kwargs)
             except Exception as e:
                 res = e
             self._task_results[task_id] = res
             self._queue.task_done()
-
 
     def _get_result(self, task_id):
         while task_id not in self._task_results:
@@ -136,9 +144,9 @@ class TaskQueue:
         self._closed = True
 
 
-
 class BaseConnection:
     pass
+
 
 class ThreadedConnection(BaseConnection):
     def __init__(self, create_connection):
@@ -158,7 +166,7 @@ class ThreadedConnection(BaseConnection):
             res = c.fetchall()
         except Exception as e:
             msg = "Exception when trying to fetch SQL result. Got error: %s"
-            raise DatabaseQueryError(msg%(e))
+            raise DatabaseQueryError(msg % (e))
 
         return sql_result_to_python(Const(sql_type, res))
 
@@ -169,13 +177,14 @@ class ThreadedConnection(BaseConnection):
                 c = self._backend_execute_sql(sql_code)
             except Exception as e:
                 msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
-                raise DatabaseQueryError(msg%(sql_code, e))
+                raise DatabaseQueryError(msg % (sql_code, e))
 
             return self._import_result(sql_type, c)
 
     def execute_sql(self, sql_type, sql_code):
-        return self._queue.run_task(self._execute_sql, context.state, sql_type, sql_code)
-
+        return self._queue.run_task(
+            self._execute_sql, context.state, sql_type, sql_code
+        )
 
     def commit(self):
         self._queue.run_task(self._conn.commit)
@@ -188,8 +197,6 @@ class ThreadedConnection(BaseConnection):
         self._queue.close()
 
 
-
-
 class SqlInterfaceCursor(SqlInterface):
     "An interface that uses the standard SQL cursor interface"
 
@@ -198,17 +205,15 @@ class SqlInterfaceCursor(SqlInterface):
 
         self._conn = ThreadedConnection(self._create_connection)
 
-
     def _execute_sql(self, sql_type, sql_code):
         return self._conn.execute_sql(sql_type, sql_code)
 
     def ping(self):
         c = self._conn.cursor()
         c.execute('select 1')
-        row ,= c.fetchall()
-        n ,= row
+        (row,) = c.fetchall()
+        (n,) = row
         assert n == 1
-
 
 
 class MysqlInterface(SqlInterfaceCursor):
@@ -220,8 +225,10 @@ class MysqlInterface(SqlInterfaceCursor):
     def __init__(self, host, port, database, user, password, print_sql=False):
         self._print_sql = print_sql
 
-        args = dict(host=host, port=port, database=database, user=user, password=password)
-        self._args = {k:v for k, v in args.items() if v is not None}
+        args = dict(
+            host=host, port=port, database=database, user=user, password=password
+        )
+        self._args = {k: v for k, v in args.items() if v is not None}
         super().__init__(print_sql)
 
     def _create_connection(self):
@@ -229,7 +236,9 @@ class MysqlInterface(SqlInterfaceCursor):
         from mysql.connector import errorcode
 
         try:
-            return mysql.connector.connect(charset='utf8', use_unicode=True, **self._args)
+            return mysql.connector.connect(
+                charset='utf8', use_unicode=True, **self._args
+            )
         except mysql.connector.Error as e:
             if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
                 raise ConnectError("Bad user name or password") from e
@@ -250,16 +259,18 @@ class MysqlInterface(SqlInterfaceCursor):
 
     def import_table_type(self, name, columns_whitelist=None):
         assert isinstance(name, Id)
-        assert len(name.parts) == 1 # TODO !
+        assert len(name.parts) == 1  # TODO !
 
-        columns_t = T.table(dict(
-            name=T.string,
-            type=T.string,
-            nullable=T.string,
-            key=T.string,
-            default=T.string,
-            extra=T.string,
-        ))
+        columns_t = T.table(
+            dict(
+                name=T.string,
+                type=T.string,
+                nullable=T.string,
+                key=T.string,
+                default=T.string,
+                extra=T.string,
+            )
+        )
         columns_q = "desc %s" % name.name
         sql_columns = self._execute_sql(columns_t, columns_q)
 
@@ -267,7 +278,10 @@ class MysqlInterface(SqlInterfaceCursor):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = {c['name']: type_from_sql(c['type'].decode(), c['nullable']) for c in sql_columns}
+        cols = {
+            c['name']: type_from_sql(c['type'].decode(), c['nullable'])
+            for c in sql_columns
+        }
 
         return T.table(cols, name=name)
 
@@ -282,30 +296,32 @@ class PostgresInterface(SqlInterfaceCursor):
     requires_subquery_name = True
 
     def __init__(self, host, port, database, user, password, print_sql=False):
-        self.args = dict(host=host, port=port, database=database, user=user, password=password)
+        self.args = dict(
+            host=host, port=port, database=database, user=user, password=password
+        )
         super().__init__(print_sql)
 
     def _create_connection(self):
         import psycopg2
         import psycopg2.extras
+
         psycopg2.extensions.set_wait_callback(psycopg2.extras.wait_select)
         try:
             return psycopg2.connect(**self.args)
         except psycopg2.OperationalError as e:
             raise ConnectError(*e.args) from e
 
-
-
-
     def table_exists(self, table_id):
         assert isinstance(table_id, Id)
         if len(table_id.parts) == 1:
             schema = 'public'
-            name ,= table_id.parts
+            (name,) = table_id.parts
         elif len(table_id.parts) == 2:
             schema, name = table_id.parts
         else:
-            raise Signal.make(T.DbError, None, "Postgres doesn't support nested schemas")
+            raise Signal.make(
+                T.DbError, None, "Postgres doesn't support nested schemas"
+            )
 
         sql_code = f"SELECT count(*) FROM information_schema.tables where table_name='{name}' and table_schema='{schema}'"
         cnt = self._execute_sql(T.int, sql_code)
@@ -317,26 +333,29 @@ class PostgresInterface(SqlInterfaceCursor):
         names = self._execute_sql(T.list[T.string], sql_code)
         return list(map(Id, names))
 
-
-    _schema_columns_t = T.table(dict(
-        schema=T.string,
-        table=T.string,
-        name=T.string,
-        pos=T.int,
-        nullable=T.bool,
-        type=T.string,
-    ))
+    _schema_columns_t = T.table(
+        dict(
+            schema=T.string,
+            table=T.string,
+            name=T.string,
+            pos=T.int,
+            nullable=T.bool,
+            type=T.string,
+        )
+    )
 
     def import_table_type(self, table_id, columns_whitelist=None):
         assert isinstance(table_id, Id)
 
         if len(table_id.parts) == 1:
             schema = 'public'
-            name ,= table_id.parts
+            (name,) = table_id.parts
         elif len(table_id.parts) == 2:
             schema, name = table_id.parts
         else:
-            raise Signal.make(T.DbError, None, "Postgres doesn't support nested schemas")
+            raise Signal.make(
+                T.DbError, None, "Postgres doesn't support nested schemas"
+            )
 
         columns_q = f"""SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
             FROM information_schema.columns
@@ -348,7 +367,10 @@ class PostgresInterface(SqlInterfaceCursor):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = [(c['pos'], c['name'], type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
+        cols = [
+            (c['pos'], c['name'], type_from_sql(c['type'], c['nullable']))
+            for c in sql_columns
+        ]
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
@@ -363,13 +385,15 @@ class PostgresInterface(SqlInterfaceCursor):
         columns_by_table = classify(sql_columns, lambda c: (c['schema'], c['table']))
 
         for (schema, table_name), columns in columns_by_table.items():
-            cols = [(c['pos'], c['name'], type_from_sql(c['type'], c['nullable'])) for c in columns]
+            cols = [
+                (c['pos'], c['name'], type_from_sql(c['type'], c['nullable']))
+                for c in columns
+            ]
             cols.sort()
             cols = dict(c[1:] for c in cols)
 
             # name = '%s.%s' % (schema, table_name)
             yield schema, table_name, T.table(cols, name=Id(schema, table_name))
-
 
 
 class BigQueryInterface(SqlInterface):
@@ -399,12 +423,12 @@ class BigQueryInterface(SqlInterface):
         if self._dataset_ensured:
             return
 
-        self._client.delete_dataset(self.PREQL_DATASET, delete_contents=True, not_found_ok=True)
+        self._client.delete_dataset(
+            self.PREQL_DATASET, delete_contents=True, not_found_ok=True
+        )
         self._client.create_dataset(self.PREQL_DATASET)
 
         self._dataset_ensured = True
-
-
 
     def _list_tables(self):
         for ds in self._client.list_datasets():
@@ -425,26 +449,26 @@ class BigQueryInterface(SqlInterface):
             res = list(self._client.query(sql_code))
         except Exception as e:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
-            raise DatabaseQueryError(msg%(sql_code, e))
+            raise DatabaseQueryError(msg % (sql_code, e))
 
         if sql_type is not T.nulltype:
             res = [list(i.values()) for i in res]
             return sql_result_to_python(Const(sql_type, res))
 
-
-
-    _schema_columns_t = T.table(dict(
-        schema=T.string,
-        table=T.string,
-        name=T.string,
-        pos=T.int,
-        nullable=T.bool,
-        type=T.string,
-    ))
-
+    _schema_columns_t = T.table(
+        dict(
+            schema=T.string,
+            table=T.string,
+            name=T.string,
+            pos=T.int,
+            nullable=T.bool,
+            type=T.string,
+        )
+    )
 
     def get_table(self, name):
-        from google.api_core.exceptions import NotFound, BadRequest
+        from google.api_core.exceptions import BadRequest, NotFound
+
         try:
             return self._client.get_table('.'.join(name.parts))
         except ValueError as e:
@@ -454,14 +478,12 @@ class BigQueryInterface(SqlInterface):
         except BadRequest as e:
             raise Signal.make(T.DbQueryError, None, str(e))
 
-
     def table_exists(self, name):
         try:
             self.get_table(name)
         except Signal:
             return False
         return True
-
 
     def import_table_type(self, name, columns_whitelist=None):
         assert isinstance(name, Id)
@@ -514,6 +536,7 @@ class BigQueryInterface(SqlInterface):
     def rollback(self):
         # XXX No error? No warning?
         pass
+
     def commit(self):
         # XXX No error? No warning?
         pass
@@ -521,13 +544,17 @@ class BigQueryInterface(SqlInterface):
     def close(self):
         self._client.close()
 
+
 class AbsSqliteInterface:
     def table_exists(self, name):
         assert isinstance(name, Id), name
         if len(name.parts) > 1:
             raise Signal.make(T.DbError, None, "Sqlite does not implement namespaces")
 
-        sql_code = "SELECT count(*) FROM sqlite_master where name='%s' and type='table'" % name.name
+        sql_code = (
+            "SELECT count(*) FROM sqlite_master where name='%s' and type='table'"
+            % name.name
+        )
         cnt = self._execute_sql(T.int, sql_code)
         return cnt > 0
 
@@ -535,14 +562,16 @@ class AbsSqliteInterface:
         sql_code = "SELECT name FROM sqlite_master where type='table'"
         return self._execute_sql(T.list[T.string], sql_code)
 
-    table_schema_type = T.table(dict(
-        pos=T.int,
-        name=T.string,
-        type=T.string,
-        notnull=T.bool,
-        default_value=T.string,
-        pk=T.bool,
-    ))
+    table_schema_type = T.table(
+        dict(
+            pos=T.int,
+            name=T.string,
+            type=T.string,
+            notnull=T.bool,
+            default_value=T.string,
+            pk=T.bool,
+        )
+    )
 
     def import_table_type(self, name, columns_whitelist=None):
         assert isinstance(name, Id), name
@@ -554,7 +583,10 @@ class AbsSqliteInterface:
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = [(c['pos'], c['name'], type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
+        cols = [
+            (c['pos'], c['name'], type_from_sql(c['type'], not c['notnull']))
+            for c in sql_columns
+        ]
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
@@ -573,7 +605,10 @@ class _SqliteProduct:
     def finalize(self):
         return self.product
 
+
 import math
+
+
 class _SqliteStddev:
     def __init__(self):
         self.M = 0.0
@@ -591,8 +626,7 @@ class _SqliteStddev:
     def finalize(self):
         if self.k < 3:
             return None
-        return math.sqrt(self.S / (self.k-2))
-
+        return math.sqrt(self.S / (self.k - 2))
 
 
 class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
@@ -602,9 +636,9 @@ class SqliteInterface(SqlInterfaceCursor, AbsSqliteInterface):
         self._filename = filename
         super().__init__(print_sql)
 
-
     def _create_connection(self):
         import sqlite3
+
         # sqlite3.enable_callback_tracebacks(True)
         try:
             conn = sqlite3.connect(self._filename or ':memory:')
@@ -632,13 +666,14 @@ class DuckInterface(SqliteInterface):
 
     def _create_connection(self):
         import duckdb
+
         return duckdb.connect(self._filename or ':memory:')
 
     def quote_name(self, name):
         return f'"{name}"'
 
     def rollback(self):
-        pass    # XXX
+        pass  # XXX
 
 
 class GitInterface(AbsSqliteInterface):
@@ -650,15 +685,16 @@ class GitInterface(AbsSqliteInterface):
         self.path = path
         self._print_sql = print_sql
 
-
-    table_schema_type = T.table(dict(
-        cid=T.int,
-        dflt_value=T.string,
-        name=T.string,
-        notnull=T.bool,
-        pk=T.bool,
-        type=T.string,
-    ))
+    table_schema_type = T.table(
+        dict(
+            cid=T.int,
+            dflt_value=T.string,
+            name=T.string,
+            notnull=T.bool,
+            pk=T.bool,
+            type=T.string,
+        )
+    )
 
     def _execute_sql(self, sql_type, sql_code):
         assert context.state
@@ -669,7 +705,7 @@ class GitInterface(AbsSqliteInterface):
             raise DatabaseQueryError(msg)
         except subprocess.CalledProcessError as e:
             msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
-            raise DatabaseQueryError(msg%(sql_code, e))
+            raise DatabaseQueryError(msg % (sql_code, e))
 
         return self._import_result(sql_type, res)
 
@@ -687,13 +723,15 @@ class GitInterface(AbsSqliteInterface):
                     assert "PLACEHOLDER" not in x, (x, row)
                     res.append(x)
             else:
-                res = [list(json.loads(x).values()) for x in c.split(b'\n') if x.strip()]
+                res = [
+                    list(json.loads(x).values()) for x in c.split(b'\n') if x.strip()
+                ]
 
             return sql_result_to_python(Const(sql_type, res))
 
     def import_table_type(self, name, columns_whitelist=None):
         assert isinstance(name, Id)
-        assert len(name.parts) == 1 # TODO !
+        assert len(name.parts) == 1  # TODO !
         # TODO merge with superclass
 
         columns_q = """pragma table_info('%s')""" % name
@@ -703,7 +741,10 @@ class GitInterface(AbsSqliteInterface):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = [(c['cid'], c['name'], type_from_sql(c['type'], not c['notnull'])) for c in sql_columns]
+        cols = [
+            (c['cid'], c['name'], type_from_sql(c['type'], not c['notnull']))
+            for c in sql_columns
+        ]
         cols.sort()
         cols = dict(c[1:] for c in cols)
 
@@ -727,28 +768,36 @@ def _drop_tables(state, *tables):
 
 _SQLITE_SCHEME = 'sqlite://'
 
+
 def create_engine(db_uri, print_sql, auto_create):
     if db_uri.startswith(_SQLITE_SCHEME):
         # Parse sqlite:// ourselves, to allow for sqlite://c:/path/to/db
-        path = db_uri[len(_SQLITE_SCHEME):]
+        path = db_uri[len(_SQLITE_SCHEME) :]
         if not auto_create and path != ':memory:':
             if not Path(path).exists():
-                raise ConnectError("File %r doesn't exist. To create it, set auto_create to True" % path)
+                raise ConnectError(
+                    "File %r doesn't exist. To create it, set auto_create to True"
+                    % path
+                )
         return SqliteInterface(path, print_sql=print_sql)
 
     dsn = dsnparse.parse(db_uri)
     if len(dsn.schemes) > 1:
         raise NotImplementedError("Preql doesn't support multiple schemes")
-    scheme ,= dsn.schemes
+    (scheme,) = dsn.schemes
 
     if len(dsn.paths) != 1:
         raise ValueError("Bad value for uri: %s" % db_uri)
-    path ,= dsn.paths
+    (path,) = dsn.paths
 
     if scheme == 'postgres':
-        return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+        return PostgresInterface(
+            dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql
+        )
     elif scheme == 'mysql':
-        return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+        return MysqlInterface(
+            dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql
+        )
     elif scheme == 'git':
         return GitInterface(path, print_sql=print_sql)
     elif scheme == 'duck':
