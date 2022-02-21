@@ -71,7 +71,7 @@ class SqlInterface:
         # Inefficient implementation but generic
         tables = self.list_tables()
         for table_name in tables:
-            table_type = self.import_table_type(Id(table_name))
+            table_type = self.import_table_type(table_name)
             yield None, table_name, table_type
 
     def qualified_name(self, name):
@@ -741,9 +741,12 @@ def create_engine(db_uri, print_sql, auto_create):
         raise NotImplementedError("Preql doesn't support multiple schemes")
     scheme ,= dsn.schemes
 
-    if len(dsn.paths) != 1:
-        raise ValueError("Bad value for uri: %s" % db_uri)
-    path ,= dsn.paths
+    if len(dsn.paths) == 0:
+        path = ''
+    elif len(dsn.paths) == 1:
+        path ,= dsn.paths
+    else:
+        raise ValueError("Bad value for uri, too many paths: %s" % db_uri)
 
     if scheme == 'postgres':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
