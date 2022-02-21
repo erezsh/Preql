@@ -204,7 +204,7 @@ class ThreadState:
             except KeyError:
                 pass
 
-            raise Signal.make(T.NameError, name, f"Name '{name}' is not defined")
+            raise Signal.make(T.NameError, name, f"Name '{name!r}' is not defined")     # TODO XXX: str(name) fails under mysql
 
 
     def set_var(self, name, value):
