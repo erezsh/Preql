@@ -11,6 +11,8 @@ from . import pql_objects as objects
 from .compiler import guess_field_name
 from .pql_types import T, Id
 
+from preql.context import context
+
 
 class Str(str):
     def __new__(cls, value, text_ref=None):
@@ -83,7 +85,7 @@ def _fix_escaping(s):
 
 def _wrap_result(res, f, meta, children):
     if isinstance(res, (Str, ast.Ast)):
-        ref = make_text_reference(*f.__self__.code_ref, meta, children)
+        ref = make_text_reference(*context.code_ref, meta, children)
         res.set_text_ref(ref)
     return res
 
@@ -93,7 +95,7 @@ def _args_wrapper(f, _data, children, meta):
     return _wrap_result(res, f, meta, children)
 
 def _args_wrapper_meta(f, _data, children, meta):
-    ref = make_text_reference(*f.__self__.code_ref, meta, children)
+    ref = make_text_reference(*context.code_ref, meta, children)
     res = f(ref, *children)
     if isinstance(res, (Str, ast.Ast)):
         res.set_text_ref(ref)
@@ -112,9 +114,8 @@ def token_value(self, t):
 
 @v_args(wrapper=_args_wrapper)
 class TreeToAst(Transformer):
-    def __init__(self, code_ref):
+    def __init__(self):
         super().__init__()
-        self.code_ref = code_ref
 
     name = token_value
 
@@ -376,4 +377,5 @@ def parse_stmts(s, source_file, wrap_syntax_error=True):
 
         raise pql_SyntaxError(ref, msg)
 
-    return TreeToAst(code_ref=(s, source_file)).transform(tree)
+    with context(code_ref=(s, source_file)):
+        return TreeToAst().transform(tree)
