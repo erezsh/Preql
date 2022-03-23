@@ -223,7 +223,7 @@ def pql_debug():
     Use `c()` to continue the execution.
     """
     state = context.state
-    py_api = state.interp._py_api
+    py_api = state.interp._preql_inst
 
     with use_scope(breakpoint_funcs):
         py_api.start_repl('debug> ')

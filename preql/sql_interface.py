@@ -533,7 +533,7 @@ class AbsSqliteInterface:
 
     def list_tables(self):
         sql_code = "SELECT name FROM sqlite_master where type='table'"
-        return self._execute_sql(T.list[T.string], sql_code)
+        return [Id(x) for x in self._execute_sql(T.list[T.string], sql_code)]
 
     table_schema_type = T.table(dict(
         pos=T.int,

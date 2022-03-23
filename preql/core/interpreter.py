@@ -49,7 +49,10 @@ class LocalCopy(threading.local):
 
 
 class Interpreter:
-    def __init__(self, sqlengine, display, use_core=True):
+    def __init__(self, sqlengine, display, use_core=True, _preql_inst=None):
+        assert _preql_inst
+        self._preql_inst = _preql_inst  # XXX temporary hack
+
         self.state = ThreadState.from_components(self, sqlengine, display, initial_namespace())
         if use_core:
             mns = import_module(self.state, ast.Import('__builtins__', use_core=False)).namespace
@@ -61,6 +64,7 @@ class Interpreter:
                     bns[k] = v
 
         self._local_copies = LocalCopy(state=self.state)
+
 
     def setup_context(self):
         return context(state=self._local_copies.state)
@@ -186,6 +190,6 @@ class Interpreter:
 
     def clone(self, use_core):
         state = self.state
-        i = Interpreter(state.db, state.display, use_core=use_core)
+        i = Interpreter(state.db, state.display, use_core=use_core, _preql_inst=self._preql_inst)
         i.state.stacktrace = state.stacktrace   # XXX proper interface
         return i

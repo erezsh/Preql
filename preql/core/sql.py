@@ -496,8 +496,10 @@ class AddIndex(SqlStatement):
     unique: bool
 
     def _compile(self, qb):
-        return [f"CREATE {'UNIQUE' if self.unique else ''} INDEX IF NOT EXISTS {quote_id(self.index_name)}"
-                f" ON {quote_id(self.table_name)}({self.column})"]
+        stmt = f"CREATE {'UNIQUE' if self.unique else ''} INDEX"
+        if qb.target != mysql:
+            stmt += "IF NOT EXISTS"
+        return [ stmt + f"{quote_id(self.index_name)} ON {quote_id(self.table_name)}({self.column})"]
 
 @dataclass
 class Insert(SqlStatement):
@@ -558,8 +560,9 @@ class InsertConsts2(SqlStatement):
             for tpl in self.tuples
         )
 
+        cols = [quote_name(c) for c in self.cols]
         q = ['INSERT INTO', quote_id(self.table),
-             "(", ', '.join(self.cols), ")",
+             "(", ', '.join(cols), ")",
              "VALUES ",
         ]
         return [' '.join(q)] + values #+ ';'

@@ -160,8 +160,7 @@ class Preql:
     def _reset_interpreter(self, engine=None):
         if engine is None:
             engine = self._interp.state.db
-        self._interp = Interpreter(engine, self._display)
-        self._interp._py_api = self # TODO proper api
+        self._interp = Interpreter(engine, self._display, _preql_inst=self)
 
     def close(self):
         self._interp.state.db.close()
