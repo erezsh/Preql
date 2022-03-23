@@ -56,7 +56,7 @@ def _restructure_result(t: T.struct, i):
 
 @dp_type
 def _restructure_result(_t: T.union[T.primitive, T.nulltype], i):
-    return next(i)
+    return _from_sql_primitive(next(i))
 
 
 @dp_type
@@ -103,7 +103,7 @@ def _extract_primitive(res, expected):
     except ValueError:
         raise Signal.make(T.TypeError, None, f"Expected a single {expected}. Got: '{res.value}'")
 
-    return item
+    return _from_sql_primitive(item)
 
 @dp_inst
 def sql_result_to_python(res: T.bool):
@@ -116,7 +116,6 @@ def sql_result_to_python(res: T.bool):
 def sql_result_to_python(res: T.int):
     item = _extract_primitive(res, 'int')
     if not isinstance(item, int):
-        breakpoint()
         raise Signal.make(T.ValueError, None, f"Expected SQL to return an int. Instead got '{item}'")
     return item
 
@@ -144,6 +143,8 @@ def _from_sql_primitive(p):
     if isinstance(p, decimal.Decimal):
         # TODO Needs different handling when we expect a decimal
         return float(p)
+    elif isinstance(p, bytearray):
+        return p.decode()
     return p
 
 @dp_inst

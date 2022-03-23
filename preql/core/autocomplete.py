@@ -199,7 +199,8 @@ def autocomplete(state, code, source='<autocomplete>'):
             tree = autocomplete_tree(e.interactive_parser)
             if tree:
                 try:
-                    stmts = parser.TreeToAst(code_ref=(code, source)).transform(tree)
+                    with context(code_ref=(code, source)):
+                        stmts = parser.TreeToAst().transform(tree)
                 except pql_SyntaxError as e:
                     return {}
 
