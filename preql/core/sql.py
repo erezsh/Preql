@@ -496,9 +496,9 @@ class AddIndex(SqlStatement):
     unique: bool
 
     def _compile(self, qb):
-        stmt = f"CREATE {'UNIQUE' if self.unique else ''} INDEX"
+        stmt = f"CREATE {'UNIQUE' if self.unique else ''} INDEX "
         if qb.target != mysql:
-            stmt += "IF NOT EXISTS"
+            stmt += "IF NOT EXISTS "
         return [ stmt + f"{quote_id(self.index_name)} ON {quote_id(self.table_name)}({self.column})"]
 
 @dataclass
