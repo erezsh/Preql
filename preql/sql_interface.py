@@ -9,7 +9,7 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id, snowflake
 from .core.sql_import_result import sql_result_to_python, type_from_sql
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
@@ -35,6 +35,7 @@ class SqlInterface:
     supports_foreign_key = True
     requires_subquery_name = False
     id_type_decl = 'INTEGER'
+    max_rows_per_query = 1024
 
 
     def __init__(self, print_sql=False):
@@ -371,6 +372,65 @@ class PostgresInterface(SqlInterfaceCursor):
             yield schema, table_name, T.table(cols, name=Id(schema, table_name))
 
 
+class SnowflakeInterface(SqlInterface):
+    target = snowflake
+
+    id_type_decl = "number autoincrement"
+    max_rows_per_query = 16384
+
+    def __init__(self, account, user, password, path, schema, database, print_sql=False):
+        import logging
+        logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
+        import snowflake.connector
+
+        self._client = snowflake.connector.connect(
+            user=user,
+            password=password,
+            account=account
+            )
+        self._client.cursor().execute(f"USE WAREHOUSE {path.lstrip('/')}")
+        self._client.cursor().execute(f"USE DATABASE {database}")
+        self._client.cursor().execute(f"USE SCHEMA {schema}")
+
+        self._print_sql = print_sql
+
+    def quote_name(self, name):
+        # return f'"{name}"'
+        return name
+
+    def table_exists(self, name):
+        assert isinstance(name, Id)
+        tables = [t.lower() for t in self.list_tables()]
+        return name.lower() in tables
+
+    def list_tables(self):
+        # sql_code = "SHOW TABLES"
+        # names = self._execute_sql(T.list[T.string], sql_code)
+        # return list(map(Id, names))
+        return []
+
+    def _import_result(self, sql_type, c):
+        if sql_type is T.nulltype:
+            return None
+
+        try:
+            res = c.fetchall()
+        except Exception as e:
+            msg = "Exception when trying to fetch SQL result. Got error: %s"
+            raise DatabaseQueryError(msg%(e))
+
+        return sql_result_to_python(Const(sql_type, res))
+    def _execute_sql(self, sql_type, sql_code):
+        import snowflake.connector
+        cs = self._client.cursor()
+        try:
+            res = cs.execute(sql_code)
+            return self._import_result(sql_type, res)
+        except snowflake.connector.errors.DatabaseError as e:
+            msg = "Exception when trying to execute SQL code:\n    %s\n\nGot error: %s"
+            raise DatabaseQueryError(msg%(sql_code, e))
+        finally:
+            cs.close()
 
 class BigQueryInterface(SqlInterface):
     target = bigquery
@@ -758,5 +818,7 @@ def create_engine(db_uri, print_sql, auto_create):
         return DuckInterface(path, print_sql=print_sql)
     elif scheme == 'bigquery':
         return BigQueryInterface(path, print_sql=print_sql)
+    elif scheme == 'snowflake':
+        return SnowflakeInterface(dsn.host, dsn.user, dsn.password, path, **dsn.query, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
