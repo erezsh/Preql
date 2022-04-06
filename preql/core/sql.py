@@ -607,6 +607,8 @@ class Values(Table):
         if qb.target == mysql:
             def row_func(x):
                 return ['ROW('] + x + [')']
+        elif qb.target == snowflake:
+            return join_sep([['SELECT '] + v.code for v in values], ' UNION ALL ')
         else:
             row_func = parens
 

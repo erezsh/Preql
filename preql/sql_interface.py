@@ -395,7 +395,7 @@ class SnowflakeInterface(SqlInterface):
         self._print_sql = print_sql
 
     def quote_name(self, name):
-        # return f'"{name}"'
+        # TODO is this right?
         return name
 
     def table_exists(self, name):
@@ -404,10 +404,56 @@ class SnowflakeInterface(SqlInterface):
         return name.lower() in tables
 
     def list_tables(self):
-        # sql_code = "SHOW TABLES"
-        # names = self._execute_sql(T.list[T.string], sql_code)
-        # return list(map(Id, names))
-        return []
+        sql_code = "SHOW TABLES"
+        table_type = T.table(dict(
+            created_on=T.datetime,
+            name=T.string,
+            database_name=T.string,
+            schema_name=T.string,
+            kind=T.string,
+            comment=T.string,
+            cluster_by=T.string,
+            rows=T.int,
+            bytes=T.int,
+            owner=T.string,
+            retention_time=T.string,
+            dropped_on=T.string,
+            automatic_clustering=T.string,
+            change_tracking=T.string,
+            search_optimization=T.string,
+            search_optimization_progress=T.string,
+            search_optimization_bytes=T.string,
+            # is_exteral=T.string,
+        ))
+        
+        tables = self._execute_sql(table_type, sql_code)
+        return [Id(table['name']) for table in tables]
+
+    def import_table_type(self, name, columns_whitelist=None):
+        assert isinstance(name, Id)
+        sql_code = f"DESC TABLE {quote_id(name)}"
+        table_type = T.table(dict(
+            name=T.string,
+            type=T.string,
+            kind=T.string,
+            null=T.bool,
+            default=T.string,
+            primary_key=T.bool,
+            unique_key=T.bool,
+            check=T.string,
+            expression=T.string,
+            comment=T.string,
+            policy=T.string,
+        ))
+        fields = self._execute_sql(table_type, sql_code)
+
+        cols = {
+            f['name']: type_from_sql(f['type'], f['null'] == 'Y')
+            for f in fields
+            if columns_whitelist is None or f.name in columns_whitelist
+        }
+
+        return T.table(cols, name=name)
 
     def _import_result(self, sql_type, c):
         if sql_type is T.nulltype:
