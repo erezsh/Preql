@@ -13,6 +13,7 @@ sqlite = 'sqlite'
 postgres = 'postgres'
 bigquery = 'bigquery'
 mysql = 'mysql'
+snowflake = 'snowflake'
 
 class QueryBuilder:
     def __init__(self, is_root=True, start_count=0):
@@ -606,6 +607,8 @@ class Values(Table):
         if qb.target == mysql:
             def row_func(x):
                 return ['ROW('] + x + [')']
+        elif qb.target == snowflake:
+            return join_sep([['SELECT '] + v.code for v in values], ' UNION ALL ')
         else:
             row_func = parens
 
@@ -965,6 +968,9 @@ class P2S_Sqlite(Types_PqlToSql):
 class P2S_Postgres(Types_PqlToSql):
     datetime = "timestamp with time zone"
 
+class P2S_Snowflake(Types_PqlToSql):
+    pass
+
 _pql_to_sql_by_target = {
     bigquery: P2S_BigQuery,
     mysql: P2S_MySql,
@@ -972,6 +978,7 @@ _pql_to_sql_by_target = {
     sqlite: P2S_Sqlite,
     duck: P2S_Sqlite,
     postgres: P2S_Postgres,
+    snowflake: P2S_Snowflake,
 }
 
 
@@ -1114,6 +1121,9 @@ def arith(res_type, op, args):
         elif target == bigquery:
             # safe div?
             return FuncCall(res_type, 'div', arg_codes)
+        elif target == snowflake:
+            res = BinOp(res_type, '/', arg_codes)
+            return FuncCall(T.int, 'floor', [res])
         else:
             op = '/'
     elif op == '%':

@@ -395,6 +395,8 @@ if (db_type == "postgres") {
     func day_of_week(x) = SQL(int, "EXTRACT (DAYOFWEEK FROM $x)")
     func hour(x) = SQL(int, "EXTRACT (HOUR FROM $x)")
     func year(x) = SQL(int, "EXTRACT (YEAR FROM $x)")
+} else if (db_type == "snowflake") {
+    //
 } else {
     throw new TypeError("Unexpected")
 }

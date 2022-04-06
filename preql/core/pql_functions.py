@@ -900,7 +900,7 @@ def pql_import_csv(table: T.table, filename: T.string, header: T.bool = ast.Cons
     header = cast_to_python(header)
     msg = f"Importing CSV file: '{filename}'"
 
-    ROWS_PER_QUERY = 1024
+    max_rows_per_query = get_db().max_rows_per_query
 
     cons = TableConstructor.make(table.type)
     keys = []
@@ -929,7 +929,7 @@ def pql_import_csv(table: T.table, filename: T.string, header: T.bool = ast.Cons
                 values = ["'%s'" % (v.replace("'", "''")) for v in row]
                 rows.append(values)
 
-                if (i+1) % ROWS_PER_QUERY == 0:
+                if (i+1) % max_rows_per_query == 0:
                     insert_values()
                     rows = []
 
@@ -1040,6 +1040,10 @@ def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false
         >> table x = [1,2,3]{item}
         >> x.add_index("item")
     """
+    if get_db().target == sql.snowflake:
+        # TODO 
+        return objects.null
+
     try:
         table_name = table.type.options['name']
     except KeyError:

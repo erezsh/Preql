@@ -367,7 +367,7 @@ def find_module(module_name):
         if module_path.exists():
             return module_path
 
-    raise Signal.make(T.ImportError, r, "Cannot find module")
+    raise Signal.make(T.ImportError, module_name, "Cannot find module")
 
 
 def import_module(state, r):
@@ -839,6 +839,8 @@ def _new_row(new_ast, table, matched):
         rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []))
         keys += ['id']
         values += [sql.make_value(rowid)]
+    elif get_db().target == sql.snowflake:
+        rowid = None
 
     try:
         table_name = table.options['name']
@@ -848,7 +850,7 @@ def _new_row(new_ast, table, matched):
     q = sql.InsertConsts(table_name, keys, [values])
     db_query(q)
 
-    if get_db().target != sql.bigquery:
+    if get_db().target not in (sql.bigquery, sql.snowflake):
         rowid = db_query(sql.LastRowId())
 
     d = SafeDict({'id': objects.pyvalue_inst(rowid)})
