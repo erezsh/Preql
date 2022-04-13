@@ -131,11 +131,6 @@ func first_or_null(obj: union[table, projected]) {
 func limit(tbl: table, n: int) = tbl[..n]
     """Returns the first 'n' rows in the table."""
 
-func limit_offset(tbl: table, lim: int, offset: int) {
-    "Returns the first 'n' rows in the table at the given offset."
-    return SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
-}
-
 
 
 func upper(s: string) = SQL(string, "upper($s)")
@@ -287,6 +282,18 @@ func _count_true(field: aggregated) = SQL(int, "sum(cast($field!=0 as int))")
 
 db_type = get_db_type()
 
+if (db_type == "mssql") {
+    func limit_offset(tbl: table, lim: int, offset: int) {
+        "Returns the first 'n' rows in the table at the given offset."
+        return SQL(type(tbl), "SELECT TOP $lim * FROM $tbl")
+    }
+} else {
+    func limit_offset(tbl: table, lim: int, offset: int) {
+        "Returns the first 'n' rows in the table at the given offset."
+        return SQL(type(tbl), "SELECT * FROM $tbl LIMIT $lim OFFSET $offset")
+    }
+}
+
 if (db_type == 'sqlite' and PY("sqlite3.sqlite_version_info < (3, 25)", "import sqlite3")) {
     func enum(tbl: table) {
         throw new NotImplementedError("Sqlite doesn't support window functions before version 3.25")
@@ -396,6 +403,8 @@ if (db_type == "postgres") {
     func hour(x) = SQL(int, "EXTRACT (HOUR FROM $x)")
     func year(x) = SQL(int, "EXTRACT (YEAR FROM $x)")
 } else if (db_type == "snowflake") {
+    //
+} else if (db_type == "mssql") {
     //
 } else {
     throw new TypeError("Unexpected")

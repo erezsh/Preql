@@ -9,7 +9,7 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id, snowflake
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, mssql, duck, bigquery, quote_id, snowflake
 from .core.sql_import_result import sql_result_to_python, type_from_sql
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
@@ -211,6 +211,66 @@ class SqlInterfaceCursor(SqlInterface):
         assert n == 1
 
 
+class MssqlInterface(SqlInterfaceCursor):
+    target = mssql
+
+    id_type_decl = "INT IDENTITY (1, 1)"
+    requires_subquery_name = True   # XXX not sure
+
+    def __init__(self, host, port, database, user, password, print_sql=False):
+        self._print_sql = print_sql
+
+        args = dict(server=host, port=port, database=database, user=user, password=password)
+        self._args = {k:v for k, v in args.items() if v is not None}
+        super().__init__(print_sql)
+
+    def _create_connection(self):
+        import pymssql
+
+        try:
+            return pymssql.connect(**self._args)
+        except mysql.connector.Error as e:
+            raise ConnectError(*e.args) from e
+
+    def quote_name(self, name):
+        return f'[{name}]'
+
+    def list_tables(self):
+        # TODO import more schemas?
+        sql_code = "SELECT Distinct TABLE_NAME FROM information_schema.TABLES"
+        names = self._execute_sql(T.list[T.string], sql_code)
+        return list(map(Id, names))
+
+    _schema_columns_t = T.table(dict(   # Same as postgres
+        schema=T.string,
+        table=T.string,
+        name=T.string,
+        pos=T.int,
+        nullable=T.bool,
+        type=T.string,
+    ))
+
+    def import_table_type(self, table_id, columns_whitelist=None):
+        columns_q = f"""SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
+            FROM information_schema.columns
+            WHERE table_name = '{table_id.name}' 
+            """
+        sql_columns = self._execute_sql(self._schema_columns_t, columns_q)
+
+        if columns_whitelist:
+            wl = set(columns_whitelist)
+            sql_columns = [c for c in sql_columns if c['name'] in wl]
+
+        cols = [(c['pos'], c['name'], type_from_sql(c['type'], c['nullable'])) for c in sql_columns]
+        cols.sort()
+        cols = dict(c[1:] for c in cols)
+
+        return T.table(cols, name=table_id)
+
+    def table_exists(self, name):
+        assert isinstance(name, Id)
+        tables = [t.lower() for t in self.list_tables()]
+        return name.lower() in tables
 
 class MysqlInterface(SqlInterfaceCursor):
     target = mysql
@@ -858,6 +918,8 @@ def create_engine(db_uri, print_sql, auto_create):
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'mysql':
         return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+    elif scheme == 'mssql':
+        return MssqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'git':
         return GitInterface(path, print_sql=print_sql)
     elif scheme == 'duck':
