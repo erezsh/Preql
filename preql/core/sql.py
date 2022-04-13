@@ -608,7 +608,7 @@ class Values(Table):
         if qb.target == mysql:
             def row_func(x):
                 return ['ROW('] + x + [')']
-        elif qb.target == snowflake:
+        elif qb.target == snowflake or qb.target == mssql:
             return join_sep([['SELECT '] + v.code for v in values], ' UNION ALL ')
         else:
             row_func = parens
@@ -740,24 +740,28 @@ class Select(TableOperation):
         if self.order:
             sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
 
-        if self.limit is not None:
-            sql += [' LIMIT ', str(self.limit)]
-        elif self.offset is not None:
-            if qb.target == sqlite:
-                sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
-            elif qb.target == mysql:
-                # MySQL requires a specific limit, always!
-                # See: https://stackoverflow.com/questions/255517/mysql-offset-infinite-rows
-                sql += [' LIMIT 18446744073709551615']
-            elif qb.target == bigquery:
-                # BigQuery requires a specific limit, always!
-                sql += [' LIMIT 9223372036854775807']
+        if qb.target == mssql:
+            # TODO !!!
+            pass
+        else:
+            if self.limit is not None:
+                sql += [' LIMIT ', str(self.limit)]
+            elif self.offset is not None:
+                if qb.target == sqlite:
+                    sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
+                elif qb.target == mysql:
+                    # MySQL requires a specific limit, always!
+                    # See: https://stackoverflow.com/questions/255517/mysql-offset-infinite-rows
+                    sql += [' LIMIT 18446744073709551615']
+                elif qb.target == bigquery:
+                    # BigQuery requires a specific limit, always!
+                    sql += [' LIMIT 9223372036854775807']
 
 
-        if self.offset is not None:
-            sql += [' OFFSET ', str(self.offset)]
+            if self.offset is not None:
+                sql += [' OFFSET ', str(self.offset)]
 
-        return sql
+            return sql
 
 
 @listgen
@@ -972,6 +976,9 @@ class P2S_Postgres(Types_PqlToSql):
 class P2S_Snowflake(Types_PqlToSql):
     pass
 
+class P2S_MsSql(Types_PqlToSql):
+    pass
+
 _pql_to_sql_by_target = {
     bigquery: P2S_BigQuery,
     mysql: P2S_MySql,
@@ -980,6 +987,7 @@ _pql_to_sql_by_target = {
     duck: P2S_Sqlite,
     postgres: P2S_Postgres,
     snowflake: P2S_Snowflake,
+    mssql: P2S_MsSql,
 }
 
 
@@ -1057,10 +1065,13 @@ def compile_type_def(table_name, table) -> Sql:
         posts.append(f"PRIMARY KEY ({names})")
 
     # Consistent among SQL databases
+    tmp = table.options.get('temporary', False)
     if db.target == 'bigquery':
-        command = ("CREATE TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS")
+        command = ("CREATE TABLE" if tmp else "CREATE TABLE IF NOT EXISTS")
+    if db.target == 'mssql':
+        command = "CREATE TEMPORARY TABLE" if tmp else "CREATE TABLE"
     else:
-        command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
+        command = "CREATE TEMPORARY TABLE" if tmp else "CREATE TABLE IF NOT EXISTS"
 
     return RawSql(T.nulltype, f'{command} {quote_id(table_name)} (' + ', '.join(columns + posts) + ')')
 

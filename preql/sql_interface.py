@@ -214,7 +214,7 @@ class SqlInterfaceCursor(SqlInterface):
 class MssqlInterface(SqlInterfaceCursor):
     target = mssql
 
-    id_type_decl = "INT PRIMARY KEY IDENTITY (1, 1)"
+    id_type_decl = "INT IDENTITY (1, 1)"
     requires_subquery_name = True   # XXX not sure
 
     def __init__(self, host, port, database, user, password, print_sql=False):
@@ -241,10 +241,19 @@ class MssqlInterface(SqlInterfaceCursor):
         names = self._execute_sql(T.list[T.string], sql_code)
         return list(map(Id, names))
 
-    def import_table_type(self, name, columns_whitelist=None):
+    _schema_columns_t = T.table(dict(   # Same as postgres
+        schema=T.string,
+        table=T.string,
+        name=T.string,
+        pos=T.int,
+        nullable=T.bool,
+        type=T.string,
+    ))
+
+    def import_table_type(self, table_id, columns_whitelist=None):
         columns_q = f"""SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
             FROM information_schema.columns
-            WHERE table_name = '{name}' 
+            WHERE table_name = '{quote_id(table_id)}' 
             """
         sql_columns = self._execute_sql(self._schema_columns_t, columns_q)
 
@@ -257,6 +266,11 @@ class MssqlInterface(SqlInterfaceCursor):
         cols = dict(c[1:] for c in cols)
 
         return T.table(cols, name=table_id)
+
+    def table_exists(self, name):
+        assert isinstance(name, Id)
+        tables = [t.lower() for t in self.list_tables()]
+        return name.lower() in tables
 
 class MysqlInterface(SqlInterfaceCursor):
     target = mysql
