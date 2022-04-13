@@ -13,6 +13,7 @@ sqlite = 'sqlite'
 postgres = 'postgres'
 bigquery = 'bigquery'
 mysql = 'mysql'
+mssql = 'mssql'
 snowflake = 'snowflake'
 
 class QueryBuilder:
