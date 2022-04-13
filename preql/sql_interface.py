@@ -253,7 +253,7 @@ class MssqlInterface(SqlInterfaceCursor):
     def import_table_type(self, table_id, columns_whitelist=None):
         columns_q = f"""SELECT table_schema, table_name, column_name, ordinal_position, is_nullable, data_type
             FROM information_schema.columns
-            WHERE table_name = '{quote_id(table_id)}' 
+            WHERE table_name = '{table_id.name}' 
             """
         sql_columns = self._execute_sql(self._schema_columns_t, columns_q)
 

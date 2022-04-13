@@ -499,7 +499,7 @@ class AddIndex(SqlStatement):
 
     def _compile(self, qb):
         stmt = f"CREATE {'UNIQUE' if self.unique else ''} INDEX "
-        if qb.target != mysql:
+        if qb.target != mysql and qb.target != mssql:
             stmt += "IF NOT EXISTS "
         return [ stmt + f"{quote_id(self.index_name)} ON {quote_id(self.table_name)}({self.column})"]
 
@@ -741,8 +741,12 @@ class Select(TableOperation):
             sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
 
         if qb.target == mssql:
-            # TODO !!!
-            pass
+            if self.offset or self.limit:
+                if not self.order:
+                    sql += [' ORDER BY ', list(self.table.type.elems)[0]]   # XXX hacky!
+                sql += [' OFFSET ', str(self.offset or 0),' ROWS ']
+                if self.limit:
+                    sql += [' FETCH NEXT ', str(self.limit), ' ROWS ONLY ']
         else:
             if self.limit is not None:
                 sql += [' LIMIT ', str(self.limit)]
@@ -761,7 +765,7 @@ class Select(TableOperation):
             if self.offset is not None:
                 sql += [' OFFSET ', str(self.offset)]
 
-            return sql
+        return sql
 
 
 @listgen
@@ -904,6 +908,8 @@ def _repr(_t: T.number, x):
 
 @dp_type
 def _repr(_t: T.bool, x):
+    if get_db().target == mssql:
+        return ['0=1', '1=1'][x]
     return ['false', 'true'][x]
 
 @dp_type
