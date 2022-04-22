@@ -9,7 +9,7 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id, snowflake
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id, snowflake, redshift
 from .core.sql_import_result import sql_result_to_python, type_from_sql
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
@@ -370,6 +370,12 @@ class PostgresInterface(SqlInterfaceCursor):
 
             # name = '%s.%s' % (schema, table_name)
             yield schema, table_name, T.table(cols, name=Id(schema, table_name))
+
+
+class RedshiftInterface(PostgresInterface):
+    target = redshift
+
+    id_type_decl = "INT IDENTITY(1,1)"
 
 
 class SnowflakeInterface(SqlInterface):
@@ -866,5 +872,7 @@ def create_engine(db_uri, print_sql, auto_create):
         return BigQueryInterface(path, print_sql=print_sql)
     elif scheme == 'snowflake':
         return SnowflakeInterface(dsn.host, dsn.user, dsn.password, path, **dsn.query, print_sql=print_sql)
+    if scheme == 'redshift':
+        return RedshiftInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")

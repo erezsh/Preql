@@ -325,7 +325,7 @@ func approx_product(col: aggregated[number]) = _approx_product(col)
     """
 
 
-if (db_type == "postgres") {
+if (db_type == "postgres" or db_type == "redshift") {
     func install_polyfills() {
         force_eval( SQL(nulltype, "CREATE OR REPLACE AGGREGATE _pql_PRODUCT(numeric) (sfunc = numeric_mul, stype = numeric);") )
     }

@@ -14,6 +14,7 @@ postgres = 'postgres'
 bigquery = 'bigquery'
 mysql = 'mysql'
 snowflake = 'snowflake'
+redshift = 'redshift'
 
 class QueryBuilder:
     def __init__(self, is_root=True, start_count=0):
@@ -65,7 +66,7 @@ class SqlTree(Sql):
     def finalize_with_subqueries(self, qb, subqueries):
         if subqueries:
             subqs = [q.compile_wrap(qb).finalize(qb) for (name, q) in subqueries.items()]
-            sql_code = ['WITH RECURSIVE '] if qb.target in (postgres, mysql) else ['WITH ']
+            sql_code = ['WITH RECURSIVE '] if qb.target in (postgres, mysql, redshift) else ['WITH ']
             sql_code += join_comma([q, '\n    '] for q in subqs)
         else:
             sql_code = []
@@ -241,7 +242,7 @@ class JsonLength(Scalar):
         code = self.expr.compile_wrap(qb).code
         if qb.target == sqlite:
             return [f'(length('] + code + [') - length(replace('] + code + [f', "{_ARRAY_SEP}", ""))) / length("{_ARRAY_SEP}") + 1']
-        elif qb.target == postgres:
+        elif qb.target in (postgres, redshift):
             return [f'array_length('] + code + [', 1)']
         elif qb.target == bigquery:
             return [f'array_length('] + code + [')']
@@ -300,7 +301,7 @@ class MakeArray(SqlTree):
         field = self.field.compile_wrap(qb).code
         if qb.target in (sqlite, duck):
             return ['group_concat('] + field + [f', "{_ARRAY_SEP}")']
-        elif qb.target == postgres:
+        elif qb.target in (postgres, redshift):
             return ['array_agg('] + field + [')']
         elif qb.target == mysql:
             return ['json_arrayagg('] + field + [')']
@@ -497,8 +498,12 @@ class AddIndex(SqlStatement):
     unique: bool
 
     def _compile(self, qb):
+        if qb.target == redshift:
+            # TODO issue some warning? error?
+            return ['SELECT NULL']
+
         stmt = f"CREATE {'UNIQUE' if self.unique else ''} INDEX "
-        if qb.target != mysql:
+        if qb.target not in mysql:
             stmt += "IF NOT EXISTS "
         return [ stmt + f"{quote_id(self.index_name)} ON {quote_id(self.table_name)}({self.column})"]
 
@@ -607,7 +612,7 @@ class Values(Table):
         if qb.target == mysql:
             def row_func(x):
                 return ['ROW('] + x + [')']
-        elif qb.target == snowflake:
+        elif qb.target in (snowflake, redshift):
             return join_sep([['SELECT '] + v.code for v in values], ' UNION ALL ')
         else:
             row_func = parens
@@ -641,6 +646,7 @@ class ValuesTuples(Table):
         if not self.values:  # SQL doesn't support empty values
             return ['SELECT '] + join_comma(['NULL']*len(self.type.elems)) +  ['LIMIT 0']
         values = [v.compile_wrap(qb) for v in self.values]
+
         return ['VALUES '] + join_comma(v.code for v in values)
 
 
@@ -882,7 +888,7 @@ class StringSlice(SqlTree):
             params = string + [', '] + start
             if length:
                 params += [', '] + length
-        elif qb.target in (postgres, mysql):
+        elif qb.target in (postgres, redshift, mysql):
             f = 'substring'
             params = string + [' from '] + start
             if length:
@@ -978,6 +984,7 @@ _pql_to_sql_by_target = {
     sqlite: P2S_Sqlite,
     duck: P2S_Sqlite,
     postgres: P2S_Postgres,
+    redshift: P2S_Postgres,
     snowflake: P2S_Snowflake,
 }
 
