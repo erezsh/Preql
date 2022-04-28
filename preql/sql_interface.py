@@ -456,7 +456,7 @@ class SnowflakeInterface(SqlInterface):
         cols = {
             f['name']: type_from_sql(f['type'], f['null'] == 'Y')
             for f in fields
-            if columns_whitelist is None or f.name in columns_whitelist
+            if columns_whitelist is None or f['name'] in columns_whitelist
         }
 
         return T.table(cols, name=name)
