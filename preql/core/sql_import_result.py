@@ -145,6 +145,8 @@ def _from_sql_primitive(p):
         return float(p)
     elif isinstance(p, bytearray):
         return p.decode()
+    elif isinstance(p, bytes):
+        return repr(p)  # TODO proper decoding?
     return p
 
 @dp_inst
@@ -173,9 +175,9 @@ def sql_result_to_python(arr: T.table):
 
 
 def _bool_from_sql(n):
-    if n == 'NO':
+    if n == 'NO' or n == 'N':
         n = False
-    elif n == 'YES':
+    elif n == 'YES' or n == 'Y':
         n = True
     assert isinstance(n, bool), n
     return n

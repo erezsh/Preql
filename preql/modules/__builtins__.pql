@@ -397,6 +397,15 @@ if (db_type == "postgres" or db_type == "redshift") {
     func year(x) = SQL(int, "EXTRACT (YEAR FROM $x)")
 } else if (db_type == "snowflake") {
     //
+} else if (db_type == "oracle") {
+    func _pi() = SQL(float, "3.141592653589793")
+
+    func limit_offset(tbl: table, lim: int, offset: int) {
+        "Returns the first 'n' rows in the table at the given offset."
+        return SQL(type(tbl), "SELECT * FROM $tbl OFFSET $offset ROWS FETCH NEXT $lim ROWS ONLY")
+    }
+    func _random() = SQL(float, "dbms_random.value")
+
 } else {
     throw new TypeError("Unexpected")
 }
