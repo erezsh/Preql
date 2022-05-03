@@ -243,14 +243,15 @@ class OracleInterface(SqlInterfaceCursor):
             nullable=T.string,
             default=T.string,
         ))
-        columns_q = "SELECT column_name, data_type, nullable, data_default FROM USER_TAB_COLUMNS WHERE table_name = '%s'" % name.name
+        columns_q = "SELECT column_name, data_type, nullable, data_default FROM USER_TAB_COLUMNS WHERE table_name = '%s'" % name.name.upper()
         sql_columns = self._execute_sql(columns_t, columns_q)
 
+        wl = {}
         if columns_whitelist:
-            wl = set(columns_whitelist)
+            wl = {c.upper(): c for c in columns_whitelist}
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = {c['name']: type_from_sql(c['type'], c['nullable']) for c in sql_columns}
+        cols = {wl.get(c['name'], c['name']): type_from_sql(c['type'], c['nullable']) for c in sql_columns}
 
         return T.table(cols, name=name)
 

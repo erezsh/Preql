@@ -405,6 +405,7 @@ if (db_type == "postgres" or db_type == "redshift") {
         return SQL(type(tbl), "SELECT * FROM $tbl OFFSET $offset ROWS FETCH NEXT $lim ROWS ONLY")
     }
     func _random() = SQL(float, "dbms_random.value")
+    func _cast_string_to_int(s: string) = SQL(int, "cast($s as int)")
 
 } else {
     throw new TypeError("Unexpected")

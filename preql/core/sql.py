@@ -1145,7 +1145,7 @@ def arith(res_type, op, args):
             # In MySQL division returns a float. All others return int
             arg_codes[0] = Cast(T.float, arg_codes[0])
     elif op == '/~':
-        if target == mysql:
+        if target in (mysql, oracle):
             op = 'DIV'
         elif target == bigquery:
             # safe div?
