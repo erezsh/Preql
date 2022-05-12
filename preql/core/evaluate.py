@@ -686,13 +686,31 @@ def apply_database_rw(o: ast.One):
     return objects.RowInstance(rowtype, d)
 
 
+def _delete_from_table(table, conds):
+    assert isinstance(table.code, sql.TableName)
+    with use_scope({n:objects.projected(c) for n, c in table.all_attrs().items()}):
+        compiled_conds = cast_to_instance(conds) 
+
+    code = sql.Delete(table.code, [c.code for c in compiled_conds])
+    db_query(code, table.subqueries)
+
 @method
 def apply_database_rw(d: ast.Delete):
     catch_access(AccessLevels.WRITE_DB)
-    # TODO Optimize: Delete on condition, not id, when possible
+
+    if isinstance(d.table, ast.Selection):
+        table = evaluate(d.table.table)
+        if isinstance(table.code, sql.TableName):
+            _delete_from_table(table, d.table.conds + d.conds)
+            return objects.null
+
+    table = evaluate(d.table)
+    if isinstance(table.code, sql.TableName):
+        _delete_from_table(table, d.conds)
+
 
     cond_table = ast.Selection(d.table, d.conds).set_text_ref(d.text_ref)
-    table = evaluate( cond_table)
+    table = evaluate(cond_table)
 
     if not table.type <= T.table:
         raise Signal.make(T.TypeError, d.table, f"Expected a table. Got: {table.type}")
@@ -716,8 +734,22 @@ def apply_database_rw(d: ast.Delete):
 def apply_database_rw(u: ast.Update):
     catch_access(AccessLevels.WRITE_DB)
 
+    if isinstance(u.table, ast.Selection):
+        table = evaluate(u.table.table)
+        if isinstance(table.code, sql.TableName):
+
+            with use_scope({n:objects.projected(c) for n, c in table.all_attrs().items()}):
+                conds = cast_to_instance(u.table.conds)
+                proj = {f.name:evaluate( f.value) for f in u.fields}
+
+            # breakpoint()
+            code = sql.Update(table.code, {sql.Name(v.type, k): v.code for k, v in proj.items()}, [c.code for c in conds])
+            db_query(code, table.subqueries)
+
+            return objects.null
+
     # TODO Optimize: Update on condition, not id, when possible
-    table = evaluate( u.table)
+    table = evaluate(u.table)
 
     if not table.type <= T.table:
         raise Signal.make(T.TypeError, u.table, f"Expected a table. Got: {table.type}")
