@@ -232,10 +232,11 @@ def _execute(table_def: ast.TableDef):
             t = t({**t.elems, **elems_to_add}, **cur_type.options)
 
         # Auto-add id only if it exists already and not defined by user
-        if 'id' in cur_type.elems: #and 'id' not in t.elems:
-            # t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
-            assert cur_type.elems['id'] <= T.primitive, cur_type.elems['id']
-            t.elems['id'] = T.t_id
+        if not table_def.bare:
+            if 'id' in cur_type.elems: #and 'id' not in t.elems:
+                # t = t(dict(id=T.t_id, **t.elems), pk=[['id']])
+                assert cur_type.elems['id'] <= T.primitive, cur_type.elems['id']
+                t.elems['id'] = T.t_id
 
         for e_name, e1_type in t.elems.items():
 
@@ -251,9 +252,10 @@ def _execute(table_def: ast.TableDef):
     else:
         # Auto-add id by default
         elems = dict(t.elems)
-        if 'id' not in elems:
-            elems = {'id': T.t_id, **elems}
-        t = t(elems, pk=[['id']])
+        if not table_def.bare:
+            if 'id' not in elems:
+                elems = {'id': T.t_id, **elems}
+            t = t(elems, pk=[['id']])
         inst = objects.new_table(t, db_name)
 
     ensure_namespace(table_def.name)

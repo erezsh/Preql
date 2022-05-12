@@ -638,6 +638,13 @@ class BasicTests(PreqlTests):
         self.assertEqual( preql('list( (adult()[..10] + adult()[..1]) {item + 1} )') , list(range(19, 29)) + [19] )
 
 
+    def test_bare_table(self):
+        preql = self.Preql()
+        preql('''
+            bare table A {x: int}
+            assert count(columns(A)) == 1
+        ''')
+
     @uses_tables('B', 'A')
     def test_rowtype(self):
         preql = self.Preql()

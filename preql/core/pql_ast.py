@@ -231,6 +231,7 @@ class TableDef(Statement, Definition):
     name: Id
     columns: List[Union[ColumnDef, Ellipsis]]
     methods: list
+    bare: bool
 
 
 @dataclass
@@ -238,6 +239,7 @@ class TableDefFromExpr(Statement, Definition):
     name: Id
     expr: Expr
     const: bool
+    bare: bool
 
 
 @dataclass

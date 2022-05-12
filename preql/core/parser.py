@@ -268,7 +268,6 @@ class TreeToAst(Transformer):
 
     insert_rows = ast.InsertRows
     struct_def = ast.StructDef
-    table_def = ast.TableDef
     col_def = ast.ColumnDef
     print = no_inline(ast.Print)
     assert_ = ast.Assert
@@ -284,8 +283,12 @@ class TreeToAst(Transformer):
     def marker(self, _marker):
         return ast.Marker()
 
-    def table_def_from_expr(self, const, name, table_expr):
-        return ast.TableDefFromExpr(name, table_expr, const == 'const')
+    def table_def(self, modifier, name, columns, methods):
+        return ast.TableDef(name, columns, methods, modifier == 'bare')
+
+
+    def table_def_from_expr(self, modifier, name, table_expr):
+        return ast.TableDefFromExpr(name, table_expr, modifier=='const', modifier=='bare')
 
     codeblock = no_inline(ast.CodeBlock)
 

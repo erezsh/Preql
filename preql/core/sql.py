@@ -494,7 +494,7 @@ class SqlStatement(SqlTree):
 class AddIndex(SqlStatement):
     index_name: Id
     table_name: Id
-    column: str
+    columns: List[str]
     unique: bool
 
     def _compile(self, qb):
@@ -505,7 +505,7 @@ class AddIndex(SqlStatement):
         stmt = f"CREATE {'UNIQUE' if self.unique else ''} INDEX "
         if qb.target not in mysql:
             stmt += "IF NOT EXISTS "
-        return [ stmt + f"{quote_id(self.index_name)} ON {quote_id(self.table_name)}({self.column})"]
+        return [ stmt + f"{quote_id(self.index_name)} ON {quote_id(self.table_name)}({', '.join(self.columns)})"]
 
 @dataclass
 class Insert(SqlStatement):
@@ -1038,7 +1038,7 @@ def compile_type_def(table_name, table) -> Sql:
     pks = []
     columns = []
 
-    pks = {join_names(pk) for pk in table.options['pk']}
+    pks = {join_names(pk) for pk in table.options.get('pk', [])}
     for name, c in flatten_type(table):
         if name in pks and c <= T.t_id:
             type_decl = db.id_type_decl

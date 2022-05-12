@@ -1024,7 +1024,7 @@ def pql_serve_rest(endpoints: T.struct, port: T.int = pyvalue_inst(8080)):
     return objects.null
 
 
-def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false):
+def pql_table_add_index(table, column_name: T.string | T.list[T.string], unique: T.bool = ast.false):
     """Add an index to the table, to optimize filtering operations.
 
     A method of the `table` type.
@@ -1051,8 +1051,10 @@ def pql_table_add_index(table, column_name: T.string, unique: T.bool = ast.false
 
     unique = cast_to_python(unique)
     column_name = cast_to_python(column_name)
+    if isinstance(column_name, str):
+        column_name = [column_name]
     
-    index_name = unique_name(f'index_{table_name.repr_name}_{column_name}')
+    index_name = unique_name(f'index_{table_name.repr_name}_{"_".join(column_name)}')
 
     code = sql.AddIndex(Id(index_name), table_name, column_name, unique=unique)
     db_query(code)
