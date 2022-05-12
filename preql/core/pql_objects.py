@@ -4,6 +4,8 @@ A collection of objects that may come to interaction with the user.
 
 from typing import List, Optional, Callable, Any, Dict
 
+import arrow
+
 from preql.utils import dataclass, SafeDict, X, listgen
 from preql import settings
 
@@ -675,6 +677,10 @@ def from_python(value: int):
 @dsp
 def from_python(value: float):
     return ast.Const(T.float, value)
+
+@dsp
+def from_python(value: arrow.Arrow):
+    return ast.Const(T.timestamp, value)
 
 @dsp
 def from_python(value: list):
