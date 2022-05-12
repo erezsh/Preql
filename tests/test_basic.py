@@ -332,13 +332,17 @@ class BasicTests(PreqlTests):
 
         const table backup = Point
 
-        func p2() = Point[x==3] update{y: y + 13}
+        func p2() {
+            Point[x==3] update{y: y + 13}
+            return Point[x==3]
+        }
         func p() = p2() {...!id}
         """)
         assert preql.p() == [{'x': 3, 'y': 14}]
         assert preql.p() == [{'x': 3, 'y': 27}]
         assert preql('backup[x==3]{y}') == [{'y': 1}]
-        res = preql('backup[x==3] update {y: x+y}')
+        preql('backup[x==3] update {y: x+y}')
+        res = preql('backup[x==3]')
         assert res == [{'id': res[0]['id'], 'x': 3, 'y': 4}], res
         assert preql('backup[x==3]{y}') == [{'y': 4}]
 
@@ -457,7 +461,10 @@ class BasicTests(PreqlTests):
             new Point(3,1)
             new Point(4,2)
 
-            func p() = Point[x==3] update{y: y + 13}
+            func p() {
+                Point[x==3] update{y: y + 13}
+                return Point[x==3]
+            }
             """)
 
         # TODO better syntax
