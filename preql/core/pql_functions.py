@@ -1040,7 +1040,7 @@ def pql_table_add_index(table, column_name: T.string | T.list[T.string], unique:
         >> table x = [1,2,3]{item}
         >> x.add_index("item")
     """
-    if get_db().target == sql.snowflake:
+    if get_db().target in (sql.snowflake, sql.redshift, sql.bigquery):
         # TODO 
         return objects.null
 
