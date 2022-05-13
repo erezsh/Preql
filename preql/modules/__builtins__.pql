@@ -396,6 +396,7 @@ if (db_type == "postgres" or db_type == "redshift") {
     func hour(x) = SQL(int, "EXTRACT (HOUR FROM $x)")
     func year(x) = SQL(int, "EXTRACT (YEAR FROM $x)")
 } else if (db_type == "snowflake") {
+    func _random() = SQL(float, "uniform(0::float, 1, random())")
     //
 } else {
     throw new TypeError("Unexpected")
@@ -536,9 +537,17 @@ func page(table, index, page_size=20) {
     return table[offset..(offset+page_size)]
 }
 
+func run_statement(code) {
+    force_eval( SQL( nulltype, code ))
+}
+
 func remove_table(table_name) {
     "Remove table from database (drop table)"
-    force_eval(SQL(nulltype, "DROP TABLE $table_name"))
+    run_statement("DROP TABLE $table_name")
+}
+func remove_table_if_exists(table_name) {
+    "Remove table from database (drop table). Ignore if it doesn't exist."
+    run_statement("DROP TABLE IF EXISTS $table_name")
 }
 
 // func remove_tables(tables) {
