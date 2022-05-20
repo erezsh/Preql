@@ -101,6 +101,10 @@ def resolve(type_: ast.Type):
     return t
 
 
+def maybe_autocommit():
+    if context.state.autocommit:
+        get_db().commit()
+
 
 def db_query(sql_code, subqueries=None, *, modifies=True):
     try:
@@ -108,8 +112,8 @@ def db_query(sql_code, subqueries=None, *, modifies=True):
     except exc.DatabaseQueryError as e:
         raise Signal.make(T.DbQueryError, None, e.args[0]) from e
 
-    if modifies and context.state.autocommit:
-        get_db().commit()
+    if modifies:
+        maybe_autocommit()
 
     return res
 
