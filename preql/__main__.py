@@ -21,6 +21,7 @@ parser.add_argument('database', type=str, nargs='?', default=None,
                     help="database url (postgres://user:password@host:port/db_name")
 parser.add_argument('--python-traceback', action='store_true',
                     help="Show the Python traceback when an exception causes the interpreter to quit")
+parser.add_argument('--autocommit', action='store_true')
 
 
 def find_dot_preql():
@@ -59,7 +60,7 @@ def main():
 
 
 
-    kw = {'print_sql': args.print_sql}
+    kw = {'print_sql': args.print_sql, 'autocommit': args.autocommit}
     if args.database:
         kw['db_uri'] = args.database
         kw['auto_create'] = True

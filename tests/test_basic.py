@@ -1564,7 +1564,50 @@ class BasicTests(PreqlTests):
         if p._interp.state.db.target != mysql:   # Not supported
             assert p('a{item} - [..100]') == []
 
+    @uses_tables("a")
+    def test_transaction1(self):
+        p = self.Preql()
+        p('''
+            table a {
+                x: int
+            }
 
+            try{
+                transaction {
+                    new a(4)
+                    throw new Exception("Some Error")
+                }
+            } catch(Exception) {
+            }
+
+            table a {
+                x: int
+            }
+        ''')
+
+        assert not p.a
+
+    def test_transaction2(self):
+        p = self.Preql()
+        p.rollback()
+        p('''
+            table a {
+                x: int
+            }
+
+            transaction {
+                try{
+                    new a(5)
+                    throw new Exception("A")
+                } catch(Exception) {
+                }
+            }
+
+        ''')
+
+        self.assertEqual( p(r'list(a{x})'), [5] )
+        p.run_statement('DROP TABLE a')
+        p.commit()
 
 class TestFlow(PreqlTests):
     def test_new_freezes_values(self):

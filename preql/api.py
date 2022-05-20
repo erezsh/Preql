@@ -126,7 +126,9 @@ class Preql:
 
     __name__ = "Preql"
 
-    def __init__(self, db_uri: str='sqlite://:memory:', print_sql: bool=settings.print_sql, auto_create: bool = False):
+    def __init__(self, db_uri: str='sqlite://:memory:', print_sql: bool=settings.print_sql,
+                 auto_create: bool = False, autocommit: bool = False
+                 ):
         """Initialize a new Preql instance
 
         Parameters:
@@ -137,6 +139,7 @@ class Preql:
         self._print_sql = print_sql
         self._auto_create = auto_create
         self._display = display.RichDisplay()
+        self._autocommit = autocommit
         # self.engine.ping()
 
         engine = create_engine(self._db_uri, print_sql=self._print_sql, auto_create=auto_create)
@@ -160,7 +163,7 @@ class Preql:
     def _reset_interpreter(self, engine=None):
         if engine is None:
             engine = self._interp.state.db
-        self._interp = Interpreter(engine, self._display, _preql_inst=self)
+        self._interp = Interpreter(engine, self._display, _preql_inst=self, autocommit=self._autocommit)
 
     def close(self):
         self._interp.state.db.close()

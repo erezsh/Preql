@@ -102,11 +102,16 @@ def resolve(type_: ast.Type):
 
 
 
-def db_query(sql_code, subqueries=None):
+def db_query(sql_code, subqueries=None, *, modifies=True):
     try:
-        return get_db().query(sql_code, subqueries)
+        res = get_db().query(sql_code, subqueries)
     except exc.DatabaseQueryError as e:
         raise Signal.make(T.DbQueryError, None, e.args[0]) from e
+
+    if modifies and context.state.autocommit:
+        get_db().commit()
+
+    return res
 
 def drop_table(table_type):
     name = table_type.options['name']
@@ -347,6 +352,19 @@ def _execute(f: ast.For):
             execute(f.do)
 
 @method
+def _execute(t: ast.Transaction):
+    db_query(sql.BeginTransaction())
+    with context(state=context.state.set_autocommit(False)):
+        try:
+            res = execute(t.do)
+        except Signal as e:
+            get_db().rollback()
+            raise
+
+    get_db().commit()
+    return res
+
+@method
 def _execute(t: ast.Try):
     try:
         execute(t.try_)
@@ -410,7 +428,8 @@ def _execute(t: ast.Throw):
     e = evaluate(t.value)
     if isinstance(e, ast.Ast):
         raise exc.InsufficientAccessLevel()
-    assert isinstance(e, Exception), e
+    if not isinstance(e, Exception):
+        raise Signal.make(T.TypeError, t, f"Can only throw an exception, not {e.type}")
     raise e
 
 def execute(stmt):
@@ -870,7 +889,7 @@ def _new_row(new_ast, table, matched):
         raise Signal.make(T.TypeError, new_ast, f"'new' expects a persistent table. Instead got a table expression.")
 
     if get_db().target == sql.bigquery:
-        rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []))
+        rowid = db_query(sql.FuncCall(T.string, 'GENERATE_UUID', []), modifies=False)
         keys += ['id']
         values += [sql.make_value(rowid)]
     elif get_db().target == sql.snowflake:
@@ -885,7 +904,7 @@ def _new_row(new_ast, table, matched):
     db_query(q)
 
     if get_db().target not in (sql.bigquery, sql.snowflake):
-        rowid = db_query(sql.LastRowId())
+        rowid = db_query(sql.LastRowId(), modifies=False)
 
     d = SafeDict({'id': objects.pyvalue_inst(rowid)})
     d.update({p.name:v for p, v in matched})
@@ -1015,7 +1034,7 @@ def localize(inst: objects.Instance):
     if inst.code is sql.null:
         return None
 
-    return db_query(inst.code, inst.subqueries)
+    return db_query(inst.code, inst.subqueries, modifies=False)
 
 @method
 def localize(inst: objects.ValueInstance):

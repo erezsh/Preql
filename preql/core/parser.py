@@ -278,6 +278,7 @@ class TreeToAst(Transformer):
     while_stmt = ast.While
     for_stmt = ast.For
     try_catch = ast.Try
+    transaction = ast.Transaction
     one = lambda self, nullable, expr: ast.One(expr, nullable is not None)
 
     def marker(self, _marker):

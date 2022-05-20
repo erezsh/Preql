@@ -127,18 +127,19 @@ class State:
 
 
 class ThreadState:
-    def __init__(self, state, ns=None):
+    def __init__(self, state, ns=None, *, autocommit=False):
         self.state = state
         # Add logger?
 
         self.ns = Namespace(ns)
         self.access_level = AccessLevels.WRITE_DB
         self.stacktrace = []
+        self.autocommit = autocommit
 
     @classmethod
-    def from_components(cls, interp, db, display, ns=None):
+    def from_components(cls, interp, db, display, ns=None, *, autocommit):
         state = State(interp, db, display)
-        return cls(state, ns)
+        return cls(state, ns, autocommit=autocommit)
 
     @property
     def interp(self):
@@ -159,6 +160,7 @@ class ThreadState:
         s.ns = copy(inst.ns)
         s.access_level = inst.access_level
         s.stacktrace = copy(inst.stacktrace)
+        s.autocommit = inst.autocommit
         return s
 
 
@@ -171,9 +173,15 @@ class ThreadState:
         s.access_level = new_level
         return s
 
+    def set_autocommit(self, autocommit):
+        s = copy(self)
+        s.autocommit = autocommit
+        return s
+
     def require_access(self, level):
         if self.access_level < level:
             raise InsufficientAccessLevel(level)
+
     def catch_access(self, level):
         if self.access_level < level:
             raise Exception("Bad access. Security risk.")

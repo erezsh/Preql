@@ -491,6 +491,13 @@ class SqlStatement(SqlTree):
     type = T.nulltype
 
 @dataclass
+class BeginTransaction(SqlStatement):
+    def _compile(self, qb):
+        if qb.target == mysql:
+            return ["START TRANSACTION"]
+        return ["BEGIN TRANSACTION"]
+
+@dataclass
 class AddIndex(SqlStatement):
     index_name: Id
     table_name: Id

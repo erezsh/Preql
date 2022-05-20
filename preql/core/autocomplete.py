@@ -32,6 +32,10 @@ def eval_autocomplete(t: ast.Try, go_inside):
         eval_autocomplete(t.catch_block, go_inside)
 
 @dsp
+def eval_autocomplete(t: ast.Transaction, go_inside):
+    eval_autocomplete(t.do, go_inside)
+
+@dsp
 def eval_autocomplete(a: ast.InsertRows, go_inside):
     eval_autocomplete(a.value, go_inside)
 @dsp
