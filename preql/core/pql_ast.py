@@ -291,6 +291,10 @@ class Try(Statement):
     catch_block: CodeBlock
 
 @dataclass
+class Transaction(Statement):
+    do: CodeBlock
+
+@dataclass
 class If(Statement):
     cond: Object
     then: Statement

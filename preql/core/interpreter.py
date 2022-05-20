@@ -49,11 +49,11 @@ class LocalCopy(threading.local):
 
 
 class Interpreter:
-    def __init__(self, sqlengine, display, use_core=True, _preql_inst=None):
+    def __init__(self, sqlengine, display, use_core=True, _preql_inst=None, autocommit=False):
         assert _preql_inst
         self._preql_inst = _preql_inst  # XXX temporary hack
 
-        self.state = ThreadState.from_components(self, sqlengine, display, initial_namespace())
+        self.state = ThreadState.from_components(self, sqlengine, display, initial_namespace(), autocommit=autocommit)
         if use_core:
             mns = import_module(self.state, ast.Import('__builtins__', use_core=False)).namespace
             bns = self.state.get_var('__builtins__').namespace

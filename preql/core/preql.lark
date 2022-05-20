@@ -13,6 +13,7 @@ module: _NL? stmt+   -> as_list
      | import_stmt
      | throw
      | try_catch
+     | transaction
      | expr _NL
 
 pql_dict: "{" _ml_sep? ml_list{named_expr} _ml_sep? "}"
@@ -52,6 +53,7 @@ func_def: "func" name func_params "=" expr [_NL string_raw] _NL -> func_def_shor
         | "func" name func_params codeblock _NL
 
 try_catch: "try" codeblock _NL? "catch" "(" [name ":"] expr ")" codeblock _NL
+transaction: "transaction" codeblock _NL
 if_stmt: "if" "(" expr ")" codeblock (_NL? "else" (codeblock _NL|if_stmt) | _NL)
 for_stmt: "for" "(" name "in" expr ")" codeblock _NL
 while_stmt: "while" "(" expr ")" codeblock _NL
