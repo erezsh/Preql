@@ -18,7 +18,7 @@ from . import pql_ast as ast
 from . import sql
 from .interp_common import pyvalue_inst, assert_type, cast_to_python_string, cast_to_python_int, cast_to_python
 from .state import get_var, get_db, use_scope, unique_name, get_db, require_access, AccessLevels, set_var
-from .evaluate import evaluate, db_query, TableConstructor, new_table_from_expr, new_table_from_rows
+from .evaluate import evaluate, db_query, maybe_autocommit, TableConstructor, new_table_from_expr, new_table_from_rows
 from .pql_types import T, Type, Id
 from .types_impl import join_names
 from .casts import cast
@@ -857,6 +857,7 @@ def import_pandas(dfs):
 
         tbl = new_table_from_rows(name, cols, rows, temporary=True)
         set_var(name, tbl)
+        maybe_autocommit()
         yield tbl
 
 def pql_import_json(table_name: T.string, uri: T.string):
@@ -936,9 +937,12 @@ def pql_import_csv(table: T.table, filename: T.string, header: T.bool = ast.Cons
         if keys and rows:
             insert_values()
 
+        maybe_autocommit()
+
         return table
     except FileNotFoundError as e:
         raise Signal.make(T.FileError, None, str(e))
+
 
 
 def _rest_func_endpoint(func):
@@ -1057,7 +1061,7 @@ def pql_table_add_index(table, column_name: T.string | T.list[T.string], unique:
     index_name = unique_name(f'index_{table_name.repr_name}_{"_".join(column_name)}')
 
     code = sql.AddIndex(Id(index_name), table_name, column_name, unique=unique)
-    db_query(code)
+    db_query(code, modifies=True)
 
     return objects.null
 
