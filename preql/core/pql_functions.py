@@ -215,6 +215,12 @@ def pql_set_setting(name: T.string, value: T.any):
     setattr(Display, name, value)
     return objects.null
 
+def pql_set_active_dataset(name: T.string):
+    name = cast_to_python_string(name)
+    db = get_db()
+    db.set_active_dataset(name)
+    return objects.null
+
 
 def pql_debug():
     """Breaks the execution of the interpreter, and enters into a debug
@@ -1115,6 +1121,7 @@ internal_funcs = create_internal_funcs({
     'force_eval': pql_force_eval,
     'fmt': pql_fmt,
     'set_setting': pql_set_setting,
+    'set_active_dataset': pql_set_active_dataset,
 })
 
 _joins = {
