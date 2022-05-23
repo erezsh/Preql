@@ -606,6 +606,7 @@ class BigQueryInterface(SqlInterface):
         return [ds.dataset_id for ds in self._client.list_datasets()]
 
     def set_active_dataset(self, dataset):
+        self._client.create_dataset(dataset, exists_ok=True)
         self._active_dataset = dataset
 
     def get_default_dataset(self):
@@ -616,7 +617,7 @@ class BigQueryInterface(SqlInterface):
         #     self._default_dataset = datasets[0]
         # return self._default_dataset
         self.ensure_dataset()
-        return self.PREQL_DATASET
+        return self.DEFAULT_PREQL_DATASET
 
     def qualified_name(self, name):
         "Ensure the name has a dataset"
