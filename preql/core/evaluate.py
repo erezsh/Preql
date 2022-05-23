@@ -907,9 +907,10 @@ def _new_row(new_ast, table, matched):
     q = sql.InsertConsts(table_name, keys, [values])
     db_query(q)
 
-    if get_db().target not in (sql.bigquery, sql.snowflake):
-        rowid = db_query(sql.LastRowId(), modifies=False)
+    if get_db().target in (sql.bigquery, sql.snowflake, sql.presto):
+        return objects.null
 
+    rowid = db_query(sql.LastRowId(), modifies=False)
     d = SafeDict({'id': objects.pyvalue_inst(rowid)})
     d.update({p.name:v for p, v in matched})
     return objects.RowInstance(T.row[table], d)

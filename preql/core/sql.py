@@ -15,6 +15,7 @@ bigquery = 'bigquery'
 mysql = 'mysql'
 snowflake = 'snowflake'
 redshift = 'redshift'
+presto = 'presto'
 
 class QueryBuilder:
     def __init__(self, is_root=True, start_count=0):
@@ -752,6 +753,9 @@ class Select(TableOperation):
         if self.order:
             sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
 
+        if self.offset is not None and get_db().offset_before_limit:
+            sql += [' OFFSET ', str(self.offset)]
+
         if self.limit is not None:
             sql += [' LIMIT ', str(self.limit)]
         elif self.offset is not None:
@@ -766,7 +770,7 @@ class Select(TableOperation):
                 sql += [' LIMIT 9223372036854775807']
 
 
-        if self.offset is not None:
+        if self.offset is not None and not get_db().offset_before_limit:
             sql += [' OFFSET ', str(self.offset)]
 
         return sql
@@ -993,6 +997,7 @@ _pql_to_sql_by_target = {
     postgres: P2S_Postgres,
     redshift: P2S_Postgres,
     snowflake: P2S_Snowflake,
+    presto: P2S_MySql,
 }
 
 

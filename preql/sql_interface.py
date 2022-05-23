@@ -9,7 +9,7 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id, snowflake, redshift
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id, snowflake, redshift, presto
 from .core.sql_import_result import sql_result_to_python, type_from_sql
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
@@ -36,6 +36,7 @@ class SqlInterface:
     requires_subquery_name = False
     id_type_decl = 'INTEGER'
     max_rows_per_query = 1024
+    offset_before_limit = False
 
 
     def __init__(self, print_sql=False):
@@ -249,11 +250,8 @@ class MysqlInterface(SqlInterfaceCursor):
         names = self._execute_sql(T.list[T.string], sql_code)
         return list(map(Id, names))
 
-    def import_table_type(self, name, columns_whitelist=None):
-        assert isinstance(name, Id)
-        assert len(name.parts) == 1 # TODO !
 
-        columns_t = T.table(dict(
+    DESC_TABLE_TYPE = T.table(dict(
             name=T.string,
             type=T.string,
             nullable=T.string,
@@ -261,8 +259,13 @@ class MysqlInterface(SqlInterfaceCursor):
             default=T.string,
             extra=T.string,
         ))
+
+    def import_table_type(self, name, columns_whitelist=None):
+        assert isinstance(name, Id)
+        assert len(name.parts) == 1 # TODO !
+
         columns_q = "desc %s" % name.name
-        sql_columns = self._execute_sql(columns_t, columns_q)
+        sql_columns = self._execute_sql(self.DESC_TABLE_TYPE, columns_q)
 
         if columns_whitelist:
             wl = set(columns_whitelist)
@@ -274,6 +277,47 @@ class MysqlInterface(SqlInterfaceCursor):
 
     def quote_name(self, name):
         return f'`{name}`'
+
+
+class PrestoInterface(MysqlInterface):
+    target = presto
+
+    offset_before_limit = True
+
+    DESC_TABLE_TYPE = T.table(dict(
+        name=T.string,
+        type=T.string,
+        unknown_empty1=T.string,
+        unknown_empty2=T.string,
+    ))
+
+    def _create_connection(self):
+        import prestodb
+        return prestodb.dbapi.connect(
+            host='presto-1335954364.eu-west-1.elb.amazonaws.com',
+            port='80',
+            user='root',
+            catalog='tpch',
+            schema='tiny',
+        )
+
+    def import_table_type(self, name, columns_whitelist=None):
+        assert isinstance(name, Id)
+        assert len(name.parts) == 1 # TODO !
+
+        columns_q = "desc %s" % name.name
+        sql_columns = self._execute_sql(self.DESC_TABLE_TYPE, columns_q)
+
+        if columns_whitelist:
+            wl = set(columns_whitelist)
+            sql_columns = [c for c in sql_columns if c['name'] in wl]
+
+        cols = {c['name']: type_from_sql(c['type'], False) for c in sql_columns}
+
+        return T.table(cols, name=name)
+
+    def quote_name(self, name):
+        return f'"{name}"'
 
 
 class PostgresInterface(SqlInterfaceCursor):
@@ -872,7 +916,9 @@ def create_engine(db_uri, print_sql, auto_create):
         return BigQueryInterface(path, print_sql=print_sql)
     elif scheme == 'snowflake':
         return SnowflakeInterface(dsn.host, dsn.user, dsn.password, path, **dsn.query, print_sql=print_sql)
-    if scheme == 'redshift':
+    elif scheme == 'redshift':
         return RedshiftInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
+    elif scheme == 'presto':
+        return PrestoInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
