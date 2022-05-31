@@ -82,6 +82,9 @@ class SqlInterface:
     def quote_name(self, name):
         return f'"{name}"'
 
+    def set_active_dataset(self, name):
+        raise Signal.make(T.DbError, None, "set_active_dataset() is not implemented for %s" % type(self).__name__)
+
 
 
 # from multiprocessing import Queue
@@ -531,7 +534,7 @@ class SnowflakeInterface(SqlInterface):
 class BigQueryInterface(SqlInterface):
     target = bigquery
 
-    PREQL_DATASET = '_preql_d9e7334a9e028e8aa38509912dfc2aac'
+    DEFAULT_PREQL_DATASET = '_preql_d9e7334a9e028e8aa38509912dfc2aac'
 
     supports_foreign_key = False
     id_type_decl = 'STRING NOT NULL'
@@ -542,7 +545,7 @@ class BigQueryInterface(SqlInterface):
         # job_config = bigquery.job.QueryJobConfig(default_dataset=f'{project}._preql')
         # self._client = bigquery.Client(project, default_query_job_config=job_config)
         self._client = bigquery.Client(project)
-        self._default_dataset = None
+        self._active_dataset = None
 
         self._print_sql = print_sql
 
@@ -555,8 +558,8 @@ class BigQueryInterface(SqlInterface):
         if self._dataset_ensured:
             return
 
-        self._client.delete_dataset(self.PREQL_DATASET, delete_contents=True, not_found_ok=True)
-        self._client.create_dataset(self.PREQL_DATASET)
+        self._client.delete_dataset(self.DEFAULT_PREQL_DATASET, delete_contents=True, not_found_ok=True)
+        self._client.create_dataset(self.DEFAULT_PREQL_DATASET)
 
         self._dataset_ensured = True
 
@@ -646,8 +649,9 @@ class BigQueryInterface(SqlInterface):
     def list_datasets(self):
         return [ds.dataset_id for ds in self._client.list_datasets()]
 
-    def set_default_dataset(self, dataset):
-        self._default_dataset = dataset
+    def set_active_dataset(self, dataset):
+        self._client.create_dataset(dataset, exists_ok=True)
+        self._active_dataset = dataset
 
     def get_default_dataset(self):
         # if self._default_dataset is None:
@@ -657,7 +661,7 @@ class BigQueryInterface(SqlInterface):
         #     self._default_dataset = datasets[0]
         # return self._default_dataset
         self.ensure_dataset()
-        return self.PREQL_DATASET
+        return self.DEFAULT_PREQL_DATASET
 
     def qualified_name(self, name):
         "Ensure the name has a dataset"
@@ -665,7 +669,7 @@ class BigQueryInterface(SqlInterface):
         if len(name.parts) > 1:
             # already has dataset
             return name
-        return Id(self.get_default_dataset(), name.parts[-1])
+        return Id(self._active_dataset or self.get_default_dataset(), name.parts[-1])
 
     def rollback(self):
         # XXX No error? No warning?

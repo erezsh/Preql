@@ -5,7 +5,7 @@ from preql.utils import dataclass, X, listgen, safezip
 from . import pql_types
 from .pql_types import T, Type, dp_type, Id
 from .types_impl import join_names, flatten_type
-from .state import get_db
+from .state import get_db, unique_name
 from .exceptions import Signal
 
 duck = 'duck'
@@ -742,6 +742,8 @@ class Select(TableOperation):
         select_sql = join_comma(f.code for f in fields_sql)
 
         sql = ['SELECT '] + select_sql + [' FROM '] + self.table.compile_wrap(qb).code
+        if qb.target == bigquery:
+            sql += [' ', qb.unique_name()]
 
         if self.conds:
             sql += [' WHERE '] + join_sep([c.compile_wrap(qb).code for c in self.conds], ' AND ')

@@ -395,6 +395,7 @@ if (db_type == "postgres" or db_type == "redshift") {
     func day_of_week(x) = SQL(int, "EXTRACT (DAYOFWEEK FROM $x)")
     func hour(x) = SQL(int, "EXTRACT (HOUR FROM $x)")
     func year(x) = SQL(int, "EXTRACT (YEAR FROM $x)")
+    func commit() = null
 } else if (db_type == "snowflake") {
     func _random() = SQL(float, "uniform(0::float, 1, random())")
     //
