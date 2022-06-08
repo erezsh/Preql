@@ -447,6 +447,9 @@ class SnowflakeInterface(SqlInterface):
 
         self._print_sql = print_sql
 
+    def commit(self):
+        self._client.commit()
+
     def quote_name(self, name):
         # TODO is this right?
         return name
@@ -917,7 +920,7 @@ def create_engine(db_uri, print_sql, auto_create):
     elif scheme == 'duck':
         return DuckInterface(path, print_sql=print_sql)
     elif scheme == 'bigquery':
-        return BigQueryInterface(path, print_sql=print_sql)
+        return BigQueryInterface(dsn.host, print_sql=print_sql)
     elif scheme == 'snowflake':
         return SnowflakeInterface(dsn.host, dsn.user, dsn.password, path, **dsn.query, print_sql=print_sql)
     elif scheme == 'redshift':
