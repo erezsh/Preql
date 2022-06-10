@@ -266,6 +266,7 @@ class OracleInterface(SqlInterfaceCursor):
         tables = [t.lower() for t in self.list_tables()]
         return name.lower() in tables
 
+
 class MysqlInterface(SqlInterfaceCursor):
     target = mysql
 
@@ -322,7 +323,7 @@ class MysqlInterface(SqlInterfaceCursor):
             wl = set(columns_whitelist)
             sql_columns = [c for c in sql_columns if c['name'] in wl]
 
-        cols = {c['name']: type_from_sql(c['type'].decode(), c['nullable']) for c in sql_columns}
+        cols = {c['name']: type_from_sql(c['type'], c['nullable']) for c in sql_columns}
 
         return T.table(cols, name=name)
 

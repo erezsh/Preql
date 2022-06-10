@@ -146,7 +146,7 @@ def _from_sql_primitive(p):
     elif isinstance(p, bytearray):
         return p.decode()
     elif isinstance(p, bytes):
-        return repr(p)  # TODO proper decoding?
+        return p.decode()  # TODO proper decoding?
     return p
 
 @dp_inst
