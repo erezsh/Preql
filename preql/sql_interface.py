@@ -540,6 +540,11 @@ class SnowflakeInterface(SqlInterface):
         finally:
             cs.close()
 
+    def commit(self):
+        pass
+    def rollback(self):
+        pass
+
 class BigQueryInterface(SqlInterface):
     target = bigquery
 
