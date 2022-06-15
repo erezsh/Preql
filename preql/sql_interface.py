@@ -334,7 +334,7 @@ class MysqlInterface(SqlInterfaceCursor):
         return f'`{name}`'
 
 
-class PrestoInterface(MysqlInterface):
+class PrestoInterface(SqlInterfaceCursor):
     target = presto
 
     offset_before_limit = True
@@ -346,15 +346,14 @@ class PrestoInterface(MysqlInterface):
         unknown_empty2=T.string,
     ))
 
+    def __init__(self, host, port, user, password, catalog, schema=None, print_sql=False):
+        self.args = dict(host=host, user=user, catalog=catalog, schema=schema)
+        super().__init__(print_sql)
+
     def _create_connection(self):
         import prestodb
-        return prestodb.dbapi.connect(
-            host='presto-1335954364.eu-west-1.elb.amazonaws.com',
-            port='80',
-            user='root',
-            catalog='tpch',
-            schema='tiny',
-        )
+
+        return prestodb.dbapi.connect(**self.args)
 
     def import_table_type(self, name, columns_whitelist=None):
         assert isinstance(name, Id)
@@ -373,6 +372,8 @@ class PrestoInterface(MysqlInterface):
 
     def quote_name(self, name):
         return f'"{name}"'
+
+    list_tables = MysqlInterface.list_tables
 
 
 class PostgresInterface(SqlInterfaceCursor):
@@ -949,6 +950,8 @@ def _drop_tables(state, *tables):
 
 
 _SQLITE_SCHEME = 'sqlite://'
+HELP_SNOWFLAKE_URI_FORMAT = 'snowflake://<user>:<pass>@<account>/<database>/<schema>?warehouse=<warehouse>'
+HELP_PRESTO_URI_FORMAT = 'presto://<user>@<host>/<catalog>/<schema>'
 
 def create_engine(db_uri, print_sql, auto_create):
     if db_uri.startswith(_SQLITE_SCHEME):
@@ -964,15 +967,29 @@ def create_engine(db_uri, print_sql, auto_create):
         raise NotImplementedError("Preql doesn't support multiple schemes")
     scheme ,= dsn.schemes
 
-    if scheme == "snowflake":
-        database, schema = dsn.paths
+    if scheme == 'snowflake':
+        if len(dsn.paths) == 1:
+            database, = dsn.paths
+            schema = dsn.query['schema']
+        elif len(dsn.paths) == 2:
+            database, schema = dsn.paths
+        else:
+            raise ValueError(f"Too many parts in path. Expected format: '{HELP_SNOWFLAKE_URI_FORMAT}'")
         try:
             warehouse = dsn.query["warehouse"]
         except KeyError:
-            raise ValueError(
-                "Must provide warehouse. Format: 'snowflake://<user>:<pass>@<account>/<database>/<schema>?warehouse=<warehouse>'"
-            )
+            raise ValueError(f"Must provide warehouse. Expected format: '{HELP_SNOWFLAKE_URI_FORMAT}'")
         return SnowflakeInterface(dsn.host, dsn.user, dsn.password, warehouse=warehouse, database=database, schema=schema, print_sql=print_sql)
+    elif scheme == "presto":
+        if len(dsn.paths) == 1:
+            catalog, = dsn.paths
+            schema = dsn.query.get('schema')
+        elif len(dsn.paths) == 2:
+            catalog, schema = dsn.paths
+        else:
+            raise ValueError(f"Too many parts in path. Expected format: '{HELP_PRESTO_URI_FORMAT}'")
+
+        return PrestoInterface(dsn.host, dsn.port, dsn.user, dsn.password, catalog=catalog, schema=schema, print_sql=print_sql)
 
     if len(dsn.paths) == 0:
         path = ''
@@ -995,7 +1012,5 @@ def create_engine(db_uri, print_sql, auto_create):
         return RedshiftInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'oracle':
         return OracleInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
-    elif scheme == 'presto':
-        return PrestoInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
 
     raise NotImplementedError(f"Scheme {dsn.scheme} currently not supported")
