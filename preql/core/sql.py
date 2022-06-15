@@ -765,19 +765,6 @@ class Select(TableOperation):
         if self.offset is not None and get_db().offset_before_limit:
             sql += [' OFFSET ', str(self.offset)]
 
-        if self.limit is not None:
-            sql += [' LIMIT ', str(self.limit)]
-        elif self.offset is not None:
-            if qb.target == sqlite:
-                sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
-            elif qb.target == mysql:
-                # MySQL requires a specific limit, always!
-                # See: https://stackoverflow.com/questions/255517/mysql-offset-infinite-rows
-                sql += [' LIMIT 18446744073709551615']
-            elif qb.target == bigquery:
-                # BigQuery requires a specific limit, always!
-                sql += [' LIMIT 9223372036854775807']
-
         if qb.target == oracle:
             if self.offset is not None:
                 sql += [' OFFSET ', str(self.offset), ' ROWS']
