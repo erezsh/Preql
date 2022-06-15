@@ -16,6 +16,7 @@ mysql = 'mysql'
 snowflake = 'snowflake'
 redshift = 'redshift'
 presto = 'presto'
+oracle = 'oracle'
 
 class QueryBuilder:
     def __init__(self, is_root=True, start_count=0):
@@ -88,6 +89,8 @@ class CompiledSQL(Sql):
         assert qb.is_root
         if wrapped.type <= T.primitive and not wrapped.code[0].lower().startswith('select '):
             code = ['SELECT '] + wrapped.code
+            if get_db().target == oracle:
+                code += [' FROM dual']
         else:
             code = wrapped.code
         return ''.join(code)
@@ -511,7 +514,7 @@ class AddIndex(SqlStatement):
             return ['SELECT NULL']
 
         stmt = f"CREATE {'UNIQUE' if self.unique else ''} INDEX "
-        if qb.target not in mysql:
+        if qb.target not in (mysql, oracle):
             stmt += "IF NOT EXISTS "
         return [ stmt + f"{quote_id(self.index_name)} ON {quote_id(self.table_name)}({', '.join(self.columns)})"]
 
@@ -526,7 +529,7 @@ class Insert(SqlStatement):
         return [f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '] + self.query.compile(qb).code
 
     def finalize_with_subqueries(self, qb, subqueries):
-        if qb.target in (mysql, bigquery):
+        if qb.target in (mysql, bigquery, oracle):
             columns = [quote_name(c) for c in self.columns]
             sql_code = f'INSERT INTO {quote_id(self.table_name)}({", ".join(columns)}) '
             sql_code += self.query.finalize_with_subqueries(qb, subqueries)
@@ -569,17 +572,18 @@ class InsertConsts2(SqlStatement):
     def _compile(self, qb):
         assert self.tuples, self
 
-        values = join_comma(
-            parens(join_comma([t] for t in tpl))
-            for tpl in self.tuples
-        )
+
+        if get_db().target == oracle:
+            values_q = join_sep([['SELECT '] + join_comma([t] for t in tpl) + [' FROM dual'] for tpl in self.tuples], ' UNION ALL ')
+        else:
+            values_q = ['VALUES '] + join_comma(
+                parens(join_comma([t] for t in tpl))
+                for tpl in self.tuples
+            )
 
         cols = [quote_name(c) for c in self.cols]
-        q = ['INSERT INTO', quote_id(self.table),
-             "(", ', '.join(cols), ")",
-             "VALUES ",
-        ]
-        return [' '.join(q)] + values #+ ';'
+        q = ['INSERT INTO ' , quote_id(self.table), "(", ', '.join(cols), ")", ] + values_q
+        return q
 
 
 @dataclass
@@ -601,7 +605,8 @@ class SelectValue(Atom, TableOperation):
 
     def _compile(self, qb):
         value = self.value.compile_wrap(qb)
-        return [f'SELECT '] + value.code + [' AS '] + value
+        code = [f'SELECT '] + value.code + [' AS '] + value
+        return code
 
     type = property(X.value.type)
 
@@ -622,6 +627,8 @@ class Values(Table):
                 return ['ROW('] + x + [')']
         elif qb.target in (snowflake, redshift):
             return join_sep([['SELECT '] + v.code for v in values], ' UNION ALL ')
+        elif qb.target in (oracle, ):
+            return join_sep([['SELECT '] + v.code + [' FROM dual'] for v in values], ' UNION ALL ')
         else:
             row_func = parens
 
@@ -771,9 +778,29 @@ class Select(TableOperation):
                 # BigQuery requires a specific limit, always!
                 sql += [' LIMIT 9223372036854775807']
 
+        if qb.target == oracle:
+            if self.offset is not None:
+                sql += [' OFFSET ', str(self.offset), ' ROWS']
 
-        if self.offset is not None and not get_db().offset_before_limit:
-            sql += [' OFFSET ', str(self.offset)]
+            if self.limit is not None:
+                sql += [' FETCH NEXT ', str(self.limit), ' ROWS ONLY']
+        
+        else:
+            if self.limit is not None:
+                sql += [' LIMIT ', str(self.limit)]
+            elif self.offset is not None:
+                if qb.target == sqlite:
+                    sql += [' LIMIT -1']  # Sqlite only (and only old versions of it)
+                elif qb.target == mysql:
+                    # MySQL requires a specific limit, always!
+                    # See: https://stackoverflow.com/questions/255517/mysql-offset-infinite-rows
+                    sql += [' LIMIT 18446744073709551615']
+                elif qb.target == bigquery:
+                    # BigQuery requires a specific limit, always!
+                    sql += [' LIMIT 9223372036854775807']
+
+            if self.offset is not None and not get_db().offset_before_limit:
+                sql += [' OFFSET ', str(self.offset)]
 
         return sql
 
@@ -918,6 +945,8 @@ def _repr(_t: T.number, x):
 
 @dp_type
 def _repr(_t: T.bool, x):
+    if get_db().target == oracle:
+        return ['1=0', '1=1'][x]
     return ['false', 'true'][x]
 
 @dp_type
@@ -990,6 +1019,9 @@ class P2S_Postgres(Types_PqlToSql):
 class P2S_Snowflake(Types_PqlToSql):
     pass
 
+class P2S_Oracle(Types_PqlToSql):
+    pass
+
 _pql_to_sql_by_target = {
     bigquery: P2S_BigQuery,
     mysql: P2S_MySql,
@@ -1000,6 +1032,7 @@ _pql_to_sql_by_target = {
     redshift: P2S_Postgres,
     snowflake: P2S_Snowflake,
     presto: P2S_MySql,
+    oracle: P2S_Oracle,
 }
 
 
@@ -1079,6 +1112,8 @@ def compile_type_def(table_name, table) -> Sql:
     # Consistent among SQL databases
     if db.target == 'bigquery':
         command = ("CREATE TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS")
+    elif db.target == 'oracle':
+        command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE"
     else:
         command = "CREATE TEMPORARY TABLE" if table.options.get('temporary', False) else "CREATE TABLE IF NOT EXISTS"
 
@@ -1137,7 +1172,7 @@ def arith(res_type, op, args):
             # In MySQL division returns a float. All others return int
             arg_codes[0] = Cast(T.float, arg_codes[0])
     elif op == '/~':
-        if target == mysql:
+        if target in (mysql, oracle):
             op = 'DIV'
         elif target == bigquery:
             # safe div?
