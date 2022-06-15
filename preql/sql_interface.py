@@ -553,13 +553,15 @@ class BigQueryInterface(SqlInterface):
     supports_foreign_key = False
     id_type_decl = 'STRING NOT NULL'
 
-    def __init__(self, project, print_sql=False):
+    def __init__(self, project, dataset, print_sql=False):
         from google.cloud import bigquery
 
         # job_config = bigquery.job.QueryJobConfig(default_dataset=f'{project}._preql')
         # self._client = bigquery.Client(project, default_query_job_config=job_config)
         self._client = bigquery.Client(project)
-        self._active_dataset = None
+        self.project = project
+        self.dataset = dataset
+        self._active_dataset = dataset
 
         self._print_sql = print_sql
 
@@ -941,7 +943,7 @@ def create_engine(db_uri, print_sql, auto_create):
     elif scheme == 'duck':
         return DuckInterface(path, print_sql=print_sql)
     elif scheme == 'bigquery':
-        return BigQueryInterface(path, print_sql=print_sql)
+        return BigQueryInterface(dsn.host, path, print_sql=print_sql)
     elif scheme == 'redshift':
         return RedshiftInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'oracle':
