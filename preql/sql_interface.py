@@ -998,7 +998,7 @@ def create_engine(db_uri, print_sql, auto_create):
     else:
         raise ValueError("Bad value for uri, too many paths: %s" % db_uri)
 
-    if scheme == 'postgres':
+    if scheme == 'postgres' or scheme == 'postgresql':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'mysql':
         return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
