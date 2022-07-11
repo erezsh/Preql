@@ -9,7 +9,7 @@ from .utils import classify, dataclass
 from .loggers import sql_log
 from .context import context
 
-from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id, snowflake, redshift, oracle
+from .core.sql import Sql, QueryBuilder, sqlite, postgres, mysql, duck, bigquery, quote_id, snowflake, redshift, oracle, presto
 from .core.sql_import_result import sql_result_to_python, type_from_sql
 from .core.pql_types import T, Type, Object, Id
 from .core.exceptions import DatabaseQueryError, Signal
@@ -36,6 +36,7 @@ class SqlInterface:
     requires_subquery_name = False
     id_type_decl = 'INTEGER'
     max_rows_per_query = 1024
+    offset_before_limit = False
 
 
     def __init__(self, print_sql=False):
@@ -304,11 +305,8 @@ class MysqlInterface(SqlInterfaceCursor):
         names = self._execute_sql(T.list[T.string], sql_code)
         return list(map(Id, names))
 
-    def import_table_type(self, name, columns_whitelist=None):
-        assert isinstance(name, Id)
-        assert len(name.parts) == 1 # TODO !
 
-        columns_t = T.table(dict(
+    DESC_TABLE_TYPE = T.table(dict(
             name=T.string,
             type=T.string,
             nullable=T.string,
@@ -316,8 +314,13 @@ class MysqlInterface(SqlInterfaceCursor):
             default=T.string,
             extra=T.string,
         ))
+
+    def import_table_type(self, name, columns_whitelist=None):
+        assert isinstance(name, Id)
+        assert len(name.parts) == 1 # TODO !
+
         columns_q = "desc %s" % name.name
-        sql_columns = self._execute_sql(columns_t, columns_q)
+        sql_columns = self._execute_sql(self.DESC_TABLE_TYPE, columns_q)
 
         if columns_whitelist:
             wl = set(columns_whitelist)
@@ -329,6 +332,48 @@ class MysqlInterface(SqlInterfaceCursor):
 
     def quote_name(self, name):
         return f'`{name}`'
+
+
+class PrestoInterface(SqlInterfaceCursor):
+    target = presto
+
+    offset_before_limit = True
+
+    DESC_TABLE_TYPE = T.table(dict(
+        name=T.string,
+        type=T.string,
+        unknown_empty1=T.string,
+        unknown_empty2=T.string,
+    ))
+
+    def __init__(self, host, port, user, password, catalog, schema=None, print_sql=False):
+        self.args = dict(host=host, user=user, catalog=catalog, schema=schema)
+        super().__init__(print_sql)
+
+    def _create_connection(self):
+        import prestodb
+
+        return prestodb.dbapi.connect(**self.args)
+
+    def import_table_type(self, name, columns_whitelist=None):
+        assert isinstance(name, Id)
+        assert len(name.parts) == 1 # TODO !
+
+        columns_q = "desc %s" % name.name
+        sql_columns = self._execute_sql(self.DESC_TABLE_TYPE, columns_q)
+
+        if columns_whitelist:
+            wl = set(columns_whitelist)
+            sql_columns = [c for c in sql_columns if c['name'] in wl]
+
+        cols = {c['name']: type_from_sql(c['type'], False) for c in sql_columns}
+
+        return T.table(cols, name=name)
+
+    def quote_name(self, name):
+        return f'"{name}"'
+
+    list_tables = MysqlInterface.list_tables
 
 
 class PostgresInterface(SqlInterfaceCursor):
@@ -456,6 +501,9 @@ class SnowflakeInterface(SqlInterface):
 
         self._print_sql = print_sql
 
+    def commit(self):
+        self._client.commit()
+
     def quote_name(self, name):
         # TODO is this right?
         return name
@@ -553,13 +601,15 @@ class BigQueryInterface(SqlInterface):
     supports_foreign_key = False
     id_type_decl = 'STRING NOT NULL'
 
-    def __init__(self, project, print_sql=False):
+    def __init__(self, project, dataset, print_sql=False):
         from google.cloud import bigquery
 
         # job_config = bigquery.job.QueryJobConfig(default_dataset=f'{project}._preql')
         # self._client = bigquery.Client(project, default_query_job_config=job_config)
         self._client = bigquery.Client(project)
-        self._active_dataset = None
+        self.project = project
+        self.dataset = dataset
+        self._active_dataset = dataset
 
         self._print_sql = print_sql
 
@@ -900,6 +950,8 @@ def _drop_tables(state, *tables):
 
 
 _SQLITE_SCHEME = 'sqlite://'
+HELP_SNOWFLAKE_URI_FORMAT = 'snowflake://<user>:<pass>@<account>/<database>/<schema>?warehouse=<warehouse>'
+HELP_PRESTO_URI_FORMAT = 'presto://<user>@<host>/<catalog>/<schema>'
 
 def create_engine(db_uri, print_sql, auto_create):
     if db_uri.startswith(_SQLITE_SCHEME):
@@ -915,15 +967,29 @@ def create_engine(db_uri, print_sql, auto_create):
         raise NotImplementedError("Preql doesn't support multiple schemes")
     scheme ,= dsn.schemes
 
-    if scheme == "snowflake":
-        database, schema = dsn.paths
+    if scheme == 'snowflake':
+        if len(dsn.paths) == 1:
+            database, = dsn.paths
+            schema = dsn.query['schema']
+        elif len(dsn.paths) == 2:
+            database, schema = dsn.paths
+        else:
+            raise ValueError(f"Too many parts in path. Expected format: '{HELP_SNOWFLAKE_URI_FORMAT}'")
         try:
             warehouse = dsn.query["warehouse"]
         except KeyError:
-            raise ValueError(
-                "Must provide warehouse. Format: 'snowflake://<user>:<pass>@<account>/<database>/<schema>?warehouse=<warehouse>'"
-            )
+            raise ValueError(f"Must provide warehouse. Expected format: '{HELP_SNOWFLAKE_URI_FORMAT}'")
         return SnowflakeInterface(dsn.host, dsn.user, dsn.password, warehouse=warehouse, database=database, schema=schema, print_sql=print_sql)
+    elif scheme == "presto":
+        if len(dsn.paths) == 1:
+            catalog, = dsn.paths
+            schema = dsn.query.get('schema')
+        elif len(dsn.paths) == 2:
+            catalog, schema = dsn.paths
+        else:
+            raise ValueError(f"Too many parts in path. Expected format: '{HELP_PRESTO_URI_FORMAT}'")
+
+        return PrestoInterface(dsn.host, dsn.port, dsn.user, dsn.password, catalog=catalog, schema=schema, print_sql=print_sql)
 
     if len(dsn.paths) == 0:
         path = ''
@@ -932,7 +998,7 @@ def create_engine(db_uri, print_sql, auto_create):
     else:
         raise ValueError("Bad value for uri, too many paths: %s" % db_uri)
 
-    if scheme == 'postgres':
+    if scheme == 'postgres' or scheme == 'postgresql':
         return PostgresInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'mysql':
         return MysqlInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
@@ -941,7 +1007,7 @@ def create_engine(db_uri, print_sql, auto_create):
     elif scheme == 'duck':
         return DuckInterface(path, print_sql=print_sql)
     elif scheme == 'bigquery':
-        return BigQueryInterface(path, print_sql=print_sql)
+        return BigQueryInterface(dsn.host, path, print_sql=print_sql)
     elif scheme == 'redshift':
         return RedshiftInterface(dsn.host, dsn.port, path, dsn.user, dsn.password, print_sql=print_sql)
     elif scheme == 'oracle':

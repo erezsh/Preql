@@ -15,6 +15,7 @@ bigquery = 'bigquery'
 mysql = 'mysql'
 snowflake = 'snowflake'
 redshift = 'redshift'
+presto = 'presto'
 oracle = 'oracle'
 
 class QueryBuilder:
@@ -761,6 +762,9 @@ class Select(TableOperation):
         if self.order:
             sql += [' ORDER BY '] + join_comma(o.compile_wrap(qb).code for o in self.order)
 
+        if self.offset is not None and get_db().offset_before_limit:
+            sql += [' OFFSET ', str(self.offset)]
+
         if qb.target == oracle:
             if self.offset is not None:
                 sql += [' OFFSET ', str(self.offset), ' ROWS']
@@ -782,7 +786,7 @@ class Select(TableOperation):
                     # BigQuery requires a specific limit, always!
                     sql += [' LIMIT 9223372036854775807']
 
-            if self.offset is not None:
+            if self.offset is not None and not get_db().offset_before_limit:
                 sql += [' OFFSET ', str(self.offset)]
 
         return sql
@@ -1014,6 +1018,7 @@ _pql_to_sql_by_target = {
     postgres: P2S_Postgres,
     redshift: P2S_Postgres,
     snowflake: P2S_Snowflake,
+    presto: P2S_MySql,
     oracle: P2S_Oracle,
 }
 
