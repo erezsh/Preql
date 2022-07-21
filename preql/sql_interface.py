@@ -489,7 +489,7 @@ class SnowflakeInterface(SqlInterface):
         logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
         import snowflake.connector
 
-        self._client = snowflake.connector.connect(
+        self._client = self._conn = snowflake.connector.connect(
             user=user,
             password=password,
             account=account,
