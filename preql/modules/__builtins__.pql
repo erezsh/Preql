@@ -414,6 +414,7 @@ if (db_type == "postgres" or db_type == "redshift") {
     }
     func _random() = SQL(float, "dbms_random.value")
     func _cast_string_to_int(s: string) = SQL(int, "cast($s as int)")
+    func _now() = SQL(timestamp, "sysdate")
 
 } else {
     throw new TypeError("Unexpected")

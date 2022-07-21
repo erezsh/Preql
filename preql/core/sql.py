@@ -948,6 +948,8 @@ def _repr(_t: T.datetime, x):
 @dp_type
 def _repr(_t: T.timestamp, x):
     # TODO Better to pass the object instead of a string?
+    if get_db().target == oracle:
+        return f"timestamp '{x.isoformat(' ')}'"
     return repr(str(x))
 
 @dp_type
@@ -1007,6 +1009,7 @@ class P2S_Snowflake(Types_PqlToSql):
     pass
 
 class P2S_Oracle(Types_PqlToSql):
+    datetime = "TIMESTAMP"
     pass
 
 _pql_to_sql_by_target = {

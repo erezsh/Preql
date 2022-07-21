@@ -907,7 +907,7 @@ def _new_row(new_ast, table, matched):
     q = sql.InsertConsts(table_name, keys, [values])
     db_query(q)
 
-    if get_db().target in (sql.bigquery, sql.snowflake, sql.presto):
+    if get_db().target in (sql.bigquery, sql.snowflake, sql.presto, sql.oracle, sql.redshift):
         return objects.null
 
     rowid = db_query(sql.LastRowId(), modifies=False)
