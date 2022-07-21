@@ -398,6 +398,7 @@ if (db_type == "postgres" or db_type == "redshift") {
     func commit() = null
 } else if (db_type == "snowflake") {
     func _random() = SQL(float, "uniform(0::float, 1, random())")
+    func _now() = SQL(timestamp, "CURRENT_TIMESTAMP()")
     //
 } else if (db_type == "presto") {
     //

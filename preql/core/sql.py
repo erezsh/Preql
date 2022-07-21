@@ -1096,7 +1096,7 @@ def compile_type_def(table_name, table) -> Sql:
                         posts.append(s)
 
     if pks and db.supports_foreign_key: 
-        names = ", ".join(pks)
+        names = ", ".join(map(quote_name, pks))
         posts.append(f"PRIMARY KEY ({names})")
 
     # Consistent among SQL databases

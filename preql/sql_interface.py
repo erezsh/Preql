@@ -499,14 +499,22 @@ class SnowflakeInterface(SqlInterface):
             schema=schema,
         )
 
+        self._schema = schema
         self._print_sql = print_sql
+
+    def qualified_name(self, name):
+        "Ensure the name has a dataset"
+        assert isinstance(name, Id)
+        if len(name.parts) > 1:
+            # already has dataset
+            return name
+        return Id(self._schema, name.parts[-1])
+
+    def quote_name(self, name):
+        return f'"{name}"'
 
     def commit(self):
         self._client.commit()
-
-    def quote_name(self, name):
-        # TODO is this right?
-        return name
 
     def table_exists(self, name):
         assert isinstance(name, Id)
@@ -576,6 +584,7 @@ class SnowflakeInterface(SqlInterface):
             raise DatabaseQueryError(msg%(e))
 
         return sql_result_to_python(Const(sql_type, res))
+
     def _execute_sql(self, sql_type, sql_code):
         import snowflake.connector
         cs = self._client.cursor()
