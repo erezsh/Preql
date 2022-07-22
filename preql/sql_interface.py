@@ -222,7 +222,7 @@ class OracleInterface(SqlInterfaceCursor):
 
     def __init__(self, host, port, database, user, password, print_sql=False):
         self._print_sql = print_sql
-        self.args = dict(dsn="%s/%s" % (host, database), user=user, password=password)
+        self.args = dict(dsn="%s/%s" % (host, database) if database else host, user=user, password=password)
 
         super().__init__(print_sql)
 
