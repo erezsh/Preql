@@ -32,7 +32,7 @@ runtype = "^0.2.4"
 dsnparse = "*"
 prompt-toolkit = "*"
 pygments = "*"
-rich = "^10.7.0"
+rich = "*"
 arrow = "*"
 
 psycopg2 = { version = "*", optional = true }
